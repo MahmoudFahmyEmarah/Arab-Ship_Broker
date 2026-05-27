@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import LaycanPicker from '../shared/LaycanPicker'
+import CircularParser from '../shared/CircularParser'
 import { supabase } from '../../lib/supabase'
 import type { CargoType, LoadTerms } from '../../types'
 
@@ -28,6 +29,7 @@ const STEPS = ['Cargo', 'Ports & Quantity', 'Laycan & Terms', 'Safety', 'Review'
 
 const PostCargoForm: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
   const [step, setStep] = useState(0)
+  const [showParser, setShowParser] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState<FormData>({
@@ -44,6 +46,43 @@ const PostCargoForm: React.FC<{ onComplete?: () => void }> = ({ onComplete }) =>
   })
 
   const update = <K extends keyof FormData>(k: K, v: FormData[K]) => setData(d => ({ ...d, [k]: v }))
+
+
+  useEffect(() => {
+    const prefillRaw = sessionStorage.getItem('prefill_cargo')
+    if (prefillRaw) {
+      try {
+        const parsed = JSON.parse(prefillRaw)
+        handleParsedCargo(parsed)
+        sessionStorage.removeItem('prefill_cargo')
+      } catch {}
+    }
+  }, [])
+
+  const handleParsedCargo = (parsed: any) => {
+    setData(d => ({
+      ...d,
+      cargo_type: parsed.cargo_type ?? d.cargo_type,
+      commodity_name: parsed.commodity_name ?? d.commodity_name,
+      qty_min_mt: parsed.qty_min_mt ?? d.qty_min_mt,
+      qty_max_mt: parsed.qty_max_mt ?? parsed.qty_min_mt ?? d.qty_max_mt,
+      load_port_locode: parsed.load_port_locode ?? d.load_port_locode,
+      disch_port_locode: parsed.disch_port_locode ?? d.disch_port_locode,
+      laycan_from: parsed.laycan_from ?? d.laycan_from,
+      laycan_to: parsed.laycan_to ?? d.laycan_to,
+      is_spot: parsed.is_spot ?? d.is_spot,
+      load_rate: parsed.load_rate ?? d.load_rate,
+      disch_rate: parsed.disch_rate ?? d.disch_rate,
+      load_terms: parsed.load_terms ?? d.load_terms,
+      laytime_qualifier: parsed.laytime_qualifier ?? d.laytime_qualifier,
+      freight_idea_usd_mt: parsed.freight_idea_usd_mt ?? d.freight_idea_usd_mt,
+      commission_pct: parsed.commission_pct ?? d.commission_pct,
+      is_wog: parsed.is_wog ?? d.is_wog,
+      notes: parsed.notes ?? d.notes,
+    }))
+    setShowParser(false)
+    setStep(0)
+  }
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -63,10 +102,32 @@ const PostCargoForm: React.FC<{ onComplete?: () => void }> = ({ onComplete }) =>
 
   return (
     <div style={{ padding: '24px', maxWidth: '720px', margin: '0 auto', fontFamily: 'Inter, sans-serif' }}>
-      <div style={{ fontSize: '20px', fontWeight: 600, color: '#1B3A5C', marginBottom: '4px' }}>Post Cargo</div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <div style={{ fontSize: '20px', fontWeight: 600, color: '#1B3A5C' }}>Post Cargo</div>
+        <button
+          onClick={() => setShowParser(!showParser)}
+          style={{
+            padding: '6px 12px',
+            background: showParser ? '#185FA5' : 'transparent',
+            color: showParser ? '#fff' : '#185FA5',
+            border: '0.5px solid #185FA5', borderRadius: '5px',
+            fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'Inter, sans-serif',
+            display: 'flex', alignItems: 'center', gap: '6px'
+          }}
+        >
+          {showParser ? '× Hide AI parser' : '✨ Paste circular → Auto-fill'}
+        </button>
+      </div>
       <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '20px' }}>
         Step {step + 1} of {STEPS.length}: {STEPS[step]}
       </div>
+
+      {showParser && (
+        <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--color-background-secondary)', borderRadius: '8px', border: '0.5px solid var(--color-border-tertiary)' }}>
+          <CircularParser onCargoExtracted={handleParsedCargo} />
+        </div>
+      )}
 
       {/* Stepper */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '24px' }}>

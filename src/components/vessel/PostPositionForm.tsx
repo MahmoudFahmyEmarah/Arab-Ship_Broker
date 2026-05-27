@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import OpenDatePicker from '../shared/OpenDatePicker'
+import CircularParser from '../shared/CircularParser'
 import { supabase } from '../../lib/supabase'
 import type { Vessel, VesselType, ZoneEnum } from '../../types'
 
@@ -54,6 +55,7 @@ const ZONES: ZoneEnum[] = ['B.SEA','E.MED','W.MED','C.MED','ADRIATIC','R.SEA','A
 
 const PostPositionForm: React.FC<{ onComplete?: () => void }> = ({ onComplete }) => {
   const [step, setStep] = useState(0)
+  const [showParser, setShowParser] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [myVessels, setMyVessels] = useState<Vessel[]>([])
@@ -77,10 +79,55 @@ const PostPositionForm: React.FC<{ onComplete?: () => void }> = ({ onComplete })
     supabase.from('vessels').select('*').order('vessel_name').then(({ data }) => {
       setMyVessels((data ?? []) as Vessel[])
     })
+    // Handle prefill from Circular Inbox
+    const prefillRaw = sessionStorage.getItem('prefill_vessel')
+    if (prefillRaw) {
+      try {
+        const parsed = JSON.parse(prefillRaw)
+        handleParsedVessel(parsed)
+        sessionStorage.removeItem('prefill_vessel')
+      } catch {}
+    }
   }, [])
 
   const update = <K extends keyof VesselFormData>(k: K, v: VesselFormData[K]) =>
     setData(d => ({ ...d, [k]: v }))
+
+
+  const handleParsedVessel = (parsed: any) => {
+    setData(d => ({
+      ...d,
+      vessel_mode: 'new',
+      existing_vessel_id: null,
+      vessel_name: parsed.vessel_name ?? d.vessel_name,
+      imo_number: parsed.imo_number ?? d.imo_number,
+      vessel_type: parsed.vessel_type ?? d.vessel_type,
+      flag: parsed.flag ?? d.flag,
+      build_year: parsed.build_year ?? d.build_year,
+      dwt_grain: parsed.dwt_grain ?? d.dwt_grain,
+      dwcc: parsed.dwcc ?? d.dwcc,
+      max_loa_m: parsed.max_loa_m ?? d.max_loa_m,
+      max_draft_m: parsed.max_draft_m ?? d.max_draft_m,
+      is_geared: parsed.is_geared ?? d.is_geared,
+      crane_count: parsed.crane_count ?? d.crane_count,
+      crane_swl_mt: parsed.crane_swl_mt ?? d.crane_swl_mt,
+      grain_cbm: parsed.grain_cbm ?? d.grain_cbm,
+      open_port_locode: parsed.open_port_locode ?? d.open_port_locode,
+      open_date: parsed.open_date ?? d.open_date,
+      is_spot: parsed.is_spot ?? d.is_spot,
+      open_date_range_days: parsed.open_date_range_days ?? d.open_date_range_days,
+      last_cargo: parsed.last_cargo ?? d.last_cargo,
+      preferred_zones: parsed.preferred_zones ?? d.preferred_zones,
+      vlsfo_sea_mt_day: parsed.vlsfo_sea_mt_day ?? d.vlsfo_sea_mt_day,
+      lsmgo_sea_mt_day: parsed.lsmgo_sea_mt_day ?? d.lsmgo_sea_mt_day,
+      service_speed_kn: parsed.service_speed_kn ?? d.service_speed_kn,
+      freight_idea_usd_mt: parsed.freight_idea_usd_mt ?? d.freight_idea_usd_mt,
+      commission_pct: parsed.commission_pct ?? d.commission_pct,
+      notes: parsed.notes ?? d.notes,
+    }))
+    setShowParser(false)
+    setStep(0)
+  }
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -158,10 +205,31 @@ const PostPositionForm: React.FC<{ onComplete?: () => void }> = ({ onComplete })
 
   return (
     <div style={{ padding: '24px', maxWidth: '720px', margin: '0 auto', fontFamily: 'Inter, sans-serif' }}>
-      <div style={{ fontSize: '20px', fontWeight: 600, color: '#1B3A5C', marginBottom: '4px' }}>Post Position</div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <div style={{ fontSize: '20px', fontWeight: 600, color: '#1B3A5C' }}>Post Position</div>
+        <button
+          onClick={() => setShowParser(!showParser)}
+          style={{
+            padding: '6px 12px',
+            background: showParser ? '#185FA5' : 'transparent',
+            color: showParser ? '#fff' : '#185FA5',
+            border: '0.5px solid #185FA5', borderRadius: '5px',
+            fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'Inter, sans-serif'
+          }}
+        >
+          {showParser ? '× Hide AI parser' : '✨ Paste circular → Auto-fill'}
+        </button>
+      </div>
       <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '20px' }}>
         Step {step + 1} of {STEPS.length}: {STEPS[step]}
       </div>
+
+      {showParser && (
+        <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--color-background-secondary)', borderRadius: '8px', border: '0.5px solid var(--color-border-tertiary)' }}>
+          <CircularParser onVesselExtracted={handleParsedVessel} />
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '4px', marginBottom: '24px' }}>
         {STEPS.map((_, i) => (

@@ -14,6 +14,7 @@ const NAV_ITEMS = [
     { path: '/dashboard', label: 'Dashboard', icon: '⊞' },
   ]},
   { section: 'WORKSPACE', items: [
+    { path: '/circular-inbox', label: 'Circular Inbox', icon: '✨' },
     { path: '/my-cargo', label: 'My Cargo', icon: '□' },
     { path: '/post-cargo', label: 'Post Cargo', icon: '+' },
     { path: '/my-vessels', label: 'My Vessels', icon: '▲' },

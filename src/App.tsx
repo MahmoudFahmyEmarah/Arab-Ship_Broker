@@ -13,6 +13,10 @@ import VoyageEstimator from './pages/VoyageEstimator'
 import AdminPanel from './pages/AdminPanel'
 import CargoDetail from './pages/CargoDetail'
 import VesselDetail from './pages/VesselDetail'
+import MyCargo from './pages/MyCargo'
+import MyVessels from './pages/MyVessels'
+import Settings from './pages/Settings'
+import CircularInbox from './pages/CircularInbox'
 import { signOut, signIn } from './lib/supabase'
 
 const App: React.FC = () => {
@@ -75,13 +79,14 @@ const App: React.FC = () => {
                   ? <VoyageEstimator tier={tier} />
                   : <LockedPage feature="Voyage Estimator" />
               } />
-              <Route path="/my-cargo" element={<PlaceholderPage title="My Cargo" />} />
-              <Route path="/my-vessels" element={<PlaceholderPage title="My Vessels" />} />
+              <Route path="/circular-inbox" element={<CircularInbox />} />
+              <Route path="/my-cargo" element={<MyCargo tier={tier} />} />
+              <Route path="/my-vessels" element={<MyVessels tier={tier} />} />
               <Route path="/post-cargo" element={<PostCargoForm onComplete={() => window.location.href = '/dashboard'} />} />
               <Route path="/post-position" element={<PostPositionForm onComplete={() => window.location.href = '/dashboard'} />} />
               <Route path="/cargo/:id" element={<CargoDetail tier={tier} isAdmin={isAdmin} />} />
               <Route path="/vessel/:id" element={<VesselDetail tier={tier} isAdmin={isAdmin} />} />
-              <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+              <Route path="/settings" element={<Settings profile={profile} tier={tier} />} />
               {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
             </Routes>
           </div>

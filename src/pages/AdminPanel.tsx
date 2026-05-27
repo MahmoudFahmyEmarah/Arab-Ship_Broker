@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import ReviewQueue from './admin/ReviewQueue'
+import UsersManager from './admin/UsersManager'
 import type { Announcement, SubscriptionTier } from '../types'
 
 type Section = 'announcements' | 'review' | 'users' | 'fuel'
@@ -46,8 +48,8 @@ const AdminPanel: React.FC = () => {
 
       <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
         {section === 'announcements' && <AnnouncementsAdmin />}
-        {section === 'review'        && <PlaceholderAdmin title="Review Queue" />}
-        {section === 'users'         && <PlaceholderAdmin title="Users & Tiers" />}
+        {section === 'review'        && <ReviewQueue />}
+        {section === 'users'         && <UsersManager />}
         {section === 'fuel'          && <FuelPricesAdmin />}
       </div>
     </div>
