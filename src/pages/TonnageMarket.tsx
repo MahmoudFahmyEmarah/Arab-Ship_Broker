@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useCargo } from '../hooks/useCargo'
 import { useVessels } from '../hooks/useVessels'
 import VesselCard from '../components/vessel/VesselCard'
@@ -9,6 +10,7 @@ import type { VesselAvailability, SubscriptionTier } from '../types'
 interface Props { tier: SubscriptionTier }
 
 const TonnageMarket: React.FC<Props> = ({ tier }) => {
+  const navigate = useNavigate()
   const [selectedVessel, setSelectedVessel] = useState<VesselAvailability | null>(null)
   const [showCargo, setShowCargo] = useState(false)
   const [showTonnage, setShowTonnage] = useState(true)
@@ -73,7 +75,7 @@ const TonnageMarket: React.FC<Props> = ({ tier }) => {
                 availability={v}
                 viewerTier={tier}
                 selected={selectedVessel?.id === v.id}
-                onSelect={setSelectedVessel}
+                onSelect={(vv) => navigate(`/vessel/${vv.id}`)}
               />
             ))
           )}

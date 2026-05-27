@@ -10,6 +10,8 @@ import TonnageMarket from './pages/TonnageMarket'
 import PostCargoForm from './components/cargo/PostCargoForm'
 import VoyageEstimator from './pages/VoyageEstimator'
 import AdminPanel from './pages/AdminPanel'
+import CargoDetail from './pages/CargoDetail'
+import VesselDetail from './pages/VesselDetail'
 import { signOut, signIn } from './lib/supabase'
 
 const App: React.FC = () => {
@@ -76,6 +78,8 @@ const App: React.FC = () => {
               <Route path="/my-vessels" element={<PlaceholderPage title="My Vessels" />} />
               <Route path="/post-cargo" element={<PostCargoForm onComplete={() => window.location.href = '/dashboard'} />} />
               <Route path="/post-position" element={<PlaceholderPage title="Post Position" />} />
+              <Route path="/cargo/:id" element={<CargoDetail tier={tier} isAdmin={isAdmin} />} />
+              <Route path="/vessel/:id" element={<VesselDetail tier={tier} isAdmin={isAdmin} />} />
               <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
               {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
             </Routes>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useCargo } from '../hooks/useCargo'
 import { useVessels } from '../hooks/useVessels'
 import CargoCard from '../components/cargo/CargoCard'
@@ -11,6 +12,7 @@ type CargoFilter = 'all' | 'IN' | 'PARTIAL' | 'urgent'
 type VesselFilter = 'all' | 'OPEN' | 'overdue'
 
 const Dashboard: React.FC<Props> = ({ tier }) => {
+  const navigate = useNavigate()
   const [cargoFilter, setCargoFilter] = useState<CargoFilter>('all')
   const [vesselFilter, setVesselFilter] = useState<VesselFilter>('all')
   const [cargoView, setCargoView] = useState<'card' | 'list'>('card')
@@ -111,7 +113,7 @@ const Dashboard: React.FC<Props> = ({ tier }) => {
                 cargo={c}
                 viewerTier={tier}
                 selected={selectedCargo?.id === c.id}
-                onSelect={setSelectedCargo}
+                onSelect={(c) => { setSelectedCargo(c); navigate(`/cargo/${c.id}`) }}
               />
             ))
           )}
@@ -176,7 +178,7 @@ const Dashboard: React.FC<Props> = ({ tier }) => {
                 availability={v}
                 viewerTier={tier}
                 selected={selectedVessel?.id === v.id}
-                onSelect={setSelectedVessel}
+                onSelect={(v) => { setSelectedVessel(v); navigate(`/vessel/${v.id}`) }}
               />
             ))
           )}
