@@ -235,13 +235,7 @@ const FuelPricesAdmin: React.FC = () => {
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const PlaceholderAdmin: React.FC<{ title: string }> = ({ title }) => (
-  <div>
-    <div style={{ fontSize: '18px', fontWeight: 600, color: '#1B3A5C', marginBottom: '4px' }}>{title}</div>
-    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>This admin section is being built.</div>
-  </div>
-)
+
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '6px 8px',

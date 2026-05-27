@@ -25,7 +25,7 @@ interface Props {
 }
 
 const LeafletMap: React.FC<Props> = ({
-  cargo, vessels, selectedCargo, selectedVessel, tier,
+  cargo, vessels, selectedCargo, selectedVessel, tier: _tier,
   showCargo = true, showTonnage = true,
   onCargoClick, onVesselClick
 }) => {

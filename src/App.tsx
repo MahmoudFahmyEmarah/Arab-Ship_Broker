@@ -142,14 +142,7 @@ const LoginPage: React.FC = () => {
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const PlaceholderPage: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => (
-  <div style={{ padding: '24px', fontFamily: 'Inter, sans-serif' }}>
-    <div style={{ fontSize: '20px', fontWeight: 600, color: '#1B3A5C', marginBottom: '4px' }}>{title}</div>
-    {subtitle && <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '12px' }}>{subtitle}</div>}
-    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>This page is being built. Check back soon.</div>
-  </div>
-)
+
 
 const LockedPage: React.FC<{ feature: string }> = ({ feature }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontFamily: 'Inter, sans-serif' }}>

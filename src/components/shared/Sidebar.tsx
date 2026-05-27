@@ -94,7 +94,7 @@ const Sidebar: React.FC<Props> = ({ profile, tier, isAdmin, onSignOut }) => {
             )}
             {section.items.map(item => {
               const active = location.pathname === item.path
-              const accessible = canAccess(item.requiresTier)
+              const accessible = canAccess((item as any).requiresTier)
               return (
                 <button
                   key={item.path}
