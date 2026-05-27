@@ -235,6 +235,7 @@ const FuelPricesAdmin: React.FC = () => {
   )
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const PlaceholderAdmin: React.FC<{ title: string }> = ({ title }) => (
   <div>
     <div style={{ fontSize: '18px', fontWeight: 600, color: '#1B3A5C', marginBottom: '4px' }}>{title}</div>

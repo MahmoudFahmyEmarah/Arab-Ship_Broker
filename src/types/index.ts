@@ -103,6 +103,12 @@ export interface Vessel {
   bale_cbm?: number
   is_sanctioned: boolean
   preferred_zones?: ZoneEnum[]
+  owner_company?: string
+  manager_company?: string
+  pic_name?: string
+  phone?: string
+  email_chartering?: string
+  email_general?: string
   created_at: string
   updated_at: string
 }

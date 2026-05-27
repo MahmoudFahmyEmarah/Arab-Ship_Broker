@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchLiveCargo, type CargoFilters } from '../lib/cargo'
-import type { CargoListing, ZoneEnum } from '../types'
+import type { CargoListing } from '../types'
 
 export const useCargo = (filters?: CargoFilters) => {
   const [cargo, setCargo] = useState<CargoListing[]>([])

@@ -4,7 +4,7 @@ import { useCargo } from '../hooks/useCargo'
 import { useVessels } from '../hooks/useVessels'
 import CargoCard from '../components/cargo/CargoCard'
 import VesselCard from '../components/vessel/VesselCard'
-import type { CargoListing, VesselAvailability, SubscriptionTier, CargoStatus } from '../types'
+import type { CargoListing, VesselAvailability, SubscriptionTier } from '../types'
 
 interface Props { tier: SubscriptionTier }
 

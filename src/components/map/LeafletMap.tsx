@@ -16,7 +16,7 @@ interface Props {
   vessels: VesselAvailability[]
   selectedCargo?: CargoListing | null
   selectedVessel?: VesselAvailability | null
-  tier: SubscriptionTier
+  tier?: SubscriptionTier
   showCargo?: boolean
   showTonnage?: boolean
   showZones?: boolean

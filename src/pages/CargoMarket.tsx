@@ -5,7 +5,7 @@ import { useVessels } from '../hooks/useVessels'
 import CargoCard from '../components/cargo/CargoCard'
 import LeafletMap from '../components/map/LeafletMap'
 import MapRightBar from '../components/map/MapRightBar'
-import type { CargoListing, VesselAvailability, SubscriptionTier } from '../types'
+import type { CargoListing, SubscriptionTier } from '../types'
 
 interface Props { tier: SubscriptionTier }
 

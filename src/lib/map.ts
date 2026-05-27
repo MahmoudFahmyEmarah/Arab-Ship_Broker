@@ -1,7 +1,7 @@
-import type { CargoListing, VesselAvailability, Port } from '../types'
+import type { CargoListing, VesselAvailability } from '../types'
 
 // Tabler icon class for cargo by category
-export const cargoIconClass = (cargoType: string, category?: string): string => {
+export const cargoIconClass = (cargoType: string, _category?: string): string => {
   const unitized = ['BREAK BULK', 'PROJECT']
   if (unitized.includes(cargoType.toUpperCase())) return 'ti-package'
   return 'ti-stack-2'

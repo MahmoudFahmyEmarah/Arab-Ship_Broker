@@ -4,11 +4,11 @@ import { useCargo } from '../hooks/useCargo'
 import { useVessels } from '../hooks/useVessels'
 import type { CargoListing, VesselAvailability, SubscriptionTier } from '../types'
 
-interface Props { tier: SubscriptionTier }
+interface Props { tier?: SubscriptionTier }
 
 type Tab = 'economics' | 'das' | 'suez' | 'docs'
 
-const VoyageEstimator: React.FC<Props> = ({ tier }) => {
+const VoyageEstimator: React.FC<Props> = ({ tier: _tier }) => {
   const { cargo } = useCargo()
   const { vessels } = useVessels()
   const [selectedVessel, setSelectedVessel] = useState<VesselAvailability | null>(null)
@@ -136,7 +136,7 @@ const VoyageEconomicsTab: React.FC<{
   vessel: VesselAvailability | null
   cargo: CargoListing | null
   livePrices: { vlsfo: number; lsmgo: number } | null
-}> = ({ vessel, cargo, livePrices }) => {
+}> = ({ vessel, cargo, livePrices: _livePrices }) => {
   const v = vessel?.vessel
 
   return (

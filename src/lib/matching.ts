@@ -8,7 +8,7 @@
 // - Hard blocks: sanctioned, gear missing, grain cert missing, oversized 2.5x+
 // ============================================================
 
-import type { CargoListing, VesselAvailability, ZoneEnum } from '../types'
+import type { CargoListing, VesselAvailability } from '../types'
 
 export type MatchLabel = 'Strong' | 'Good' | 'Possible' | 'Weak' | 'BLOCKED'
 

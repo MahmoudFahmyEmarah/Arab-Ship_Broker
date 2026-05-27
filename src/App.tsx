@@ -142,6 +142,7 @@ const LoginPage: React.FC = () => {
   )
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const PlaceholderPage: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => (
   <div style={{ padding: '24px', fontFamily: 'Inter, sans-serif' }}>
     <div style={{ fontSize: '20px', fontWeight: 600, color: '#1B3A5C', marginBottom: '4px' }}>{title}</div>
