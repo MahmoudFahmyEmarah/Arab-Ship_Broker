@@ -1,20 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const supabaseUrl     = (import.meta.env.VITE_SUPABASE_URL     as string) || ''
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
 
-// Warn but don't crash — blank page is harder to debug than a console warning
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error(
-    '[ArabShipBroker] Missing Supabase env vars.\n' +
-    'VITE_SUPABASE_URL:', supabaseUrl ? '✓' : '✗ MISSING',
-    '\nVITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? '✓' : '✗ MISSING'
+    '[ArabShipBroker] Supabase env vars missing:\n' +
+    '  VITE_SUPABASE_URL:      ' + (supabaseUrl     ? '✓' : '✗ MISSING') + '\n' +
+    '  VITE_SUPABASE_ANON_KEY: ' + (supabaseAnonKey ? '✓' : '✗ MISSING') + '\n' +
+    'Add these in Vercel → Environment Variables and redeploy.'
   )
 }
 
+// Use placeholders so app renders the login page even if misconfigured
+// (login will fail with a visible message rather than a blank page)
 export const supabase = createClient(
-  supabaseUrl  ?? 'https://placeholder.supabase.co',
-  supabaseAnonKey ?? 'placeholder'
+  supabaseUrl     || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key-replace-in-vercel'
 )
 
 export const signIn = (email: string, password: string) =>
