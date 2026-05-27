@@ -80,3 +80,5 @@ scripts/
 - Trust tier (NEW/VERIFIED/FLAGGED) is admin-only — never shown to users
 - Subscription tier (T1-T4) drives feature access
 - Contact data (email, phone, address) is encrypted end-to-end and only visible to ASB until a match is made
+
+<!-- Vercel deploy trigger: 2026-05-27T12:54:25Z -->
