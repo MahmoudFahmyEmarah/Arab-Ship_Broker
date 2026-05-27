@@ -82,3 +82,4 @@ scripts/
 - Contact data (email, phone, address) is encrypted end-to-end and only visible to ASB until a match is made
 
 <!-- Vercel deploy trigger: 2026-05-27T12:54:25Z -->
+# Build trigger: 2026-05-27T13:36:43Z
