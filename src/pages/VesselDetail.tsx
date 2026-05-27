@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import MatchExplainer from '../components/shared/MatchExplainer'
+import { scoreMatch, type MatchResult } from '../lib/matching'
 import type { VesselAvailability, CargoListing, SubscriptionTier } from '../types'
 
 interface Props { tier: SubscriptionTier; isAdmin: boolean }
@@ -42,7 +44,6 @@ const VesselDetail: React.FC<Props> = ({ tier, isAdmin }) => {
 
   const vessel = va.vessel
   const isOverdue = va.open_date && new Date(va.open_date) < new Date() && va.status === 'OPEN'
-  const displayDwt = vessel.dwcc ?? vessel.dwt_grain
   const showPartner = va.for_circulation && (tier === 'T3' || tier === 'T4' || isAdmin)
   const showLocked  = va.for_circulation && tier === 'T2'
 

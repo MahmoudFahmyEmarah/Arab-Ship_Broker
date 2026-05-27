@@ -128,6 +128,10 @@ export interface VesselAvailability {
   goes_live_at?: string
   broker?: string
   commission_pct?: number
+  service_speed_kn?: number
+  for_circulation?: boolean
+  market_partner_id?: string
+  market_partner_name?: string
   notes?: string
   // Computed
   match_count?: number
@@ -174,6 +178,7 @@ export interface AppUser {
   company?: string
   role?: string
   email?: string
+  phone?: string
   trust_tier: TrustTier
   subscription_tier: SubscriptionTier
   clean_posts: number

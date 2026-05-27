@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import LeafletMap from '../components/map/LeafletMap'
 import {
   getScopeColor, getCategoryBadge, formatLaycan, calcVolume
 } from '../lib/cargo'
+import MatchExplainer from '../components/shared/MatchExplainer'
+import { scoreMatch, type MatchResult } from '../lib/matching'
 import type { CargoListing, VesselAvailability, SubscriptionTier } from '../types'
 
 interface Props { tier: SubscriptionTier; isAdmin: boolean }
