@@ -1,15 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
+// Warn but don't crash — blank page is harder to debug than a console warning
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Check your .env file.')
+  console.error(
+    '[ArabShipBroker] Missing Supabase env vars.\n' +
+    'VITE_SUPABASE_URL:', supabaseUrl ? '✓' : '✗ MISSING',
+    '\nVITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? '✓' : '✗ MISSING'
+  )
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(
+  supabaseUrl  ?? 'https://placeholder.supabase.co',
+  supabaseAnonKey ?? 'placeholder'
+)
 
-// Auth helpers
 export const signIn = (email: string, password: string) =>
   supabase.auth.signInWithPassword({ email, password })
 
