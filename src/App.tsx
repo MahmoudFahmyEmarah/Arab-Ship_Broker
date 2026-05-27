@@ -8,6 +8,8 @@ import Dashboard from './pages/Dashboard'
 import CargoMarket from './pages/CargoMarket'
 import TonnageMarket from './pages/TonnageMarket'
 import PostCargoForm from './components/cargo/PostCargoForm'
+import VoyageEstimator from './pages/VoyageEstimator'
+import AdminPanel from './pages/AdminPanel'
 import { signOut, signIn } from './lib/supabase'
 
 const App: React.FC = () => {
@@ -67,7 +69,7 @@ const App: React.FC = () => {
               <Route path="/tonnage-market" element={<TonnageMarket tier={tier} />} />
               <Route path="/voyage-estimator" element={
                 (tier === 'T3' || tier === 'T4' || isAdmin)
-                  ? <PlaceholderPage title="Voyage Estimator" subtitle="Full P&L · Port DAs · Suez Canal · Documentation" />
+                  ? <VoyageEstimator tier={tier} />
                   : <LockedPage feature="Voyage Estimator" />
               } />
               <Route path="/my-cargo" element={<PlaceholderPage title="My Cargo" />} />
@@ -75,7 +77,7 @@ const App: React.FC = () => {
               <Route path="/post-cargo" element={<PostCargoForm onComplete={() => window.location.href = '/dashboard'} />} />
               <Route path="/post-position" element={<PlaceholderPage title="Post Position" />} />
               <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
-              {isAdmin && <Route path="/admin" element={<PlaceholderPage title="Admin Panel" />} />}
+              {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
             </Routes>
           </div>
         </div>
