@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import CargoMarket from './pages/CargoMarket'
 import TonnageMarket from './pages/TonnageMarket'
 import PostCargoForm from './components/cargo/PostCargoForm'
+import PostPositionForm from './components/vessel/PostPositionForm'
 import VoyageEstimator from './pages/VoyageEstimator'
 import AdminPanel from './pages/AdminPanel'
 import CargoDetail from './pages/CargoDetail'
@@ -77,7 +78,7 @@ const App: React.FC = () => {
               <Route path="/my-cargo" element={<PlaceholderPage title="My Cargo" />} />
               <Route path="/my-vessels" element={<PlaceholderPage title="My Vessels" />} />
               <Route path="/post-cargo" element={<PostCargoForm onComplete={() => window.location.href = '/dashboard'} />} />
-              <Route path="/post-position" element={<PlaceholderPage title="Post Position" />} />
+              <Route path="/post-position" element={<PostPositionForm onComplete={() => window.location.href = '/dashboard'} />} />
               <Route path="/cargo/:id" element={<CargoDetail tier={tier} isAdmin={isAdmin} />} />
               <Route path="/vessel/:id" element={<VesselDetail tier={tier} isAdmin={isAdmin} />} />
               <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
