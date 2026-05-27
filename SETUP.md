@@ -113,6 +113,41 @@ VESSELS: 43 inserted, 0 skipped
 
 ---
 
+## STEP 6.5 — Set up the AI Circular Parser (optional but recommended)
+
+The AI parser lets you paste any cargo or vessel circular email/WhatsApp text and auto-extract structured data.
+
+### a. Get an Anthropic API key
+1. Go to https://console.anthropic.com
+2. Create an account if you don't have one
+3. Settings → API Keys → Create key
+4. Copy the key
+
+### b. Add it to Supabase secrets
+In Supabase → Project Settings → Edge Functions → Manage secrets:
+```
+ANTHROPIC_API_KEY = sk-ant-...
+```
+
+### c. Deploy the Edge Function
+You need the Supabase CLI installed. If not:
+```bash
+brew install supabase/tap/supabase    # macOS
+# or
+npm install -g supabase                # any OS
+```
+
+Then:
+```bash
+supabase login
+supabase link --project-ref sidcsytgqalqacsgyguz
+supabase functions deploy parse-circular
+```
+
+The parser is now live. From any Post Cargo / Post Position form, click "✨ Paste circular → Auto-fill" and paste a circular. It returns structured fields with confidence rating.
+
+---
+
 ## STEP 7 — Start the platform
 
 ```bash
