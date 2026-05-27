@@ -19,10 +19,47 @@
         --color-border-tertiary: #DDE2EA;
         --color-border-secondary: rgba(0,0,0,0.3);
       }
+      #initial-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        gap: 12px;
+        font-family: 'Inter', sans-serif;
+      }
+      #initial-loader .logo {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1B3A5C;
+        letter-spacing: 0.02em;
+      }
+      #initial-loader .sub {
+        font-size: 11px;
+        color: #6B7280;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      #initial-loader .dot {
+        width: 8px; height: 8px;
+        background: #185FA5;
+        border-radius: 50%;
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; transform: scale(0.8); }
+        50% { opacity: 1; transform: scale(1); }
+      }
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="initial-loader">
+        <div class="logo">Arab ShipBroker</div>
+        <div class="sub">Loading platform...</div>
+        <div class="dot"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
