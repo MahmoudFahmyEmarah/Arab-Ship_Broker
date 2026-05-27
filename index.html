@@ -20,35 +20,23 @@
         --color-border-secondary: rgba(0,0,0,0.3);
       }
       #initial-loader {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        gap: 12px;
-        font-family: 'Inter', sans-serif;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        height: 100vh; gap: 12px; font-family: 'Inter', sans-serif;
       }
-      #initial-loader .logo {
-        font-size: 18px;
-        font-weight: 600;
-        color: #1B3A5C;
-        letter-spacing: 0.02em;
-      }
-      #initial-loader .sub {
-        font-size: 11px;
-        color: #6B7280;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-      }
-      #initial-loader .dot {
-        width: 8px; height: 8px;
-        background: #185FA5;
-        border-radius: 50%;
-        animation: pulse 1.2s ease-in-out infinite;
-      }
+      .logo { font-size: 18px; font-weight: 600; color: #1B3A5C; }
+      .sub  { font-size: 11px; color: #6B7280; letter-spacing: 0.06em; text-transform: uppercase; }
+      .dot  { width: 8px; height: 8px; background: #185FA5; border-radius: 50%;
+              animation: pulse 1.2s ease-in-out infinite; }
       @keyframes pulse {
         0%, 100% { opacity: 0.3; transform: scale(0.8); }
-        50% { opacity: 1; transform: scale(1); }
+        50%       { opacity: 1;   transform: scale(1); }
+      }
+      #js-error {
+        display: none; padding: 16px; margin: 16px;
+        background: #FCEBEB; color: #A32D2D; border-radius: 6px;
+        font-size: 12px; font-family: monospace;
+        max-width: 700px; white-space: pre-wrap; word-break: break-all;
       }
     </style>
   </head>
@@ -58,8 +46,30 @@
         <div class="logo">Arab ShipBroker</div>
         <div class="sub">Loading platform...</div>
         <div class="dot"></div>
+        <div id="js-error"></div>
       </div>
     </div>
+
+    <!-- Catch JS errors before React mounts and show them on screen -->
+    <script>
+      window.addEventListener('error', function(e) {
+        var el = document.getElementById('js-error');
+        if (el) {
+          el.style.display = 'block';
+          el.textContent = 'JavaScript error:\n' + (e.message || 'Unknown') +
+            '\n\nFile: ' + (e.filename || '?') +
+            '\nLine: ' + (e.lineno || '?');
+        }
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var el = document.getElementById('js-error');
+        if (el) {
+          el.style.display = 'block';
+          el.textContent = 'Promise error:\n' + (e.reason || 'Unknown');
+        }
+      });
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
