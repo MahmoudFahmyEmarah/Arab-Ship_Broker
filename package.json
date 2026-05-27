@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "migrate": "tsx scripts/migrate-data.ts"
+    "migrate": "tsx scripts/migrate-data.ts",
+    "match": "tsx scripts/run-matches.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

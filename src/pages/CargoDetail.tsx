@@ -15,6 +15,8 @@ const CargoDetail: React.FC<Props> = ({ tier, isAdmin }) => {
   const [cargo, setCargo] = useState<CargoListing | null>(null)
   const [matches, setMatches] = useState<Array<VesselAvailability & { score_label: string }>>([])
   const [loading, setLoading] = useState(true)
+  const [expandedMatch, setExpandedMatch] = useState<string | null>(null)
+  const [liveScores, setLiveScores] = useState<Record<string, MatchResult>>({})
 
   useEffect(() => {
     if (!id) return
@@ -22,8 +24,20 @@ const CargoDetail: React.FC<Props> = ({ tier, isAdmin }) => {
       supabase.from('cargo_listings').select('*').eq('id', id).single(),
       supabase.from('matches').select('score_label, vessel_avail_id, vessel_availability(*, vessel:vessels(*))').eq('cargo_id', id)
     ]).then(([c, m]) => {
-      setCargo(c.data)
-      setMatches((m.data ?? []).map((r: any) => ({ ...r.vessel_availability, score_label: r.score_label })))
+      const cargo = c.data
+      const matchedVessels = (m.data ?? []).map((r: any) => ({ ...r.vessel_availability, score_label: r.score_label }))
+      setCargo(cargo)
+      setMatches(matchedVessels)
+
+      // Compute detailed scores for each match using the live engine
+      if (cargo) {
+        const scores: Record<string, MatchResult> = {}
+        matchedVessels.forEach(v => {
+          scores[v.id] = scoreMatch(cargo, v)
+        })
+        setLiveScores(scores)
+      }
+
       setLoading(false)
     })
   }, [id])
@@ -192,35 +206,55 @@ const CargoDetail: React.FC<Props> = ({ tier, isAdmin }) => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
-                {matches.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => navigate(`/vessel/${m.id}`)}
-                    style={{
-                      padding: '8px 10px', textAlign: 'left',
+                {matches.map(m => {
+                  const score = liveScores[m.id]
+                  const isExpanded = expandedMatch === m.id
+                  return (
+                    <div key={m.id} style={{
                       border: '0.5px solid var(--color-border-tertiary)',
                       borderLeft: `3px solid ${matchColor(m.score_label)}`,
-                      borderRadius: '4px', cursor: 'pointer',
+                      borderRadius: '4px',
                       background: 'var(--color-background-primary)',
-                      fontFamily: 'Inter, sans-serif'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#1B3A5C' }}>
-                        {m.vessel?.vessel_name ?? 'TBN'}
-                      </span>
-                      <span style={{
-                        fontSize: '9px', fontWeight: 600, padding: '2px 6px', borderRadius: '3px',
-                        background: matchBgColor(m.score_label), color: matchTextColor(m.score_label)
-                      }}>
-                        {m.score_label.toUpperCase()}
-                      </span>
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: '8px', padding: '8px 10px' }}>
+                        <button
+                          onClick={() => navigate(`/vessel/${m.id}`)}
+                          style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: 'Inter, sans-serif', padding: 0, minWidth: 0 }}
+                        >
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#1B3A5C' }}>
+                            {m.vessel?.vessel_name ?? 'TBN'}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
+                            {(m.vessel?.dwcc ?? m.vessel?.dwt_grain)?.toLocaleString() ?? '?'} MT · Open {m.open_port_name ?? m.open_port_locode}
+                          </div>
+                        </button>
+                        <span style={{
+                          fontSize: '9px', fontWeight: 600, padding: '2px 6px', borderRadius: '3px',
+                          background: matchBgColor(m.score_label), color: matchTextColor(m.score_label)
+                        }}>
+                          {m.score_label.toUpperCase()}
+                        </span>
+                        <button
+                          onClick={() => setExpandedMatch(isExpanded ? null : m.id)}
+                          title="Show match breakdown"
+                          style={{
+                            width: '20px', height: '20px', border: '0.5px solid var(--color-border-tertiary)',
+                            borderRadius: '3px', background: isExpanded ? '#E6F1FB' : 'transparent',
+                            color: isExpanded ? '#185FA5' : 'var(--color-text-secondary)',
+                            cursor: 'pointer', fontSize: '11px', padding: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          }}
+                        >{isExpanded ? '−' : '?'}</button>
+                      </div>
+                      {isExpanded && score && (
+                        <div style={{ padding: '0 8px 8px' }}>
+                          <MatchExplainer result={score} compact />
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
-                      {(m.vessel?.dwcc ?? m.vessel?.dwt_grain)?.toLocaleString() ?? '?'} MT · Open {m.open_port_name ?? m.open_port_locode}
-                    </div>
-                  </button>
-                ))}
+                  )
+                })}
               </div>
             )}
           </Panel>

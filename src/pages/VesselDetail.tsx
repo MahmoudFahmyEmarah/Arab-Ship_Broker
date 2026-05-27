@@ -11,6 +11,8 @@ const VesselDetail: React.FC<Props> = ({ tier, isAdmin }) => {
   const [va, setVa] = useState<VesselAvailability | null>(null)
   const [matches, setMatches] = useState<Array<CargoListing & { score_label: string }>>([])
   const [loading, setLoading] = useState(true)
+  const [expandedMatch, setExpandedMatch] = useState<string | null>(null)
+  const [liveScores, setLiveScores] = useState<Record<string, MatchResult>>({})
 
   useEffect(() => {
     if (!id) return
@@ -18,8 +20,19 @@ const VesselDetail: React.FC<Props> = ({ tier, isAdmin }) => {
       supabase.from('vessel_availability').select('*, vessel:vessels(*)').eq('id', id).single(),
       supabase.from('matches').select('score_label, cargo_id, cargo_listings(*)').eq('vessel_avail_id', id)
     ]).then(([v, m]) => {
-      setVa(v.data)
-      setMatches((m.data ?? []).map((r: any) => ({ ...r.cargo_listings, score_label: r.score_label })))
+      const va = v.data
+      const matchedCargo = (m.data ?? []).map((r: any) => ({ ...r.cargo_listings, score_label: r.score_label }))
+      setVa(va)
+      setMatches(matchedCargo)
+
+      if (va) {
+        const scores: Record<string, MatchResult> = {}
+        matchedCargo.forEach(c => {
+          scores[c.id] = scoreMatch(c, va)
+        })
+        setLiveScores(scores)
+      }
+
       setLoading(false)
     })
   }, [id])
@@ -187,30 +200,50 @@ const VesselDetail: React.FC<Props> = ({ tier, isAdmin }) => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
-                {matches.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => navigate(`/cargo/${c.id}`)}
-                    style={{
-                      padding: '8px 10px', textAlign: 'left',
+                {matches.map(c => {
+                  const score = liveScores[c.id]
+                  const isExpanded = expandedMatch === c.id
+                  return (
+                    <div key={c.id} style={{
                       border: '0.5px solid var(--color-border-tertiary)',
                       borderLeft: `3px solid ${matchColor(c.score_label)}`,
-                      borderRadius: '4px', cursor: 'pointer',
+                      borderRadius: '4px',
                       background: 'var(--color-background-primary)',
-                      fontFamily: 'Inter, sans-serif'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#1B3A5C' }}>{c.commodity_name}</span>
-                      <span style={{ fontSize: '9px', fontWeight: 600, padding: '2px 6px', borderRadius: '3px', background: matchBgColor(c.score_label), color: matchTextColor(c.score_label) }}>
-                        {c.score_label.toUpperCase()}
-                      </span>
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: '8px', padding: '8px 10px' }}>
+                        <button
+                          onClick={() => navigate(`/cargo/${c.id}`)}
+                          style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: 'Inter, sans-serif', padding: 0, minWidth: 0 }}
+                        >
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#1B3A5C' }}>{c.commodity_name}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
+                            {c.qty_max_mt.toLocaleString()} MT · {c.load_port_locode} → {c.disch_port_locode}
+                          </div>
+                        </button>
+                        <span style={{ fontSize: '9px', fontWeight: 600, padding: '2px 6px', borderRadius: '3px', background: matchBgColor(c.score_label), color: matchTextColor(c.score_label) }}>
+                          {c.score_label.toUpperCase()}
+                        </span>
+                        <button
+                          onClick={() => setExpandedMatch(isExpanded ? null : c.id)}
+                          title="Show match breakdown"
+                          style={{
+                            width: '20px', height: '20px', border: '0.5px solid var(--color-border-tertiary)',
+                            borderRadius: '3px', background: isExpanded ? '#E6F1FB' : 'transparent',
+                            color: isExpanded ? '#185FA5' : 'var(--color-text-secondary)',
+                            cursor: 'pointer', fontSize: '11px', padding: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          }}
+                        >{isExpanded ? '−' : '?'}</button>
+                      </div>
+                      {isExpanded && score && (
+                        <div style={{ padding: '0 8px 8px' }}>
+                          <MatchExplainer result={score} compact />
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
-                      {c.qty_max_mt.toLocaleString()} MT · {c.load_port_locode} → {c.disch_port_locode}
-                    </div>
-                  </button>
-                ))}
+                  )
+                })}
               </div>
             )}
           </Panel>
