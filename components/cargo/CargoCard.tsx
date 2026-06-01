@@ -69,12 +69,18 @@ export function CargoCard({
   cargo,
   matches = 0,
   partner = null,
+  selected = false,
+  onSelect,
 }: {
   cargo: CargoListingRow;
   /** Engine match count (0 → muted circle). */
   matches?: number;
   /** Company alias only — never personal contact. null → identity masked. */
   partner?: { name: string; role?: string } | null;
+  /** Board mode: when provided, clicking selects (reframes the map) instead
+   *  of navigating; the commodity title becomes the detail link. */
+  selected?: boolean;
+  onSelect?: (id: string) => void;
 }) {
   const c = cargo as CargoExtra;
   const t = typeLabel(c);
@@ -94,14 +100,24 @@ export function CargoCard({
       : c.load_rate
     : null;
 
-  return (
-    <Link
-      href={`/dashboard/cargo/${c.id}`}
-      className={`cargo-card ${stripKey(c)} block no-underline`}
-    >
+  const href = `/dashboard/cargo/${c.id}`;
+  const inner = (
+    <>
       {/* Line 1 — commodity + category */}
       <div className="cc-line1">
-        <div className="cc-title">{c.commodity_name}</div>
+        <div className="cc-title">
+          {onSelect ? (
+            <Link
+              href={href}
+              onClick={(e) => e.stopPropagation()}
+              className="text-inherit no-underline hover:underline"
+            >
+              {c.commodity_name}
+            </Link>
+          ) : (
+            c.commodity_name
+          )}
+        </div>
         <span className={`cc-cat cc-cat--${t.variant}`}>{t.label}</span>
       </div>
 
@@ -239,6 +255,22 @@ export function CargoCard({
           <span className={`cc-match-circle ${matches === 0 ? "is-zero" : ""}`}>{matches}</span>
         </div>
       </div>
+    </>
+  );
+
+  if (onSelect) {
+    return (
+      <div
+        className={`cargo-card ${stripKey(c)} ${selected ? "is-selected" : ""}`}
+        onClick={() => onSelect(c.id)}
+      >
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <Link href={href} className={`cargo-card ${stripKey(c)} block no-underline`}>
+      {inner}
     </Link>
   );
 }

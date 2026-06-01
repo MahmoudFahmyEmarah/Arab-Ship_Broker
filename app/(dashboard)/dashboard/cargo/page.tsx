@@ -14,7 +14,8 @@ import {
   Infinity as InfinityIcon,
 } from "lucide-react";
 
-import { CargoCard } from "@/components/cargo/CargoCard";
+import { CargoBoard } from "@/components/cargo/CargoBoard";
+import { type MapPoint } from "@/components/map/SharedMap";
 import { CargoFilterBar } from "@/components/cargo/CargoFilterBar";
 import { CargoFilterTransitionProvider } from "@/components/cargo/CargoFilterTransitionProvider";
 import { CargoResultsShell } from "@/components/cargo/CargoResultsShell";
@@ -266,6 +267,44 @@ export default async function BrowseCargoPage({
   const cargos = await getCargos(supabase, filters);
   const stats = computeStats(cargos);
 
+  // Resolve load-port coordinates for the market map.
+  const cargoLocodes = Array.from(
+    new Set(cargos.map((c) => c.load_port_locode).filter((x): x is string => !!x)),
+  );
+  const portCoord = new Map<string, { lat: number; lon: number }>();
+  if (cargoLocodes.length) {
+    const { data: portsData } = await supabase
+      .from("ports")
+      .select("locode, latitude, longitude")
+      .in("locode", cargoLocodes);
+    for (const p of (portsData ?? []) as {
+      locode: string;
+      latitude: number | null;
+      longitude: number | null;
+    }[]) {
+      if (p.latitude != null && p.longitude != null) {
+        portCoord.set(p.locode, { lat: Number(p.latitude), lon: Number(p.longitude) });
+      }
+    }
+  }
+  const scopeOf = (s: string): "in" | "partial" | "out" =>
+    s === "PARTIAL" ? "partial" : s === "OUT" || s === "CLOSED" ? "out" : "in";
+  const cargoPoints: MapPoint[] = cargos.flatMap((c) => {
+    const coord = c.load_port_locode ? portCoord.get(c.load_port_locode) : undefined;
+    if (!coord) return [];
+    return [
+      {
+        id: c.id,
+        name: c.commodity_name,
+        lat: coord.lat,
+        lon: coord.lon,
+        kind: "cargo" as const,
+        scope: scopeOf(c.status),
+        zone: c.load_zone,
+      },
+    ];
+  });
+
   return (
     <div className="space-y-4 py-2">
       <div className="flex flex-row justify-between items-center gap-4 max-[768px]:flex-col max-[768px]:items-start">
@@ -305,16 +344,7 @@ export default async function BrowseCargoPage({
               <EmptyState />
             </div>
           ) : (
-            <div
-              className={cn(
-                "grid gap-4",
-                "grid-cols-4 max-[1280px]:grid-cols-3 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1",
-              )}
-            >
-              {cargos.map((cargo) => (
-                <CargoCard key={cargo.id} cargo={cargo} />
-              ))}
-            </div>
+            <CargoBoard cargos={cargos} points={cargoPoints} />
           )}
         </CargoResultsShell>
       </CargoFilterTransitionProvider>
