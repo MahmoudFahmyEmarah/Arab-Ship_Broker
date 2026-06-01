@@ -305,7 +305,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
   if (isLoadingInitialData) {
     return (
-      <div className="flex items-center justify-center py-20 gap-3 text-slate-500">
+      <div className="flex items-center justify-center py-20 gap-3 text-asb-gray-500">
         <Loader2 className="w-5 h-5 animate-spin" />
         <span className="text-sm">Loading cargo details…</span>
       </div>
@@ -329,9 +329,9 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                 <div
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
-                    isActive && "bg-ocean-600 text-white",
-                    isDone && "bg-ocean-100 text-ocean-700",
-                    !isActive && !isDone && "text-slate-400",
+                    isActive && "bg-asb-blue text-white",
+                    isDone && "bg-asb-blue-light text-asb-blue",
+                    !isActive && !isDone && "text-asb-gray-400",
                   )}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -341,7 +341,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   <div
                     className={cn(
                       "flex-1 h-0.5 mx-1 rounded-full transition-colors",
-                      idx < step ? "bg-ocean-400" : "bg-slate-100",
+                      idx < step ? "bg-asb-blue" : "bg-asb-gray-100",
                     )}
                   />
                 )}
@@ -351,7 +351,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 max-[768px]:p-6">
+      <div className="bg-white rounded shadow-sm border border-asb-gray-200 p-8 max-[768px]:p-6">
         <form
           onSubmit={handleFormSubmit}
           onKeyDown={preventEnterSubmit}
@@ -361,12 +361,12 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           {step === 0 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
               <div className="flex items-center gap-3 mb-2">
-                <Package className="w-7 h-7 text-ocean-600" />
+                <Package className="w-7 h-7 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">
+                  <h2 className="text-xl font-bold text-asb-navy">
                     Select Commodity
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-asb-gray-500">
                     Cargo type, IMSBC category, and safety requirements are set
                     automatically.
                   </p>
@@ -381,9 +381,9 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
               {selectedCommodity && (
                 <div>
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-semibold text-asb-ink-soft">
                     Stowage Factor (m³/t)
-                    <span className="text-slate-400 font-normal ml-1">
+                    <span className="text-asb-gray-400 font-normal ml-1">
                       — pre-filled from commodity default, override if needed
                     </span>
                   </label>
@@ -407,7 +407,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                             ? String(selectedCommodity.default_sf_m3t)
                             : "e.g. 47.0"
                         }
-                        className="mt-1.5 w-48 max-[768px]:w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                        className="mt-1.5 w-48 max-[768px]:w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                       />
                     )}
                   />
@@ -420,12 +420,12 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
               <div className="flex items-center gap-3 mb-2">
-                <MapPin className="w-7 h-7 text-ocean-600" />
+                <MapPin className="w-7 h-7 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">
+                  <h2 className="text-xl font-bold text-asb-navy">
                     Ports & Quantity
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-asb-gray-500">
                     Zone is auto-filled from the port — never type it manually.
                   </p>
                 </div>
@@ -433,7 +433,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
               <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-semibold text-asb-ink-soft">
                     Min Quantity (MT)
                   </label>
                   <Controller
@@ -453,7 +453,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                             )
                           }
                           className={cn(
-                            "w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all",
+                            "w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all",
                             fieldState.error && "border-red-300",
                           )}
                         />
@@ -467,7 +467,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-semibold text-asb-ink-soft">
                     Max Quantity (MT)
                   </label>
                   <Controller
@@ -487,7 +487,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                             )
                           }
                           className={cn(
-                            "w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all",
+                            "w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all",
                             fieldState.error && "border-red-300",
                           )}
                         />
@@ -509,24 +509,24 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
                 return (
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700">
+                    <label className="text-sm font-semibold text-asb-ink-soft">
                       Cargo Volume (cbm)
-                      <span className="text-slate-400 font-normal ml-1 text-xs">
+                      <span className="text-asb-gray-400 font-normal ml-1 text-xs">
                         — optional; auto-computed from qty × stowage factor
                       </span>
                     </label>
 
                     {computed !== null && (
                       <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-asb-gray-500">
                           Auto-computed:
                         </span>
-                        <span className="text-xs font-bold text-ocean-700 bg-ocean-50 border border-ocean-200 px-2 py-0.5 rounded-md">
+                        <span className="text-xs font-bold text-asb-blue bg-asb-blue-light border border-asb-blue px-2 py-0.5 rounded-md">
                           {computed.toLocaleString()} cbm
                         </span>
                         <button
                           type="button"
-                          className="text-xs text-ocean-600 hover:text-ocean-800 font-semibold underline"
+                          className="text-xs text-asb-blue hover:text-asb-blue font-semibold underline"
                           onClick={() =>
                             form.setValue("volume_cbm", computed, {
                               shouldValidate: true,
@@ -559,13 +559,13 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                                 ? String(computed)
                                 : "e.g. 48 000"
                             }
-                            className="w-48 max-[768px]:w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                            className="w-48 max-[768px]:w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                           />
-                          <span className="text-xs text-slate-400 font-medium">
+                          <span className="text-xs text-asb-gray-400 font-medium">
                             cbm
                           </span>
                           {field.value && (
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-asb-gray-400">
                               ≈{" "}
                               {Math.round(
                                 field.value * 35.3147,
@@ -586,7 +586,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                         </p>
                       )}
 
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-asb-gray-400">
                       Used to verify the cargo fits in the vessel hold.
                       Relationship: Volume = Qty (MT) × Stowage Factor (m³/t).
                     </p>
@@ -638,12 +638,12 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           {step === 2 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
               <div className="flex items-center gap-3 mb-2">
-                <Calendar className="w-7 h-7 text-ocean-600" />
+                <Calendar className="w-7 h-7 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">
+                  <h2 className="text-xl font-bold text-asb-navy">
                     Laycan & Commercial Terms
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-asb-gray-500">
                     All fields optional. Leave laycan blank for SPOT cargo.
                   </p>
                 </div>
@@ -651,13 +651,13 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
               <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-semibold text-asb-ink-soft">
                     Laycan From
                   </label>
                   <input
                     type="date"
                     {...form.register("laycan_from")}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                    className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                   />
                   {form.formState.errors.laycan_from && (
                     <p className="text-xs text-red-500">
@@ -666,13 +666,13 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-semibold text-asb-ink-soft">
                     Laycan To
                   </label>
                   <input
                     type="date"
                     {...form.register("laycan_to")}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                    className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                   />
                   {form.formState.errors.laycan_to && (
                     <p className="text-xs text-red-500">
@@ -689,27 +689,27 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                 </p>
               )}
 
-              <div className="border-t border-slate-100 pt-5">
+              <div className="border-t border-asb-gray-100 pt-5">
                 <div className="flex items-center gap-2 mb-4">
-                  <DollarSign className="w-5 h-5 text-ocean-600" />
-                  <h3 className="text-base font-semibold text-slate-800">
+                  <DollarSign className="w-5 h-5 text-asb-blue" />
+                  <h3 className="text-base font-semibold text-asb-ink">
                     Commercial Terms
                   </h3>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-asb-gray-400">
                     — all optional, improves match ranking
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700">
+                    <label className="text-sm font-semibold text-asb-ink-soft">
                       Load Terms
                     </label>
                     <select
                       {...form.register("load_terms", {
                         setValueAs: (v) => (v === "" ? undefined : v),
                       })}
-                      className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                      className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                     >
                       <option value="">Select terms…</option>
                       {LOAD_TERMS.map((t) => (
@@ -721,7 +721,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700">
+                    <label className="text-sm font-semibold text-asb-ink-soft">
                       Freight Idea ($/MT)
                     </label>
                     <Controller
@@ -740,14 +740,14 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                             )
                           }
                           placeholder="e.g. 22.50"
-                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                          className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                         />
                       )}
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700">
+                    <label className="text-sm font-semibold text-asb-ink-soft">
                       Load Rate (MT/day)
                     </label>
                     <Controller
@@ -765,14 +765,14 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                             )
                           }
                           placeholder="e.g. 2000"
-                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                          className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                         />
                       )}
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700">
+                    <label className="text-sm font-semibold text-asb-ink-soft">
                       Discharge Rate (MT/day)
                     </label>
                     <Controller
@@ -790,14 +790,14 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                             )
                           }
                           placeholder="e.g. 1500"
-                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                          className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                         />
                       )}
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700">
+                    <label className="text-sm font-semibold text-asb-ink-soft">
                       Demurrage ($/day)
                     </label>
                     <Controller
@@ -814,14 +814,14 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                                 : Number(e.target.value),
                             )
                           }
-                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                          className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                         />
                       )}
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700">
+                    <label className="text-sm font-semibold text-asb-ink-soft">
                       Commission (%)
                     </label>
                     <Controller
@@ -842,7 +842,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                             )
                           }
                           placeholder="e.g. 2.5"
-                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                          className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                         />
                       )}
                     />
@@ -850,26 +850,26 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                 </div>
 
                 <div className="mt-4 space-y-1.5">
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-semibold text-asb-ink-soft">
                     Broker / Reference
                   </label>
                   <input
                     type="text"
                     {...form.register("broker")}
                     placeholder="e.g. Company name / contact ref"
-                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                    className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all"
                   />
                 </div>
 
                 <div className="mt-4 space-y-1.5">
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-semibold text-asb-ink-soft">
                     Additional Notes
                   </label>
                   <textarea
                     {...form.register("notes")}
                     rows={2}
                     placeholder="Any special requirements or notes…"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all resize-none"
+                    className="w-full px-3 py-2 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:border-asb-blue focus:bg-white transition-all resize-none"
                   />
                 </div>
               </div>
@@ -880,12 +880,12 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           {step === 3 && selectedCommodity && (
             <div className="animate-in fade-in slide-in-from-bottom-3">
               <div className="flex items-center gap-3 mb-6">
-                <ShieldCheck className="w-7 h-7 text-ocean-600" />
+                <ShieldCheck className="w-7 h-7 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">
+                  <h2 className="text-xl font-bold text-asb-navy">
                     Safety & Vessel Requirements
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-asb-gray-500">
                     Questions are specific to {selectedCommodity.canonical_name}{" "}
                     ({selectedCommodity.imsbc_category}). Answers tagged
                     &quot;used in matching&quot; drive vessel filtering.
@@ -908,19 +908,19 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           {step === 4 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
               <div className="flex items-center gap-3 mb-2">
-                <CheckCircle className="w-7 h-7 text-ocean-600" />
+                <CheckCircle className="w-7 h-7 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">
+                  <h2 className="text-xl font-bold text-asb-navy">
                     Review & Submit
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-asb-gray-500">
                     Double-check before submitting. Your listing will be
                     reviewed before going live.
                   </p>
                 </div>
               </div>
 
-              <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200">
+              <div className="bg-asb-gray-50 rounded border border-asb-gray-200 divide-y divide-slate-200">
                 <ReviewRow
                   label="Commodity"
                   value={values.commodity_name ?? "—"}
@@ -986,10 +986,10 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
               {Object.keys(safetyAnswers).length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                  <p className="text-xs font-semibold text-asb-gray-500 uppercase tracking-wider mb-2">
                     Safety answers ({Object.keys(safetyAnswers).length})
                   </p>
-                  <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200">
+                  <div className="bg-asb-gray-50 rounded border border-asb-gray-200 divide-y divide-slate-200">
                     {Object.entries(safetyAnswers).map(([key, val]) => (
                       <ReviewRow key={key} label={key} value={String(val)} />
                     ))}
@@ -997,7 +997,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                 </div>
               )}
 
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+              <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm text-blue-800">
                 <p className="font-semibold mb-1">What happens next?</p>
                 <p>
                   Your listing will be reviewed by our team (SLA: 2 hours during
@@ -1009,12 +1009,12 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           )}
 
           {/* Navigation */}
-          <div className="flex justify-between items-center pt-8 mt-6 border-t border-slate-100">
+          <div className="flex justify-between items-center pt-8 mt-6 border-t border-asb-gray-100">
             <button
               type="button"
               onClick={goBack}
               disabled={step === 0}
-              className="px-5 py-2.5 font-semibold text-slate-600 hover:bg-slate-50 rounded-xl transition-colors disabled:invisible"
+              className="px-5 py-2.5 font-semibold text-asb-gray-700 hover:bg-asb-gray-50 rounded transition-colors disabled:invisible"
             >
               ← Back
             </button>
@@ -1023,7 +1023,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
               <button
                 type="button"
                 onClick={goNext}
-                className="px-7 py-3 bg-ocean-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-ocean-700 transition-colors"
+                className="px-7 py-3 bg-asb-blue text-white font-bold rounded flex items-center gap-2 hover:bg-asb-navy transition-colors"
               >
                 Continue <ArrowRight className="w-4 h-4" />
               </button>
@@ -1034,7 +1034,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   submitTriggeredByButtonRef.current = true;
                 }}
                 disabled={isSubmitting}
-                className="px-7 py-3 bg-ocean-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-ocean-700 transition-colors disabled:opacity-60"
+                className="px-7 py-3 bg-asb-blue text-white font-bold rounded flex items-center gap-2 hover:bg-asb-navy transition-colors disabled:opacity-60"
               >
                 {isSubmitting ? (
                   <>
@@ -1058,8 +1058,8 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between items-center px-4 py-2.5 text-sm">
-      <span className="text-slate-500 font-medium">{label}</span>
-      <span className="text-slate-900 font-semibold text-right wrap-break-word max-w-[68%]">
+      <span className="text-asb-gray-500 font-medium">{label}</span>
+      <span className="text-asb-navy font-semibold text-right wrap-break-word max-w-[68%]">
         {value}
       </span>
     </div>
