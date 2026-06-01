@@ -61,19 +61,19 @@ function StatItem({
     <div className="flex items-center gap-3 px-5 py-3.5 flex-1 min-w-27.5">
       <div
         className={cn(
-          "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
-          accent ?? "bg-ocean-50",
+          "w-8 h-8 rounded flex items-center justify-center shrink-0",
+          accent ?? "bg-asb-blue-light",
         )}
       >
         <Icon
-          className={cn("w-4 h-4", accent ? "text-white" : "text-ocean-600")}
+          className={cn("w-4 h-4", accent ? "text-white" : "text-asb-blue")}
         />
       </div>
       <div>
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-0.5">
+        <p className="text-[10px] font-bold text-asb-gray-400 uppercase tracking-wider leading-none mb-0.5">
           {label}
         </p>
-        <p className="text-xl font-black text-slate-900 leading-none tabular-nums">
+        <p className="text-xl font-black text-asb-navy leading-none tabular-nums">
           {value}
         </p>
       </div>
@@ -87,7 +87,7 @@ function cn(...classes: (string | undefined | false | null)[]): string {
 
 function StatsBar({ stats }: { stats: MarketStats }) {
   return (
-    <div className="w-full bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+    <div className="w-full bg-white border border-asb-gray-200 rounded shadow-sm overflow-hidden">
       <div className="flex flex-wrap divide-x divide-slate-100">
         <StatItem
           icon={BarChart3}
@@ -110,14 +110,14 @@ function StatsBar({ stats }: { stats: MarketStats }) {
 
 function EmptyState() {
   return (
-    <div className="col-span-4 text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-      <Package className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-      <p className="text-slate-500 font-semibold">
+    <div className="col-span-4 text-center py-20 bg-white rounded border border-dashed border-asb-gray-200">
+      <Package className="w-10 h-10 text-asb-gray-400 mx-auto mb-3" />
+      <p className="text-asb-gray-500 font-semibold">
         No active listings match your filters.
       </p>
       <Link
         href="/dashboard/cargo"
-        className="mt-3 inline-block text-ocean-600 hover:underline font-bold text-sm"
+        className="mt-3 inline-block text-asb-blue hover:underline font-bold text-sm"
       >
         Clear all filters
       </Link>
@@ -134,22 +134,22 @@ function TemporalAccessBanner({
 }) {
   if (isAdmin) {
     return (
-      <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3">
-        <div className="w-7 h-7 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
-          <InfinityIcon className="w-3.5 h-3.5 text-slate-500" />
+      <div className="flex items-center gap-3 bg-asb-gray-50 border border-asb-gray-200 rounded px-5 py-3">
+        <div className="w-7 h-7 rounded-lg bg-asb-gray-200 flex items-center justify-center shrink-0">
+          <InfinityIcon className="w-3.5 h-3.5 text-asb-gray-500" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-slate-600">
+          <p className="text-xs font-semibold text-asb-gray-700">
             Admin — unlimited archive access
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-[11px] text-asb-gray-400 mt-0.5">
             All historical listings are visible across all three temporal layers.
           </p>
         </div>
-        <div className="hidden sm:flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
-          <span className="bg-ocean-50 text-ocean-600 border border-ocean-100 rounded-full px-2 py-0.5">Layer 1 — Future</span>
+        <div className="hidden sm:flex items-center gap-3 text-[10px] font-bold text-asb-gray-400 uppercase tracking-wider shrink-0">
+          <span className="bg-asb-blue-light text-asb-blue border border-asb-gray-200 rounded-full px-2 py-0.5">Layer 1 — Future</span>
           <span className="bg-amber-50 text-amber-600 border border-amber-100 rounded-full px-2 py-0.5">Layer 2 — ≤ 7 days</span>
-          <span className="bg-slate-100 text-slate-500 border border-slate-200 rounded-full px-2 py-0.5">Layer 3 — Archive ∞</span>
+          <span className="bg-asb-gray-100 text-asb-gray-500 border border-asb-gray-200 rounded-full px-2 py-0.5">Layer 3 — Archive ∞</span>
         </div>
       </div>
     );
@@ -160,7 +160,7 @@ function TemporalAccessBanner({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 border rounded-2xl px-5 py-3",
+        "flex items-center gap-3 border rounded px-5 py-3",
         isVerified
           ? "bg-emerald-50 border-emerald-200/80"
           : "bg-blue-50 border-blue-200/80",
@@ -198,8 +198,8 @@ function TemporalAccessBanner({
             : "You can browse cargo listings up to 1 month back. Verify your account for 3-month access."}
         </p>
       </div>
-      <div className="hidden sm:flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
-        <span className="bg-ocean-50 text-ocean-600 border border-ocean-100 rounded-full px-2 py-0.5">Layer 1 — Future</span>
+      <div className="hidden sm:flex items-center gap-3 text-[10px] font-bold text-asb-gray-400 uppercase tracking-wider shrink-0">
+        <span className="bg-asb-blue-light text-asb-blue border border-asb-gray-200 rounded-full px-2 py-0.5">Layer 1 — Future</span>
         <span className="bg-amber-50 text-amber-600 border border-amber-100 rounded-full px-2 py-0.5">Layer 2 — ≤ 7 days</span>
         <span
           className={cn(
@@ -309,10 +309,10 @@ export default async function BrowseCargoPage({
     <div className="space-y-4 py-2">
       <div className="flex flex-row justify-between items-center gap-4 max-[768px]:flex-col max-[768px]:items-start">
         <div>
-          <h1 className="text-2xl font-bold text-ocean-900">
+          <h1 className="text-2xl font-bold text-asb-blue">
             Cargo Marketplace
           </h1>
-          <p className="text-slate-500 mt-0.5 text-sm">
+          <p className="text-asb-gray-500 mt-0.5 text-sm">
             {cargos.length} active listing{cargos.length !== 1 ? "s" : ""}
             {Object.values(filters).some(
               (v) => v !== null && v !== undefined && v !== false && v !== "",
@@ -323,7 +323,7 @@ export default async function BrowseCargoPage({
         </div>
         <Link
           href="/dashboard/cargo/create"
-          className="flex-none max-[768px]:w-full flex items-center justify-center gap-2 bg-ocean-600 hover:bg-ocean-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm"
+          className="flex-none max-[768px]:w-full flex items-center justify-center gap-2 bg-asb-blue hover:bg-asb-blue text-white font-semibold px-5 py-2.5 rounded shadow-sm transition-colors text-sm"
         >
           <Plus className="w-4 h-4" /> Post Cargo
         </Link>

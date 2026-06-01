@@ -204,27 +204,27 @@ export function VoyageEstimatorCalculator() {
   return (
     <div className="space-y-5">
       {/* Bunker ticker */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm">
-        <Fuel className="h-4 w-4 text-ocean-600" />
-        <span className="rounded-md bg-ocean-50 px-2 py-1 text-xs font-semibold text-ocean-700">
+      <div className="flex flex-wrap items-center gap-2 rounded border border-asb-gray-200 bg-white p-3 text-sm shadow-sm">
+        <Fuel className="h-4 w-4 text-asb-blue" />
+        <span className="rounded-md bg-asb-blue-light px-2 py-1 text-xs font-semibold text-asb-blue">
           VLSFO ${fuel?.vlsfo_usd_mt ?? "—"}/MT
         </span>
         <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
           LSMGO ${fuel?.lsmgo_usd_mt ?? "—"}/MT
         </span>
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-asb-gray-400">
           {fuel?.port_area ? `· ${fuel.port_area}` : ""} (editable below)
         </span>
       </div>
 
       {/* Prefill selectors */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-medium text-slate-500">
+        <label className="text-xs font-medium text-asb-gray-500">
           Prefill bunkers from open vessel
           <select
             value={selVessel}
             onChange={(e) => prefillVessel(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-sm text-slate-800"
+            className="mt-1 w-full rounded-lg border border-asb-gray-200 p-2 text-sm text-asb-ink"
           >
             <option value="">— none —</option>
             {availabilities.map((a) => (
@@ -235,12 +235,12 @@ export function VoyageEstimatorCalculator() {
             ))}
           </select>
         </label>
-        <label className="text-xs font-medium text-slate-500">
+        <label className="text-xs font-medium text-asb-gray-500">
           Prefill economics from cargo
           <select
             value={selCargo}
             onChange={(e) => prefillCargo(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-sm text-slate-800"
+            className="mt-1 w-full rounded-lg border border-asb-gray-200 p-2 text-sm text-asb-ink"
           >
             <option value="">— none —</option>
             {cargos.map((c) => (
@@ -254,21 +254,21 @@ export function VoyageEstimatorCalculator() {
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         {/* Inputs */}
-        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="space-y-4 rounded border border-asb-gray-200 bg-white p-4 shadow-sm">
           {groups.map((g) => (
             <fieldset key={g}>
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-asb-gray-400">
                 {g}
               </legend>
               <div className="grid gap-3 sm:grid-cols-2">
                 {FIELDS.filter((f) => f.group === g).map((f) => (
-                  <label key={f.key} className="text-xs font-medium text-slate-600">
+                  <label key={f.key} className="text-xs font-medium text-asb-gray-700">
                     {f.label}
                     <input
                       inputMode="decimal"
                       value={vals[f.key]}
                       onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-sm text-slate-800 outline-none focus:border-ocean-400 focus:ring-2 focus:ring-ocean-400/40"
+                      className="mt-1 w-full rounded-lg border border-asb-gray-200 p-2 text-sm text-asb-ink outline-none focus:border-asb-blue  focus:ring-asb-blue/40"
                       placeholder="0"
                     />
                   </label>
@@ -279,22 +279,22 @@ export function VoyageEstimatorCalculator() {
         </div>
 
         {/* Result */}
-        <div className="space-y-3 self-start rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <div className="space-y-3 self-start rounded border border-asb-gray-200 bg-white p-5 shadow-sm">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-asb-gray-400">
             Voyage result
           </h3>
           <Row label="Sea days" v={r.seaDays.toFixed(1)} />
           <Row label="Port days" v={r.portDays.toFixed(1)} />
           <Row label="VLSFO burned" v={`${r.vlsfoMt.toFixed(1)} MT`} />
           <Row label="LSMGO burned" v={`${r.lsmgoMt.toFixed(1)} MT`} />
-          <div className="border-t border-slate-100 pt-2" />
+          <div className="border-t border-asb-gray-100 pt-2" />
           <Row label="Gross freight" v={money(r.grossFreight)} />
           <Row label="Commission" v={`− ${money(r.commission)}`} />
           <Row label="Bunker cost" v={`− ${money(r.bunkerCost)}`} />
           <Row label="Port + canal" v={`− ${money(r.portCosts)}`} />
-          <div className="border-t border-slate-100 pt-2" />
+          <div className="border-t border-asb-gray-100 pt-2" />
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-slate-700">Voyage result</span>
+            <span className="text-sm font-semibold text-asb-ink-soft">Voyage result</span>
             <span
               className={`text-lg font-bold ${
                 r.voyageResult >= 0 ? "text-emerald-600" : "text-red-600"
@@ -309,7 +309,7 @@ export function VoyageEstimatorCalculator() {
             type="button"
             onClick={save}
             disabled={saving}
-            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ocean-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-ocean-600 disabled:opacity-50"
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-asb-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-asb-blue disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save estimate
@@ -323,8 +323,8 @@ export function VoyageEstimatorCalculator() {
 function Row({ label, v }: { label: string; v: string }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-medium text-slate-800">{v}</span>
+      <span className="text-asb-gray-500">{label}</span>
+      <span className="font-medium text-asb-ink">{v}</span>
     </div>
   );
 }

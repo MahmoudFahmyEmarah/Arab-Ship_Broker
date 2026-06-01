@@ -15,16 +15,16 @@ function FieldGrid({ data }: { data: Record<string, unknown> }) {
     ([, v]) => v !== null && v !== undefined && v !== "",
   );
   if (entries.length === 0) {
-    return <p className="text-sm text-slate-500">No fields extracted.</p>;
+    return <p className="text-sm text-asb-gray-500">No fields extracted.</p>;
   }
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
       {entries.map(([k, v]) => (
-        <div key={k} className="flex justify-between gap-3 border-b border-slate-100 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <div key={k} className="flex justify-between gap-3 border-b border-asb-gray-100 py-1">
+          <dt className="text-xs font-medium uppercase tracking-wide text-asb-gray-500">
             {k.replace(/_/g, " ")}
           </dt>
-          <dd className="text-sm font-medium text-slate-800 text-right">
+          <dd className="text-sm font-medium text-asb-ink text-right">
             {Array.isArray(v) ? v.join(", ") : String(v)}
           </dd>
         </div>
@@ -68,7 +68,7 @@ export function CircularParser() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded border border-asb-gray-200 bg-white p-4 shadow-sm">
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -76,13 +76,13 @@ export function CircularParser() {
           placeholder={
             "Paste any email or WhatsApp circular here.\n\nExamples:\n\n" + EXAMPLE
           }
-          className="w-full resize-y rounded-lg border border-slate-200 p-3 text-sm font-mono text-slate-800 outline-none focus:border-ocean-400 focus:ring-2 focus:ring-ocean-400/40"
+          className="w-full resize-y rounded-lg border border-asb-gray-200 p-3 text-sm font-mono text-asb-ink outline-none focus:border-asb-blue  focus:ring-asb-blue/40"
         />
         <div className="mt-3 flex items-center justify-between">
           <button
             type="button"
             onClick={() => setText(EXAMPLE)}
-            className="text-xs text-slate-500 underline hover:text-slate-700"
+            className="text-xs text-asb-gray-500 underline hover:text-asb-ink-soft"
           >
             Load example
           </button>
@@ -90,7 +90,7 @@ export function CircularParser() {
             type="button"
             onClick={parse}
             disabled={loading || text.trim().length === 0}
-            className="inline-flex items-center gap-2 rounded-lg bg-ocean-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-ocean-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-asb-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-asb-blue disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -109,27 +109,27 @@ export function CircularParser() {
       )}
 
       {result && (
-        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="space-y-4 rounded border border-asb-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {result.kind === "vessel" ? (
-                <Ship className="h-5 w-5 text-ocean-600" />
+                <Ship className="h-5 w-5 text-asb-blue" />
               ) : result.kind === "cargo" ? (
-                <Package className="h-5 w-5 text-ocean-600" />
+                <Package className="h-5 w-5 text-asb-blue" />
               ) : (
-                <AlertTriangle className="h-5 w-5 text-slate-400" />
+                <AlertTriangle className="h-5 w-5 text-asb-gray-400" />
               )}
-              <span className="text-sm font-semibold capitalize text-slate-800">
+              <span className="text-sm font-semibold capitalize text-asb-ink">
                 {result.kind}
               </span>
             </div>
-            <span className="text-xs font-medium text-slate-500">
+            <span className="text-xs font-medium text-asb-gray-500">
               Confidence {confidencePct}%
             </span>
           </div>
 
           {result.raw_intent && (
-            <p className="text-sm italic text-slate-600">{result.raw_intent}</p>
+            <p className="text-sm italic text-asb-gray-700">{result.raw_intent}</p>
           )}
 
           {isWog && (
@@ -140,7 +140,7 @@ export function CircularParser() {
           )}
 
           {result.warnings?.length > 0 && (
-            <ul className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+            <ul className="space-y-1 rounded-lg bg-asb-gray-50 p-3 text-sm text-asb-gray-700">
               {result.warnings.map((w, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
@@ -151,7 +151,7 @@ export function CircularParser() {
           )}
 
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-asb-gray-400">
               Extracted fields
             </h3>
             <FieldGrid
@@ -159,7 +159,7 @@ export function CircularParser() {
             />
           </div>
 
-          <p className="border-t border-slate-100 pt-3 text-xs text-slate-400">
+          <p className="border-t border-asb-gray-100 pt-3 text-xs text-asb-gray-400">
             Review the extracted data, then create the listing from the{" "}
             {result.kind === "vessel" ? "Post Position" : "Post Cargo"} form. The
             listing goes through the normal review queue before going live.

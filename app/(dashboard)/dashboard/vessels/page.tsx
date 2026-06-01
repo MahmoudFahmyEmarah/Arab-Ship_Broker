@@ -244,10 +244,10 @@ export default async function MyVesselsPage() {
       <section>
         <div className="flex items-center justify-between mb-6 max-[768px]:flex-col max-[768px]:items-start max-[768px]:gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-2xl font-bold text-asb-navy tracking-tight">
               My Vessels
             </h1>
-            <p className="text-sm text-slate-500 mt-0.5">
+            <p className="text-sm text-asb-gray-500 mt-0.5">
               {myVessels.length > 0
                 ? `${myVessels.length} registered · Open vessel page to post a position`
                 : "Register your vessels to start posting positions"}
@@ -257,14 +257,14 @@ export default async function MyVesselsPage() {
             {myVessels.length > 0 && (
               <Link
                 href={quickPostHref}
-                className="flex items-center gap-2 border border-slate-200 text-slate-700 font-semibold px-4 py-2.5 rounded-xl text-sm hover:border-ocean-300 hover:text-ocean-700 transition-colors"
+                className="flex items-center gap-2 border border-asb-gray-200 text-asb-ink-soft font-semibold px-4 py-2.5 rounded text-sm hover:border-asb-blue hover:text-asb-blue transition-colors"
               >
                 <Plus className="w-4 h-4" /> Post position
               </Link>
             )}
             <Link
               href="/dashboard/vessels/register"
-              className="flex items-center gap-2 bg-ocean-600 hover:bg-ocean-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors shadow-sm"
+              className="flex items-center gap-2 bg-asb-blue hover:bg-asb-blue text-white font-semibold px-4 py-2.5 rounded text-sm transition-colors shadow-sm"
             >
               <Plus className="w-4 h-4" /> Register vessel
             </Link>
@@ -272,20 +272,20 @@ export default async function MyVesselsPage() {
         </div>
 
         {myVessels.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-            <div className="w-16 h-16 bg-ocean-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Ship className="w-8 h-8 text-ocean-400" />
+          <div className="text-center py-20 bg-white rounded border border-dashed border-asb-gray-200">
+            <div className="w-16 h-16 bg-asb-blue-light rounded flex items-center justify-center mx-auto mb-4">
+              <Ship className="w-8 h-8 text-asb-blue" />
             </div>
-            <p className="text-slate-700 font-semibold text-base">
+            <p className="text-asb-ink-soft font-semibold text-base">
               No vessels registered yet
             </p>
-            <p className="text-slate-400 text-sm mt-1.5 max-w-xs mx-auto">
+            <p className="text-asb-gray-400 text-sm mt-1.5 max-w-xs mx-auto">
               Add your vessel to the register, then post its operational
               positions.
             </p>
             <Link
               href="/dashboard/vessels/register"
-              className="mt-5 inline-flex items-center gap-2 bg-ocean-600 text-white font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-ocean-700 transition-colors shadow-sm"
+              className="mt-5 inline-flex items-center gap-2 bg-asb-blue text-white font-semibold px-5 py-2.5 rounded text-sm hover:bg-asb-blue transition-colors shadow-sm"
             >
               <Plus className="w-4 h-4" /> Register your first vessel
             </Link>
@@ -301,10 +301,10 @@ export default async function MyVesselsPage() {
       <section>
         <div className="flex items-center justify-between mb-6 max-[768px]:flex-col max-[768px]:items-start max-[768px]:gap-3">
           <div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-xl font-bold text-asb-navy tracking-tight">
               Open Positions
             </h2>
-            <p className="text-sm text-slate-500 mt-0.5">
+            <p className="text-sm text-asb-gray-500 mt-0.5">
               {listings.length} total · {groups.open.length} open ·{" "}
               {groups.pending.length} under review
             </p>
@@ -312,7 +312,7 @@ export default async function MyVesselsPage() {
           {myVessels.length > 0 && (
             <Link
               href={quickPostHref}
-              className="flex items-center gap-2 border border-slate-200 text-slate-700 font-semibold px-4 py-2.5 rounded-xl text-sm hover:border-ocean-300 hover:text-ocean-700 transition-colors max-[768px]:w-full max-[768px]:justify-center"
+              className="flex items-center gap-2 border border-asb-gray-200 text-asb-ink-soft font-semibold px-4 py-2.5 rounded text-sm hover:border-asb-blue hover:text-asb-blue transition-colors max-[768px]:w-full max-[768px]:justify-center"
             >
               <Plus className="w-4 h-4" /> Post position
             </Link>
@@ -320,12 +320,12 @@ export default async function MyVesselsPage() {
         </div>
 
         {listings.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
-            <Anchor className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-semibold">No open positions</p>
+          <div className="text-center py-16 bg-white rounded border border-dashed border-asb-gray-200">
+            <Anchor className="w-10 h-10 text-asb-gray-400 mx-auto mb-3" />
+            <p className="text-asb-gray-500 font-semibold">No open positions</p>
             {myVessels.length > 0 ? (
               <>
-                <p className="text-slate-400 text-sm mt-1">
+                <p className="text-asb-gray-400 text-sm mt-1">
                   Go to a vessel&apos;s page and post a position to get started.
                 </p>
                 <div className="mt-4 flex gap-3 justify-center flex-wrap">
@@ -333,7 +333,7 @@ export default async function MyVesselsPage() {
                     <Link
                       key={v.id}
                       href={`/dashboard/vessels/${v.id}`}
-                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-ocean-600 hover:text-ocean-700 px-3 py-1.5 rounded-lg border border-ocean-200 hover:border-ocean-300 transition-colors"
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-asb-blue hover:text-asb-blue px-3 py-1.5 rounded-lg border border-asb-blue hover:border-asb-blue transition-colors"
                     >
                       <Ship className="w-3.5 h-3.5" />
                       {v.vessel_name}
@@ -342,7 +342,7 @@ export default async function MyVesselsPage() {
                 </div>
               </>
             ) : (
-              <p className="text-slate-400 text-sm mt-1">
+              <p className="text-asb-gray-400 text-sm mt-1">
                 Register a vessel first, then post its operational positions.
               </p>
             )}
@@ -395,9 +395,9 @@ function PositionSection({
 }) {
   return (
     <div>
-      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
+      <h3 className="text-xs font-bold text-asb-gray-400 uppercase tracking-widest mb-4">
         {title}{" "}
-        <span className="ml-1 text-slate-300 font-normal normal-case">
+        <span className="ml-1 text-asb-gray-400 font-normal normal-case">
           ({count})
         </span>
       </h3>
@@ -441,19 +441,19 @@ function PositionRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
   return (
     <Link
       href={`/dashboard/vessels/${listing.vessel_id}/availability/${listing.id}`}
-      className="group bg-white border border-slate-200 rounded-2xl p-5 hover:border-ocean-300 hover:shadow-md transition-all flex flex-col gap-4"
+      className="group bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-ocean-50 border border-ocean-100 flex items-center justify-center shrink-0 mt-0.5">
-            <Ship className="w-4 h-4 text-ocean-600" />
+          <div className="w-9 h-9 rounded bg-asb-blue-light border border-asb-gray-200 flex items-center justify-center shrink-0 mt-0.5">
+            <Ship className="w-4 h-4 text-asb-blue" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-900 group-hover:text-ocean-700 transition-colors truncate">
+            <p className="text-sm font-bold text-asb-navy group-hover:text-asb-blue transition-colors truncate">
               {listing.vessel.vessel_name}
             </p>
-            <p className="text-xs text-slate-400 truncate mt-0.5">
+            <p className="text-xs text-asb-gray-400 truncate mt-0.5">
               {listing.vessel.vessel_type}
               {listing.vessel.dwt_grain
                 ? ` · ${listing.vessel.dwt_grain.toLocaleString()} DWT`
@@ -466,7 +466,7 @@ function PositionRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
             Under Review
           </span>
         ) : (
-          <span className="shrink-0 text-xs font-semibold text-slate-500">
+          <span className="shrink-0 text-xs font-semibold text-asb-gray-500">
             {STATUS_LABELS[listing.status]}
           </span>
         )}
@@ -474,9 +474,9 @@ function PositionRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
 
       {/* Open port */}
       {listing.open_port_name && (
-        <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
-          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span className="font-semibold text-slate-700 truncate">
+        <div className="flex items-center gap-1.5 text-xs text-asb-gray-700 bg-asb-gray-50 rounded px-3 py-2 border border-asb-gray-100">
+          <MapPin className="w-3.5 h-3.5 text-asb-gray-400 shrink-0" />
+          <span className="font-semibold text-asb-ink-soft truncate">
             {listing.open_port_name}
             {listing.open_zone ? ` (${listing.open_zone})` : ""}
           </span>
@@ -487,11 +487,11 @@ function PositionRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
       {listing.open_date && (
         <div
           className={cn(
-            "flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border",
+            "flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded border",
             urgency.color
               ? "bg-amber-50 border-amber-100"
-              : "bg-slate-50 border-slate-100",
-            urgency.color || "text-slate-600",
+              : "bg-asb-gray-50 border-asb-gray-100",
+            urgency.color || "text-asb-gray-700",
           )}
         >
           <Calendar className="w-3.5 h-3.5 shrink-0" />
@@ -501,14 +501,14 @@ function PositionRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
       )}
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-auto">
+      <div className="flex items-center justify-between pt-3 border-t border-asb-gray-100 mt-auto">
         <div className={cn("flex items-center gap-1.5", REVIEW_COLORS[listing.review_status])}>
           <ReviewIcon className="w-3.5 h-3.5" />
           <span className="text-[11px] font-semibold">
             {listing.review_status === "PENDING" ? "Pending Review" : listing.review_status}
           </span>
         </div>
-        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-ocean-500 group-hover:translate-x-0.5 transition-all" />
+        <ArrowRight className="w-4 h-4 text-asb-gray-400 group-hover:text-asb-blue group-hover:translate-x-0.5 transition-all" />
       </div>
     </Link>
   );

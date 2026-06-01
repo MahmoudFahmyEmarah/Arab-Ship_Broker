@@ -73,12 +73,12 @@ function EmailVerifyLogic() {
 
 export default function VerifyEmailPage() {
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 selection:bg-ocean-500/30">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 selection:bg-asb-blue/30">
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-1000 scale-105"
         style={{ backgroundImage: "url('/5.jpeg')" }}
       />
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-asb-navy-deep/40 backdrop-blur-[2px]" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}

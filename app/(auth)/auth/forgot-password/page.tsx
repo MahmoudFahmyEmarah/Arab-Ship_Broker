@@ -68,12 +68,12 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 selection:bg-ocean-500/30">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 selection:bg-asb-blue/30">
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-1000 scale-105"
         style={{ backgroundImage: "url('/3.jpeg')" }}
       />
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-asb-navy-deep/40 backdrop-blur-[2px]" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -81,20 +81,20 @@ export default function ForgotPasswordPage() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative z-10 w-full max-w-md"
       >
-        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-[768px]:p-8 border border-white/20 ring-1 ring-slate-900/5">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-[768px]:p-8 border border-white/20 ring-1 ring-asb-navy-deep/5">
           <div className="text-center mb-8">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="mx-auto w-12 h-12 bg-ocean-50 text-ocean-600 rounded-xl flex items-center justify-center mb-4 shadow-sm border border-ocean-100"
+              className="mx-auto w-12 h-12 bg-asb-blue-light text-asb-blue rounded flex items-center justify-center mb-4 shadow-sm border border-asb-gray-200"
             >
               <Key className="w-6 h-6" />
             </motion.div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">
+            <h1 className="text-3xl font-bold text-asb-navy tracking-tight mb-2">
               Recover Password
             </h1>
-            <p className="text-slate-500 text-sm">
+            <p className="text-asb-gray-500 text-sm">
               Enter your email and we&apos;ll send you a secure verification
               code.
             </p>
@@ -114,17 +114,17 @@ export default function ForgotPasswordPage() {
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700 font-semibold text-xs uppercase tracking-wider">
+                        <FormLabel className="text-asb-ink-soft font-semibold text-xs uppercase tracking-wider">
                           Email Address
                         </FormLabel>
                         <FormControl>
                           <div className="relative group">
-                            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-ocean-500 transition-colors" />
+                            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-asb-gray-400 w-4 h-4 group-focus-within:text-asb-blue transition-colors" />
                             <Input
                               {...field}
                               type="email"
                               placeholder="captain@arabship.com"
-                              className="bg-slate-50 border-slate-200 focus:bg-white focus:border-ocean-500 focus:ring-2 focus:ring-ocean-500/20 pl-10 h-11 transition-all rounded-xl"
+                              className="bg-asb-gray-50 border-asb-gray-200 focus:bg-white focus:border-asb-blue  focus:ring-asb-blue/20 pl-10 h-11 transition-all rounded"
                             />
                           </div>
                         </FormControl>
@@ -138,7 +138,7 @@ export default function ForgotPasswordPage() {
                   <Button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-base shadow-md hover:shadow-lg transition-all flex items-center justify-center group"
+                    className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold text-base shadow-md hover:shadow-lg transition-all flex items-center justify-center group"
                   >
                     {isSubmitting ? (
                       <>
@@ -157,12 +157,12 @@ export default function ForgotPasswordPage() {
             </form>
           </Form>
 
-          <div className="text-center mt-8 pt-6 border-t border-slate-100">
-            <p className="text-slate-600 text-sm">
+          <div className="text-center mt-8 pt-6 border-t border-asb-gray-100">
+            <p className="text-asb-gray-700 text-sm">
               Remembered your password?{" "}
               <Link
                 href="/auth/login"
-                className="text-ocean-600 hover:text-ocean-700 font-semibold hover:underline underline-offset-4 transition-all"
+                className="text-asb-blue hover:text-asb-blue font-semibold hover:underline underline-offset-4 transition-all"
               >
                 Return to Sign In
               </Link>

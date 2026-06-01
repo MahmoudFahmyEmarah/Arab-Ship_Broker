@@ -62,8 +62,8 @@ export default async function EditAvailabilityPage({
   return (
     <div className="py-2 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Edit position</h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <h1 className="text-2xl font-bold text-asb-navy">Edit position</h1>
+        <p className="text-sm text-asb-gray-500 mt-1">
           {listing.vessel.vessel_name}
           {listing.open_port_name ? (
             <>
@@ -71,7 +71,7 @@ export default async function EditAvailabilityPage({
               {listing.open_port_locode ? (
                 <Link
                   href={`/dashboard/ports/${listing.open_port_locode}`}
-                  className="hover:text-ocean-700 hover:underline"
+                  className="hover:text-asb-blue hover:underline"
                 >
                   {listing.open_port_name}
                 </Link>

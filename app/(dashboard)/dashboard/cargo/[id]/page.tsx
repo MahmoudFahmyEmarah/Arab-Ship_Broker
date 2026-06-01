@@ -167,11 +167,11 @@ export default async function CargoDetailPage({
                 <span>
                   <Link
                     href={`/dashboard/ports/${listing.load_port_locode}`}
-                    className="hover:text-ocean-700 hover:underline"
+                    className="hover:text-asb-blue hover:underline"
                   >
                     {listing.load_port_name}
                   </Link>
-                  <span className="text-slate-400">
+                  <span className="text-asb-gray-400">
                     {" "}
                     ({listing.load_port_locode})
                   </span>
@@ -185,11 +185,11 @@ export default async function CargoDetailPage({
                 <span>
                   <Link
                     href={`/dashboard/ports/${listing.disch_port_locode}`}
-                    className="hover:text-ocean-700 hover:underline"
+                    className="hover:text-asb-blue hover:underline"
                   >
                     {listing.disch_port_name}
                   </Link>
-                  <span className="text-slate-400">
+                  <span className="text-asb-gray-400">
                     {" "}
                     ({listing.disch_port_locode})
                   </span>
@@ -282,7 +282,7 @@ export default async function CargoDetailPage({
 
           {listing.notes && (
             <DetailCard title="Notes">
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <p className="text-sm text-asb-gray-700 leading-relaxed">
                 {listing.notes}
               </p>
             </DetailCard>
@@ -423,7 +423,7 @@ function VesselMatchCard({ match }: { match: CargoMatchResult }) {
           </span>
         )}
         {match.accepts_part_cargo && (
-          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+          <span className="text-xs bg-asb-gray-100 text-asb-gray-700 px-2 py-0.5 rounded">
             Part cargo OK
           </span>
         )}
@@ -433,7 +433,7 @@ function VesselMatchCard({ match }: { match: CargoMatchResult }) {
               ? "bg-green-50 text-green-700 border-green-200"
               : match.scope === "Marginal"
                 ? "bg-amber-50 text-amber-700 border-amber-200"
-                : "bg-slate-100 text-slate-600 border-slate-200"
+                : "bg-asb-gray-100 text-asb-gray-700 border-asb-gray-200"
           }`}
         >
           {match.scope}

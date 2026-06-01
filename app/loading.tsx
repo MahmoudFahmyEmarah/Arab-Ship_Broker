@@ -12,12 +12,12 @@ export default function Loading() {
         className="relative flex flex-col items-center gap-4"
       >
         <div className="relative h-14 w-14">
-          <span className="absolute inset-0 rounded-full border-4 border-slate-200" />
+          <span className="absolute inset-0 rounded-full border-4 border-asb-gray-200" />
           <span className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-r-ocean-400 border-t-ocean-500" />
-          <span className="absolute inset-3 animate-pulse rounded-full bg-ocean-100" />
+          <span className="absolute inset-3 animate-pulse rounded-full bg-asb-blue-light" />
         </div>
 
-        <p className="text-sm font-medium text-slate-600">Loading content...</p>
+        <p className="text-sm font-medium text-asb-gray-700">Loading content...</p>
         <span className="sr-only">Loading</span>
       </div>
     </div>

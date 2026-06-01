@@ -20,7 +20,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       <button
         aria-label="Open menu"
         onClick={() => setMobileOpen(true)}
-        className="hidden max-[1024px]:inline-flex fixed top-4 right-4 z-50 p-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-slate-600 hover:text-ocean-600 hover:bg-slate-50 transition-colors"
+        className="hidden max-[1024px]:inline-flex fixed top-4 right-4 z-50 p-2.5 bg-white rounded shadow-sm border border-asb-gray-200 text-asb-gray-700 hover:text-asb-blue hover:bg-asb-gray-50 transition-colors"
       >
         <Menu className="w-6 h-6" />
       </button>

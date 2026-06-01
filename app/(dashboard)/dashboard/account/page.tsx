@@ -66,31 +66,31 @@ export default async function AccountSettingsPage() {
   return (
     <div className="max-w-2xl space-y-8 py-2">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Account Settings</h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <h1 className="text-2xl font-bold text-asb-navy">Account Settings</h1>
+        <p className="text-asb-gray-500 text-sm mt-1">
           Manage your identity, contact details and security.
         </p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-5">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 pb-3 border-b border-slate-100">
+      <div className="bg-white border border-asb-gray-200 rounded p-5">
+        <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-4 pb-3 border-b border-asb-gray-100">
           Account status
         </p>
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-600 font-medium">Status:</span>
+            <Shield className="w-4 h-4 text-asb-gray-400" />
+            <span className="text-sm text-asb-gray-700 font-medium">Status:</span>
             <span
               className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
                 u.is_active
                   ? "bg-green-50 text-green-700 border-green-200"
-                  : "bg-slate-100 text-slate-500 border-slate-200"
+                  : "bg-asb-gray-100 text-asb-gray-500 border-asb-gray-200"
               }`}
             >
               {u.is_active ? "Active" : "Inactive"}
             </span>
           </div>
-          <div className="ml-auto text-xs text-slate-400">
+          <div className="ml-auto text-xs text-asb-gray-400">
             Member since{" "}
             {new Date(u.created_at).toLocaleDateString("en-GB", {
               month: "long",

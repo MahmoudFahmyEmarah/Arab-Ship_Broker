@@ -70,15 +70,15 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
           <div className="flex items-center gap-2 mb-1">
             <Link
               href="/dashboard/vessels"
-              className="text-sm text-slate-500 hover:text-slate-700"
+              className="text-sm text-asb-gray-500 hover:text-asb-ink-soft"
             >
               ← My postings
             </Link>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <h1 className="text-2xl font-bold text-asb-navy">
             {vessel.vessel_name}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-asb-gray-500 mt-1">
             {vessel.vessel_type} · {vessel.dwt_grain?.toLocaleString() ?? "—"}{" "}
             MT DWT · {availability.ref ?? id.slice(0, 8)}
           </p>
@@ -90,7 +90,7 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
           />
           <Link
             href={`/dashboard/vessels/${vesselId}/availability/${id}/edit`}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-white border border-slate-200 rounded-xl hover:border-ocean-300 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-white border border-asb-gray-200 rounded hover:border-asb-blue transition-colors"
           >
             <Edit className="w-4 h-4" />
             Edit
@@ -101,8 +101,8 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-3 max-[1024px]:grid-cols-1 gap-6">
         {/* Left: Posting details */}
         <div className="col-span-1 space-y-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+          <div className="bg-white border border-asb-gray-200 rounded p-5 space-y-4">
+            <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider">
               Availability details
             </h2>
             <Detail
@@ -112,7 +112,7 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
                 availability.open_port_name && availability.open_port_locode ? (
                   <Link
                     href={`/dashboard/ports/${availability.open_port_locode}`}
-                    className="hover:text-ocean-700 hover:underline"
+                    className="hover:text-asb-blue hover:underline"
                   >
                     {availability.open_port_name}
                   </Link>
@@ -131,7 +131,7 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
                   availability.ballast_port_locode ? (
                     <Link
                       href={`/dashboard/ports/${availability.ballast_port_locode}`}
-                      className="hover:text-ocean-700 hover:underline"
+                      className="hover:text-asb-blue hover:underline"
                     >
                       {availability.ballast_port_name}
                     </Link>
@@ -225,8 +225,8 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
             )}
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+          <div className="bg-white border border-asb-gray-200 rounded p-5 space-y-4">
+            <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider">
               Vessel
             </h2>
             <Detail icon={Ship} label="Type" value={vessel.vessel_type} />
@@ -277,16 +277,16 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
         {/* Right: Match results */}
         <div className="col-span-2 max-[1024px]:col-span-1 space-y-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 mb-1">
+            <h2 className="text-lg font-bold text-asb-navy mb-1">
               Matching cargoes
               {matches.length > 0 && (
-                <span className="ml-2 text-sm font-semibold text-ocean-600 bg-ocean-50 px-2 py-0.5 rounded-md">
+                <span className="ml-2 text-sm font-semibold text-asb-blue bg-asb-blue-light px-2 py-0.5 rounded-md">
                   {matches.length}
                 </span>
               )}
             </h2>
             {!isLive ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
+              <div className="bg-amber-50 border border-amber-200 rounded p-6 text-center">
                 <Clock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-amber-900">
                   {availability.review_status === "PENDING"
@@ -295,12 +295,12 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
                 </p>
               </div>
             ) : matches.length === 0 ? (
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-10 text-center">
-                <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-500">
+              <div className="bg-asb-gray-50 border border-asb-gray-200 rounded p-10 text-center">
+                <Package className="w-8 h-8 text-asb-gray-400 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-asb-gray-500">
                   No matching cargoes found
                 </p>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-asb-gray-400 mt-1">
                   Match results refresh automatically as new cargo listings are
                   approved.
                 </p>
@@ -321,11 +321,11 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
 
 function MatchCard({ match }: { match: VesselMatchResult }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-ocean-300 hover:shadow-sm transition-all">
+    <div className="bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-sm transition-all">
       <div className="flex items-start justify-between gap-4 mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <p className="text-sm font-bold text-slate-900">
+            <p className="text-sm font-bold text-asb-navy">
               {match.commodity_name}
             </p>
             {match.is_rate_aligned && (
@@ -339,16 +339,16 @@ function MatchCard({ match }: { match: VesselMatchResult }) {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-asb-gray-500 mt-0.5">
             {match.ref ?? "—"} · {match.cargo_type}
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-slate-900">
+          <p className="text-sm font-bold text-asb-navy">
             {match.qty_min_mt.toLocaleString()} –{" "}
             {match.qty_max_mt.toLocaleString()} MT
           </p>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-asb-gray-400">
             DWT delta: {match.dwt_delta.toLocaleString()} MT
           </p>
         </div>
@@ -356,22 +356,22 @@ function MatchCard({ match }: { match: VesselMatchResult }) {
 
       <div className="grid grid-cols-4 max-[1024px]:grid-cols-2 max-[768px]:grid-cols-1 gap-3 text-xs">
         <div>
-          <p className="text-slate-400 font-medium">Load port</p>
-          <p className="font-semibold text-slate-700 mt-0.5">
+          <p className="text-asb-gray-400 font-medium">Load port</p>
+          <p className="font-semibold text-asb-ink-soft mt-0.5">
             {match.load_port_name}{" "}
-            <span className="text-slate-400">({match.load_zone})</span>
+            <span className="text-asb-gray-400">({match.load_zone})</span>
           </p>
         </div>
         <div>
-          <p className="text-slate-400 font-medium">Disch port</p>
-          <p className="font-semibold text-slate-700 mt-0.5">
+          <p className="text-asb-gray-400 font-medium">Disch port</p>
+          <p className="font-semibold text-asb-ink-soft mt-0.5">
             {match.disch_port_name}{" "}
-            <span className="text-slate-400">({match.disch_zone})</span>
+            <span className="text-asb-gray-400">({match.disch_zone})</span>
           </p>
         </div>
         <div>
-          <p className="text-slate-400 font-medium">Laycan</p>
-          <p className="font-semibold text-slate-700 mt-0.5">
+          <p className="text-asb-gray-400 font-medium">Laycan</p>
+          <p className="font-semibold text-asb-ink-soft mt-0.5">
             {match.is_spot
               ? "SPOT"
               : match.laycan_from
@@ -380,8 +380,8 @@ function MatchCard({ match }: { match: VesselMatchResult }) {
           </p>
         </div>
         <div>
-          <p className="text-slate-400 font-medium">Freight idea</p>
-          <p className="font-semibold text-slate-700 mt-0.5">
+          <p className="text-asb-gray-400 font-medium">Freight idea</p>
+          <p className="font-semibold text-asb-ink-soft mt-0.5">
             {match.freight_idea_usd_mt
               ? `$${match.freight_idea_usd_mt}/MT`
               : "—"}
@@ -407,22 +407,22 @@ function MatchCard({ match }: { match: VesselMatchResult }) {
           </span>
         )}
         {match.max_vessel_age_yr && (
-          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+          <span className="text-xs bg-asb-gray-100 text-asb-gray-700 px-2 py-0.5 rounded">
             Max age: {match.max_vessel_age_yr} yr
           </span>
         )}
         {match.max_draft_m && (
-          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+          <span className="text-xs bg-asb-gray-100 text-asb-gray-700 px-2 py-0.5 rounded">
             Max draft: {match.max_draft_m}m
           </span>
         )}
         {match.max_loa_m && (
-          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+          <span className="text-xs bg-asb-gray-100 text-asb-gray-700 px-2 py-0.5 rounded">
             Max LOA: {match.max_loa_m}m
           </span>
         )}
         {match.load_terms && (
-          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+          <span className="text-xs bg-asb-gray-100 text-asb-gray-700 px-2 py-0.5 rounded">
             {match.load_terms}
           </span>
         )}
@@ -442,10 +442,10 @@ function Detail({
 }) {
   return (
     <div className="flex items-start gap-2.5">
-      <Icon className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+      <Icon className="w-4 h-4 text-asb-gray-400 shrink-0 mt-0.5" />
       <div>
-        <p className="text-xs text-slate-400">{label}</p>
-        <p className="text-sm font-semibold text-slate-800">{value}</p>
+        <p className="text-xs text-asb-gray-400">{label}</p>
+        <p className="text-sm font-semibold text-asb-ink">{value}</p>
       </div>
     </div>
   );
@@ -460,20 +460,20 @@ function StatusBadge({
 }) {
   if (reviewStatus === "PENDING") {
     return (
-      <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded-xl">
+      <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded">
         <Clock className="w-3.5 h-3.5" /> Pending review
       </span>
     );
   }
   if (status === "OPEN") {
     return (
-      <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded-xl">
+      <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded">
         <CheckCircle2 className="w-3.5 h-3.5" /> Live
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 rounded-xl">
+    <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-asb-gray-100 text-asb-gray-700 border border-asb-gray-200 rounded">
       {status}
     </span>
   );

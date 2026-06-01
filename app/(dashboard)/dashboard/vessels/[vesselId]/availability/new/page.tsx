@@ -51,13 +51,13 @@ export default async function NewAvailabilityPage({ params }: PageProps) {
         <div className="flex items-start gap-3">
           <Link
             href={`/dashboard/vessels/${prefilledVessel.id}`}
-            className="mt-1 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="mt-1 p-2 rounded text-asb-gray-400 hover:text-asb-gray-700 hover:bg-asb-gray-100 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Post Position</h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <h1 className="text-2xl font-bold text-asb-navy">Post Position</h1>
+            <p className="text-sm text-asb-gray-500 mt-1">
               Select your vessel, choose an open port, and submit for matching.
             </p>
           </div>

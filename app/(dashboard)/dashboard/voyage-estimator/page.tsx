@@ -23,12 +23,12 @@ export default async function VoyageEstimatorPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 py-2">
       <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-ocean-50 p-2">
-          <Calculator className="h-5 w-5 text-ocean-600" />
+        <div className="rounded-lg bg-asb-blue-light p-2">
+          <Calculator className="h-5 w-5 text-asb-blue" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Voyage Estimator</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-asb-navy">Voyage Estimator</h1>
+          <p className="mt-1 text-sm text-asb-gray-500">
             Full voyage P&amp;L with per-fuel bunkers (VLSFO &amp; LSMGO, at sea
             and in port). Prefill from an open vessel or a cargo, adjust the
             inputs, and the result updates live. Saved estimates are private to

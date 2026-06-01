@@ -49,15 +49,15 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5">
-      <div className="flex items-center gap-3 mb-5 pb-4 border-b border-slate-100">
-        <div className="w-9 h-9 rounded-xl bg-ocean-50 border border-ocean-100 flex items-center justify-center shrink-0">
-          <Icon className="w-4.5 h-4.5 text-ocean-600" />
+    <div className="bg-white border border-asb-gray-200 rounded p-5">
+      <div className="flex items-center gap-3 mb-5 pb-4 border-b border-asb-gray-100">
+        <div className="w-9 h-9 rounded bg-asb-blue-light border border-asb-gray-200 flex items-center justify-center shrink-0">
+          <Icon className="w-4.5 h-4.5 text-asb-blue" />
         </div>
         <div>
-          <p className="text-sm font-bold text-slate-800">{title}</p>
+          <p className="text-sm font-bold text-asb-ink">{title}</p>
           {subtitle && (
-            <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
+            <p className="text-xs text-asb-gray-400 mt-0.5">{subtitle}</p>
           )}
         </div>
       </div>
@@ -68,14 +68,14 @@ function SectionCard({
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+    <label className="block text-xs font-semibold text-asb-gray-700 mb-1.5">
       {children}
     </label>
   );
 }
 
 const inputCls =
-  "w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all";
+  "w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:bg-white transition-all";
 
 function SaveButton({
   isPending,
@@ -88,7 +88,7 @@ function SaveButton({
     <button
       type="submit"
       disabled={isPending}
-      className="flex items-center gap-2 px-5 py-2.5 bg-ocean-600 hover:bg-ocean-700 text-white font-semibold text-sm rounded-xl transition-colors disabled:opacity-60 shadow-sm"
+      className="flex items-center gap-2 px-5 py-2.5 bg-asb-blue hover:bg-asb-blue text-white font-semibold text-sm rounded transition-colors disabled:opacity-60 shadow-sm"
     >
       {isPending ? (
         <>
@@ -178,7 +178,7 @@ function ProfileSection({
             onChange={set("notes")}
             rows={2}
             placeholder="Any additional info about your company or activity…"
-            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all resize-none"
+            className="w-full px-3 py-2.5 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:bg-white transition-all resize-none"
           />
         </div>
         <div className="flex justify-end">
@@ -270,9 +270,9 @@ export function AccountEditForm({ initialValues }: AccountEditFormProps) {
             <input
               value={initialValues.email}
               readOnly
-              className={cn(inputCls, "text-slate-400 cursor-not-allowed")}
+              className={cn(inputCls, "text-asb-gray-400 cursor-not-allowed")}
             />
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-asb-gray-400 mt-1">
               To change your email, use the Email section below.
             </p>
           </div>
@@ -332,7 +332,7 @@ export function AccountEditForm({ initialValues }: AccountEditFormProps) {
               <button
                 type="button"
                 onClick={() => setShowCurrent((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-asb-gray-400 hover:text-asb-gray-700"
               >
                 {showCurrent ? (
                   <EyeOff className="w-4 h-4" />
@@ -357,7 +357,7 @@ export function AccountEditForm({ initialValues }: AccountEditFormProps) {
               <button
                 type="button"
                 onClick={() => setShowNew((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-asb-gray-400 hover:text-asb-gray-700"
               >
                 {showNew ? (
                   <EyeOff className="w-4 h-4" />

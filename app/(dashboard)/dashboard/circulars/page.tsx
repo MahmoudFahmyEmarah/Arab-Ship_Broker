@@ -23,12 +23,12 @@ export default async function CircularsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 py-2">
       <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-ocean-50 p-2">
-          <Sparkles className="h-5 w-5 text-ocean-600" />
+        <div className="rounded-lg bg-asb-blue-light p-2">
+          <Sparkles className="h-5 w-5 text-asb-blue" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Circular Parser</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-asb-navy">Circular Parser</h1>
+          <p className="mt-1 text-sm text-asb-gray-500">
             Paste a cargo or vessel circular from email or WhatsApp. The parser
             reads maritime shorthand and extracts structured data for posting —
             it never reads or reveals any counterparty&apos;s contact details.

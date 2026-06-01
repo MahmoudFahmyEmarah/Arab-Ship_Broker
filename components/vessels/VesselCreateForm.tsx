@@ -237,10 +237,10 @@ function FieldLabel({
 }) {
   return (
     <div className="flex items-center gap-1.5 mb-1.5">
-      <label className="text-sm font-semibold text-slate-700">{children}</label>
+      <label className="text-sm font-semibold text-asb-ink-soft">{children}</label>
       {required && <span className="text-red-400 text-xs">*</span>}
       {hint && (
-        <span className="text-xs text-slate-400 font-normal">{hint}</span>
+        <span className="text-xs text-asb-gray-400 font-normal">{hint}</span>
       )}
     </div>
   );
@@ -258,12 +258,12 @@ function FieldInput(
       <input
         {...rest}
         className={cn(
-          "w-full h-10 px-3 rounded-xl border bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all",
+          "w-full h-10 px-3 rounded border bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:bg-white transition-all",
           error
             ? "border-red-300 focus:ring-red-400"
             : warning
               ? "border-amber-300"
-              : "border-slate-200",
+              : "border-asb-gray-200",
           className,
         )}
       />
@@ -288,8 +288,8 @@ function FieldSelect(
       <select
         {...rest}
         className={cn(
-          "w-full h-10 px-3 rounded-xl border bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all cursor-pointer",
-          error ? "border-red-300" : "border-slate-200",
+          "w-full h-10 px-3 rounded border bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:bg-white transition-all cursor-pointer",
+          error ? "border-red-300" : "border-asb-gray-200",
           className,
         )}
       >
@@ -326,10 +326,10 @@ function TriBoolean({
             type="button"
             onClick={() => onChange(o.val)}
             className={cn(
-              "flex-1 h-9 rounded-xl text-sm font-semibold border transition-all",
+              "flex-1 h-9 rounded text-sm font-semibold border transition-all",
               value === o.val
-                ? "bg-ocean-600 text-white border-ocean-600"
-                : "bg-slate-50 text-slate-600 border-slate-200 hover:border-ocean-300",
+                ? "bg-asb-blue text-white border-asb-blue"
+                : "bg-asb-gray-50 text-asb-gray-700 border-asb-gray-200 hover:border-asb-blue",
             )}
           >
             {o.label}
@@ -367,10 +367,10 @@ function MultiSelectChips({
             type="button"
             onClick={() => toggle(opt)}
             className={cn(
-              "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all",
+              "px-3 py-1.5 rounded text-xs font-semibold border transition-all",
               value.includes(opt)
-                ? "bg-ocean-600 text-white border-ocean-600"
-                : "bg-slate-50 text-slate-600 border-slate-200 hover:border-ocean-300",
+                ? "bg-asb-blue text-white border-asb-blue"
+                : "bg-asb-gray-50 text-asb-gray-700 border-asb-gray-200 hover:border-asb-blue",
             )}
           >
             {opt}
@@ -385,8 +385,8 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
   if (!value || value === "—") return null;
   return (
     <div className="flex justify-between items-center px-4 py-2.5 text-sm">
-      <span className="text-slate-500 font-medium">{label}</span>
-      <span className="text-slate-900 font-semibold text-right break-word max-w-[60%]">
+      <span className="text-asb-gray-500 font-medium">{label}</span>
+      <span className="text-asb-navy font-semibold text-right break-word max-w-[60%]">
         {value}
       </span>
     </div>
@@ -404,12 +404,12 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center gap-3 mb-6">
-      <div className="w-10 h-10 rounded-xl bg-ocean-50 border border-ocean-100 flex items-center justify-center shrink-0">
-        <Icon className="w-5 h-5 text-ocean-600" />
+      <div className="w-10 h-10 rounded bg-asb-blue-light border border-asb-gray-200 flex items-center justify-center shrink-0">
+        <Icon className="w-5 h-5 text-asb-blue" />
       </div>
       <div>
-        <h2 className="text-xl font-bold text-slate-900">{title}</h2>
-        {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+        <h2 className="text-xl font-bold text-asb-navy">{title}</h2>
+        {subtitle && <p className="text-sm text-asb-gray-500">{subtitle}</p>}
       </div>
     </div>
   );
@@ -424,7 +424,7 @@ function FormSection({
 }) {
   return (
     <div className="space-y-4">
-      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+      <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-widest">
         {title}
       </p>
       {children}
@@ -649,9 +649,9 @@ export function VesselCreateForm() {
               <div
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap",
-                  idx === step && "bg-ocean-600 text-white",
-                  idx < step && "bg-ocean-100 text-ocean-700",
-                  idx > step && "text-slate-400",
+                  idx === step && "bg-asb-blue text-white",
+                  idx < step && "bg-asb-blue-light text-asb-blue",
+                  idx > step && "text-asb-gray-400",
                 )}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -661,7 +661,7 @@ export function VesselCreateForm() {
                 <div
                   className={cn(
                     "flex-1 h-0.5 mx-1 rounded-full transition-colors min-w-2",
-                    idx < step ? "bg-ocean-400" : "bg-slate-100",
+                    idx < step ? "bg-asb-blue" : "bg-asb-gray-100",
                   )}
                 />
               )}
@@ -670,7 +670,7 @@ export function VesselCreateForm() {
         })}
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 max-[768px]:p-6 overflow-hidden">
+      <div className="bg-white rounded border border-asb-gray-200 shadow-sm p-8 max-[768px]:p-6 overflow-hidden">
         <form onSubmit={handleFormSubmit} onKeyDown={preventEnterSubmit}>
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
@@ -742,7 +742,7 @@ export function VesselCreateForm() {
                       error={errors.imo_number?.message}
                     />
                     {!values.imo_number && !imoBypass && (
-                      <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                      <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded px-3 py-2.5">
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                         <div className="flex-1">
                           <p className="text-xs text-amber-800 font-medium">
@@ -771,7 +771,7 @@ export function VesselCreateForm() {
                       placeholder="e.g. Panama"
                     />
                   </div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
+                  <div className="bg-blue-50 border border-blue-200 rounded p-4 flex gap-3">
                     <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                     <p className="text-xs text-blue-700 leading-relaxed">
                       Arab ShipBroker will verify your vessel and assign a trust
@@ -833,7 +833,7 @@ export function VesselCreateForm() {
 
                   {/* ── Cubic capacity (grain_cbm / bale_cbm) ── */}
                   <FormSection title="Cubic capacity (optional)">
-                    <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                    <p className="text-xs text-asb-gray-500 mb-3 leading-relaxed">
                       Enter the grain and/or bale cubic capacity of all holds
                       combined. This is used to verify cargo volume fits: Volume
                       (cbm) = Qty (MT) × Stowage Factor.
@@ -852,9 +852,9 @@ export function VesselCreateForm() {
                           error={errors.grain_cbm?.message}
                         />
                         {values.grain_cbm && values.dwt_grain && (
-                          <p className="text-xs text-slate-400 mt-1">
+                          <p className="text-xs text-asb-gray-400 mt-1">
                             Implied SF:{" "}
-                            <strong className="text-slate-600">
+                            <strong className="text-asb-gray-700">
                               {(values.grain_cbm / values.dwt_grain).toFixed(2)}{" "}
                               m³/t
                             </strong>
@@ -880,7 +880,7 @@ export function VesselCreateForm() {
                           )}
                       </div>
                     </div>
-                    <p className="text-xs text-slate-400 mt-2">
+                    <p className="text-xs text-asb-gray-400 mt-2">
                       1 cbm = 35.31 cbft. Enter in cubic metres (cbm).
                     </p>
                   </FormSection>
@@ -976,7 +976,7 @@ export function VesselCreateForm() {
                         )}
                       />
                       {values.is_geared === true && (
-                        <div className="pl-4 border-l-2 border-ocean-200 space-y-4">
+                        <div className="pl-4 border-l-2 border-asb-blue space-y-4">
                           <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
                             <div>
                               <FieldLabel>Crane count</FieldLabel>
@@ -1012,7 +1012,7 @@ export function VesselCreateForm() {
                             )}
                           />
                           {values.has_grabs === true && (
-                            <div className="pl-4 border-l-2 border-ocean-100">
+                            <div className="pl-4 border-l-2 border-asb-gray-200">
                               <FieldLabel hint="(MT)">Grab capacity</FieldLabel>
                               <FieldInput
                                 type="number"
@@ -1239,7 +1239,7 @@ export function VesselCreateForm() {
                         {...form.register("hold_special_notes")}
                         rows={2}
                         placeholder="Any special cargo hold features or loading restrictions…"
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all resize-none"
+                        className="w-full px-3 py-2.5 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:bg-white transition-all resize-none"
                       />
                     </div>
                   </FormSection>
@@ -1269,7 +1269,7 @@ export function VesselCreateForm() {
                       )}
                     />
                     {values.scrubber_fitted === true && (
-                      <div className="mt-4 pl-4 border-l-2 border-ocean-200 space-y-3">
+                      <div className="mt-4 pl-4 border-l-2 border-asb-blue space-y-3">
                         <div>
                           <FieldLabel>Scrubber type</FieldLabel>
                           <Controller
@@ -1290,7 +1290,7 @@ export function VesselCreateForm() {
                           />
                         </div>
                         {values.scrubber_type === "Open loop" && (
-                          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2">
+                          <div className="bg-amber-50 border border-amber-200 rounded p-3 flex gap-2">
                             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                             <p className="text-xs text-amber-800">
                               Open loop scrubbers are prohibited in several
@@ -1493,13 +1493,13 @@ export function VesselCreateForm() {
                           </FieldSelect>
                         )}
                       />
-                      <p className="text-xs text-slate-400 mt-1.5">
+                      <p className="text-xs text-asb-gray-400 mt-1.5">
                         Determines who holds commercial authority — brokers need
                         this before presenting the vessel.
                       </p>
                     </div>
                     {values.charter_status === "Time Charter (TC)" && (
-                      <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4 pl-4 border-l-2 border-ocean-200">
+                      <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4 pl-4 border-l-2 border-asb-blue">
                         <div>
                           <FieldLabel>TC charterer name</FieldLabel>
                           <FieldInput
@@ -1517,7 +1517,7 @@ export function VesselCreateForm() {
                       </div>
                     )}
                     {values.charter_status === "Bareboat Charter (BBC)" && (
-                      <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4 pl-4 border-l-2 border-ocean-200">
+                      <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4 pl-4 border-l-2 border-asb-blue">
                         <div>
                           <FieldLabel>BBC charterer name</FieldLabel>
                           <FieldInput
@@ -1541,16 +1541,16 @@ export function VesselCreateForm() {
                       {picFields.map((pic, idx) => (
                         <div
                           key={pic.id}
-                          className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3"
+                          className="bg-asb-gray-50 border border-asb-gray-200 rounded p-4 space-y-3"
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <p className="text-xs font-bold text-asb-gray-500 uppercase tracking-wider">
                               Contact {idx + 1}
                             </p>
                             <button
                               type="button"
                               onClick={() => removePic(idx)}
-                              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                              className="p-1 text-asb-gray-400 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1632,14 +1632,14 @@ export function VesselCreateForm() {
                               phone: "",
                             })
                           }
-                          className="flex items-center gap-2 w-full py-3 rounded-xl border-2 border-dashed border-slate-200 hover:border-ocean-300 text-sm font-semibold text-slate-500 hover:text-ocean-600 transition-all"
+                          className="flex items-center gap-2 w-full py-3 rounded border-2 border-dashed border-asb-gray-200 hover:border-asb-blue text-sm font-semibold text-asb-gray-500 hover:text-asb-blue transition-all"
                         >
                           <UserPlus className="w-4 h-4" />
                           Add person in charge
                         </button>
                       )}
                       {picFields.length === 0 && (
-                        <p className="text-xs text-slate-400 text-center">
+                        <p className="text-xs text-asb-gray-400 text-center">
                           At least one contact is recommended.
                         </p>
                       )}
@@ -1740,14 +1740,14 @@ export function VesselCreateForm() {
                         />
                       )}
                     />
-                    <p className="text-xs text-slate-400 mt-2">
+                    <p className="text-xs text-asb-gray-400 mt-2">
                       Selection affects match ranking, not hard-blocking.
                     </p>
                   </FormSection>
 
                   {/* ── Preferred destination zones (preferred_zones) ── */}
                   <FormSection title="Preferred destination zones">
-                    <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                    <p className="text-xs text-asb-gray-500 mb-3 leading-relaxed">
                       Select the geographic zones this vessel prefers to
                       discharge in. Linked directly to the system zone list —
                       enables automatic suggestions and zone-aware cargo
@@ -1783,8 +1783,8 @@ export function VesselCreateForm() {
                                   className={cn(
                                     "px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all",
                                     active
-                                      ? "bg-ocean-600 text-white border-ocean-600"
-                                      : "bg-white text-slate-600 border-slate-200 hover:border-ocean-300 hover:text-ocean-700",
+                                      ? "bg-asb-blue text-white border-asb-blue"
+                                      : "bg-white text-asb-gray-700 border-asb-gray-200 hover:border-asb-blue hover:text-asb-blue",
                                   )}
                                 >
                                   {ZONE_LABELS[code]}
@@ -1799,23 +1799,23 @@ export function VesselCreateForm() {
                       }}
                     />
                     {(values.preferred_zones ?? []).length > 0 && (
-                      <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                      <div className="mt-3 flex items-center gap-2 text-xs text-asb-gray-500">
                         <span>Selected:</span>
-                        <span className="font-semibold text-ocean-700">
+                        <span className="font-semibold text-asb-blue">
                           {(values.preferred_zones ?? [])
                             .map((z) => ZONE_LABELS[z])
                             .join(", ")}
                         </span>
                         <button
                           type="button"
-                          className="ml-auto text-xs text-slate-400 hover:text-red-500 font-semibold"
+                          className="ml-auto text-xs text-asb-gray-400 hover:text-red-500 font-semibold"
                           onClick={() => form.setValue("preferred_zones", [])}
                         >
                           Clear
                         </button>
                       </div>
                     )}
-                    <p className="text-xs text-slate-400 mt-2">
+                    <p className="text-xs text-asb-gray-400 mt-2">
                       Affects match ranking (soft preference — not a hard
                       filter).
                     </p>
@@ -1856,7 +1856,7 @@ export function VesselCreateForm() {
                           {...form.register("war_risk_conditions")}
                           rows={2}
                           placeholder="e.g. Red Sea approved subject to war risk premium. Black Sea case by case."
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all resize-none"
+                          className="w-full px-3 py-2.5 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:bg-white transition-all resize-none"
                         />
                       </div>
                     )}
@@ -1867,7 +1867,7 @@ export function VesselCreateForm() {
                       {...form.register("notes")}
                       rows={3}
                       placeholder="Any relevant information about the vessel…"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all resize-none"
+                      className="w-full px-3 py-2 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:bg-white transition-all resize-none"
                     />
                   </FormSection>
                 </div>
@@ -1883,7 +1883,7 @@ export function VesselCreateForm() {
                     title="Review & register"
                     subtitle="Confirm the details below. You can update them after registration."
                   />
-                  <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200">
+                  <div className="bg-asb-gray-50 rounded border border-asb-gray-200 divide-y divide-slate-200">
                     <ReviewRow
                       label="Vessel name"
                       value={values.vessel_name ?? "—"}
@@ -1997,9 +1997,9 @@ export function VesselCreateForm() {
                     )}
                   </div>
 
-                  <div className="bg-ocean-50 border border-ocean-200 rounded-xl p-4 flex gap-3">
-                    <Anchor className="w-4 h-4 text-ocean-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-ocean-800">
+                  <div className="bg-asb-blue-light border border-asb-blue rounded p-4 flex gap-3">
+                    <Anchor className="w-4 h-4 text-asb-blue shrink-0 mt-0.5" />
+                    <div className="text-xs text-asb-blue">
                       <p className="font-semibold">What happens next</p>
                       <p className="mt-1 leading-relaxed">
                         Arab ShipBroker will verify your vessel and assign a
@@ -2015,12 +2015,12 @@ export function VesselCreateForm() {
           </AnimatePresence>
 
           {/* ── Navigation buttons ────────────────────────────────── */}
-          <div className="flex justify-between items-center pt-8 mt-6 border-t border-slate-100">
+          <div className="flex justify-between items-center pt-8 mt-6 border-t border-asb-gray-100">
             <button
               type="button"
               onClick={goBack}
               disabled={step === 0}
-              className="px-5 py-2.5 font-semibold text-slate-600 hover:bg-slate-50 rounded-xl transition-colors disabled:invisible flex items-center gap-2"
+              className="px-5 py-2.5 font-semibold text-asb-gray-700 hover:bg-asb-gray-50 rounded transition-colors disabled:invisible flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
@@ -2029,7 +2029,7 @@ export function VesselCreateForm() {
                 type="button"
                 onClick={goNext}
                 disabled={step === 0 && !values.imo_number && !imoBypass}
-                className="px-7 py-3 bg-ocean-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-ocean-700 transition-colors disabled:opacity-50"
+                className="px-7 py-3 bg-asb-blue text-white font-bold rounded flex items-center gap-2 hover:bg-asb-blue transition-colors disabled:opacity-50"
               >
                 Continue <ArrowRight className="w-4 h-4" />
               </button>
@@ -2040,7 +2040,7 @@ export function VesselCreateForm() {
                   submitTriggeredByButtonRef.current = true;
                 }}
                 disabled={isSubmitting}
-                className="px-7 py-3 bg-ocean-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-ocean-700 transition-colors disabled:opacity-60"
+                className="px-7 py-3 bg-asb-blue text-white font-bold rounded flex items-center gap-2 hover:bg-asb-blue transition-colors disabled:opacity-60"
               >
                 {isSubmitting ? (
                   <>

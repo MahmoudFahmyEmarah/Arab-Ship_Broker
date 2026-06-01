@@ -42,7 +42,7 @@ export function LogoutButton({
       onClick={handleLogout}
       disabled={isLoggingOut || props.disabled}
       className={cn(
-        "flex items-center justify-center gap-1.5 text-sm font-semibold rounded-xl transition-all duration-300 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ocean-500 disabled:opacity-50",
+        "flex items-center justify-center gap-1.5 text-sm font-semibold rounded transition-all duration-300 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-asb-blue disabled:opacity-50",
         className,
       )}
       {...props}

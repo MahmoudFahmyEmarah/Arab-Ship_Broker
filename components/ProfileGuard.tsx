@@ -42,7 +42,7 @@ export function ProfileGuard({ requires, children }: ProfileGuardProps) {
 
   if (isLoadingAccount) {
     return (
-      <div className="flex items-center justify-center min-h-[40vh] text-slate-400">
+      <div className="flex items-center justify-center min-h-[40vh] text-asb-gray-400">
         <Loader2 className="w-6 h-6 animate-spin" />
       </div>
     );
@@ -60,22 +60,22 @@ export function ProfileGuard({ requires, children }: ProfileGuardProps) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] px-4">
       <div className="max-w-sm text-center">
-        <div className="mx-auto w-14 h-14 bg-ocean-50 border border-ocean-100 rounded-2xl flex items-center justify-center mb-5">
-          <Icon className="w-7 h-7 text-ocean-500" />
+        <div className="mx-auto w-14 h-14 bg-asb-blue-light border border-asb-gray-200 rounded flex items-center justify-center mb-5">
+          <Icon className="w-7 h-7 text-asb-blue" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">
+        <h2 className="text-xl font-bold text-asb-navy mb-2">
           {meta.label} Required
         </h2>
-        <p className="text-slate-500 text-sm mb-6">{meta.description}</p>
+        <p className="text-asb-gray-500 text-sm mb-6">{meta.description}</p>
         <Link
           href={meta.addHref}
-          className="inline-flex items-center gap-2 bg-ocean-600 hover:bg-ocean-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 bg-asb-blue hover:bg-asb-blue text-white font-semibold text-sm px-5 py-2.5 rounded transition-colors shadow-sm"
         >
           Activate {meta.label}
           <ArrowRight className="w-4 h-4" />
         </Link>
-        <p className="text-xs text-slate-400 mt-4">
-          <Link href="/dashboard" className="underline hover:text-slate-600">
+        <p className="text-xs text-asb-gray-400 mt-4">
+          <Link href="/dashboard" className="underline hover:text-asb-gray-700">
             Back to Overview
           </Link>
         </p>

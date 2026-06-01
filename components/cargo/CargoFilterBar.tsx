@@ -64,7 +64,7 @@ function FilterLabel({
   children: React.ReactNode;
 }) {
   return (
-    <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+    <span className="flex items-center gap-1 text-[10px] font-bold text-asb-gray-400 uppercase tracking-wider mb-1">
       <Icon className="w-3 h-3" />
       {children}
     </span>
@@ -72,7 +72,7 @@ function FilterLabel({
 }
 
 function Divider() {
-  return <div className="w-px h-10 bg-slate-100 shrink-0 hidden lg:block" />;
+  return <div className="w-px h-10 bg-asb-gray-100 shrink-0 hidden lg:block" />;
 }
 
 export function CargoFilterBar() {
@@ -128,7 +128,7 @@ export function CargoFilterBar() {
   }, [f, router, startTransition]);
 
   const inputCls =
-    "h-9 px-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-ocean-500 focus:bg-white transition-all";
+    "h-9 px-2.5 rounded-lg border border-asb-gray-200 bg-asb-gray-50 text-xs font-medium text-asb-ink-soft focus:outline-none  focus:ring-asb-blue focus:border-asb-blue focus:bg-white transition-all";
 
   const selectCls = cn(inputCls, "pr-7 appearance-none cursor-pointer");
 
@@ -144,7 +144,7 @@ export function CargoFilterBar() {
             className={cn(inputCls, "flex-1 min-w-0")}
             title="Laycan from"
           />
-          <span className="text-slate-300 text-xs shrink-0">–</span>
+          <span className="text-asb-gray-400 text-xs shrink-0">–</span>
           <input
             type="date"
             value={f.laycan_to}
@@ -172,7 +172,7 @@ export function CargoFilterBar() {
               </option>
             ))}
           </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-asb-gray-400" />
         </div>
       </div>
 
@@ -180,7 +180,7 @@ export function CargoFilterBar() {
 
       <div className="shrink-0">
         <FilterLabel icon={ShieldAlert}>Cargo category</FilterLabel>
-        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg h-9">
+        <div className="flex items-center bg-asb-gray-100 p-0.5 rounded-lg h-9">
           {(
             [
               { label: "All", value: false },
@@ -194,8 +194,8 @@ export function CargoFilterBar() {
               className={cn(
                 "px-3 h-full text-xs font-semibold rounded-md transition-all whitespace-nowrap",
                 f.is_dg_only === value
-                  ? "bg-white shadow-sm text-ocean-700"
-                  : "text-slate-500 hover:text-slate-700",
+                  ? "bg-white shadow-sm text-asb-blue"
+                  : "text-asb-gray-500 hover:text-asb-ink-soft",
               )}
             >
               {label}
@@ -208,7 +208,7 @@ export function CargoFilterBar() {
 
       <div className="shrink-0">
         <FilterLabel icon={Package}>Cargo type</FilterLabel>
-        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg h-9">
+        <div className="flex items-center bg-asb-gray-100 p-0.5 rounded-lg h-9">
           {(["", "Dry Bulk", "Break Bulk"] as const).map((t) => (
             <button
               key={t}
@@ -217,8 +217,8 @@ export function CargoFilterBar() {
               className={cn(
                 "px-3 h-full text-xs font-semibold rounded-md transition-all whitespace-nowrap",
                 f.cargo_type === t
-                  ? "bg-white shadow-sm text-ocean-700"
-                  : "text-slate-500 hover:text-slate-700",
+                  ? "bg-white shadow-sm text-asb-blue"
+                  : "text-asb-gray-500 hover:text-asb-ink-soft",
               )}
             >
               {t === "" ? "All" : t}
@@ -240,7 +240,7 @@ export function CargoFilterBar() {
             onChange={(e) => set("min_qty", e.target.value)}
             className={cn(inputCls, "flex-1 min-w-0")}
           />
-          <span className="text-slate-300 text-xs shrink-0">–</span>
+          <span className="text-asb-gray-400 text-xs shrink-0">–</span>
           <input
             type="number"
             placeholder="Max"
@@ -267,7 +267,7 @@ export function CargoFilterBar() {
             <option value="qty_asc">Qty — smallest</option>
             <option value="qty_desc">Qty — largest</option>
           </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-asb-gray-400" />
         </div>
       </div>
 
@@ -275,10 +275,10 @@ export function CargoFilterBar() {
         <button
           type="button"
           onClick={clearAll}
-          className="shrink-0 flex items-center gap-1.5 h-9 px-3 text-xs font-semibold text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 rounded-lg transition-all whitespace-nowrap self-end"
+          className="shrink-0 flex items-center gap-1.5 h-9 px-3 text-xs font-semibold text-asb-gray-500 hover:text-red-600 hover:bg-red-50 border border-asb-gray-200 hover:border-red-200 rounded-lg transition-all whitespace-nowrap self-end"
         >
           <X className="w-3.5 h-3.5" /> Clear all
-          <span className="ml-0.5 bg-ocean-100 text-ocean-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+          <span className="ml-0.5 bg-asb-blue-light text-asb-blue text-[10px] px-1.5 py-0.5 rounded-full font-bold">
             {activeCount}
           </span>
         </button>
@@ -288,7 +288,7 @@ export function CargoFilterBar() {
 
   return (
     <>
-      <div className="hidden lg:block w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 shadow-sm">
+      <div className="hidden lg:block w-full bg-white border border-asb-gray-200 rounded px-5 py-4 shadow-sm">
         {filterContent}
       </div>
 
@@ -296,24 +296,24 @@ export function CargoFilterBar() {
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
-          className="w-full flex items-center justify-between bg-white border border-slate-200 text-slate-700 font-semibold px-4 py-2.5 rounded-xl shadow-sm text-sm"
+          className="w-full flex items-center justify-between bg-white border border-asb-gray-200 text-asb-ink-soft font-semibold px-4 py-2.5 rounded shadow-sm text-sm"
         >
           <span className="flex items-center gap-2">
-            <SlidersHorizontal className="w-4 h-4 text-ocean-600" />
+            <SlidersHorizontal className="w-4 h-4 text-asb-blue" />
             Filters
             {activeCount > 0 && (
-              <span className="bg-ocean-100 text-ocean-700 text-xs px-2 py-0.5 rounded-full font-bold">
+              <span className="bg-asb-blue-light text-asb-blue text-xs px-2 py-0.5 rounded-full font-bold">
                 {activeCount}
               </span>
             )}
           </span>
-          <ChevronDown className="w-4 h-4 text-slate-400" />
+          <ChevronDown className="w-4 h-4 text-asb-gray-400" />
         </button>
       </div>
 
       <div
         className={cn(
-          "lg:hidden fixed inset-0 bg-slate-900/50 z-40 transition-opacity",
+          "lg:hidden fixed inset-0 bg-asb-navy-deep/50 z-40 transition-opacity",
           mobileOpen
             ? "opacity-100 pointer-events-auto"
             : "opacity-0 pointer-events-none",
@@ -328,17 +328,17 @@ export function CargoFilterBar() {
         )}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
+          <h2 className="font-bold text-base text-asb-navy flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4" /> Filters
             {activeCount > 0 && (
-              <span className="bg-ocean-100 text-ocean-700 text-xs px-2 py-0.5 rounded-full">
+              <span className="bg-asb-blue-light text-asb-blue text-xs px-2 py-0.5 rounded-full">
                 {activeCount}
               </span>
             )}
           </h2>
           <button
             onClick={() => setMobileOpen(false)}
-            className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl"
+            className="p-2 text-asb-gray-400 hover:bg-asb-gray-100 rounded"
           >
             <X className="w-5 h-5" />
           </button>

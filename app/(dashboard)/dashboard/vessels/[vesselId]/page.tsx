@@ -275,7 +275,7 @@ export default async function VesselDetailPage({
               <CapRow label="DG certified" value={v.dg_certified} />
             </div>
             {v.is_geared && (v.crane_count || v.crane_swl_mt) && (
-              <div className="mt-3 pt-3 border-t border-slate-100 text-sm text-slate-600">
+              <div className="mt-3 pt-3 border-t border-asb-gray-100 text-sm text-asb-gray-700">
                 <span className="font-medium">Cranes: </span>
                 {v.crane_count && `${v.crane_count}×`}
                 {v.crane_swl_mt && ` ${v.crane_swl_mt} MT SWL`}
@@ -381,16 +381,16 @@ export default async function VesselDetailPage({
                 {vesselContacts.map((contact) => (
                   <div
                     key={contact.id}
-                    className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5"
+                    className="rounded border border-asb-gray-100 bg-asb-gray-50 px-3 py-2.5"
                   >
-                    <p className="text-sm font-semibold text-slate-800">
+                    <p className="text-sm font-semibold text-asb-ink">
                       {contact.name}
                     </p>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-xs text-asb-gray-500 mt-0.5">
                       {contact.role}
                     </p>
                     {(contact.email || contact.phone) && (
-                      <p className="text-xs text-slate-500 mt-1.5">
+                      <p className="text-xs text-asb-gray-500 mt-1.5">
                         {contact.email ?? ""}
                         {contact.email && contact.phone ? " · " : ""}
                         {contact.phone ?? ""}
@@ -404,7 +404,7 @@ export default async function VesselDetailPage({
 
           {v.notes && (
             <IntelCard title="Notes" icon={Anchor}>
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <p className="text-sm text-asb-gray-700 leading-relaxed">
                 {v.notes}
               </p>
             </IntelCard>
@@ -415,14 +415,14 @@ export default async function VesselDetailPage({
           <IntelCard title="Open Positions" icon={Anchor}>
             {availabilities.length === 0 ? (
               <div className="text-center py-8">
-                <Anchor className="w-7 h-7 text-slate-200 mx-auto mb-2" />
-                <p className="text-sm text-slate-500 font-medium">
+                <Anchor className="w-7 h-7 text-asb-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-asb-gray-500 font-medium">
                   No open positions
                 </p>
                 {isClaimed && (
                   <Link
                     href={`/dashboard/vessels/${vesselId}/availability/new`}
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs text-ocean-600 hover:text-ocean-700 font-semibold"
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs text-asb-blue hover:text-asb-blue font-semibold"
                   >
                     <Plus className="w-3.5 h-3.5" /> Post new position
                   </Link>
@@ -435,12 +435,12 @@ export default async function VesselDetailPage({
                   return (
                     <div
                       key={a.id}
-                      className="block p-3.5 rounded-xl border border-slate-200 hover:border-ocean-300 hover:bg-ocean-50/40 transition-all"
+                      className="block p-3.5 rounded border border-asb-gray-200 hover:border-asb-blue hover:bg-asb-blue-light/40 transition-all"
                     >
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <Link
                           href={`/dashboard/vessels/${vesselId}/availability/${a.id}`}
-                          className="text-xs font-mono text-slate-400 hover:text-ocean-700"
+                          className="text-xs font-mono text-asb-gray-400 hover:text-asb-blue"
                         >
                           {a.ref ?? "—"}
                         </Link>
@@ -451,13 +451,13 @@ export default async function VesselDetailPage({
                       </div>
 
                       {a.open_port_name && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-1">
-                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        <div className="flex items-center gap-1.5 text-xs text-asb-gray-700 mb-1">
+                          <MapPin className="w-3 h-3 text-asb-gray-400 shrink-0" />
                           <span>
                             {a.open_port_locode ? (
                               <Link
                                 href={`/dashboard/ports/${a.open_port_locode}`}
-                                className="font-semibold text-slate-700 hover:text-ocean-700 hover:underline"
+                                className="font-semibold text-asb-ink-soft hover:text-asb-blue hover:underline"
                               >
                                 {a.open_port_name}
                               </Link>
@@ -465,7 +465,7 @@ export default async function VesselDetailPage({
                               a.open_port_name
                             )}
                             {a.open_zone && (
-                              <span className="text-slate-400 ml-1">
+                              <span className="text-asb-gray-400 ml-1">
                                 ({a.open_zone})
                               </span>
                             )}
@@ -475,19 +475,19 @@ export default async function VesselDetailPage({
 
                       {a.open_date && (
                         <div className="flex items-center gap-1.5 text-xs mb-1">
-                          <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                          <Calendar className="w-3 h-3 text-asb-gray-400 shrink-0" />
                           <span
                             className={cn(
                               "font-medium",
                               urgency.color
                                 ? urgency.color.split(" ")[0]
-                                : "text-slate-500",
+                                : "text-asb-gray-500",
                             )}
                           >
                             {a.open_date}
                           </span>
                           {a.open_date_range_days > 0 && (
-                            <span className="text-slate-400">
+                            <span className="text-asb-gray-400">
                               ±{a.open_date_range_days}d
                             </span>
                           )}
@@ -498,8 +498,8 @@ export default async function VesselDetailPage({
                       )}
 
                       {a.freight_idea_usd_mt && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                          <DollarSign className="w-3 h-3 text-slate-400 shrink-0" />
+                        <div className="flex items-center gap-1.5 text-xs text-asb-gray-500">
+                          <DollarSign className="w-3 h-3 text-asb-gray-400 shrink-0" />
                           <span>${a.freight_idea_usd_mt}/MT</span>
                         </div>
                       )}
@@ -510,7 +510,7 @@ export default async function VesselDetailPage({
                 {isClaimed && (
                   <Link
                     href={`/dashboard/vessels/${vesselId}/availability/new`}
-                    className="mt-1 flex items-center justify-center gap-1.5 w-full py-2 rounded-xl border border-dashed border-ocean-300 text-xs font-semibold text-ocean-600 hover:bg-ocean-50 transition-colors"
+                    className="mt-1 flex items-center justify-center gap-1.5 w-full py-2 rounded border border-dashed border-asb-blue text-xs font-semibold text-asb-blue hover:bg-asb-blue-light transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" /> Post new position
                   </Link>
@@ -521,10 +521,10 @@ export default async function VesselDetailPage({
 
           <div
             className={cn(
-              "rounded-2xl border p-4 text-sm",
+              "rounded border p-4 text-sm",
               isClaimed
                 ? "bg-green-50 border-green-200"
-                : "bg-slate-50 border-slate-200",
+                : "bg-asb-gray-50 border-asb-gray-200",
             )}
           >
             <div className="flex items-center gap-2 font-semibold mb-1">
@@ -535,12 +535,12 @@ export default async function VesselDetailPage({
                 </>
               ) : (
                 <>
-                  <Anchor className="w-4 h-4 text-slate-400" />{" "}
-                  <span className="text-slate-600">Not your vessel</span>
+                  <Anchor className="w-4 h-4 text-asb-gray-400" />{" "}
+                  <span className="text-asb-gray-700">Not your vessel</span>
                 </>
               )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-asb-gray-500">
               {isClaimed
                 ? `You registered this vessel (${claim?.role ?? "owner"}). You can post positions from this page.`
                 : "This vessel was added by Arab ShipBroker or another operator. Contact us to claim it."}
@@ -581,18 +581,18 @@ function MaskedCommercialCard() {
   return (
     <IntelCard title="Company & Contacts" icon={Lock}>
       <div className="flex flex-col items-center px-2 py-4 text-center">
-        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
-          <Lock className="h-4 w-4 text-slate-400" />
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-asb-gray-200 bg-asb-gray-100">
+          <Lock className="h-4 w-4 text-asb-gray-400" />
         </div>
-        <p className="text-sm font-semibold text-slate-700">
+        <p className="text-sm font-semibold text-asb-ink-soft">
           Identity available to Tier 3 &amp; Partner
         </p>
-        <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-slate-500">
+        <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-asb-gray-500">
           Owner, company roles and contacts for this vessel are shown only to
           authorised subscribers. Arab ShipBroker holds these details and sits
           in the middle.
         </p>
-        <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400">
+        <div className="mt-3 flex items-center gap-1.5 text-[11px] text-asb-gray-400">
           <Lock className="h-3 w-3" /> Encrypted at rest
         </div>
       </div>

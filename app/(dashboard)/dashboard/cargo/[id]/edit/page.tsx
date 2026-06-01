@@ -52,10 +52,10 @@ export default async function EditCargoPage({
   return (
     <div className="py-2 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">
+        <h1 className="text-2xl font-bold text-asb-navy">
           Edit Cargo Listing
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="text-sm text-asb-gray-500 mt-1">
           {listing.commodity_name} · {listing.ref ?? id}
         </p>
       </div>

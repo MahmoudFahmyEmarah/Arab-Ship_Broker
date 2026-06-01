@@ -222,8 +222,8 @@ export default async function BrowseVesselsPage({
     <div className="space-y-6 py-2">
       <div className="flex flex-row items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Browse Vessels</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-2xl font-bold text-asb-navy">Browse Vessels</h1>
+          <p className="mt-1 text-sm text-asb-gray-500">
             {vessels.length} vessel{vessels.length !== 1 ? "s" : ""}
             {searchTerm.length >= 2 ? ` found for "${q}"` : " in register"}
           </p>
@@ -231,7 +231,7 @@ export default async function BrowseVesselsPage({
         {(appUser?.role === "vessel_owner" || appUser?.role === "broker") && (
           <Link
             href="/dashboard/vessels/register"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-ocean-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-ocean-700"
+            className="inline-flex items-center justify-center gap-2 rounded bg-asb-blue px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-asb-blue"
           >
             <Plus className="h-4 w-4" /> Register vessel
           </Link>
@@ -244,26 +244,26 @@ export default async function BrowseVesselsPage({
         className="flex flex-row gap-2 max-[768px]:flex-col"
       >
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-asb-gray-400" />
           <input
             type="text"
             name="q"
             defaultValue={q}
             placeholder="Search by vessel name or IMO"
-            className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-ocean-500"
+            className="h-11 w-full rounded border border-asb-gray-200 bg-white pl-10 pr-3 text-sm text-asb-ink-soft outline-none transition-colors placeholder:text-asb-gray-400 focus:border-asb-blue"
           />
         </div>
         <div className="flex gap-2">
           <button
             type="submit"
-            className="inline-flex h-11 items-center justify-center rounded-xl bg-ocean-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-ocean-700"
+            className="inline-flex h-11 items-center justify-center rounded bg-asb-blue px-5 text-sm font-semibold text-white transition-colors hover:bg-asb-blue"
           >
             Search
           </button>
           {q && (
             <Link
               href="/dashboard/vessels/browse"
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-5 text-sm font-semibold text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-800"
+              className="inline-flex h-11 items-center justify-center rounded border border-asb-gray-200 px-5 text-sm font-semibold text-asb-gray-700 transition-colors hover:border-asb-gray-400 hover:text-asb-ink"
             >
               Clear
             </Link>
@@ -272,10 +272,10 @@ export default async function BrowseVesselsPage({
       </form>
 
       {vessels.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
-          <Ship className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-          <p className="font-semibold text-slate-500">No vessels found</p>
-          <p className="mt-1 text-sm text-slate-400">
+        <div className="rounded border border-dashed border-asb-gray-200 bg-white py-16 text-center">
+          <Ship className="mx-auto mb-3 h-10 w-10 text-asb-gray-400" />
+          <p className="font-semibold text-asb-gray-500">No vessels found</p>
+          <p className="mt-1 text-sm text-asb-gray-400">
             Try a different vessel name or IMO number.
           </p>
         </div>

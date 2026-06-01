@@ -80,32 +80,32 @@ export default async function MyCargoListingsPage() {
       <div className="space-y-8 py-2">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-2xl font-bold text-asb-navy">
               My Cargo Listings
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-asb-gray-500 mt-1">
               {listings.length} total · {groups.live.length} live ·{" "}
               {groups.pending.length} pending
             </p>
           </div>
           <Link
             href="/dashboard/cargo/create"
-            className="flex items-center gap-2 bg-ocean-600 hover:bg-ocean-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors"
+            className="flex items-center gap-2 bg-asb-blue hover:bg-asb-blue text-white font-semibold px-4 py-2.5 rounded text-sm transition-colors"
           >
             <Plus className="w-4 h-4" /> New listing
           </Link>
         </div>
 
         {listings.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300">
-            <Package className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-semibold">No listings yet</p>
-            <p className="text-slate-400 text-sm mt-1">
+          <div className="text-center py-20 bg-white rounded border border-dashed border-asb-gray-200">
+            <Package className="w-10 h-10 text-asb-gray-400 mx-auto mb-3" />
+            <p className="text-asb-gray-500 font-semibold">No listings yet</p>
+            <p className="text-asb-gray-400 text-sm mt-1">
               Post your first cargo to get started.
             </p>
             <Link
               href="/dashboard/cargo/create"
-              className="mt-4 inline-flex items-center gap-2 bg-ocean-600 text-white font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-ocean-700 transition-colors"
+              className="mt-4 inline-flex items-center gap-2 bg-asb-blue text-white font-semibold px-5 py-2.5 rounded text-sm hover:bg-asb-blue transition-colors"
             >
               <Plus className="w-4 h-4" /> Post cargo
             </Link>
@@ -151,9 +151,9 @@ function Section({
 }) {
   return (
     <div>
-      <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">
+      <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider mb-4">
         {title}{" "}
-        <span className="ml-1 text-slate-400 font-normal normal-case">
+        <span className="ml-1 text-asb-gray-400 font-normal normal-case">
           ({count})
         </span>
       </h2>
@@ -204,8 +204,8 @@ const STATUS_LABELS: Record<CargoStatus, string> = {
 const STATUS_COLORS: Record<CargoStatus, string> = {
   IN: "text-green-700 bg-green-50 border-green-200",
   PARTIAL: "text-amber-700 bg-amber-50 border-amber-200",
-  OUT: "text-slate-500 bg-slate-50 border-slate-200",
-  CLOSED: "text-slate-400 bg-slate-50 border-slate-100",
+  OUT: "text-asb-gray-500 bg-asb-gray-50 border-asb-gray-200",
+  CLOSED: "text-asb-gray-400 bg-asb-gray-50 border-asb-gray-100",
 };
 
 function CargoCard({ listing }: { listing: CargoListingRow }) {
@@ -214,19 +214,19 @@ function CargoCard({ listing }: { listing: CargoListingRow }) {
   return (
     <Link
       href={`/dashboard/cargo/${listing.id}`}
-      className="group bg-white border border-slate-200 rounded-2xl p-5 hover:border-ocean-300 hover:shadow-md transition-all flex flex-col gap-4"
+      className="group bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-ocean-50 border border-ocean-100 flex items-center justify-center shrink-0 mt-0.5">
-            <Package className="w-4 h-4 text-ocean-600" />
+          <div className="w-9 h-9 rounded bg-asb-blue-light border border-asb-gray-200 flex items-center justify-center shrink-0 mt-0.5">
+            <Package className="w-4 h-4 text-asb-blue" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-900 group-hover:text-ocean-700 transition-colors truncate">
+            <p className="text-sm font-bold text-asb-navy group-hover:text-asb-blue transition-colors truncate">
               {listing.commodity_name}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5 capitalize">
+            <p className="text-xs text-asb-gray-400 mt-0.5 capitalize">
               {listing.cargo_type ?? "Cargo"}
             </p>
           </div>
@@ -243,13 +243,13 @@ function CargoCard({ listing }: { listing: CargoListingRow }) {
       </div>
 
       {/* Route */}
-      <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
-        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-        <span className="font-semibold text-slate-700 truncate">
+      <div className="flex items-center gap-1.5 text-xs text-asb-gray-700 bg-asb-gray-50 rounded px-3 py-2 border border-asb-gray-100">
+        <MapPin className="w-3.5 h-3.5 text-asb-gray-400 shrink-0" />
+        <span className="font-semibold text-asb-ink-soft truncate">
           {listing.load_port_name}
         </span>
-        <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
-        <span className="font-semibold text-slate-700 truncate">
+        <ArrowRight className="w-3 h-3 text-asb-gray-400 shrink-0" />
+        <span className="font-semibold text-asb-ink-soft truncate">
           {listing.disch_port_name}
         </span>
       </div>
@@ -281,7 +281,7 @@ function CargoCard({ listing }: { listing: CargoListingRow }) {
       {/* Footer */}
       <div
         className={cn(
-          "flex items-center justify-between pt-3 border-t border-slate-100 mt-auto",
+          "flex items-center justify-between pt-3 border-t border-asb-gray-100 mt-auto",
         )}
       >
         <div
@@ -294,7 +294,7 @@ function CargoCard({ listing }: { listing: CargoListingRow }) {
           <ReviewIcon className="w-3 h-3" />
           {REVIEW_LABEL[listing.review_status]}
         </div>
-        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-ocean-500 group-hover:translate-x-0.5 transition-all" />
+        <ArrowRight className="w-4 h-4 text-asb-gray-400 group-hover:text-asb-blue group-hover:translate-x-0.5 transition-all" />
       </div>
     </Link>
   );
@@ -310,13 +310,13 @@ function DataPill({
   value: string;
 }) {
   return (
-    <div className="bg-slate-50 rounded-lg px-2.5 py-2 border border-slate-100">
-      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">
+    <div className="bg-asb-gray-50 rounded-lg px-2.5 py-2 border border-asb-gray-100">
+      <p className="text-[10px] text-asb-gray-400 font-semibold uppercase tracking-wide mb-0.5">
         {label}
       </p>
       <div className="flex items-center gap-1">
-        <Icon className="w-3 h-3 text-slate-400 shrink-0" />
-        <p className="text-xs font-bold text-slate-700 truncate">{value}</p>
+        <Icon className="w-3 h-3 text-asb-gray-400 shrink-0" />
+        <p className="text-xs font-bold text-asb-ink-soft truncate">{value}</p>
       </div>
     </div>
   );

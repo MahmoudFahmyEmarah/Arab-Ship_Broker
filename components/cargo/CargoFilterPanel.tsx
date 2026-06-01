@@ -78,10 +78,10 @@ export function CargoFilterPanel() {
   const panelContent = (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
+        <h2 className="font-bold text-base text-asb-navy flex items-center gap-2">
           <Filter className="w-4 h-4" /> Filters
           {activeCount > 0 && (
-            <span className="bg-ocean-100 text-ocean-700 text-xs px-2 py-0.5 rounded-full">
+            <span className="bg-asb-blue-light text-asb-blue text-xs px-2 py-0.5 rounded-full">
               {activeCount}
             </span>
           )}
@@ -89,7 +89,7 @@ export function CargoFilterPanel() {
         {activeCount > 0 && (
           <button
             onClick={clearAll}
-            className="text-xs text-slate-500 hover:text-ocean-600 font-semibold"
+            className="text-xs text-asb-gray-500 hover:text-asb-blue font-semibold"
           >
             Clear all
           </button>
@@ -97,11 +97,11 @@ export function CargoFilterPanel() {
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+        <label className="text-xs font-bold text-asb-gray-500 uppercase tracking-wide">
           Zone
         </label>
         <select
-          className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-ocean-500 transition-all"
+          className="w-full p-2.5 border border-asb-gray-200 rounded bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:border-asb-blue transition-all"
           value={filters.zone}
           onChange={(e) => setFilters((f) => ({ ...f, zone: e.target.value }))}
         >
@@ -115,10 +115,10 @@ export function CargoFilterPanel() {
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+        <label className="text-xs font-bold text-asb-gray-500 uppercase tracking-wide">
           Cargo Type
         </label>
-        <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+        <div className="flex bg-asb-gray-100 p-1 rounded gap-1">
           {(["", "Dry Bulk", "Break Bulk"] as const).map((t) => (
             <button
               key={t}
@@ -126,8 +126,8 @@ export function CargoFilterPanel() {
               className={cn(
                 "flex-1 text-xs py-2 rounded-lg font-semibold transition-colors",
                 filters.cargo_type === t
-                  ? "bg-white shadow-sm text-ocean-700"
-                  : "text-slate-500 hover:text-slate-700",
+                  ? "bg-white shadow-sm text-asb-blue"
+                  : "text-asb-gray-500 hover:text-asb-ink-soft",
               )}
             >
               {t === "" ? "All" : t}
@@ -137,7 +137,7 @@ export function CargoFilterPanel() {
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+        <label className="text-xs font-bold text-asb-gray-500 uppercase tracking-wide">
           Quantity (MT)
         </label>
         <div className="flex gap-2 items-center">
@@ -148,9 +148,9 @@ export function CargoFilterPanel() {
             onChange={(e) =>
               setFilters((f) => ({ ...f, min_qty: e.target.value }))
             }
-            className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-1 focus:ring-ocean-500 focus:border-ocean-500"
+            className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none focus:ring-1 focus:ring-asb-blue focus:border-asb-blue"
           />
-          <span className="text-slate-400 text-sm">–</span>
+          <span className="text-asb-gray-400 text-sm">–</span>
           <input
             type="number"
             placeholder="Max"
@@ -158,7 +158,7 @@ export function CargoFilterPanel() {
             onChange={(e) =>
               setFilters((f) => ({ ...f, max_qty: e.target.value }))
             }
-            className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-1 focus:ring-ocean-500 focus:border-ocean-500"
+            className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none focus:ring-1 focus:ring-asb-blue focus:border-asb-blue"
           />
         </div>
       </div>
@@ -167,7 +167,7 @@ export function CargoFilterPanel() {
         <div
           className={cn(
             "w-9 h-5 rounded-full transition-colors relative",
-            filters.is_dg_only ? "bg-ocean-600" : "bg-slate-200",
+            filters.is_dg_only ? "bg-asb-blue" : "bg-asb-gray-200",
           )}
           onClick={() =>
             setFilters((f) => ({ ...f, is_dg_only: !f.is_dg_only }))
@@ -180,17 +180,17 @@ export function CargoFilterPanel() {
             )}
           />
         </div>
-        <span className="text-sm font-semibold text-slate-700">
+        <span className="text-sm font-semibold text-asb-ink-soft">
           Dangerous goods only
         </span>
       </label>
 
       <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+        <label className="text-xs font-bold text-asb-gray-500 uppercase tracking-wide">
           Sort By
         </label>
         <select
-          className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-ocean-500 transition-all"
+          className="w-full p-2.5 border border-asb-gray-200 rounded bg-asb-gray-50 text-sm focus:outline-none  focus:ring-asb-blue focus:border-asb-blue transition-all"
           value={filters.sort}
           onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}
         >
@@ -207,14 +207,14 @@ export function CargoFilterPanel() {
     <>
       <button
         onClick={() => setIsMobileOpen(true)}
-        className="hidden max-[1024px]:flex w-full items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 font-semibold px-4 py-2.5 rounded-xl shadow-sm text-sm mb-4 cursor-pointer"
+        className="hidden max-[1024px]:flex w-full items-center justify-center gap-2 bg-white border border-asb-gray-200 text-asb-ink-soft font-semibold px-4 py-2.5 rounded shadow-sm text-sm mb-4 cursor-pointer"
       >
         <SlidersHorizontal className="w-4 h-4" /> Filters
       </button>
 
       <div
         className={cn(
-          "fixed inset-0 bg-slate-900/50 z-40 hidden max-[1024px]:block transition-opacity",
+          "fixed inset-0 bg-asb-navy-deep/50 z-40 hidden max-[1024px]:block transition-opacity",
           isMobileOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         )}
         onClick={() => setIsMobileOpen(false)}
@@ -228,14 +228,14 @@ export function CargoFilterPanel() {
       >
         <button
           onClick={() => setIsMobileOpen(false)}
-          className="absolute top-3 right-3 p-2 text-slate-500 hover:bg-slate-100 rounded-full"
+          className="absolute top-3 right-3 p-2 text-asb-gray-500 hover:bg-asb-gray-100 rounded-full"
         >
           <X className="w-5 h-5" />
         </button>
         {panelContent}
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit sticky top-8 max-[1024px]:hidden">
+      <div className="bg-white p-6 rounded shadow-sm border border-asb-gray-200 h-fit sticky top-8 max-[1024px]:hidden">
         {panelContent}
       </div>
     </>

@@ -162,12 +162,12 @@ export default async function DashboardPage() {
     <div className="space-y-6 py-2 max-w-5xl">
       <div className="flex items-start justify-between gap-4 max-sm:flex-col">
         <div>
-          <p className="text-label text-ocean-500 mb-1.5">Operations Center</p>
-          <h1 className="text-[26px] font-bold text-ocean-950 tracking-tight leading-none">
+          <p className="text-label text-asb-blue mb-1.5">Operations Center</p>
+          <h1 className="text-[26px] font-bold text-asb-blue tracking-tight leading-none">
             Good {getGreeting()},{" "}
-            <span className="text-ocean-500">{firstName}</span>
+            <span className="text-asb-blue">{firstName}</span>
           </h1>
-          <p className="text-[13px] text-slate-500 mt-2 leading-relaxed max-w-md">
+          <p className="text-[13px] text-asb-gray-500 mt-2 leading-relaxed max-w-md">
             {role === "broker"
               ? "Your cargo listings and vessel availability across the MENA market."
               : showCargo
@@ -180,7 +180,7 @@ export default async function DashboardPage() {
           {showCargo && (
             <Link
               href="/dashboard/cargo/create"
-              className="group flex items-center gap-2 bg-ocean-600 hover:bg-ocean-700 text-white font-semibold px-4 py-2.5 rounded-xl transition-all text-sm shadow-[0_1px_4px_rgba(45,109,168,0.3)] hover:shadow-[0_2px_8px_rgba(45,109,168,0.35)] hover:-translate-y-px"
+              className="group flex items-center gap-2 bg-asb-blue hover:bg-asb-blue text-white font-semibold px-4 py-2.5 rounded transition-all text-sm shadow-[0_1px_4px_rgba(45,109,168,0.3)] hover:shadow-[0_2px_8px_rgba(45,109,168,0.35)] hover:-translate-y-px"
             >
               <Plus className="w-4 h-4" />
               Post cargo
@@ -189,9 +189,9 @@ export default async function DashboardPage() {
           {showVessel && (
             <Link
               href={postAvailabilityHref}
-              className="group flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-ocean-200 text-slate-700 font-semibold px-4 py-2.5 rounded-xl transition-all text-sm hover:-translate-y-px"
+              className="group flex items-center gap-2 bg-white hover:bg-asb-gray-50 border border-asb-gray-200 hover:border-asb-blue text-asb-ink-soft font-semibold px-4 py-2.5 rounded transition-all text-sm hover:-translate-y-px"
             >
-              <Ship className="w-4 h-4 text-ocean-500" />
+              <Ship className="w-4 h-4 text-asb-blue" />
               Post position
             </Link>
           )}
@@ -205,7 +205,7 @@ export default async function DashboardPage() {
       />
 
       {totalPending > 0 && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200/80 rounded-2xl px-5 py-4">
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200/80 rounded px-5 py-4">
           <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
             <Clock className="w-3.5 h-3.5 text-amber-600" />
           </div>
@@ -370,8 +370,8 @@ function SectionLabel({
 }) {
   return (
     <div className="flex items-center gap-2 mb-3">
-      {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" />}
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.16em]">
+      {Icon && <Icon className="w-3.5 h-3.5 text-asb-gray-400" />}
+      <p className="text-[10px] font-bold text-asb-gray-400 uppercase tracking-[0.16em]">
         {label}
       </p>
     </div>
@@ -389,8 +389,8 @@ function TrustTierBanner({
 }) {
   if (tier === "VERIFIED") {
     return (
-      <div className="flex items-center gap-3.5 bg-emerald-50 border border-emerald-200/80 rounded-2xl px-5 py-4">
-        <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0 shadow-inner">
+      <div className="flex items-center gap-3.5 bg-emerald-50 border border-emerald-200/80 rounded px-5 py-4">
+        <div className="w-8 h-8 rounded bg-emerald-600 flex items-center justify-center shrink-0 shadow-inner">
           <CheckCircle2 className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1">
@@ -410,8 +410,8 @@ function TrustTierBanner({
 
   if (tier === "FLAGGED") {
     return (
-      <div className="flex items-center gap-3.5 bg-red-50 border border-red-200/80 rounded-2xl px-5 py-4">
-        <div className="w-8 h-8 rounded-xl bg-red-600 flex items-center justify-center shrink-0 shadow-inner">
+      <div className="flex items-center gap-3.5 bg-red-50 border border-red-200/80 rounded px-5 py-4">
+        <div className="w-8 h-8 rounded bg-red-600 flex items-center justify-center shrink-0 shadow-inner">
           <AlertTriangle className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1">
@@ -430,17 +430,17 @@ function TrustTierBanner({
   const remaining = 5 - cleanPosts;
 
   return (
-    <div className="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-4">
+    <div className="bg-white border border-asb-gray-200/80 rounded p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+          <div className="w-8 h-8 rounded bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
             <Clock className="w-3.5 h-3.5 text-amber-700" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900 leading-none">
+            <p className="text-sm font-semibold text-asb-navy leading-none">
               Building your trust score
             </p>
-            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed max-w-xs">
+            <p className="text-xs text-asb-gray-500 mt-1.5 leading-relaxed max-w-xs">
               {remaining > 0
                 ? `${remaining} more clean submission${remaining !== 1 ? "s" : ""} needed to unlock instant publishing.`
                 : "You're eligible for a Verified upgrade."}
@@ -448,11 +448,11 @@ function TrustTierBanner({
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-2xl font-bold text-slate-900 tabular-nums leading-none">
+          <p className="text-2xl font-bold text-asb-navy tabular-nums leading-none">
             {cleanPosts}
-            <span className="text-base text-slate-300 font-normal">/5</span>
+            <span className="text-base text-asb-gray-400 font-normal">/5</span>
           </p>
-          <p className="text-[10px] text-slate-400 uppercase tracking-wider mt-0.5">
+          <p className="text-[10px] text-asb-gray-400 uppercase tracking-wider mt-0.5">
             clean posts
           </p>
         </div>
@@ -464,7 +464,7 @@ function TrustTierBanner({
             <div
               key={n}
               className={`flex-1 h-1.5 rounded-full transition-colors ${
-                n <= cleanPosts ? "bg-ocean-500" : "bg-slate-100"
+                n <= cleanPosts ? "bg-asb-blue" : "bg-asb-gray-100"
               }`}
             />
           ))}
@@ -499,16 +499,16 @@ const KPI_ACCENT_CONFIG: Record<
     pill: "bg-amber-50 text-amber-600",
   },
   slate: {
-    icon: "text-slate-500 bg-slate-100",
-    value: "text-slate-600",
-    dot: "bg-slate-300",
-    pill: "bg-slate-100 text-slate-500",
+    icon: "text-asb-gray-500 bg-asb-gray-100",
+    value: "text-asb-gray-700",
+    dot: "bg-asb-gray-200",
+    pill: "bg-asb-gray-100 text-asb-gray-500",
   },
   ocean: {
-    icon: "text-ocean-600 bg-ocean-50",
-    value: "text-ocean-800",
-    dot: "bg-ocean-500",
-    pill: "bg-ocean-50 text-ocean-600",
+    icon: "text-asb-blue bg-asb-blue-light",
+    value: "text-asb-blue",
+    dot: "bg-asb-blue",
+    pill: "bg-asb-blue-light text-asb-blue",
   },
   foam: {
     icon: "text-foam-600 bg-foam-50",
@@ -535,15 +535,15 @@ function KpiCard({
 
   const inner = (
     <div
-      className={`bg-white border border-slate-200/80 rounded-2xl p-5 space-y-3 transition-all ${
+      className={`bg-white border border-asb-gray-200/80 rounded p-5 space-y-3 transition-all ${
         href
-          ? "hover:border-ocean-200 hover:shadow-[0_2px_8px_rgba(45,109,168,0.1)] hover:-translate-y-px cursor-pointer"
+          ? "hover:border-asb-blue hover:shadow-[0_2px_8px_rgba(45,109,168,0.1)] hover:-translate-y-px cursor-pointer"
           : ""
       }`}
     >
       <div className="flex items-center justify-between">
         <div
-          className={`w-8 h-8 rounded-xl flex items-center justify-center ${cfg.icon}`}
+          className={`w-8 h-8 rounded flex items-center justify-center ${cfg.icon}`}
         >
           <Icon className="w-4 h-4" />
         </div>
@@ -554,12 +554,12 @@ function KpiCard({
       <div>
         <p
           className={`text-2xl font-bold tabular-nums leading-none ${
-            value > 0 ? cfg.value : "text-slate-200"
+            value > 0 ? cfg.value : "text-asb-gray-400"
           }`}
         >
           {value}
         </p>
-        <p className="text-xs text-slate-400 font-medium mt-1">{label}</p>
+        <p className="text-xs text-asb-gray-400 font-medium mt-1">{label}</p>
       </div>
     </div>
   );
@@ -588,32 +588,32 @@ function ActionCard({
   return (
     <Link
       href={href}
-      className={`group flex flex-col gap-4 rounded-2xl p-6 border transition-all duration-200 hover:-translate-y-px ${
+      className={`group flex flex-col gap-4 rounded p-6 border transition-all duration-200 hover:-translate-y-px ${
         primary
-          ? "bg-ocean-600 border-ocean-600 hover:bg-ocean-700 hover:border-ocean-700 shadow-[0_2px_8px_rgba(45,109,168,0.2)]"
-          : "bg-white border-slate-200/80 hover:border-ocean-200 hover:shadow-[0_2px_8px_rgba(45,109,168,0.08)]"
+          ? "bg-asb-blue border-asb-blue hover:bg-asb-blue hover:border-asb-blue shadow-[0_2px_8px_rgba(45,109,168,0.2)]"
+          : "bg-white border-asb-gray-200/80 hover:border-asb-blue hover:shadow-[0_2px_8px_rgba(45,109,168,0.08)]"
       }`}
     >
       <div
-        className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-          primary ? "bg-white/15" : "bg-ocean-50"
+        className={`w-10 h-10 rounded flex items-center justify-center ${
+          primary ? "bg-white/15" : "bg-asb-blue-light"
         }`}
       >
         <Icon
-          className={`w-5 h-5 ${primary ? "text-white" : "text-ocean-600"}`}
+          className={`w-5 h-5 ${primary ? "text-white" : "text-asb-blue"}`}
         />
       </div>
       <div className="flex-1">
         <p
           className={`font-semibold text-[14px] ${
-            primary ? "text-white" : "text-slate-900"
+            primary ? "text-white" : "text-asb-navy"
           }`}
         >
           {title}
         </p>
         <p
           className={`text-[13px] mt-1.5 leading-relaxed ${
-            primary ? "text-ocean-100/80" : "text-slate-500"
+            primary ? "text-asb-blue/80" : "text-asb-gray-500"
           }`}
         >
           {description}
@@ -621,7 +621,7 @@ function ActionCard({
       </div>
       <div
         className={`flex items-center gap-1.5 text-[13px] font-semibold group-hover:gap-2 transition-all duration-150 ${
-          primary ? "text-white/80" : "text-ocean-600"
+          primary ? "text-white/80" : "text-asb-blue"
         }`}
       >
         {cta}

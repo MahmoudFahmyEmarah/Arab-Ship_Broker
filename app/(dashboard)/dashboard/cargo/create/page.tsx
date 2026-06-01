@@ -6,8 +6,8 @@ export default function CreateCargoPage() {
     <ProfileGuard requires="cargo">
       <div className="py-2 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Post New Cargo</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-2xl font-bold text-asb-navy">Post New Cargo</h1>
+          <p className="text-sm text-asb-gray-500 mt-1">
             Select your commodity, ports, and laycan. Safety requirements load
             automatically.
           </p>
