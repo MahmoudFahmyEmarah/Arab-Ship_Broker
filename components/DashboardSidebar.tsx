@@ -17,6 +17,7 @@ import {
   Loader2,
   Plus,
   Sparkles,
+  Calculator,
 } from "lucide-react";
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -83,6 +84,7 @@ function buildNavSections(
 
   const workspaceLinks: NavLink[] = [
     { label: "Circular Parser", href: "/dashboard/circulars", icon: Sparkles },
+    { label: "Voyage Estimator", href: "/dashboard/voyage-estimator", icon: Calculator },
   ];
   if (hasCargoProfile) {
     workspaceLinks.push(
