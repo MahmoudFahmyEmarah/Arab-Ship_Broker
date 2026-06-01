@@ -15,16 +15,48 @@ import {
   Calendar,
 } from "lucide-react";
 
-import {
-  VesselAvailabilityWithVessel,
-  VesselStatus,
-  ReviewStatus,
-  MyVesselRow,
-} from "@/lib/schemas/vessel";
+import { VesselStatus, ReviewStatus } from "@/lib/schemas/vessel";
 import { cn } from "@/lib/utils";
+import { normalizeRole } from "@/lib/role";
 import { type VesselCardData } from "@/components/vessels/VesselCard";
 import { FleetBoard } from "@/components/vessels/FleetBoard";
 import { type MapPoint } from "@/components/map/SharedMap";
+
+// Production-shaped availability + joined vessel. Prod has no v_my_vessels and
+// no direct vessel ownership — a user's fleet is the distinct vessels behind
+// the availability positions they own (listing_ownership).
+type MyAvailability = {
+  id: string;
+  vessel_id: string;
+  status: VesselStatus;
+  review_status: ReviewStatus;
+  open_port_name: string | null;
+  open_port_locode: string | null;
+  open_zone: string | null;
+  open_date: string | null;
+  vlsfo_sea_mt_day: number | null;
+  vlsfo_port_mt_day: number | null;
+  lsmgo_sea_mt_day: number | null;
+  lsmgo_port_mt_day: number | null;
+  created_at: string;
+  vessel: {
+    id: string;
+    vessel_name: string;
+    imo_number: string | null;
+    vessel_type: string;
+    dwt_grain: number | null;
+    build_year: number | null;
+    flag: string | null;
+    is_geared: boolean | null;
+    max_loa_m: number | null;
+    max_draft_m: number | null;
+    owner_company: string | null;
+    manager_company: string | null;
+    preferred_zones: string[] | null;
+  };
+};
+
+const numOrNull = (n: number | null) => (n != null ? String(n) : null);
 
 function getDateUrgency(openDate: string | null): {
   color: string;
@@ -67,21 +99,18 @@ const fmtOpenDate = (s: string | null) => {
 };
 
 /**
- * MyVesselRow (vessel specs + latest open position) merged with the owner's
- * latest availability (fuel consumption) → the canonical VesselCard.
- * This is the owner's OWN fleet, so identity is NOT masked: the manager/owner
- * company alias is shown. No personal contact (email/phone/PIC) is referenced.
+ * One owned availability (+ joined vessel) → the canonical VesselCard.
+ * Owner's OWN fleet, so the manager/owner company alias is shown. No personal
+ * contact (pic/email/phone/website) is referenced. Prod columns throughout:
+ * explicit vlsfo/lsmgo fuel, preferred_zones, no gross_tonnage.
  */
-function toCardData(
-  v: MyVesselRow,
-  av: VesselAvailabilityWithVessel | undefined,
-): VesselCardData {
-  const hasPosition = !!v.open_port_name;
-  const dir = v.preferred_trading_areas?.length
-    ? v.preferred_trading_areas.join(" / ")
-    : null;
+function toCardData(av: MyAvailability): VesselCardData {
+  const v = av.vessel;
+  const hasPosition = !!av.open_port_name;
+  const dir = v.preferred_zones?.length ? v.preferred_zones.join(" / ") : null;
   const viaName = v.manager_company ?? v.owner_company ?? null;
   const viaRole = v.manager_company ? "manager" : v.owner_company ? "owner" : undefined;
+  const isOpen = av.status === "OPEN" && av.review_status === "APPROVED";
 
   return {
     imo: v.imo_number ?? "—",
@@ -90,33 +119,29 @@ function toCardData(
     type: v.vessel_type,
     built: v.build_year,
     dwt: v.dwt_grain != null ? v.dwt_grain.toLocaleString() : null,
-    grt: v.gross_tonnage != null ? v.gross_tonnage.toLocaleString() : null,
+    grt: null, // prod has no gross_tonnage
     loa: v.max_loa_m != null ? String(v.max_loa_m) : null,
     draft: v.max_draft_m != null ? String(v.max_draft_m) : null,
     gear: v.is_geared == null ? null : v.is_geared ? "Geared" : "Gearless",
-    status: v.vessel_review_status === "IN_REVIEW" ? "REVIEW" : "OPEN",
-    fuel: av
-      ? {
-          vs: av.me_consumption_mt_day != null ? String(av.me_consumption_mt_day) : null,
-          vp: av.me_consumption_port_mt_day != null ? String(av.me_consumption_port_mt_day) : null,
-          ls: av.aux_consumption_mt_day != null ? String(av.aux_consumption_mt_day) : null,
-          lp: av.aux_consumption_port_mt_day != null ? String(av.aux_consumption_port_mt_day) : null,
-        }
-      : null,
-    // Match engine not yet wired: a declared position shows "0 matches"
-    // (placeholder), an undeclared one shows "No position yet".
+    status: isOpen ? "OPEN" : "REVIEW",
+    fuel: {
+      vs: numOrNull(av.vlsfo_sea_mt_day),
+      vp: numOrNull(av.vlsfo_port_mt_day),
+      ls: numOrNull(av.lsmgo_sea_mt_day),
+      lp: numOrNull(av.lsmgo_port_mt_day),
+    },
     matches: hasPosition ? 0 : null,
     position: hasPosition
       ? {
-          port: v.open_port_name as string,
-          zone: v.open_zone,
-          date: fmtOpenDate(v.open_date),
-          lyc: laycanDot(v.open_date),
+          port: av.open_port_name as string,
+          zone: av.open_zone,
+          date: fmtOpenDate(av.open_date),
+          lyc: laycanDot(av.open_date),
         }
       : null,
     dir,
     via: viaName ? { name: viaName, role: viaRole } : null,
-    href: `/dashboard/vessels/${v.id}`,
+    href: `/dashboard/vessels/${av.vessel_id}`,
   };
 }
 
@@ -136,23 +161,15 @@ export default async function MyVesselsPage() {
   const { data: appUser } = await supabase
     .from("users")
     .select("role")
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
-  const canAccessVesselPages =
-    appUser?.role === "vessel_owner" || appUser?.role === "broker";
+  const role = normalizeRole(appUser?.role);
+  const canAccessVesselPages = role === "vessel_owner" || role === "broker";
   if (!canAccessVesselPages) redirect("/dashboard");
 
-  const { data: myVesselsData } = await supabase
-    .from("v_my_vessels")
-    .select("*")
-    .order("claimed_at", { ascending: false });
-
-  const myVessels = (myVesselsData ?? []) as MyVesselRow[];
-  const quickPostHref = myVessels[0]
-    ? `/dashboard/vessels/${myVessels[0].id}/availability/new`
-    : "/dashboard/vessels/register";
-
+  // Prod ownership model: the vessels you manage are the distinct vessels
+  // behind the availability positions you own.
   const { data: ownership } = await supabase
     .from("listing_ownership")
     .select("listing_id")
@@ -161,34 +178,43 @@ export default async function MyVesselsPage() {
     .eq("is_current", true)
     .eq("role", "primary");
 
-  const ids = (ownership ?? []).map(
-    (o: { listing_id: string }) => o.listing_id,
-  );
+  const ids = (ownership ?? []).map((o: { listing_id: string }) => o.listing_id);
 
-  const listings: VesselAvailabilityWithVessel[] = [];
+  const listings: MyAvailability[] = [];
   if (ids.length) {
     const { data } = await supabase
       .from("vessel_availability")
       .select(
-        `*, vessel:vessels (vessel_name, imo_number, vessel_type, dwt_grain, build_year, flag, risk_level, is_sanctioned, is_geared, grain_certified, dg_certified, max_draft_m)`,
+        `id, vessel_id, status, review_status, open_port_name, open_port_locode, open_zone, open_date, vlsfo_sea_mt_day, vlsfo_port_mt_day, lsmgo_sea_mt_day, lsmgo_port_mt_day, created_at, vessel:vessels ( id, vessel_name, imo_number, vessel_type, dwt_grain, build_year, flag, is_geared, max_loa_m, max_draft_m, owner_company, manager_company, preferred_zones )`,
       )
       .in("id", ids)
       .order("created_at", { ascending: false });
-    if (data) listings.push(...(data as VesselAvailabilityWithVessel[]));
+    if (data) listings.push(...(data as unknown as MyAvailability[]));
   }
 
-  // Latest availability per vessel (listings are ordered created_at desc) —
-  // sources the fuel-consumption block for each fleet card.
-  const availByVessel = new Map<string, VesselAvailabilityWithVessel>();
+  // Latest availability per vessel → one fleet card per vessel.
+  const availByVessel = new Map<string, MyAvailability>();
   for (const l of listings) {
     if (!availByVessel.has(l.vessel_id)) availByVessel.set(l.vessel_id, l);
   }
 
+  const fleetEntries = [...availByVessel.values()].map((av) => ({
+    av,
+    data: toCardData(av),
+  }));
+  const myVessels = fleetEntries.map((e) => ({
+    id: e.av.vessel_id,
+    vessel_name: e.av.vessel.vessel_name,
+  }));
+  const quickPostHref = myVessels[0]
+    ? `/dashboard/vessels/${myVessels[0].id}/availability/new`
+    : "/dashboard/vessels/register";
+
   // Resolve open-port coordinates for the fleet map.
   const openLocodes = Array.from(
     new Set(
-      myVessels
-        .map((v) => v.open_port_locode)
+      fleetEntries
+        .map((e) => e.av.open_port_locode)
         .filter((x): x is string => !!x),
     ),
   );
@@ -209,21 +235,18 @@ export default async function MyVesselsPage() {
     }
   }
 
-  const fleetCards = myVessels.map((v) => ({
-    v,
-    data: toCardData(v, availByVessel.get(v.id)),
-  }));
-  const fleetPoints: MapPoint[] = fleetCards.flatMap(({ v, data }) => {
-    const c = v.open_port_locode ? portCoord.get(v.open_port_locode) : undefined;
+  const fleetCards = fleetEntries.map((e) => e.data);
+  const fleetPoints: MapPoint[] = fleetEntries.flatMap(({ av, data }) => {
+    const c = av.open_port_locode ? portCoord.get(av.open_port_locode) : undefined;
     if (!c) return [];
     return [
       {
         id: data.imo,
-        name: v.vessel_name,
+        name: av.vessel.vessel_name,
         lat: c.lat,
         lon: c.lon,
         kind: "vessel" as const,
-        zone: v.open_zone,
+        zone: av.open_zone,
       },
     ];
   });
@@ -292,7 +315,7 @@ export default async function MyVesselsPage() {
           </div>
         ) : (
           <FleetBoard
-            vessels={fleetCards.map((c) => c.data)}
+            vessels={fleetCards}
             points={fleetPoints}
           />
         )}
@@ -391,7 +414,7 @@ function PositionSection({
 }: {
   title: string;
   count: number;
-  listings: VesselAvailabilityWithVessel[];
+  listings: MyAvailability[];
 }) {
   return (
     <div>
@@ -431,7 +454,7 @@ const STATUS_LABELS: Record<VesselStatus, string> = {
   INACTIVE: "Inactive",
 };
 
-function PositionRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
+function PositionRow({ listing }: { listing: MyAvailability }) {
   const ReviewIcon = REVIEW_ICONS[listing.review_status];
   const isPending = listing.review_status === "PENDING";
 
