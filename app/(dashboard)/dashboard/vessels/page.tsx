@@ -13,9 +13,6 @@ import {
   AlertTriangle,
   MapPin,
   Calendar,
-  Ruler,
-  Waves,
-  ClipboardCheck,
 } from "lucide-react";
 
 import {
@@ -25,6 +22,7 @@ import {
   MyVesselRow,
 } from "@/lib/schemas/vessel";
 import { cn } from "@/lib/utils";
+import { VesselCard, type VesselCardData } from "@/components/vessels/VesselCard";
 
 function getDateUrgency(openDate: string | null): {
   color: string;
@@ -41,12 +39,83 @@ function getDateUrgency(openDate: string | null): {
   if (diffDays < 0)
     return { color: "text-red-600", icon: AlertTriangle, label: "Overdue" };
   if (diffDays <= 7)
-    return {
-      color: "text-amber-600",
-      icon: AlertTriangle,
-      label: "Due soon",
-    };
+    return { color: "text-amber-600", icon: AlertTriangle, label: "Due soon" };
   return { color: "text-green-600", icon: CheckCircle2, label: "On track" };
+}
+
+/** Date → laycan urgency dot (matches the cargo-card thresholds). */
+function laycanDot(openDate: string | null): "green" | "amber" | "red" {
+  if (!openDate) return "green";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.ceil(
+    (new Date(openDate).getTime() - today.getTime()) / 86_400_000,
+  );
+  if (diff < 0) return "red";
+  if (diff <= 7) return "amber";
+  return "green";
+}
+
+const fmtOpenDate = (s: string | null) => {
+  if (!s) return "";
+  const d = new Date(s);
+  return Number.isNaN(d.getTime())
+    ? s
+    : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+/**
+ * MyVesselRow (vessel specs + latest open position) merged with the owner's
+ * latest availability (fuel consumption) → the canonical VesselCard.
+ * This is the owner's OWN fleet, so identity is NOT masked: the manager/owner
+ * company alias is shown. No personal contact (email/phone/PIC) is referenced.
+ */
+function toCardData(
+  v: MyVesselRow,
+  av: VesselAvailabilityWithVessel | undefined,
+): VesselCardData {
+  const hasPosition = !!v.open_port_name;
+  const dir = v.preferred_trading_areas?.length
+    ? v.preferred_trading_areas.join(" / ")
+    : null;
+  const viaName = v.manager_company ?? v.owner_company ?? null;
+  const viaRole = v.manager_company ? "manager" : v.owner_company ? "owner" : undefined;
+
+  return {
+    imo: v.imo_number ?? "—",
+    name: v.vessel_name,
+    flag: v.flag,
+    type: v.vessel_type,
+    built: v.build_year,
+    dwt: v.dwt_grain != null ? v.dwt_grain.toLocaleString() : null,
+    grt: v.gross_tonnage != null ? v.gross_tonnage.toLocaleString() : null,
+    loa: v.max_loa_m != null ? String(v.max_loa_m) : null,
+    draft: v.max_draft_m != null ? String(v.max_draft_m) : null,
+    gear: v.is_geared == null ? null : v.is_geared ? "Geared" : "Gearless",
+    status: v.vessel_review_status === "IN_REVIEW" ? "REVIEW" : "OPEN",
+    fuel: av
+      ? {
+          vs: av.me_consumption_mt_day != null ? String(av.me_consumption_mt_day) : null,
+          vp: av.me_consumption_port_mt_day != null ? String(av.me_consumption_port_mt_day) : null,
+          ls: av.aux_consumption_mt_day != null ? String(av.aux_consumption_mt_day) : null,
+          lp: av.aux_consumption_port_mt_day != null ? String(av.aux_consumption_port_mt_day) : null,
+        }
+      : null,
+    // Match engine not yet wired: a declared position shows "0 matches"
+    // (placeholder), an undeclared one shows "No position yet".
+    matches: hasPosition ? 0 : null,
+    position: hasPosition
+      ? {
+          port: v.open_port_name as string,
+          zone: v.open_zone,
+          date: fmtOpenDate(v.open_date),
+          lyc: laycanDot(v.open_date),
+        }
+      : null,
+    dir,
+    via: viaName ? { name: viaName, role: viaRole } : null,
+    href: `/dashboard/vessels/${v.id}`,
+  };
 }
 
 export default async function MyVesselsPage() {
@@ -104,6 +173,13 @@ export default async function MyVesselsPage() {
       .in("id", ids)
       .order("created_at", { ascending: false });
     if (data) listings.push(...(data as VesselAvailabilityWithVessel[]));
+  }
+
+  // Latest availability per vessel (listings are ordered created_at desc) —
+  // sources the fuel-consumption block for each fleet card.
+  const availByVessel = new Map<string, VesselAvailabilityWithVessel>();
+  for (const l of listings) {
+    if (!availByVessel.has(l.vessel_id)) availByVessel.set(l.vessel_id, l);
   }
 
   const groups = {
@@ -169,9 +245,12 @@ export default async function MyVesselsPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-3 max-[1024px]:grid-cols-2 max-[768px]:grid-cols-1 gap-4">
+          <div className="mvb-cardhost">
             {myVessels.map((v) => (
-              <VesselCard key={v.id} vessel={v} />
+              <VesselCard
+                key={v.id}
+                vessel={toCardData(v, availByVessel.get(v.id))}
+              />
             ))}
           </div>
         )}
@@ -259,147 +338,6 @@ export default async function MyVesselsPage() {
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function VesselCard({ vessel: v }: { vessel: MyVesselRow }) {
-  const showRiskBadge = v.risk_level === "HIGH" || v.risk_level === "MEDIUM";
-  const RISK_STYLE: Record<string, string> = {
-    MEDIUM: "bg-amber-50 text-amber-700 border-amber-200",
-    HIGH: "bg-red-50 text-red-700 border-red-200",
-  };
-
-  const currentYear = new Date().getFullYear();
-  const vesselAge = v.build_year ? currentYear - v.build_year : null;
-  const isInReview = v.vessel_review_status === "IN_REVIEW";
-
-  return (
-    <Link
-      href={`/dashboard/vessels/${v.id}`}
-      className="group bg-white border border-slate-200 rounded-2xl p-5 hover:border-ocean-300 hover:shadow-md transition-all"
-    >
-      {isInReview && (
-        <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 mb-3 -mt-1">
-          <ClipboardCheck className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
-          <p className="text-[11px] font-semibold text-orange-700 leading-snug">
-            Vessel under review — tap to see details
-          </p>
-        </div>
-      )}
-
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-ocean-50 border border-ocean-100 flex items-center justify-center shrink-0 mt-0.5">
-            <Ship className="w-4.5 h-4.5 text-ocean-600" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-900 group-hover:text-ocean-700 transition-colors truncate">
-              {v.vessel_name}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5 truncate">
-              {v.vessel_type}
-              {v.flag && ` · ${v.flag}`}
-            </p>
-          </div>
-        </div>
-        {showRiskBadge && (
-          <span
-            className={cn(
-              "text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 uppercase tracking-wide",
-              RISK_STYLE[v.risk_level],
-            )}
-          >
-            {v.risk_level}
-          </span>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-        <StatPill
-          label="DWT"
-          value={v.dwt_grain ? `${v.dwt_grain.toLocaleString()} MT` : "—"}
-        />
-        <StatPill
-          label="Built"
-          value={
-            v.build_year
-              ? vesselAge
-                ? `${v.build_year} (${vesselAge} yrs)`
-                : String(v.build_year)
-              : "—"
-          }
-        />
-        {v.max_loa_m && (
-          <StatPill label="LOA" value={`${v.max_loa_m} m`} icon={Ruler} />
-        )}
-        {v.max_draft_m && (
-          <StatPill
-            label="Draft — Summer"
-            value={`${v.max_draft_m} m`}
-            icon={Waves}
-          />
-        )}
-      </div>
-
-      {(v.open_port_name || v.open_date) && (
-        <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs space-y-1 mb-3">
-          {v.open_port_name && (
-            <div className="flex items-center gap-1.5 text-slate-600">
-              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-              <span>
-                <span className="font-semibold text-slate-700">
-                  {v.open_port_name}
-                </span>
-                {v.open_zone && (
-                  <span className="text-slate-400 ml-1">({v.open_zone})</span>
-                )}
-              </span>
-            </div>
-          )}
-          {v.open_date && (
-            <div className="flex items-center gap-1.5 text-slate-600">
-              <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
-              <span>{v.open_date}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-        {v.open_availability_count > 0 ? (
-          <span className="text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
-            {v.open_availability_count} open position
-            {v.open_availability_count > 1 ? "s" : ""}
-          </span>
-        ) : (
-          <span className="text-xs text-slate-400 italic">
-            No open positions
-          </span>
-        )}
-        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-ocean-500 group-hover:translate-x-0.5 transition-all" />
-      </div>
-    </Link>
-  );
-}
-function StatPill({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ElementType;
-}) {
-  return (
-    <div className="bg-slate-50 rounded-lg px-2.5 py-2 border border-slate-100">
-      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">
-        {label}
-      </p>
-      <div className="flex items-center gap-1">
-        {Icon && <Icon className="w-3 h-3 text-slate-400" />}
-        <p className="text-xs font-bold text-slate-700">{value}</p>
-      </div>
     </div>
   );
 }
