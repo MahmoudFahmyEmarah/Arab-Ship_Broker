@@ -1,5 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import type { AccountWithProfiles, ProfileType } from "@/lib/schemas/account";
+import { normalizeRole } from "@/lib/role";
 
 export class EmailNotVerifiedError extends Error {
   email: string;
@@ -112,7 +113,7 @@ export async function getCurrentUser(
 
   if (error) throw error;
 
-  const role = data.role as string;
+  const role = normalizeRole(data.role);
   const hasCargoProfile = role === "cargo_owner" || role === "broker";
   const hasVesselProfile = role === "vessel_owner" || role === "broker";
   const activeProfiles: ProfileType[] = [

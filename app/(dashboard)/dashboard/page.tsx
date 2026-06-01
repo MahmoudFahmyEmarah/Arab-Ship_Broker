@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerClient } from "@supabase/ssr";
+
+import { normalizeRole } from "@/lib/role";
 import { cookies } from "next/headers";
 import {
   Plus,
@@ -61,7 +63,7 @@ export default async function DashboardPage() {
   if (!appUser) redirect("/auth/login");
   if (!appUser.is_active) redirect("/auth/login?error=account_suspended");
 
-  const role = appUser.role as string;
+  const role = normalizeRole(appUser.role);
   const showCargo = role === "cargo_owner" || role === "broker";
   const showVessel = role === "vessel_owner" || role === "broker";
   const tier = appUser.trust_tier as TrustTier;

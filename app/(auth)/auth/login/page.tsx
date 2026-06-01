@@ -7,6 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+
+import { normalizeRole } from "@/lib/role";
 import {
   Eye,
   EyeOff,
@@ -101,7 +103,7 @@ export default function LoginPage() {
           throw new SuspendedAccountError();
         }
 
-        role = dbUser?.role ?? null;
+        role = normalizeRole(dbUser?.role);
       }
 
       toast.success("Welcome back! Dropping anchor in your dashboard...");

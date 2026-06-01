@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 
+import { normalizeRole } from "@/lib/role";
+
 export type AdminUser = {
   supabaseUserId: string;
   email: string;
@@ -36,7 +38,7 @@ export async function requireAdmin(): Promise<AdminUser> {
     .eq("id", user.id)
     .single();
 
-  if (!appUser || appUser.role !== "admin") {
+  if (!appUser || normalizeRole(appUser.role) !== "admin") {
     redirect(appUser ? "/dashboard" : "/auth/login");
   }
 

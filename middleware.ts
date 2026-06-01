@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { normalizeRole } from "@/lib/role";
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -91,7 +93,7 @@ export async function middleware(request: NextRequest) {
     return redirectWithSupabaseCookies(verifyUrl);
   }
 
-  const userRole = appUser?.role;
+  const userRole = normalizeRole(appUser?.role);
 
   if (isAuthRoute) {
     if (userRole === "admin") {

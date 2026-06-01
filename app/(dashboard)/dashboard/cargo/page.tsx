@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { createServerClient } from "@supabase/ssr";
+
+import { normalizeRole } from "@/lib/role";
 import { cookies } from "next/headers";
 import {
   Plus,
@@ -247,7 +249,7 @@ export default async function BrowseCargoPage({
         .single()
     : { data: null };
 
-  const role = appUser?.role ?? "cargo_owner";
+  const role = normalizeRole(appUser?.role) ?? "cargo_owner";
   const trustTier = appUser?.trust_tier ?? "NEW";
   const { archiveCutoff, archiveLabel } = getTemporalAccess(role, trustTier);
   const isAdmin = role === "admin";
