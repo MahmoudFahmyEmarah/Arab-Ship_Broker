@@ -161,15 +161,15 @@ export default async function VesselDetailPage({
         <div className="flex items-start gap-4">
           <Link
             href="/dashboard/vessels"
-            className="mt-1 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="mt-1 p-2 rounded text-asb-gray-400 hover:text-asb-ink hover:bg-asb-gray-50 transition-colors"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4.5 h-4.5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-[17px] font-medium text-asb-navy">
               {v.vessel_name}
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-xs text-asb-gray-500 mt-1">
               {v.vessel_type}
               {v.imo_number && ` · IMO ${v.imo_number}`}
               {v.flag && ` · ${v.flag}`}
@@ -178,7 +178,7 @@ export default async function VesselDetailPage({
                   {" · Built "}
                   {v.build_year}
                   {vesselAge !== null && (
-                    <span className="text-slate-400"> ({vesselAge} yrs)</span>
+                    <span className="text-asb-gray-400"> ({vesselAge} yrs)</span>
                   )}
                 </>
               )}
@@ -196,11 +196,11 @@ export default async function VesselDetailPage({
       </div>
 
       {v.is_sanctioned && (
-        <div className="bg-red-50 border border-red-300 rounded-2xl p-5 flex gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+        <div className="bg-asb-red-bg border border-asb-red-bg rounded p-4 flex gap-3">
+          <AlertTriangle className="w-4 h-4 text-asb-red shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold text-red-900">Sanctioned vessel</p>
-            <p className="text-sm text-red-700 mt-0.5">
+            <p className="text-sm font-semibold text-asb-red">Sanctioned vessel</p>
+            <p className="text-xs text-asb-red mt-0.5 opacity-80">
               This vessel is on a sanctions list. No positions can be posted.
             </p>
           </div>
@@ -208,13 +208,13 @@ export default async function VesselDetailPage({
       )}
 
       {v.risk_level === "HIGH" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+        <div className="bg-asb-amber-bg border border-asb-amber-bg rounded p-4 flex gap-3">
+          <AlertTriangle className="w-4 h-4 text-asb-amber shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold text-amber-900">
+            <p className="text-sm font-semibold text-asb-amber">
               Positions require additional review
             </p>
-            <p className="text-sm text-amber-700 mt-0.5">
+            <p className="text-xs text-asb-amber mt-0.5 opacity-80">
               Arab ShipBroker will review each position posted for this vessel
               before it goes live.
             </p>
@@ -223,19 +223,19 @@ export default async function VesselDetailPage({
       )}
 
       {v.vessel_review_status === "IN_REVIEW" && (
-        <div className="bg-orange-50 border border-orange-300 rounded-2xl p-5 flex gap-3">
-          <ClipboardCheck className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+        <div className="bg-asb-amber-bg border border-asb-amber-bg rounded p-4 flex gap-3">
+          <ClipboardCheck className="w-4 h-4 text-asb-amber shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold text-orange-900">
+            <p className="text-sm font-semibold text-asb-amber">
               This vessel is currently under Arab ShipBroker review
             </p>
             {v.vessel_review_reason && (
-              <p className="text-sm text-orange-700 mt-1 leading-relaxed">
+              <p className="text-xs text-asb-amber mt-1 leading-relaxed opacity-90">
                 <span className="font-medium">Reason: </span>
                 {v.vessel_review_reason}
               </p>
             )}
-            <p className="text-xs text-orange-600 mt-2">
+            <p className="text-[11px] text-asb-amber mt-2 opacity-70">
               You may continue to manage existing positions. Contact Arab
               ShipBroker if you have questions about this review.
             </p>
@@ -562,10 +562,10 @@ function IntelCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5">
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
-        <Icon className="w-4 h-4 text-slate-400" />
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+    <div className="bg-asb-white rounded border border-asb-gray-200 p-4">
+      <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-asb-gray-100">
+        <Icon className="w-3.5 h-3.5 text-asb-gray-400" />
+        <h3 className="text-[10px] font-medium text-asb-gray-500 uppercase tracking-[0.09em]">
           {title}
         </h3>
       </div>
@@ -602,11 +602,13 @@ function MaskedCommercialCard() {
 
 function StatBox({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-100">
-      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
+    <div className="bg-asb-gray-50 rounded-[3px] px-3 py-2.5 border border-asb-gray-100">
+      <p className="text-[8px] text-asb-gray-500 font-medium uppercase tracking-[0.06em] mb-0.5">
         {label}
       </p>
-      <p className="text-sm font-bold text-slate-800">{value ?? "—"}</p>
+      <p className="text-sm font-semibold text-asb-navy tabular-nums">
+        {value ?? "—"}
+      </p>
     </div>
   );
 }
@@ -616,18 +618,18 @@ function CapRow({ label, value }: { label: string; value: boolean | null }) {
     value === true ? CheckCircle2 : value === false ? XCircle : Minus;
   const color =
     value === true
-      ? "text-green-600"
+      ? "text-asb-green"
       : value === false
-        ? "text-slate-400"
-        : "text-slate-300";
+        ? "text-asb-gray-400"
+        : "text-asb-gray-400";
 
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <Icon className={cn("w-4 h-4 shrink-0", color)} />
+    <div className="flex items-center gap-2 text-xs">
+      <Icon className={cn("w-3.5 h-3.5 shrink-0", color)} />
       <span
         className={cn(
           "font-medium",
-          value === null ? "text-slate-400" : "text-slate-700",
+          value === null ? "text-asb-gray-400" : "text-asb-ink",
         )}
       >
         {label}
@@ -638,9 +640,11 @@ function CapRow({ label, value }: { label: string; value: boolean | null }) {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4 py-1">
-      <span className="text-slate-400 font-medium shrink-0">{label}</span>
-      <span className="text-slate-700 font-semibold text-right word-break max-w-[65%]">
+    <div className="flex justify-between gap-4 py-0.5">
+      <span className="text-[10px] uppercase tracking-wide text-asb-gray-500 font-medium shrink-0">
+        {label}
+      </span>
+      <span className="text-xs text-asb-ink font-medium text-right tabular-nums max-w-[65%]">
         {value}
       </span>
     </div>
