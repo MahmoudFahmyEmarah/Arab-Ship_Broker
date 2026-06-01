@@ -13,6 +13,8 @@
 import { useEffect, useRef, useState } from "react";
 import type * as LType from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 
 export type MapPoint = {
   id: string;
@@ -67,9 +69,17 @@ export function SharedMap({
   const mapRef = useRef<LType.Map | null>(null);
   const LRef = useRef<typeof LType | null>(null);
   const baseLayerRef = useRef<LType.TileLayer | null>(null);
+  const clusterRef = useRef<LType.MarkerClusterGroup | null>(null);
   const markersRef = useRef<Map<string, LType.Marker>>(new Map());
+  const selectedRef = useRef<string | null | undefined>(selectedId);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+
+  const applyHighlight = () => {
+    markersRef.current.forEach((m, id) => {
+      m.getElement()?.classList.toggle("is-selected", id === selectedRef.current);
+    });
+  };
 
   // Init map once.
   useEffect(() => {
@@ -95,7 +105,28 @@ export function SharedMap({
       }).addTo(map);
       L.tileLayer(TILES.seamark, { maxZoom: 18, opacity: 0.6 }).addTo(map);
 
-      renderMarkers(L, map);
+      // markercluster patches the L instance.
+      await import("leaflet.markercluster");
+      const cluster = L.markerClusterGroup({
+        maxClusterRadius: 38,
+        showCoverageOnHover: false,
+        spiderfyDistanceMultiplier: 1.5,
+        iconCreateFunction: (cl) => {
+          const count = cl.getChildCount();
+          const size = count < 10 ? 28 : count < 50 ? 34 : 40;
+          return L.divIcon({
+            html: `<div class="asb-cluster" style="width:${size}px;height:${size}px;">${count}</div>`,
+            className: "asb-cluster-wrap",
+            iconSize: L.point(size, size),
+          });
+        },
+      });
+      clusterRef.current = cluster;
+      map.addLayer(cluster);
+      map.on("moveend", applyHighlight);
+      cluster.on("animationend", applyHighlight);
+
+      renderMarkers(L);
       fitToPoints(L, map);
     })();
     return () => {
@@ -125,8 +156,8 @@ export function SharedMap({
   useEffect(() => {
     const L = LRef.current;
     const map = mapRef.current;
-    if (!L || !map) return;
-    renderMarkers(L, map);
+    if (!L || !map || !clusterRef.current) return;
+    renderMarkers(L);
     fitToPoints(L, map);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [points]);
@@ -134,20 +165,19 @@ export function SharedMap({
   // Reframe + highlight on selection.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-    markersRef.current.forEach((m, id) => {
-      const el = m.getElement();
-      if (el) el.classList.toggle("is-selected", id === selectedId);
-    });
-    if (selectedId) {
+    selectedRef.current = selectedId;
+    applyHighlight();
+    if (map && selectedId) {
       const p = points.find((x) => x.id === selectedId);
       if (p) map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), 6), { duration: 0.6 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  function renderMarkers(L: typeof LType, map: LType.Map) {
-    markersRef.current.forEach((m) => map.removeLayer(m));
+  function renderMarkers(L: typeof LType) {
+    const cluster = clusterRef.current;
+    if (!cluster) return;
+    cluster.clearLayers();
     markersRef.current.clear();
     for (const p of points) {
       if (p.lat == null || p.lon == null) continue;
@@ -162,11 +192,12 @@ export function SharedMap({
         iconSize: [16, 16],
         iconAnchor: [8, 8],
       });
-      const marker = L.marker([p.lat, p.lon], { icon, title: p.name }).addTo(map);
+      const marker = L.marker([p.lat, p.lon], { icon, title: p.name });
       marker.on("click", () => onSelectRef.current?.(p.id));
-      if (p.id === selectedId) marker.getElement()?.classList.add("is-selected");
+      cluster.addLayer(marker);
       markersRef.current.set(p.id, marker);
     }
+    applyHighlight();
   }
 
   function fitToPoints(L: typeof LType, map: LType.Map) {
