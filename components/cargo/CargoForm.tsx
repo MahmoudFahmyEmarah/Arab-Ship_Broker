@@ -1,0 +1,1067 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Package,
+  MapPin,
+  Calendar,
+  DollarSign,
+  ShieldCheck,
+  ArrowRight,
+  Loader2,
+  CheckCircle,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
+import {
+  cargoFormSchema,
+  CargoFormValues,
+  CargoListingRow,
+  CommodityOption,
+  PortOption,
+  computeCargoVolumeCbm,
+  LOAD_TERMS,
+} from "@/lib/schemas/cargo";
+import {
+  submitCargo,
+  updateCargo,
+  getCargoSafetyAnswers,
+} from "@/sdk/app/cargos";
+import { getCommodityById } from "@/sdk/app/commodities";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { CommoditySelector } from "./CommoditySelector";
+import { PortAutocomplete } from "./PortAutocomplete";
+import { SafetyQuestionsStep } from "./SafetyQuestionsStep";
+import { cn } from "@/lib/utils";
+
+const STEPS = [
+  { id: "commodity", label: "Commodity", icon: Package },
+  { id: "ports", label: "Ports & Qty", icon: MapPin },
+  { id: "laycan", label: "Laycan & Terms", icon: Calendar },
+  { id: "safety", label: "Safety", icon: ShieldCheck },
+  { id: "review", label: "Review", icon: CheckCircle },
+] as const;
+
+const STEP_FIELDS: Record<number, (keyof CargoFormValues)[]> = {
+  0: ["commodity_id"],
+  1: ["qty_min_mt", "qty_max_mt", "load_port_locode", "disch_port_locode"],
+  2: ["laycan_from", "laycan_to"],
+  3: [],
+  4: [],
+};
+
+interface CargoFormProps {
+  initialData?: CargoListingRow;
+  mode?: "create" | "edit";
+}
+
+export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
+  const router = useRouter();
+  const [step, setStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitTriggeredByButtonRef = useRef(false);
+  const [isLoadingInitialData, setIsLoadingInitialData] = useState(
+    mode === "edit" && !!initialData,
+  );
+
+  const [loadPort, setLoadPort] = useState<PortOption | null>(
+    initialData
+      ? {
+          locode: initialData.load_port_locode,
+          trade_name: initialData.load_port_name,
+          country: initialData.load_country,
+          zone: initialData.load_zone,
+          port_type: "Sea Port",
+        }
+      : null,
+  );
+
+  const [dischPort, setDischPort] = useState<PortOption | null>(
+    initialData
+      ? {
+          locode: initialData.disch_port_locode,
+          trade_name: initialData.disch_port_name,
+          country: initialData.disch_country,
+          zone: initialData.disch_zone,
+          port_type: "Sea Port",
+        }
+      : null,
+  );
+
+  // In edit mode we need the real imsbc_category from the commodity table,
+  // not a hard-coded "Cat_C". We resolve it after mount.
+  const [selectedCommodity, setSelectedCommodity] =
+    useState<CommodityOption | null>(null);
+
+  const [safetyAnswers, setSafetyAnswers] = useState<Record<string, string>>(
+    {},
+  );
+  const [safetyErrors, setSafetyErrors] = useState<Record<string, string>>({});
+
+  const form = useForm<CargoFormValues>({
+    resolver: zodResolver(cargoFormSchema),
+    defaultValues: initialData
+      ? {
+          commodity_id: initialData.commodity_id,
+          commodity_name: initialData.commodity_name,
+          cargo_type: initialData.cargo_type,
+          // imsbc_category will be updated once the commodity is resolved below
+          imsbc_category: "Cat_C",
+          is_dg_cargo: initialData.is_dg_cargo,
+          is_grain_cargo: initialData.is_grain_cargo,
+          stowage_factor: initialData.stowage_factor ?? undefined,
+          qty_min_mt: initialData.qty_min_mt,
+          qty_max_mt: initialData.qty_max_mt,
+          load_port_locode: initialData.load_port_locode,
+          disch_port_locode: initialData.disch_port_locode,
+          laycan_from: initialData.laycan_from ?? "",
+          laycan_to: initialData.laycan_to ?? "",
+          load_rate: initialData.load_rate ?? undefined,
+          disch_rate: initialData.disch_rate ?? undefined,
+          load_terms: initialData.load_terms ?? undefined,
+          freight_idea_usd_mt: initialData.freight_idea_usd_mt ?? undefined,
+          commission_pct: initialData.commission_pct ?? undefined,
+          demurrage_rate: initialData.demurrage_rate ?? undefined,
+          despatch_rate: initialData.despatch_rate ?? undefined,
+          broker: initialData.broker ?? "",
+          notes: initialData.notes ?? "",
+          safety_answers: {},
+        }
+      : {
+          cargo_type: "Dry Bulk",
+          is_dg_cargo: false,
+          is_grain_cargo: false,
+          qty_min_mt: 0,
+          qty_max_mt: 0,
+          load_port_locode: "",
+          disch_port_locode: "",
+          safety_answers: {},
+        },
+    mode: "onChange",
+  });
+
+  // Resolve the real commodity (with correct imsbc_category) and load saved answers
+  useEffect(() => {
+    if (mode !== "edit" || !initialData) return;
+
+    const supabase = getSupabaseBrowserClient();
+
+    const resolve = async () => {
+      setIsLoadingInitialData(true);
+      try {
+        const [commodity, answers] = await Promise.all([
+          initialData.commodity_id
+            ? getCommodityById(supabase, initialData.commodity_id)
+            : Promise.resolve(null),
+          getCargoSafetyAnswers(supabase, initialData.id),
+        ]);
+
+        if (commodity) {
+          setSelectedCommodity(commodity);
+          form.setValue("imsbc_category", commodity.imsbc_category);
+        } else {
+          // Fallback: construct from listing row (imsbc_category unknown)
+          setSelectedCommodity({
+            id: initialData.commodity_id,
+            canonical_name: initialData.commodity_name,
+            cargo_type: initialData.cargo_type,
+            imsbc_category: "Cat_C",
+            is_dg: initialData.is_dg_cargo,
+            is_grain: initialData.is_grain_cargo,
+            default_sf_m3t: initialData.stowage_factor,
+          });
+        }
+
+        if (Object.keys(answers).length > 0) {
+          setSafetyAnswers(answers);
+        }
+      } catch (err) {
+        console.error("Failed to load edit data:", err);
+      } finally {
+        setIsLoadingInitialData(false);
+      }
+    };
+
+    resolve();
+  }, [mode, initialData, form]);
+
+  const handleCommodityChange = (commodity: CommodityOption) => {
+    setSelectedCommodity(commodity);
+    form.setValue("commodity_id", commodity.id, { shouldValidate: true });
+    form.setValue("commodity_name", commodity.canonical_name);
+    form.setValue("cargo_type", commodity.cargo_type);
+    form.setValue("imsbc_category", commodity.imsbc_category);
+    form.setValue("is_dg_cargo", commodity.is_dg);
+    form.setValue("is_grain_cargo", commodity.is_grain);
+    if (commodity.default_sf_m3t) {
+      form.setValue("stowage_factor", commodity.default_sf_m3t);
+    }
+    // Reset safety answers when commodity changes
+    setSafetyAnswers({});
+    setSafetyErrors({});
+  };
+
+  // Validate required safety questions explicitly when leaving the safety step
+  const validateSafetyAnswers = async (): Promise<boolean> => {
+    if (!selectedCommodity) return true;
+
+    const supabase = getSupabaseBrowserClient();
+    const { getSafetyQuestions } = await import("@/sdk/app/commodities");
+    const questions = await getSafetyQuestions(
+      supabase,
+      selectedCommodity.cargo_type,
+      selectedCommodity.imsbc_category,
+    );
+
+    const newErrors: Record<string, string> = {};
+    for (const q of questions) {
+      if (q.is_required && !safetyAnswers[q.question_key]) {
+        newErrors[q.question_key] = "This field is required";
+      }
+    }
+
+    setSafetyErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const goNext = async () => {
+    const fields = STEP_FIELDS[step];
+    if (fields.length > 0) {
+      const valid = await form.trigger(fields);
+      if (!valid) return;
+    }
+
+    if (step === 3 && selectedCommodity) {
+      const valid = await validateSafetyAnswers();
+      if (!valid) {
+        toast.error(
+          "Please answer all required safety questions before continuing.",
+        );
+        return;
+      }
+    }
+
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  };
+
+  const goBack = () => setStep((s) => Math.max(s - 1, 0));
+
+  const onSubmit = async (data: CargoFormValues) => {
+    setIsSubmitting(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const payload: CargoFormValues = {
+        ...data,
+        safety_answers: safetyAnswers,
+      };
+
+      if (mode === "edit" && initialData?.id) {
+        await updateCargo(supabase, initialData.id, payload);
+        toast.success("Cargo updated successfully.");
+      } else {
+        await submitCargo(supabase, payload);
+        toast.success(
+          "Cargo submitted! It will go live once reviewed by our team.",
+        );
+      }
+
+      router.push("/dashboard/cargo");
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const preventEnterSubmit = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Enter") return;
+    const target = event.target as HTMLElement;
+    if (target.tagName === "TEXTAREA") return;
+    event.preventDefault();
+  };
+
+  const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (!submitTriggeredByButtonRef.current) {
+      event.preventDefault();
+      return;
+    }
+
+    submitTriggeredByButtonRef.current = false;
+    void form.handleSubmit(onSubmit, (errors) =>
+      console.log("Validation Errors:", errors),
+    )(event);
+  };
+
+  const values = form.watch();
+
+  if (isLoadingInitialData) {
+    return (
+      <div className="flex items-center justify-center py-20 gap-3 text-slate-500">
+        <Loader2 className="w-5 h-5 animate-spin" />
+        <span className="text-sm">Loading cargo details…</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto relative max-[768px]:px-4">
+      {/* Step indicator */}
+      <div className="mb-8">
+        <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
+          {STEPS.map((s, idx) => {
+            const Icon = s.icon;
+            const isActive = idx === step;
+            const isDone = idx < step;
+            return (
+              <div
+                key={s.id}
+                className="flex items-center flex-1 last:flex-none"
+              >
+                <div
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
+                    isActive && "bg-ocean-600 text-white",
+                    isDone && "bg-ocean-100 text-ocean-700",
+                    !isActive && !isDone && "text-slate-400",
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="inline max-[768px]:hidden">{s.label}</span>
+                </div>
+                {idx < STEPS.length - 1 && (
+                  <div
+                    className={cn(
+                      "flex-1 h-0.5 mx-1 rounded-full transition-colors",
+                      idx < step ? "bg-ocean-400" : "bg-slate-100",
+                    )}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 max-[768px]:p-6">
+        <form
+          onSubmit={handleFormSubmit}
+          onKeyDown={preventEnterSubmit}
+          className="space-y-5"
+        >
+          {/* ── Step 0: Commodity ── */}
+          {step === 0 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-2">
+                <Package className="w-7 h-7 text-ocean-600" />
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Select Commodity
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    Cargo type, IMSBC category, and safety requirements are set
+                    automatically.
+                  </p>
+                </div>
+              </div>
+
+              <CommoditySelector
+                selected={selectedCommodity}
+                onChange={handleCommodityChange}
+                error={form.formState.errors.commodity_id?.message}
+              />
+
+              {selectedCommodity && (
+                <div>
+                  <label className="text-sm font-semibold text-slate-700">
+                    Stowage Factor (m³/t)
+                    <span className="text-slate-400 font-normal ml-1">
+                      — pre-filled from commodity default, override if needed
+                    </span>
+                  </label>
+                  <Controller
+                    control={form.control}
+                    name="stowage_factor"
+                    render={({ field }) => (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={field.value ?? ""}
+                        onChange={(e) =>
+                          field.onChange(
+                            e.target.value === ""
+                              ? undefined
+                              : Number(e.target.value),
+                          )
+                        }
+                        placeholder={
+                          selectedCommodity.default_sf_m3t
+                            ? String(selectedCommodity.default_sf_m3t)
+                            : "e.g. 47.0"
+                        }
+                        className="mt-1.5 w-48 max-[768px]:w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                      />
+                    )}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 1: Ports & Quantity ── */}
+          {step === 1 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-2">
+                <MapPin className="w-7 h-7 text-ocean-600" />
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Ports & Quantity
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    Zone is auto-filled from the port — never type it manually.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Min Quantity (MT)
+                  </label>
+                  <Controller
+                    control={form.control}
+                    name="qty_min_mt"
+                    render={({ field, fieldState }) => (
+                      <>
+                        <input
+                          type="number"
+                          min={1}
+                          value={field.value || ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value === ""
+                                ? 0
+                                : Number(e.target.value),
+                            )
+                          }
+                          className={cn(
+                            "w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all",
+                            fieldState.error && "border-red-300",
+                          )}
+                        />
+                        {fieldState.error && (
+                          <p className="text-xs text-red-500">
+                            {fieldState.error.message}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Max Quantity (MT)
+                  </label>
+                  <Controller
+                    control={form.control}
+                    name="qty_max_mt"
+                    render={({ field, fieldState }) => (
+                      <>
+                        <input
+                          type="number"
+                          min={1}
+                          value={field.value || ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value === ""
+                                ? 0
+                                : Number(e.target.value),
+                            )
+                          }
+                          className={cn(
+                            "w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all",
+                            fieldState.error && "border-red-300",
+                          )}
+                        />
+                        {fieldState.error && (
+                          <p className="text-xs text-red-500">
+                            {fieldState.error.message}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  />
+                </div>
+              </div>
+
+              {(() => {
+                const qty = values.qty_max_mt;
+                const sf = values.stowage_factor;
+                const computed = computeCargoVolumeCbm(qty, sf);
+
+                return (
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Cargo Volume (cbm)
+                      <span className="text-slate-400 font-normal ml-1 text-xs">
+                        — optional; auto-computed from qty × stowage factor
+                      </span>
+                    </label>
+
+                    {computed !== null && (
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-xs text-slate-500">
+                          Auto-computed:
+                        </span>
+                        <span className="text-xs font-bold text-ocean-700 bg-ocean-50 border border-ocean-200 px-2 py-0.5 rounded-md">
+                          {computed.toLocaleString()} cbm
+                        </span>
+                        <button
+                          type="button"
+                          className="text-xs text-ocean-600 hover:text-ocean-800 font-semibold underline"
+                          onClick={() =>
+                            form.setValue("volume_cbm", computed, {
+                              shouldValidate: true,
+                            })
+                          }
+                        >
+                          Use this
+                        </button>
+                      </div>
+                    )}
+
+                    <Controller
+                      control={form.control}
+                      name="volume_cbm"
+                      render={({ field }) => (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            value={field.value ?? ""}
+                            onChange={(e) =>
+                              field.onChange(
+                                e.target.value === ""
+                                  ? undefined
+                                  : Math.round(Number(e.target.value)),
+                              )
+                            }
+                            placeholder={
+                              computed !== null
+                                ? String(computed)
+                                : "e.g. 48 000"
+                            }
+                            className="w-48 max-[768px]:w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                          />
+                          <span className="text-xs text-slate-400 font-medium">
+                            cbm
+                          </span>
+                          {field.value && (
+                            <span className="text-xs text-slate-400">
+                              ≈{" "}
+                              {Math.round(
+                                field.value * 35.3147,
+                              ).toLocaleString()}{" "}
+                              cbft
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    />
+
+                    {computed !== null &&
+                      values.volume_cbm &&
+                      values.volume_cbm !== computed && (
+                        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">
+                          Manual override — differs from auto-computed{" "}
+                          {computed.toLocaleString()} cbm.
+                        </p>
+                      )}
+
+                    <p className="text-xs text-slate-400">
+                      Used to verify the cargo fits in the vessel hold.
+                      Relationship: Volume = Qty (MT) × Stowage Factor (m³/t).
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <Controller
+                control={form.control}
+                name="load_port_locode"
+                render={({ fieldState }) => (
+                  <PortAutocomplete
+                    label="Load Port (POL)"
+                    selectedPort={loadPort}
+                    onChange={(locode, port) => {
+                      form.setValue("load_port_locode", locode, {
+                        shouldValidate: true,
+                      });
+                      setLoadPort(port);
+                    }}
+                    error={fieldState.error?.message}
+                    placeholder="Search load port…"
+                  />
+                )}
+              />
+
+              <Controller
+                control={form.control}
+                name="disch_port_locode"
+                render={({ fieldState }) => (
+                  <PortAutocomplete
+                    label="Discharge Port (POD)"
+                    selectedPort={dischPort}
+                    onChange={(locode, port) => {
+                      form.setValue("disch_port_locode", locode, {
+                        shouldValidate: true,
+                      });
+                      setDischPort(port);
+                    }}
+                    error={fieldState.error?.message}
+                    placeholder="Search discharge port…"
+                  />
+                )}
+              />
+            </div>
+          )}
+
+          {/* ── Step 2: Laycan & Terms ── */}
+          {step === 2 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-2">
+                <Calendar className="w-7 h-7 text-ocean-600" />
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Laycan & Commercial Terms
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    All fields optional. Leave laycan blank for SPOT cargo.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Laycan From
+                  </label>
+                  <input
+                    type="date"
+                    {...form.register("laycan_from")}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                  />
+                  {form.formState.errors.laycan_from && (
+                    <p className="text-xs text-red-500">
+                      {form.formState.errors.laycan_from.message}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Laycan To
+                  </label>
+                  <input
+                    type="date"
+                    {...form.register("laycan_to")}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                  />
+                  {form.formState.errors.laycan_to && (
+                    <p className="text-xs text-red-500">
+                      {form.formState.errors.laycan_to.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {!values.laycan_from && !values.laycan_to && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+                  No laycan set — this cargo will be listed as SPOT and will
+                  match any open vessel date.
+                </p>
+              )}
+
+              <div className="border-t border-slate-100 pt-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <DollarSign className="w-5 h-5 text-ocean-600" />
+                  <h3 className="text-base font-semibold text-slate-800">
+                    Commercial Terms
+                  </h3>
+                  <span className="text-xs text-slate-400">
+                    — all optional, improves match ranking
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Load Terms
+                    </label>
+                    <select
+                      {...form.register("load_terms", {
+                        setValueAs: (v) => (v === "" ? undefined : v),
+                      })}
+                      className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                    >
+                      <option value="">Select terms…</option>
+                      {LOAD_TERMS.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Freight Idea ($/MT)
+                    </label>
+                    <Controller
+                      control={form.control}
+                      name="freight_idea_usd_mt"
+                      render={({ field }) => (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value === ""
+                                ? undefined
+                                : Number(e.target.value),
+                            )
+                          }
+                          placeholder="e.g. 22.50"
+                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                        />
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Load Rate (MT/day)
+                    </label>
+                    <Controller
+                      control={form.control}
+                      name="load_rate"
+                      render={({ field }) => (
+                        <input
+                          type="number"
+                          value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value === ""
+                                ? undefined
+                                : Number(e.target.value),
+                            )
+                          }
+                          placeholder="e.g. 2000"
+                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                        />
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Discharge Rate (MT/day)
+                    </label>
+                    <Controller
+                      control={form.control}
+                      name="disch_rate"
+                      render={({ field }) => (
+                        <input
+                          type="number"
+                          value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value === ""
+                                ? undefined
+                                : Number(e.target.value),
+                            )
+                          }
+                          placeholder="e.g. 1500"
+                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                        />
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Demurrage ($/day)
+                    </label>
+                    <Controller
+                      control={form.control}
+                      name="demurrage_rate"
+                      render={({ field }) => (
+                        <input
+                          type="number"
+                          value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value === ""
+                                ? undefined
+                                : Number(e.target.value),
+                            )
+                          }
+                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                        />
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Commission (%)
+                    </label>
+                    <Controller
+                      control={form.control}
+                      name="commission_pct"
+                      render={({ field }) => (
+                        <input
+                          type="number"
+                          step="0.25"
+                          min={0}
+                          max={100}
+                          value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value === ""
+                                ? undefined
+                                : Number(e.target.value),
+                            )
+                          }
+                          placeholder="e.g. 2.5"
+                          className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                        />
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Broker / Reference
+                  </label>
+                  <input
+                    type="text"
+                    {...form.register("broker")}
+                    placeholder="e.g. Company name / contact ref"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all"
+                  />
+                </div>
+
+                <div className="mt-4 space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Additional Notes
+                  </label>
+                  <textarea
+                    {...form.register("notes")}
+                    rows={2}
+                    placeholder="Any special requirements or notes…"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:bg-white transition-all resize-none"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Safety Questions ── */}
+          {step === 3 && selectedCommodity && (
+            <div className="animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-6">
+                <ShieldCheck className="w-7 h-7 text-ocean-600" />
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Safety & Vessel Requirements
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    Questions are specific to {selectedCommodity.canonical_name}{" "}
+                    ({selectedCommodity.imsbc_category}). Answers tagged
+                    &quot;used in matching&quot; drive vessel filtering.
+                  </p>
+                </div>
+              </div>
+              <SafetyQuestionsStep
+                cargoType={selectedCommodity.cargo_type}
+                imsbcCategory={selectedCommodity.imsbc_category}
+                values={safetyAnswers}
+                onChange={(key, value) =>
+                  setSafetyAnswers((prev) => ({ ...prev, [key]: value }))
+                }
+                errors={safetyErrors}
+              />
+            </div>
+          )}
+
+          {/* ── Step 4: Review ── */}
+          {step === 4 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-2">
+                <CheckCircle className="w-7 h-7 text-ocean-600" />
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Review & Submit
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    Double-check before submitting. Your listing will be
+                    reviewed before going live.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200">
+                <ReviewRow
+                  label="Commodity"
+                  value={values.commodity_name ?? "—"}
+                />
+                <ReviewRow
+                  label="Cargo type"
+                  value={values.cargo_type ?? "—"}
+                />
+                <ReviewRow label="IMSBC" value={values.imsbc_category ?? "—"} />
+                <ReviewRow
+                  label="Quantity"
+                  value={`${values.qty_min_mt?.toLocaleString()} – ${values.qty_max_mt?.toLocaleString()} MT`}
+                />
+                {values.volume_cbm && (
+                  <ReviewRow
+                    label="Volume"
+                    value={`${values.volume_cbm.toLocaleString()} cbm`}
+                  />
+                )}
+                {values.stowage_factor && (
+                  <ReviewRow
+                    label="Stowage factor"
+                    value={`${values.stowage_factor} m³/t`}
+                  />
+                )}
+                <ReviewRow
+                  label="Load port"
+                  value={
+                    loadPort
+                      ? `${loadPort.trade_name} (${loadPort.locode}) — ${loadPort.zone}`
+                      : (values.load_port_locode ?? "—")
+                  }
+                />
+                <ReviewRow
+                  label="Discharge port"
+                  value={
+                    dischPort
+                      ? `${dischPort.trade_name} (${dischPort.locode}) — ${dischPort.zone}`
+                      : (values.disch_port_locode ?? "—")
+                  }
+                />
+                <ReviewRow
+                  label="Laycan"
+                  value={
+                    values.laycan_from
+                      ? `${values.laycan_from} – ${values.laycan_to || "?"}`
+                      : "SPOT (no laycan)"
+                  }
+                />
+                {values.load_terms && (
+                  <ReviewRow label="Load terms" value={values.load_terms} />
+                )}
+                {values.freight_idea_usd_mt && (
+                  <ReviewRow
+                    label="Freight idea"
+                    value={`$${values.freight_idea_usd_mt}/MT`}
+                  />
+                )}
+                {values.broker && (
+                  <ReviewRow label="Broker ref" value={values.broker} />
+                )}
+              </div>
+
+              {Object.keys(safetyAnswers).length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                    Safety answers ({Object.keys(safetyAnswers).length})
+                  </p>
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200">
+                    {Object.entries(safetyAnswers).map(([key, val]) => (
+                      <ReviewRow key={key} label={key} value={String(val)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+                <p className="font-semibold mb-1">What happens next?</p>
+                <p>
+                  Your listing will be reviewed by our team (SLA: 2 hours during
+                  business hours). Once approved, it will go live in the
+                  marketplace and be included in vessel matchmaking.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation */}
+          <div className="flex justify-between items-center pt-8 mt-6 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={goBack}
+              disabled={step === 0}
+              className="px-5 py-2.5 font-semibold text-slate-600 hover:bg-slate-50 rounded-xl transition-colors disabled:invisible"
+            >
+              ← Back
+            </button>
+
+            {step < STEPS.length - 1 ? (
+              <button
+                type="button"
+                onClick={goNext}
+                className="px-7 py-3 bg-ocean-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-ocean-700 transition-colors"
+              >
+                Continue <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                onClick={() => {
+                  submitTriggeredByButtonRef.current = true;
+                }}
+                disabled={isSubmitting}
+                className="px-7 py-3 bg-ocean-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-ocean-700 transition-colors disabled:opacity-60"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting…
+                  </>
+                ) : mode === "edit" ? (
+                  "Save Changes"
+                ) : (
+                  "Submit Listing"
+                )}
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center px-4 py-2.5 text-sm">
+      <span className="text-slate-500 font-medium">{label}</span>
+      <span className="text-slate-900 font-semibold text-right wrap-break-word max-w-[68%]">
+        {value}
+      </span>
+    </div>
+  );
+}

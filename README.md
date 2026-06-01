@@ -1,85 +1,36 @@
-# Arab ShipBroker Platform
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-Professional dry bulk and break bulk shipbroking platform.
-Sub-15K DWT handysize and coaster tonnage. Arabian Gulf, Red Sea, East Med, Black Sea.
+## Getting Started
 
-## Setup — first time
+First, run the development server:
 
-### 1. Install dependencies
-```bash
-npm install
-```
-
-### 2. Configure environment
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set:
-```
-VITE_SUPABASE_URL=https://sidcsytgqalqacsgyguz.supabase.co
-VITE_SUPABASE_ANON_KEY=<your anon key starting with eyJ...>
-SUPABASE_SERVICE_KEY=<service_role key — for data migration only, NEVER ship to frontend>
-```
-
-Get keys from: Supabase → Project Settings → API → Project API keys
-
-### 3. Run database migrations
-Open Supabase → SQL Editor and paste/run:
-1. The base schema (`arabshipbroker_schema.sql` from project root if present)
-2. `supabase/migrations/001_schema_addendum.sql`
-
-### 4. Load real data
-Place your CargoMap Excel in the project root, then run:
-```bash
-npm run migrate ./ArabShipBroker_CargoMap_v3.xlsx
-```
-
-This loads:
-- Ports (with locode, zone, country)
-- 698 cargo records (with multi-port, WOG, circulation, laytime qualifier detection)
-- 43 vessels with availability records
-
-### 5. Start the dev server
 ```bash
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-Opens at http://localhost:3000
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Architecture
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-```
-src/
-  components/
-    cargo/      CargoCard, PostCargoForm
-    vessel/     VesselCard
-    map/        LeafletMap, MapRightBar
-    shared/     Sidebar, BunkerTicker, Announcements, LaycanPicker
-  pages/        Dashboard, CargoMarket, TonnageMarket
-  hooks/        useAuth, useCargo, useVessels
-  lib/          supabase, cargo, map
-  types/        index.ts (all entity types)
-supabase/
-  migrations/   SQL migrations
-scripts/
-  migrate-data.ts  Excel → Supabase loader
-```
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Tier model
+## Learn More
 
-| Tier | Name | Description |
-|---|---|---|
-| T1 | Free | Vetted, zone-level match counts only |
-| T2 | Promoted | Full match intel, partner names locked |
-| T3 | Subscriber | Full access + Voyage Estimator |
-| T4 | Partner | ASB-promoted key account |
+To learn more about Next.js, take a look at the following resources:
 
-## Notes
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-- Trust tier (NEW/VERIFIED/FLAGGED) is admin-only — never shown to users
-- Subscription tier (T1-T4) drives feature access
-- Contact data (email, phone, address) is encrypted end-to-end and only visible to ASB until a match is made
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-<!-- Vercel deploy trigger: 2026-05-27T12:54:25Z -->
-# Build trigger: 2026-05-27T13:36:43Z
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
