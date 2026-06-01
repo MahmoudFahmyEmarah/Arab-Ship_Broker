@@ -93,7 +93,7 @@ export default function LoginPage() {
         const { data: dbUser } = await supabase
           .from("users")
           .select("role, is_active")
-          .eq("supabase_user_id", userId)
+          .eq("id", userId)
           .maybeSingle();
 
         if (dbUser && dbUser.is_active === false) {

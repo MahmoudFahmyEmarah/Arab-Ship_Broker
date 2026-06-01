@@ -101,26 +101,35 @@ export async function getCurrentUser(
     throw authError || new Error("No authenticated user found");
   }
 
+  // Production schema: read public.users directly (id == auth uid) and derive
+  // the cargo/vessel personas from `role` — prod has no `profiles` table or
+  // `v_account_profiles` view.
   const { data, error } = await supabase
-    .from("v_account_profiles")
-    .select(
-      "account_id, supabase_user_id, full_name, email, trust_tier, is_active, has_cargo_profile, has_vessel_profile, active_profiles",
-    )
-    .eq("supabase_user_id", authData.user.id)
+    .from("users")
+    .select("id, full_name, email, trust_tier, is_active, role")
+    .eq("id", authData.user.id)
     .single();
 
   if (error) throw error;
 
+  const role = data.role as string;
+  const hasCargoProfile = role === "cargo_owner" || role === "broker";
+  const hasVesselProfile = role === "vessel_owner" || role === "broker";
+  const activeProfiles: ProfileType[] = [
+    ...(hasCargoProfile ? (["cargo"] as ProfileType[]) : []),
+    ...(hasVesselProfile ? (["vessel"] as ProfileType[]) : []),
+  ];
+
   return {
-    supabaseUserId: data.supabase_user_id,
+    supabaseUserId: data.id,
     email: data.email,
-    accountId: data.account_id,
+    accountId: data.id,
     fullName: data.full_name,
     trustTier: data.trust_tier as "NEW" | "VERIFIED" | "FLAGGED",
     isActive: data.is_active,
-    hasCargoProfile: data.has_cargo_profile ?? false,
-    hasVesselProfile: data.has_vessel_profile ?? false,
-    activeProfiles: (data.active_profiles ?? []) as ProfileType[],
+    hasCargoProfile,
+    hasVesselProfile,
+    activeProfiles,
   };
 }
 

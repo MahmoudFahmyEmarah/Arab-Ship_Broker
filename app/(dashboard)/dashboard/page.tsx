@@ -55,7 +55,7 @@ export default async function DashboardPage() {
     .select(
       "id, full_name, role, trust_tier, clean_posts, strike_count, is_active",
     )
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   if (!appUser) redirect("/auth/login");

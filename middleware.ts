@@ -73,7 +73,7 @@ export async function middleware(request: NextRequest) {
   const { data: appUser } = await supabase
     .from("users")
     .select("role, is_active, trust_tier")
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   if (appUser && !appUser.is_active) {

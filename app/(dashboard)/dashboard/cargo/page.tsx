@@ -243,7 +243,7 @@ export default async function BrowseCargoPage({
     ? await supabase
         .from("users")
         .select("role, trust_tier")
-        .eq("supabase_user_id", user.id)
+        .eq("id", user.id)
         .single()
     : { data: null };
 

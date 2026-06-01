@@ -33,7 +33,7 @@ export async function requireAdmin(): Promise<AdminUser> {
   const { data: appUser } = await supabase
     .from("users")
     .select("full_name, email, role, is_active")
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   if (!appUser || appUser.role !== "admin") {
