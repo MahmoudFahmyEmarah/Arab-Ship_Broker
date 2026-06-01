@@ -53,7 +53,10 @@ DECLARE
     'commercial_manager_company','commercial_manager_country',
     'commercial_manager_contact','commercial_manager_email','commercial_manager_phone',
     'pic_name','website',
-    'tc_charterer_name','bbc_charterer_name'
+    'tc_charterer_name','bbc_charterer_name',
+    -- commercial intel (locked per firewall scope decision)
+    'charter_status','tc_expiry','bbc_expiry','pi_club','pi_ig_member',
+    'pi_coverage_types','war_risk_trading','war_risk_conditions','preferred_trading_areas'
   ];
   col text;
 BEGIN
@@ -81,7 +84,10 @@ DECLARE
     'commercial_manager_company','commercial_manager_country',
     'commercial_manager_contact','commercial_manager_email','commercial_manager_phone',
     'pic_name','website',
-    'tc_charterer_name','bbc_charterer_name'
+    'tc_charterer_name','bbc_charterer_name',
+    -- commercial intel (locked per firewall scope decision)
+    'charter_status','tc_expiry','bbc_expiry','pi_club','pi_ig_member',
+    'pi_coverage_types','war_risk_trading','war_risk_conditions','preferred_trading_areas'
   ];
   sel text := '';
   col text;
@@ -116,8 +122,8 @@ GRANT SELECT ON public.v_vessel_detail TO authenticated;
 --
 -- Commercial INTEL columns (charter_status, tc_expiry, bbc_expiry, pi_club,
 -- pi_ig_member, pi_coverage_types, war_risk_trading, war_risk_conditions,
--- preferred_trading_areas) are NOT contact/identity, so they remain
--- readable at the API and are gated only in the UI (commercial card shown
--- to owner/admin). Flagged for an explicit decision on whether to DB-lock
--- them too — not locked here without sign-off.
+-- preferred_trading_areas) ARE locked here too (per scope decision): the
+-- entire commercial card is unreachable via the raw API for non-owner/
+-- non-admin. Note: pi_club therefore no longer shows on the availability
+-- detail for non-owners.
 -- ============================================================

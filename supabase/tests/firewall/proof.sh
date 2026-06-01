@@ -26,6 +26,16 @@ check "Member raw API: vessels.pic_name => DENIED" "" "$R" '[[ "$R" == *"permiss
 R=$(q "$MEMBER" "SELECT tc_charterer_name FROM public.vessels")
 check "Member raw API: vessels.tc_charterer_name => DENIED" "" "$R" '[[ "$R" == *"permission denied"* ]]'
 
+# A2. Intel columns (charter_status, pi_club) also locked at the raw API
+R=$(q "$MEMBER" "SELECT charter_status FROM public.vessels")
+check "Member raw API: vessels.charter_status => DENIED" "" "$R" '[[ "$R" == *"permission denied"* ]]'
+R=$(q "$MEMBER" "SELECT pi_club FROM public.vessels")
+check "Member raw API: vessels.pi_club => DENIED" "" "$R" '[[ "$R" == *"permission denied"* ]]'
+R=$(q "$MEMBER" "SELECT coalesce(charter_status,'<NULL>')||'/'||coalesce(pi_club,'<NULL>') FROM public.v_vessel_detail")
+check "Member view: intel (charter_status,pi_club) => NULL" "" "$R" '[[ "$R" == *"<NULL>/<NULL>"* && "$R" != *"Gard"* && "$R" != *"TC until"* ]]'
+R=$(q "$OWNER" "SELECT charter_status||'/'||pi_club FROM public.v_vessel_detail")
+check "Owner view: intel => visible" "" "$R" '[[ "$R" == *"TC until Dec/Gard P&I"* ]]'
+
 # B. Member CAN read specs from the raw table (firewall didn't break the market)
 R=$(q "$MEMBER" "SELECT vessel_name||'|'||dwt_grain FROM public.vessels")
 check "Member raw API: specs (vessel_name,dwt_grain) => visible" "" "$R" '[[ "$R" == *"MV FIREWALL TEST|8200"* ]]'

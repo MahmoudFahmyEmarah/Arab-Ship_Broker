@@ -104,7 +104,9 @@ DECLARE
   pii text[] := ARRAY['owner_company','owner_country','manager_company','manager_country',
     'commercial_manager_company','commercial_manager_country','commercial_manager_contact',
     'commercial_manager_email','commercial_manager_phone','pic_name','website',
-    'tc_charterer_name','bbc_charterer_name'];
+    'tc_charterer_name','bbc_charterer_name',
+    'charter_status','tc_expiry','bbc_expiry','pi_club','pi_ig_member',
+    'pi_coverage_types','war_risk_trading','war_risk_conditions','preferred_trading_areas'];
   col text;
 BEGIN
   EXECUTE 'REVOKE SELECT ON public.vessels FROM anon, authenticated';
@@ -120,7 +122,9 @@ DECLARE
   pii text[] := ARRAY['owner_company','owner_country','manager_company','manager_country',
     'commercial_manager_company','commercial_manager_country','commercial_manager_contact',
     'commercial_manager_email','commercial_manager_phone','pic_name','website',
-    'tc_charterer_name','bbc_charterer_name'];
+    'tc_charterer_name','bbc_charterer_name',
+    'charter_status','tc_expiry','bbc_expiry','pi_club','pi_ig_member',
+    'pi_coverage_types','war_risk_trading','war_risk_conditions','preferred_trading_areas'];
   sel text := ''; col text;
 BEGIN
   FOR col IN SELECT column_name FROM information_schema.columns
@@ -157,10 +161,10 @@ INSERT INTO public.users (supabase_user_id, email, role, access_tier) VALUES
 
 INSERT INTO public.vessels (id, vessel_name, imo_number, dwt_grain, flag, is_geared, owner_company,
   owner_country, manager_company, commercial_manager_email, commercial_manager_phone, pic_name,
-  website, tc_charterer_name, charter_status)
+  website, tc_charterer_name, charter_status, pi_club)
 VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','MV FIREWALL TEST','9000001',8200,'Panama',true,
   'Poseidon Shipping Ltd','Greece','Triton Mgmt','ceo@poseidon.example','+30 555 0001',
-  'Capt. Nikos','poseidon.example','Cargill','TC until Dec');
+  'Capt. Nikos','poseidon.example','Cargill','TC until Dec','Gard P&I');
 
 -- owner (user 3) claims the vessel
 INSERT INTO public.vessel_claims (vessel_id, user_id, role)

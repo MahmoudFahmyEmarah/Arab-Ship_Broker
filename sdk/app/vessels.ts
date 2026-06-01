@@ -225,7 +225,7 @@ export async function getAvailabilityById(
          grain_cbm, bale_cbm,
          build_year, flag, flag_category, scope, risk_level,
          is_geared, grain_certified, dg_certified,
-         max_loa_m, max_draft_m, is_sanctioned, pi_club,
+         max_loa_m, max_draft_m, is_sanctioned,
          preferred_zones
        )`,
     )
