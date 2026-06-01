@@ -18,6 +18,7 @@ import {
   Building2,
   DollarSign,
   ClipboardCheck,
+  Lock,
 } from "lucide-react";
 
 import {
@@ -282,7 +283,7 @@ export default async function VesselDetailPage({
             )}
           </IntelCard>
 
-          {canSeeCommercial && (
+          {canSeeCommercial ? (
             <IntelCard title="Commercial Details" icon={Building2}>
               <div className="space-y-2.5 text-sm">
                 {v.owner_company && (
@@ -370,6 +371,8 @@ export default async function VesselDetailPage({
                   )}
               </div>
             </IntelCard>
+          ) : (
+            <MaskedCommercialCard />
           )}
 
           {vesselContacts.length > 0 && (
@@ -568,6 +571,32 @@ function IntelCard({
       </div>
       {children}
     </div>
+  );
+}
+
+// Firewall made visible: non-owner / non-admin viewers get a locked identity
+// card instead of a silently-absent one. Renders NO identity — only the gating
+// message — matching the design's "available to Tier 3 & Partner" treatment.
+function MaskedCommercialCard() {
+  return (
+    <IntelCard title="Company & Contacts" icon={Lock}>
+      <div className="flex flex-col items-center px-2 py-4 text-center">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
+          <Lock className="h-4 w-4 text-slate-400" />
+        </div>
+        <p className="text-sm font-semibold text-slate-700">
+          Identity available to Tier 3 &amp; Partner
+        </p>
+        <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-slate-500">
+          Owner, company roles and contacts for this vessel are shown only to
+          authorised subscribers. Arab ShipBroker holds these details and sits
+          in the middle.
+        </p>
+        <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400">
+          <Lock className="h-3 w-3" /> Encrypted at rest
+        </div>
+      </div>
+    </IntelCard>
   );
 }
 
