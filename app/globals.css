@@ -919,3 +919,15 @@ body { font-family: var(--asb-font); }
   display: flex; align-items: center; justify-content: center;
   font-family: var(--asb-font, "Inter", sans-serif); box-shadow: 0 0 12px rgba(24,95,165,0.35);
 }
+
+/* Cargo card reuses the .mvb-vcard shell — scope chip colours + tag chips */
+.mvb-chip-st.scope-in      { background: #DEF1E2; color: #2A9962; }
+.mvb-chip-st.scope-partial { background: #FBF2DF; color: #B17311; }
+.mvb-chip-st.scope-out     { background: #FBE3E3; color: #C84A4A; }
+.mvb-chip-st.scope-review  { background: #E6F1FB; color: #185FA5; }
+.mvb-tag { font-size: 8px; font-weight: 600; letter-spacing: .04em; padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+.mvb-tag.cat   { background: #E6F1FB; color: #0C447C; }
+.mvb-tag.dg    { background: #FBE3E3; color: #C84A4A; }
+.mvb-tag.grain { background: #FBF2DF; color: #B17311; }
+.mvb-tag.spot  { background: #DEF1E2; color: #2A9962; }
+.mvb-tag.wog   { background: #F2F6FB; color: #6B7A99; }

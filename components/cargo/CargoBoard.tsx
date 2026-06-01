@@ -55,9 +55,9 @@ export function CargoBoard({
       <div className="flex items-start gap-4 max-[900px]:flex-col">
         <div className={hasMap ? "w-1/2 max-[900px]:w-full" : "w-full"}>
           <div
-            className="grid gap-3"
+            className="mvb-cardhost"
             style={{
-              gridTemplateColumns: `repeat(auto-fill, minmax(${hasMap ? 270 : 285}px, 1fr))`,
+              gridTemplateColumns: `repeat(auto-fill, minmax(${hasMap ? 270 : 290}px, 1fr))`,
             }}
           >
             {cargos.map((cargo) => (

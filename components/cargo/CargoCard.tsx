@@ -3,25 +3,28 @@
 import Link from "next/link";
 import { CargoListingRow } from "@/lib/schemas/cargo";
 
-// Extra columns that exist in the DB (added by the firewall/feature migrations)
-// but may not be on the base row type — accessed defensively.
+// Extra prod columns accessed defensively (the base Row type may omit some).
 type CargoExtra = CargoListingRow & {
   is_wog?: boolean | null;
   for_circulation?: boolean | null;
   commission_pct?: number | null;
   disch_rate?: string | null;
   imsbc_category?: string | null;
+  demurrage_rate?: number | null;
+  despatch_rate?: number | null;
+  market_partner_name?: string | null;
+  broker?: string | null;
 };
 
 const GRAIN_COMMODITIES = new Set([
   "Wheat", "Corn", "Barley", "Rice", "Sorghum", "Soybean", "Soybeans", "Maize",
 ]);
 
-function typeLabel(c: CargoExtra): { label: string; variant: string } {
+function typeLabel(c: CargoExtra): string {
   if (c.is_grain_cargo || (c.commodity_name && GRAIN_COMMODITIES.has(c.commodity_name)))
-    return { label: "GRAIN", variant: "dryish" };
-  if (c.cargo_type === "Break Bulk") return { label: "BREAK BULK", variant: "bbulk" };
-  return { label: "DRY BULK", variant: "dryish" };
+    return "GRAIN";
+  if (c.cargo_type === "Break Bulk") return "BREAK BULK";
+  return (c.cargo_type ?? "DRY BULK").toUpperCase();
 }
 
 function laycanDays(from: string | null): number | null {
@@ -31,39 +34,36 @@ function laycanDays(from: string | null): number | null {
   return Math.ceil((d.getTime() - Date.now()) / 86_400_000);
 }
 
-function stripKey(c: CargoExtra): string {
-  if (c.review_status === "PENDING") return "strip-review";
-  if (c.is_spot) return "strip-in";
-  const days = laycanDays(c.laycan_from);
-  if (days != null && days < 3) return "strip-out";
-  if (days != null && days <= 7) return "strip-partial";
-  return "strip-in";
+// Status chip (replaces the old left strip): review / urgency-driven.
+function statusChip(c: CargoExtra): { cls: string; label: string } {
+  if (c.review_status === "PENDING") return { cls: "scope-review", label: "REVIEW" };
+  if (c.is_spot) return { cls: "scope-in", label: "LIVE" };
+  const d = laycanDays(c.laycan_from);
+  if (d != null && d < 3) return { cls: "scope-out", label: "URGENT" };
+  if (d != null && d <= 7) return { cls: "scope-partial", label: "SOON" };
+  return { cls: "scope-in", label: "LIVE" };
+}
+
+function imsbcRender(cat: string | null | undefined, isDg: boolean): string {
+  switch (cat) {
+    case "Cat_A": return "⚠ Group A";
+    case "Cat_B": return "Group B";
+    case "Cat_C": return "Group C";
+    case "DG": return "⚠ DG";
+  }
+  return isDg ? "⚠ DG" : "—";
 }
 
 const fmtDay = (s: string | null) => {
   if (!s) return "";
   const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  return Number.isNaN(d.getTime())
+    ? s
+    : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 };
 
-// IMSBC category → label/treatment (Group A & DG carry hazard warnings).
-// Uses the IMSBC group when a richer row supplies it; otherwise falls back to
-// the listing's is_dg_cargo flag. No data is fabricated.
-function imsbcRender(cat: string | null | undefined, isDg: boolean) {
-  switch (cat) {
-    case "Cat_A":
-      return { text: "Group A", color: "#854F0B", warn: true };
-    case "Cat_B":
-      return { text: "Group B", color: "#1B3A5C", warn: false };
-    case "Cat_C":
-      return { text: "Group C", color: "#1B3A5C", warn: false };
-    case "DG":
-      return { text: "DG", color: "#A32D2D", warn: true };
-  }
-  if (isDg) return { text: "DG", color: "#A32D2D", warn: true };
-  return { text: "—", color: "#1B3A5C", warn: false };
-}
+const dash = (v: string | number | null | undefined) =>
+  v == null || v === "" ? "—" : String(v);
 
 export function CargoCard({
   cargo,
@@ -73,203 +73,148 @@ export function CargoCard({
   onSelect,
 }: {
   cargo: CargoListingRow;
-  /** Engine match count (0 → muted circle). */
   matches?: number;
-  /** Company alias only — never personal contact. null → identity masked. */
   partner?: { name: string; role?: string } | null;
-  /** Board mode: when provided, clicking selects (reframes the map) instead
-   *  of navigating; the commodity title becomes the detail link. */
   selected?: boolean;
   onSelect?: (id: string) => void;
 }) {
   const c = cargo as CargoExtra;
-  const t = typeLabel(c);
-  const sf = c.stowage_factor;
-  const sfDense = sf != null && sf < 0.5;
-  const volume =
-    sf != null ? `max ${Math.round(c.qty_max_mt * sf).toLocaleString()} m³` : "— m³";
-  const weight =
-    c.qty_min_mt !== c.qty_max_mt
-      ? `${c.qty_min_mt.toLocaleString()}–${c.qty_max_mt.toLocaleString()} MT`
-      : `${c.qty_max_mt.toLocaleString()} MT`;
-  const terms = (c.load_terms ?? "").toUpperCase();
-  const fiost = terms.includes("FIOST");
-  const ldText = c.load_rate
-    ? c.disch_rate && c.disch_rate !== c.load_rate
-      ? `${c.load_rate} / ${c.disch_rate}`
-      : c.load_rate
-    : null;
-
   const href = `/dashboard/cargo/${c.id}`;
+  const chip = statusChip(c);
+  const cat = typeLabel(c);
+  const qty =
+    c.qty_min_mt !== c.qty_max_mt
+      ? `${c.qty_min_mt.toLocaleString()}–${c.qty_max_mt.toLocaleString()}`
+      : c.qty_max_mt.toLocaleString();
+  const qtyIsRange = c.qty_min_mt !== c.qty_max_mt;
+  const laycan = c.is_spot
+    ? "SPOT"
+    : `${fmtDay(c.laycan_from)} – ${fmtDay(c.laycan_to)}`;
+  const ld =
+    c.load_rate
+      ? c.disch_rate && c.disch_rate !== c.load_rate
+        ? `${c.load_rate} / ${c.disch_rate}`
+        : c.load_rate
+      : null;
+  const imsbc = imsbcRender(c.imsbc_category, c.is_dg_cargo);
+  const viaName = partner?.name ?? c.market_partner_name ?? c.broker ?? null;
+
   const inner = (
     <>
-      {/* Line 1 — commodity + category */}
-      <div className="cc-line1">
-        <div className="cc-title">
+      {/* Header — commodity + status chip */}
+      <div className="mvb-vc__hd">
+        <span className="mvb-vc__name">
           {onSelect ? (
-            <Link
-              href={href}
-              onClick={(e) => e.stopPropagation()}
-              className="text-inherit no-underline hover:underline"
-            >
+            <Link href={href} onClick={(e) => e.stopPropagation()} className="text-inherit no-underline hover:underline">
               {c.commodity_name}
             </Link>
           ) : (
             c.commodity_name
           )}
-        </div>
-        <span className={`cc-cat cc-cat--${t.variant}`}>{t.label}</span>
-      </div>
-
-      {/* Line 2 — route + zones + WOG */}
-      <div className="cc-line2">
-        <span className="cc-route-line">
-          <span className="cc-ports">
-            {c.load_port_locode}
-            <span className="cc-arrow"> → </span>
-            {c.disch_port_locode}
-          </span>
-          {(c.load_zone || c.disch_zone) && (
-            <>
-              <span className="cc-mid">·</span>
-              <span className="cc-zones">
-                {c.load_zone}
-                <span className="cc-arrow"> → </span>
-                {c.disch_zone}
-              </span>
-            </>
-          )}
         </span>
-        {c.is_wog && <span className="cc-wog">WOG</span>}
+        <span className={`mvb-chip-st ${chip.cls}`}>{chip.label}</span>
       </div>
 
-      {/* Data grid 2×3 */}
-      <div className="cc-grid">
-        <div className="cc-field">
-          <div className="cc-field__k">QTY / VOL</div>
-          <div className="cc-field__v">
-            <span className="cc-qty">
-              <span className="cc-qty__w">{weight}</span>
-              <span
-                className="cc-qty__v"
-                style={{ color: sf != null ? "#185FA5" : "#8B95A3" }}
-              >
-                {volume}
-              </span>
-            </span>
-          </div>
-        </div>
+      {/* ID line — ref · category + tags */}
+      <div className="mvb-vc__id">
+        {c.ref && <span className="mono">{c.ref}</span>}
+        {c.ref && <span className="sep">·</span>}
+        <span className="mvb-tag cat">{cat}</span>
+        {c.is_dg_cargo && <span className="mvb-tag dg">DG</span>}
+        {c.is_spot && <span className="mvb-tag spot">SPOT</span>}
+        {c.is_wog && <span className="mvb-tag wog">WOG</span>}
+      </div>
 
-        <div className="cc-field">
-          <div className="cc-field__k">LAYCAN</div>
-          <div className="cc-field__v">
-            {c.is_spot ? (
-              <span className="cc-spot">SPOT</span>
-            ) : (
-              <span>
-                {fmtDay(c.laycan_from)}
-                {c.laycan_to ? ` – ${fmtDay(c.laycan_to)}` : ""}
-              </span>
-            )}
-          </div>
+      {/* Figure block — QTY dominant + SF secondary */}
+      <div className="mvb-vc__figs">
+        <div className="mvb-fig mvb-fig--dwt">
+          <div className="fglbl">Quantity (MT)</div>
+          <div className="fgval" style={qtyIsRange ? { fontSize: 17 } : undefined}>{qty}</div>
         </div>
-
-        <div className="cc-field">
-          <div className="cc-field__k">TERMS</div>
-          <div className="cc-field__v">{c.load_terms || "—"}</div>
-        </div>
-
-        <div className="cc-field">
-          <div className="cc-field__k">SF</div>
-          <div className="cc-field__v">
-            {sf != null ? (
-              <span style={sfDense ? { color: "#854F0B" } : undefined}>
-                {sfDense && "⚠ "}
-                {sf} m³/t
-              </span>
-            ) : (
-              <span className="cc-tbd">Not declared</span>
-            )}
-          </div>
-        </div>
-
-        <div className="cc-field">
-          <div className="cc-field__k">L/D RATE</div>
-          <div className="cc-field__v">
-            {fiost ? (
-              <span className="cc-cat cc-cat--dryish">FIOST</span>
-            ) : ldText ? (
-              <span>{ldText}</span>
-            ) : (
-              <span className="cc-tbd">Rate TBD</span>
-            )}
-          </div>
-        </div>
-
-        <div className="cc-field">
-          <div className="cc-field__k">IMSBC</div>
-          <div className="cc-field__v">
-            {(() => {
-              const im = imsbcRender(c.imsbc_category, c.is_dg_cargo);
-              return (
-                <span style={{ color: im.color, fontWeight: im.warn ? 500 : 400 }}>
-                  {im.warn && "⚠ "}
-                  {im.text}
-                </span>
-              );
-            })()}
-          </div>
+        <div className="mvb-fig mvb-fig--grt">
+          <div className="fglbl">SF m³/t</div>
+          {c.stowage_factor != null ? (
+            <div className="fgval">{c.stowage_factor}</div>
+          ) : (
+            <div className="fgval tbc-sm">—</div>
+          )}
         </div>
       </div>
 
-      {/* Footer — freight + via | circ | match (no contact) */}
-      <div className="cc-footer">
-        <div className="cc-foot-col cc-foot-col--freight">
-          <div className="cc-freight">
-            {c.freight_idea_usd_mt != null ? `$${c.freight_idea_usd_mt}/MT` : "—"}
-            {c.commission_pct != null && ` · ${c.commission_pct}% comm`}
-          </div>
-          <div className="cc-partner-slot">
-            {partner ? (
-              <span className="mp-tag">
-                via <b>{partner.name}</b>
-                {partner.role && ` (${partner.role})`}
-              </span>
-            ) : (
-              <span className="mp-tag masked">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
-                  <rect x="3" y="7" width="10" height="6.5" rx="1" />
-                  <path d="M5 7V5a3 3 0 016 0v2" />
-                </svg>
-                Identity · Tier 3 &amp; Partner
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="cc-foot-col">
-          <div className="cc-foot-label">Circ</div>
-          <span className={`cc-circ-dot ${c.for_circulation ? "is-on" : "is-off"}`} />
-        </div>
-        <div className="cc-foot-col cc-foot-col--match">
-          <div className="cc-foot-label">Match</div>
-          <span className={`cc-match-circle ${matches === 0 ? "is-zero" : ""}`}>{matches}</span>
+      {/* Spec grid — Laycan / Terms / L·D / IMSBC */}
+      <div className="mvb-vc__specs">
+        <div className="mvb-spec"><div className="sk">Laycan</div><div className={`sv${c.is_spot ? "" : ""}`}>{laycan}</div></div>
+        <div className="mvb-spec"><div className="sk">Terms</div><div className={`sv${c.load_terms ? "" : " dim"}`}>{dash(c.load_terms)}</div></div>
+        <div className="mvb-spec"><div className="sk">L/D rate</div><div className={`sv${ld ? "" : " dim"}`}>{ld ?? "—"}</div></div>
+        <div className="mvb-spec"><div className="sk">IMSBC</div><div className={`sv${imsbc === "—" ? " dim" : ""}`} style={imsbc.startsWith("⚠") ? { color: imsbc.includes("DG") ? "#C84A4A" : "#B17311" } : undefined}>{imsbc}</div></div>
+      </div>
+
+      {/* Commercial block (mirrors the vessel fuel block) */}
+      <div className="mvb-vc__fuel">
+        <div className="fh">Commercial · USD</div>
+        <div className="mvb-fuelgrid">
+          <div className="mvb-fcell"><div className="fk">Freight /MT</div><div className="fv">{c.freight_idea_usd_mt != null ? `$${c.freight_idea_usd_mt}` : "—"}</div></div>
+          <div className="mvb-fcell"><div className="fk">Comm %</div><div className="fv">{c.commission_pct != null ? c.commission_pct : "—"}</div></div>
+          <div className="mvb-fcell"><div className="fk">Demurrage</div><div className="fv">{c.demurrage_rate != null ? c.demurrage_rate.toLocaleString() : "—"}</div></div>
+          <div className="mvb-fcell"><div className="fk">Despatch</div><div className="fv">{c.despatch_rate != null ? c.despatch_rate.toLocaleString() : "—"}</div></div>
         </div>
       </div>
+
+      {/* Footer — ref · circ · matches · view */}
+      <div className="mvb-vc__ft">
+        <span className="imo">{c.ref ?? c.commodity_name}</span>
+        <span
+          className={`cc-circ-dot ${c.for_circulation ? "is-on" : "is-off"}`}
+          title={c.for_circulation ? "In circulation" : "Not circulated"}
+          style={{ marginLeft: 2 }}
+        />
+        <span className={`mvb-matches ${matches === 0 ? "none" : ""}`}>{matches} matches</span>
+        <span className="sp" />
+        {onSelect ? (
+          <Link className="mvb-vlink strong" href={href} onClick={(e) => e.stopPropagation()}>
+            View details
+          </Link>
+        ) : (
+          <span className="mvb-vlink strong">View details</span>
+        )}
+      </div>
+
+      {/* Route bar (mirrors the vessel position bar) */}
+      <div className="mvb-vc__pos">
+        <div className="posbar-eyebrow">Route</div>
+        <div className="row1">
+          <span className="port">{c.load_port_locode ?? c.load_port_name}</span>
+          {c.load_zone && <span className="zone">{c.load_zone}</span>}
+          <span style={{ color: "#9AA7BD", margin: "0 2px" }}>→</span>
+          <span className="port">{c.disch_port_locode ?? c.disch_port_name}</span>
+          {c.disch_zone && <span className="zone">{c.disch_zone}</span>}
+        </div>
+        <div className="dir">
+          {c.load_port_name} <span style={{ color: "#9AA7BD" }}>→</span> {c.disch_port_name}
+        </div>
+      </div>
+
+      {viaName ? (
+        <div className="mvb-vc__via">
+          via <b>{viaName}</b>
+          {partner?.role && <span style={{ opacity: 0.7 }}> ({partner.role})</span>}
+        </div>
+      ) : null}
     </>
   );
 
   if (onSelect) {
     return (
-      <div
-        className={`cargo-card ${stripKey(c)} ${selected ? "is-selected" : ""}`}
+      <article
+        className={`mvb-vcard${selected ? " is-selected" : ""}`}
         onClick={() => onSelect(c.id)}
       >
         {inner}
-      </div>
+      </article>
     );
   }
   return (
-    <Link href={href} className={`cargo-card ${stripKey(c)} block no-underline`}>
+    <Link href={href} className="mvb-vcard" style={{ textDecoration: "none" }}>
       {inner}
     </Link>
   );
