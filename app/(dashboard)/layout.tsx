@@ -10,7 +10,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-asb-gray-50 flex">
       {/* Sidebar Component */}
       <DashboardSidebar
         mobileOpen={mobileOpen}
@@ -25,7 +25,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         <Menu className="w-6 h-6" />
       </button>
 
-      <main className="flex-1 ml-64 max-[1024px]:ml-0 min-h-screen w-full transition-all duration-300 ease-in-out">
+      <main className="flex-1 ml-[180px] max-[1024px]:ml-0 min-h-screen w-full transition-all duration-300 ease-in-out">
         <div className="p-10 max-[1024px]:p-8 max-[768px]:p-4 max-w-screen-2xl mx-auto w-full">
           {children}
         </div>

@@ -18,6 +18,8 @@ import {
   Plus,
   Sparkles,
   Calculator,
+  Anchor,
+  Waves,
 } from "lucide-react";
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -35,6 +37,8 @@ type NavLink = {
   label: string;
   href: string;
   icon: React.ElementType;
+  disabled?: boolean;
+  tooltip?: string;
 };
 
 type NavSection = {
@@ -42,27 +46,31 @@ type NavSection = {
   links: NavLink[];
 };
 
+// Light-terminal trust-tier chip styling (design tokens).
 const TRUST_TIER_CONFIG = {
   NEW: {
     label: "New Account",
     icon: Clock,
-    className: "text-amber-400 bg-amber-400/10 border-amber-400/20",
+    text: "text-asb-amber",
+    bg: "bg-asb-amber-bg",
+    dot: "bg-asb-amber",
     hint: "Posts held for review",
-    dot: "bg-amber-400",
   },
   VERIFIED: {
     label: "Verified",
     icon: CheckCircle2,
-    className: "text-foam-400 bg-foam-400/10 border-foam-400/20",
+    text: "text-asb-green",
+    bg: "bg-asb-green-bg",
+    dot: "bg-asb-green",
     hint: "Posts go live instantly",
-    dot: "bg-foam-400",
   },
   FLAGGED: {
     label: "Flagged",
     icon: AlertTriangle,
-    className: "text-coral-400 bg-coral-400/10 border-coral-400/20",
+    text: "text-asb-red",
+    bg: "bg-asb-red-bg",
+    dot: "bg-asb-red",
     hint: "Contact support",
-    dot: "bg-coral-500",
   },
 } as const;
 
@@ -77,23 +85,13 @@ function buildNavSections(
     links: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
   });
 
-  sections.push({
-    label: "Account",
-    links: [{ label: "Settings", href: "/dashboard/account", icon: User }],
-  });
-
   const workspaceLinks: NavLink[] = [
     { label: "Circular Parser", href: "/dashboard/circulars", icon: Sparkles },
-    { label: "Voyage Estimator", href: "/dashboard/voyage-estimator", icon: Calculator },
   ];
   if (hasCargoProfile) {
     workspaceLinks.push(
       { label: "My Listings", href: "/dashboard/cargo/my", icon: Package },
-      {
-        label: "Post Cargo",
-        href: "/dashboard/cargo/create",
-        icon: Plus,
-      },
+      { label: "Post Cargo", href: "/dashboard/cargo/create", icon: Plus },
     );
   }
   if (hasVesselProfile) {
@@ -103,27 +101,17 @@ function buildNavSections(
       icon: Ship,
     });
   }
-  if (workspaceLinks.length > 0) {
-    sections.push({ label: "Workspace", links: workspaceLinks });
-  }
+  sections.push({ label: "Workspace", links: workspaceLinks });
 
   const discoverLinks: NavLink[] = [];
   if (hasCargoProfile || hasVesselProfile) {
-    if (!hasCargoProfile) {
-      discoverLinks.push({
-        label: "Browse Cargo",
-        href: "/dashboard/cargo",
-        icon: Package,
-      });
-    } else {
-      discoverLinks.push({
-        label: "Market Cargo",
-        href: "/dashboard/cargo",
-        icon: Search,
-      });
-    }
     discoverLinks.push({
-      label: "Open Vessels",
+      label: hasCargoProfile ? "Cargo Market" : "Browse Cargo",
+      href: "/dashboard/cargo",
+      icon: hasCargoProfile ? Search : Package,
+    });
+    discoverLinks.push({
+      label: "Tonnage Market",
       href: "/dashboard/vessels/browse",
       icon: Search,
     });
@@ -131,6 +119,36 @@ function buildNavSections(
   if (discoverLinks.length > 0) {
     sections.push({ label: "Discover", links: discoverLinks });
   }
+
+  sections.push({
+    label: "Economic Calculators",
+    links: [
+      {
+        label: "Voyage Estimator",
+        href: "/dashboard/voyage-estimator",
+        icon: Calculator,
+      },
+      {
+        label: "Ports DA Calculator",
+        href: "#",
+        icon: Anchor,
+        disabled: true,
+        tooltip: "Ports DA Calculator · Coming soon",
+      },
+      {
+        label: "Suez Canal Toll",
+        href: "#",
+        icon: Waves,
+        disabled: true,
+        tooltip: "Suez Canal Toll · Coming soon",
+      },
+    ],
+  });
+
+  sections.push({
+    label: "Account",
+    links: [{ label: "Settings", href: "/dashboard/account", icon: User }],
+  });
 
   return sections;
 }
@@ -168,10 +186,7 @@ function isNavLinkActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function DashboardSidebar({
-  mobileOpen,
-  onClose,
-}: DashboardSidebarProps) {
+export function DashboardSidebar({ mobileOpen, onClose }: DashboardSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -203,41 +218,38 @@ export function DashboardSidebar({
     return "";
   })();
 
-  const sidebarContent = (
-    <div
-      className="flex flex-col h-full relative overflow-hidden"
-      style={{ background: "#060d1f" }}
-    >
-      <div
-        className="absolute top-0 inset-x-0 h-48 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse at 50% -20%, rgba(16,163,188,0.07) 0%, transparent 70%)",
-        }}
-        aria-hidden
-      />
+  const initials =
+    account?.fullName
+      ?.split(" ")
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() ?? "—";
 
-      <div className="relative h-15.5 px-4 flex items-center justify-between shrink-0 border-b border-white/6">
+  const sidebarContent = (
+    <div className="flex h-full flex-col overflow-hidden bg-asb-white">
+      {/* Brand header */}
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-asb-gray-200 px-4">
         <Link
           href="/"
           onClick={onClose}
-          className="flex items-center gap-3 rounded-xl focus:outline-none focus-visible:ring-1 focus-visible:ring-foam-400/50"
+          className="flex items-center gap-2.5 focus:outline-none"
           aria-label="Arab ShipBroker home"
         >
-          <div className="relative w-8 h-8 rounded-lg overflow-hidden bg-white/8 border border-white/10 flex items-center justify-center shrink-0">
+          <div className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-asb-gray-200 bg-asb-gray-50">
             <Image
               src="/logo.png"
               alt="Arab ShipBroker"
               fill
-              className="object-contain p-1 brightness-0 invert"
+              className="object-contain p-1"
             />
           </div>
-          <div className="leading-none">
-            <p className="font-bold text-white text-[13.5px] tracking-tight">
+          <div className="leading-tight">
+            <p className="text-[13px] font-medium text-asb-navy">
               Arab ShipBroker
             </p>
-            <p className="text-[9px] font-bold text-foam-400/60 uppercase tracking-[0.22em] mt-0.75">
-              Broker Portal
+            <p className="mt-0.5 text-[9px] uppercase tracking-[0.12em] text-asb-gray-500">
+              Portal
             </p>
           </div>
         </Link>
@@ -245,112 +257,93 @@ export function DashboardSidebar({
         {mobileOpen && (
           <button
             onClick={onClose}
-            className="hidden max-lg:inline-flex p-1.5 text-white/30 hover:text-white/60 rounded-lg transition-colors"
+            className="inline-flex rounded p-1.5 text-asb-gray-500 transition-colors hover:bg-asb-gray-50 hover:text-asb-ink lg:hidden"
             aria-label="Close menu"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      <nav className="flex-1 min-h-0 px-3 py-4 overflow-y-auto sidebar-scroll space-y-5 relative">
+      {/* Nav */}
+      <nav className="flex-1 min-h-0 overflow-y-auto py-2">
         {isLoadingAccount ? (
-          <div className="flex items-center justify-center py-10 text-white/20">
-            <Loader2 className="w-4 h-4 animate-spin" />
+          <div className="flex items-center justify-center py-10 text-asb-gray-400">
+            <Loader2 className="h-4 w-4 animate-spin" />
           </div>
         ) : (
           navSections.map((section) => (
-            <div key={section.label}>
-              <p className="sidebar-section-label">{section.label}</p>
-              <div className="space-y-0.5">
-                {section.links.map((link) => {
-                  const active = isNavLinkActive(pathname, link.href);
+            <div key={section.label} className="mb-1">
+              <p className="px-3.5 pb-1 pt-3 text-[10px] font-normal uppercase tracking-[0.09em] text-asb-gray-500">
+                {section.label}
+              </p>
+              {section.links.map((link) => {
+                const active =
+                  !link.disabled && isNavLinkActive(pathname, link.href);
+                const Icon = link.icon;
+                if (link.disabled) {
                   return (
-                    <Link
+                    <button
                       key={link.href + link.label}
-                      href={link.href}
-                      onClick={onClose}
-                      className={cn(
-                        "sidebar-item group",
-                        active
-                          ? "sidebar-item-active"
-                          : "sidebar-item-inactive",
-                      )}
+                      type="button"
+                      className="nav-item is-disabled"
+                      title={link.tooltip}
+                      aria-disabled
                     >
-                      <span
-                        className={cn(
-                          "w-0.5 h-4 rounded-full shrink-0 transition-all duration-150",
-                          active ? "bg-foam-400" : "bg-transparent",
-                        )}
-                        aria-hidden
-                      />
-
-                      <link.icon
-                        className={cn(
-                          "w-4 h-4 shrink-0 transition-colors duration-150",
-                          active
-                            ? "text-foam-400"
-                            : "text-white/30 group-hover:text-white/55",
-                        )}
-                      />
-
-                      <span
-                        className={cn(
-                          "text-sm transition-colors duration-150",
-                          active ? "font-semibold" : "font-medium",
-                        )}
-                      >
-                        {link.label}
-                      </span>
-                    </Link>
+                      <Icon className="nav-icon" />
+                      <span className="flex-1">{link.label}</span>
+                    </button>
                   );
-                })}
-              </div>
+                }
+                return (
+                  <Link
+                    key={link.href + link.label}
+                    href={link.href}
+                    onClick={onClose}
+                    className={cn("nav-item", active && "is-active")}
+                  >
+                    <Icon className="nav-icon" />
+                    <span className="flex-1">{link.label}</span>
+                  </Link>
+                );
+              })}
             </div>
           ))
         )}
       </nav>
 
-      <div className="relative px-3 py-4 border-t border-white/6 shrink-0 space-y-2">
+      {/* Footer: trust tier + user + sign out */}
+      <div className="shrink-0 border-t border-asb-gray-200 p-2.5">
         {tierConfig && TierIcon && account && (
           <div
             className={cn(
-              "flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-xs font-medium",
-              tierConfig.className,
+              "mb-2 flex items-center gap-2 rounded px-2.5 py-2 text-[11px]",
+              tierConfig.bg,
+              tierConfig.text,
             )}
           >
-            <span className="relative flex h-1.5 w-1.5 shrink-0">
-              {account.trustTier === "VERIFIED" && (
-                <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-foam-400 opacity-50" />
-              )}
-              <span
-                className={cn(
-                  "relative inline-flex rounded-full h-1.5 w-1.5",
-                  tierConfig.dot,
-                )}
-              />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold truncate leading-none">
+            <span
+              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tierConfig.dot)}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium leading-none">
                 {tierConfig.label}
               </p>
-              <p className="opacity-60 font-normal truncate mt-0.5">
-                {tierConfig.hint}
-              </p>
+              <p className="mt-0.5 truncate opacity-70">{tierConfig.hint}</p>
             </div>
-            <TierIcon className="w-3.5 h-3.5 shrink-0 opacity-60" />
+            <TierIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
           </div>
         )}
 
-        <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/4 rounded-xl border border-white/6">
-          <div className="w-7 h-7 bg-ocean-700/60 border border-ocean-600/30 rounded-full flex items-center justify-center shrink-0">
-            <User className="w-3.5 h-3.5 text-ocean-200" />
+        <div className="flex items-center gap-2.5 px-1 py-1">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-asb-blue-light text-[12px] font-medium text-asb-blue">
+            {initials}
           </div>
-          <div className="flex-1 overflow-hidden leading-none">
-            <p className="text-xs font-semibold text-white/85 truncate">
+          <div className="min-w-0 flex-1 leading-none">
+            <p className="truncate text-[12px] font-medium text-asb-ink">
               {isLoadingAccount ? "Loading…" : (account?.fullName ?? "—")}
             </p>
-            <p className="text-[10px] font-medium text-white/30 uppercase tracking-[0.14em] truncate mt-0.75">
+            <p className="mt-0.5 truncate text-[10px] uppercase tracking-[0.1em] text-asb-gray-500">
               {profileLabel || "Platform user"}
             </p>
           </div>
@@ -358,9 +351,9 @@ export function DashboardSidebar({
 
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-2 text-xs font-medium text-white/30 hover:text-red-400/80 hover:bg-red-400/8 rounded-xl transition-all duration-150"
+          className="mt-1 flex w-full items-center gap-2.5 rounded px-3.5 py-2 text-[12px] text-asb-gray-500 transition-colors hover:bg-asb-red-bg hover:text-asb-red"
         >
-          <LogOut className="w-3.5 h-3.5 shrink-0" />
+          <LogOut className="h-3.5 w-3.5 shrink-0" />
           Sign out
         </button>
       </div>
@@ -369,25 +362,28 @@ export function DashboardSidebar({
 
   return (
     <>
+      {/* Mobile overlay */}
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-ocean-950/70 backdrop-blur-sm hidden max-lg:block transition-opacity duration-300",
-          mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+          "fixed inset-0 z-40 bg-asb-navy/30 backdrop-blur-sm transition-opacity duration-200 lg:hidden",
+          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={onClose}
         aria-hidden
       />
 
+      {/* Mobile drawer */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 h-full w-[80vw] max-w-68 transform transition-transform duration-300 ease-out hidden max-lg:block",
+          "fixed inset-y-0 left-0 z-50 h-full w-[80vw] max-w-[220px] transform border-r border-asb-gray-200 transition-transform duration-200 ease-out lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         {sidebarContent}
       </div>
 
-      <div className="fixed inset-y-0 left-0 w-64 z-30 max-lg:hidden">
+      {/* Desktop fixed sidebar — 180px per tokens.css */}
+      <div className="fixed inset-y-0 left-0 z-30 w-[180px] border-r border-asb-gray-200 max-lg:hidden">
         {sidebarContent}
       </div>
     </>
