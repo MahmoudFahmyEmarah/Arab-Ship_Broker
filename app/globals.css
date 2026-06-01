@@ -777,3 +777,99 @@ body { font-family: var(--asb-font); }
 .cc-circ-dot.is-on { background: #97C459; border: 0.5px solid #3B6D11; }
 .cc-circ-dot.is-off { background: #F1EFE8; border: 0.5px solid #B7BEC9; }
 .cc-view { font-size: 10px; font-weight: 500; color: #185FA5; white-space: nowrap; }
+
+/* ============================================================
+   CARGO CARD — match circle + market-partner (via) slot
+   Completes the footer to the Claude Design 3-column standard.
+   ============================================================ */
+.cc-foot-col--match { cursor: default; padding-right: 0; }
+.cc-match-circle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #E6F1FB; color: #185FA5; border: 0.5px solid #B5D4F4;
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1;
+}
+.cc-match-circle.is-zero { background: #F1EFE8; color: #888780; border-color: #D3D1C7; }
+.cc-partner-slot { min-height: 13px; margin-top: 1px; font-size: 9px; }
+.mp-tag { font-size: 9px; font-weight: 400; font-style: italic; color: #8B95A3; line-height: 1.4; display: inline-flex; align-items: center; gap: 4px; }
+.mp-tag b { font-style: normal; font-weight: 500; color: #6B7280; }
+.mp-tag.masked svg { width: 10px; height: 10px; opacity: .75; }
+
+/* ============================================================
+   SHARED VESSEL CARD (canonical — My Vessels board card)
+   Ported verbatim from design asb/my-vessels-board.css (.mvb-*).
+   Local tokens live on the card + host so it renders anywhere a
+   vessel appears (My Vessels, Tonnage Market, detail panels).
+   ============================================================ */
+.mvb-cardhost, .mvb-vcard {
+  --mvb-card:#FFFFFF; --mvb-line:#DDE5F0; --mvb-line2:#EDF1F8; --mvb-soft:#F2F6FB;
+  --mvb-navy:#0D2545; --mvb-ink:#1A2330; --mvb-slate:#6B7A99; --mvb-faint:#9AA7BD;
+  --mvb-blue:#185FA5; --mvb-green:#2A9962; --mvb-amber:#B17311; --mvb-red:#C84A4A;
+}
+.mvb-cardhost { display: grid; gap: 14px; align-content: start;
+  grid-template-columns: repeat(3, 1fr);
+  font: 13px/1.45 var(--asb-font, "Inter", system-ui, sans-serif); }
+.mvb-cardhost.cols-2 { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1180px) { .mvb-cardhost { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 768px)  { .mvb-cardhost { grid-template-columns: 1fr; } }
+.mvb-cardhost * { box-sizing: border-box; }
+
+.mvb-vcard { background: var(--mvb-card); border: 0.5px solid var(--mvb-line); border-radius: 12px;
+  overflow: visible; display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(13,37,69,.04);
+  transition: .12s; cursor: pointer; color: var(--mvb-ink);
+  font: 13px/1.45 var(--asb-font, "Inter", system-ui, sans-serif); text-decoration: none; }
+.mvb-vcard:hover { box-shadow: 0 4px 14px rgba(13,37,69,.08); border-color: #C4D1E6; }
+.mvb-vcard.is-selected { border-color: var(--mvb-navy); box-shadow: 0 0 0 2px rgba(13,37,69,.16), 0 6px 18px rgba(13,37,69,.10); }
+.mvb-vc__hd { padding: 13px 15px 0; display: flex; align-items: flex-start; gap: 10px; }
+.mvb-vc__name { font-size: 15.5px; font-weight: 700; color: var(--mvb-navy); letter-spacing: -.01em; flex: 1; min-width: 0; }
+.mvb-chip-st { font-size: 8.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+.mvb-chip-st.open { background: #DEF1E2; color: var(--mvb-green); }
+.mvb-chip-st.review { background: #FBF2DF; color: var(--mvb-amber); }
+.mvb-vc__id { padding: 4px 15px 0; font-size: 10.5px; color: var(--mvb-slate); display: flex; gap: 7px; flex-wrap: wrap; }
+.mvb-vc__id .mono { color: var(--mvb-ink); font-family: var(--asb-font-mono, monospace); }
+.mvb-vc__id .sep { color: var(--mvb-faint); }
+.mvb-vc__figs { margin: 11px 15px 0; display: grid; grid-template-columns: 1.55fr 1fr; gap: 1px; background: var(--mvb-line2); border: 0.5px solid var(--mvb-line2); border-radius: 9px; overflow: hidden; }
+.mvb-fig { background: var(--mvb-soft); padding: 9px 13px; }
+.mvb-fig .fglbl { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--mvb-slate); font-weight: 600; }
+.mvb-fig .fgval { font-variant-numeric: tabular-nums; color: var(--mvb-navy); line-height: 1; margin-top: 5px; }
+.mvb-fig--dwt .fgval { font-size: 23px; font-weight: 700; }
+.mvb-fig--grt .fgval { font-size: 16px; font-weight: 600; color: #46566F; }
+.mvb-fig .fgval.tbc { font-size: 13px; font-weight: 500; color: var(--mvb-amber); font-style: italic; }
+.mvb-fig .fgval.tbc-sm { font-size: 16px; font-weight: 600; color: var(--mvb-faint); }
+.mvb-vc__specs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin: 11px 15px 0; background: var(--mvb-line2); border: 0.5px solid var(--mvb-line2); border-radius: 8px; overflow: hidden; }
+.mvb-spec { background: #fff; padding: 7px 9px; }
+.mvb-spec .sk { font-size: 8px; letter-spacing: .07em; text-transform: uppercase; color: var(--mvb-slate); font-weight: 600; }
+.mvb-spec .sv { font-size: 12px; font-weight: 600; color: var(--mvb-ink); margin-top: 2px; }
+.mvb-spec .sv.dim { color: var(--mvb-faint); font-weight: 400; }
+.mvb-vc__fuel { margin: 11px 15px 0; border: 0.5px solid var(--mvb-line2); border-radius: 8px; overflow: hidden; }
+.mvb-vc__fuel .fh { font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mvb-slate); font-weight: 600; padding: 6px 10px; background: var(--mvb-soft); border-bottom: 0.5px solid var(--mvb-line2); }
+.mvb-fuelgrid { display: grid; grid-template-columns: repeat(4, 1fr); }
+.mvb-fcell { padding: 6px 8px; border-left: 0.5px solid var(--mvb-line2); text-align: center; }
+.mvb-fcell:first-child { border-left: 0; }
+.mvb-fcell .fk { font-size: 8px; color: var(--mvb-slate); font-weight: 600; letter-spacing: .02em; }
+.mvb-fcell .fv { font-size: 12.5px; font-weight: 600; color: var(--mvb-ink); font-variant-numeric: tabular-nums; margin-top: 1px; }
+.mvb-vc__ft { margin-top: 11px; padding: 10px 15px; border-top: 0.5px solid var(--mvb-line2); display: flex; align-items: center; gap: 9px; }
+.mvb-vc__ft .imo { font-family: var(--asb-font-mono, monospace); font-size: 10px; color: var(--mvb-slate); }
+.mvb-matches { font-size: 9.5px; font-weight: 600; color: var(--mvb-blue); background: #E6F1FB; padding: 2px 8px; border-radius: 99px; }
+.mvb-matches.none { color: var(--mvb-faint); background: var(--mvb-soft); font-weight: 500; }
+.mvb-vc__ft .sp { flex: 1; }
+.mvb-vlink { font-size: 11px; color: var(--mvb-slate); cursor: pointer; text-decoration: none; }
+.mvb-vlink:hover { color: var(--mvb-navy); }
+.mvb-vlink.strong { color: var(--mvb-blue); font-weight: 500; }
+.mvb-vlink.strong:hover { text-decoration: underline; }
+.mvb-vc__pos { margin: 0 15px; margin-top: auto; padding: 9px 11px 10px; border-top: 0.5px solid var(--mvb-line2); min-height: 62px; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.mvb-vc__pos .posbar-eyebrow { font-size: 8px; letter-spacing: .1em; text-transform: uppercase; color: var(--mvb-faint); font-weight: 600; margin-bottom: 1px; }
+.mvb-vc__pos .row1 { display: flex; align-items: center; gap: 9px; font-size: 12px; }
+.mvb-vc__pos .port { font-weight: 700; color: var(--mvb-navy); }
+.mvb-vc__pos .zone { font-size: 9px; letter-spacing: .05em; text-transform: uppercase; color: var(--mvb-slate); border: 0.5px solid var(--mvb-line); background: #fff; padding: 1px 6px; border-radius: 99px; }
+.mvb-vc__pos .date { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--mvb-ink); }
+.mvb-lyc { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.mvb-lyc.red { background: var(--mvb-red); } .mvb-lyc.amber { background: #E0A23A; } .mvb-lyc.green { background: var(--mvb-green); }
+.mvb-vc__pos .dir { font-size: 10.5px; color: var(--mvb-slate); }
+.mvb-vc__pos .dir b { color: var(--mvb-ink); font-weight: 600; }
+.mvb-vc__pos .undecl { font-weight: 600; color: var(--mvb-slate); font-style: italic; }
+.mvb-vc__pos .optflag { font-size: 8.5px; letter-spacing: .04em; color: var(--mvb-slate); border: 0.5px solid var(--mvb-line); background: #fff; padding: 1px 7px; border-radius: 99px; }
+.mvb-vc__via { padding: 0 15px 12px; font-size: 10px; color: var(--mvb-faint); }
+.mvb-vc__via b { color: var(--mvb-slate); font-weight: 500; }
+.mvb-vc__via.masked { color: var(--mvb-slate); display: flex; align-items: center; gap: 6px; }
+.mvb-vc__via.masked svg { width: 11px; height: 11px; flex-shrink: 0; opacity: .8; }

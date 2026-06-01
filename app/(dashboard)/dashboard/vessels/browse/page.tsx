@@ -2,10 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { ArrowRight, Plus, Search, Ship } from "lucide-react";
+import { Plus, Search, Ship } from "lucide-react";
 
 import type { VesselRow } from "@/lib/schemas/vessel";
-import { cn } from "@/lib/utils";
+import { VesselCard, type VesselCardData } from "@/components/vessels/VesselCard";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -16,26 +16,40 @@ type BrowseVessel = Pick<
   | "imo_number"
   | "vessel_type"
   | "dwt_grain"
+  | "gross_tonnage"
   | "build_year"
   | "flag"
-  | "risk_level"
-  | "scope"
+  | "max_loa_m"
+  | "max_draft_m"
   | "is_geared"
   | "is_sanctioned"
 >;
 
-const RISK_STYLE: Record<string, string> = {
-  CLEAR: "bg-green-50 text-green-700 border-green-200",
-  LOW: "bg-green-50 text-green-700 border-green-200",
-  MEDIUM: "bg-amber-50 text-amber-700 border-amber-200",
-  HIGH: "bg-red-50 text-red-700 border-red-200",
-};
-
-const SCOPE_STYLE: Record<string, string> = {
-  "In Scope": "bg-green-50 text-green-700 border-green-200",
-  Marginal: "bg-amber-50 text-amber-700 border-amber-200",
-  "Out of Scope": "bg-slate-100 text-slate-600 border-slate-200",
-};
+/**
+ * Tonnage Market is the public marketplace view → counterparty identity is
+ * masked (the canonical VesselCard shows "Identity available to Tier 3 &
+ * Partner"). Only non-PII vessel particulars are selected; no owner/manager
+ * company or contact columns are queried.
+ */
+function toCardData(v: BrowseVessel): VesselCardData {
+  return {
+    imo: v.imo_number ?? "—",
+    name: v.vessel_name,
+    flag: v.flag,
+    type: v.vessel_type,
+    built: v.build_year,
+    dwt: v.dwt_grain != null ? v.dwt_grain.toLocaleString() : null,
+    grt: v.gross_tonnage != null ? v.gross_tonnage.toLocaleString() : null,
+    loa: v.max_loa_m != null ? String(v.max_loa_m) : null,
+    draft: v.max_draft_m != null ? String(v.max_draft_m) : null,
+    gear: v.is_geared == null ? null : v.is_geared ? "Geared" : "Gearless",
+    status: "OPEN",
+    fuel: null,
+    matches: null,
+    position: null,
+    href: `/dashboard/vessels/${v.id}`,
+  };
+}
 
 export default async function BrowseVesselsPage({
   searchParams,
@@ -76,7 +90,7 @@ export default async function BrowseVesselsPage({
   let vesselsQuery = supabase
     .from("vessels")
     .select(
-      "id, vessel_name, imo_number, vessel_type, dwt_grain, build_year, flag, risk_level, scope, is_geared, is_sanctioned",
+      "id, vessel_name, imo_number, vessel_type, dwt_grain, gross_tonnage, build_year, flag, max_loa_m, max_draft_m, is_geared, is_sanctioned",
     )
     .eq("is_sanctioned", false)
     .order("vessel_name", { ascending: true })
@@ -153,62 +167,9 @@ export default async function BrowseVesselsPage({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-3 max-[1024px]:grid-cols-2 max-[768px]:grid-cols-1 gap-4">
+        <div className="mvb-cardhost">
           {vessels.map((v) => (
-            <Link
-              key={v.id}
-              href={`/dashboard/vessels/${v.id}`}
-              className="group rounded-2xl border border-slate-200 bg-white p-5 transition-all hover:border-ocean-300 hover:shadow-sm"
-            >
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-900 transition-colors group-hover:text-ocean-700">
-                    {v.vessel_name}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-slate-500">
-                    {v.vessel_type}
-                    {v.imo_number && ` · IMO ${v.imo_number}`}
-                  </p>
-                </div>
-                <span
-                  className={cn(
-                    "shrink-0 rounded-lg border px-2 py-0.5 text-xs font-bold",
-                    RISK_STYLE[v.risk_level] ??
-                      "bg-slate-100 text-slate-600 border-slate-200",
-                  )}
-                >
-                  {v.risk_level}
-                </span>
-              </div>
-
-              <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-                  <p className="mb-0.5 font-semibold text-slate-400">DWT</p>
-                  <p className="font-bold text-slate-700">
-                    {v.dwt_grain ? `${v.dwt_grain.toLocaleString()} MT` : "—"}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-                  <p className="mb-0.5 font-semibold text-slate-400">Built</p>
-                  <p className="font-bold text-slate-700">
-                    {v.build_year ?? "—"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span
-                  className={cn(
-                    "rounded-full border px-2 py-0.5 text-xs font-semibold",
-                    SCOPE_STYLE[v.scope] ??
-                      "bg-slate-100 text-slate-600 border-slate-200",
-                  )}
-                >
-                  {v.scope}
-                </span>
-                <ArrowRight className="h-4 w-4 text-slate-300 transition-colors group-hover:text-ocean-500" />
-              </div>
-            </Link>
+            <VesselCard key={v.id} vessel={toCardData(v)} masked />
           ))}
         </div>
       )}

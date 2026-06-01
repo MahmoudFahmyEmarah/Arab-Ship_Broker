@@ -10,6 +10,7 @@ type CargoExtra = CargoListingRow & {
   for_circulation?: boolean | null;
   commission_pct?: number | null;
   disch_rate?: string | null;
+  imsbc_category?: string | null;
 };
 
 const GRAIN_COMMODITIES = new Set([
@@ -46,7 +47,35 @@ const fmtDay = (s: string | null) => {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 };
 
-export function CargoCard({ cargo }: { cargo: CargoListingRow }) {
+// IMSBC category → label/treatment (Group A & DG carry hazard warnings).
+// Uses the IMSBC group when a richer row supplies it; otherwise falls back to
+// the listing's is_dg_cargo flag. No data is fabricated.
+function imsbcRender(cat: string | null | undefined, isDg: boolean) {
+  switch (cat) {
+    case "Cat_A":
+      return { text: "Group A", color: "#854F0B", warn: true };
+    case "Cat_B":
+      return { text: "Group B", color: "#1B3A5C", warn: false };
+    case "Cat_C":
+      return { text: "Group C", color: "#1B3A5C", warn: false };
+    case "DG":
+      return { text: "DG", color: "#A32D2D", warn: true };
+  }
+  if (isDg) return { text: "DG", color: "#A32D2D", warn: true };
+  return { text: "—", color: "#1B3A5C", warn: false };
+}
+
+export function CargoCard({
+  cargo,
+  matches = 0,
+  partner = null,
+}: {
+  cargo: CargoListingRow;
+  /** Engine match count (0 → muted circle). */
+  matches?: number;
+  /** Company alias only — never personal contact. null → identity masked. */
+  partner?: { name: string; role?: string } | null;
+}) {
   const c = cargo as CargoExtra;
   const t = typeLabel(c);
   const sf = c.stowage_factor;
@@ -164,31 +193,50 @@ export function CargoCard({ cargo }: { cargo: CargoListingRow }) {
         <div className="cc-field">
           <div className="cc-field__k">IMSBC</div>
           <div className="cc-field__v">
-            {c.is_dg_cargo ? (
-              <span style={{ color: "#A32D2D", fontWeight: 500 }}>⚠ DG</span>
-            ) : (
-              <span>—</span>
-            )}
+            {(() => {
+              const im = imsbcRender(c.imsbc_category, c.is_dg_cargo);
+              return (
+                <span style={{ color: im.color, fontWeight: im.warn ? 500 : 400 }}>
+                  {im.warn && "⚠ "}
+                  {im.text}
+                </span>
+              );
+            })()}
           </div>
         </div>
       </div>
 
-      {/* Footer — freight + circulation + view (no contact) */}
+      {/* Footer — freight + via | circ | match (no contact) */}
       <div className="cc-footer">
         <div className="cc-foot-col cc-foot-col--freight">
-          <div className="cc-foot-label">Freight idea</div>
           <div className="cc-freight">
             {c.freight_idea_usd_mt != null ? `$${c.freight_idea_usd_mt}/MT` : "—"}
             {c.commission_pct != null && ` · ${c.commission_pct}% comm`}
+          </div>
+          <div className="cc-partner-slot">
+            {partner ? (
+              <span className="mp-tag">
+                via <b>{partner.name}</b>
+                {partner.role && ` (${partner.role})`}
+              </span>
+            ) : (
+              <span className="mp-tag masked">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+                  <rect x="3" y="7" width="10" height="6.5" rx="1" />
+                  <path d="M5 7V5a3 3 0 016 0v2" />
+                </svg>
+                Identity · Tier 3 &amp; Partner
+              </span>
+            )}
           </div>
         </div>
         <div className="cc-foot-col">
           <div className="cc-foot-label">Circ</div>
           <span className={`cc-circ-dot ${c.for_circulation ? "is-on" : "is-off"}`} />
         </div>
-        <div className="cc-foot-col">
-          <div className="cc-foot-label">&nbsp;</div>
-          <span className="cc-view">View →</span>
+        <div className="cc-foot-col cc-foot-col--match">
+          <div className="cc-foot-label">Match</div>
+          <span className={`cc-match-circle ${matches === 0 ? "is-zero" : ""}`}>{matches}</span>
         </div>
       </div>
     </Link>
