@@ -715,3 +715,65 @@ body { font-family: var(--asb-font); }
   background: #FBF4E5; color: #854F0B;
   border-left-color: #854F0B; font-weight: 500;
 }
+
+/* ============================================================
+   ASB CARGO / VESSEL CARD (Phase 2 — leaf surfaces)
+   Ported verbatim from design asb/tokens.css. Dense, status-stripped.
+   ============================================================ */
+.asb-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 6px; font-size: var(--fs-label); font-weight: 500;
+  border-radius: var(--r-pill); text-transform: uppercase;
+  letter-spacing: 0.04em; line-height: 1.2; white-space: nowrap; border: var(--bd);
+}
+.asb-badge.in      { background: var(--asb-green-bg); color: var(--asb-green); border-color: transparent; }
+.asb-badge.partial { background: var(--asb-amber-bg); color: var(--asb-amber); border-color: transparent; }
+.asb-badge.out     { background: var(--asb-red-bg);   color: var(--asb-red);   border-color: transparent; }
+.asb-badge.review  { background: var(--asb-amber-bg); color: var(--asb-amber); border-color: transparent; }
+.asb-badge.open    { background: var(--asb-green-bg); color: var(--asb-green); border-color: transparent; }
+.asb-badge.neutral { background: var(--asb-white); color: var(--asb-ink); border-color: var(--asb-gray-200); }
+
+.cargo-card {
+  padding: 10px 12px 0; border-radius: 6px;
+  border: 0.5px solid #DDE2EA; background: #FFFFFF;
+  display: flex; flex-direction: column; gap: 0; position: relative;
+  transition: border-color .15s ease, transform .15s ease, background .15s ease;
+}
+.cargo-card:hover { border-color: #185FA5; transform: translateY(-1px); }
+.cargo-card.is-selected { border: 1.5px solid #185FA5; background: #F0F7FF; }
+.cargo-card::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--strip, #97C459); border-radius: 6px 0 0 6px;
+}
+.cc-line1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.cc-title { font-size: 12px; font-weight: 600; color: #1B3A5C; line-height: 1.25; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-cat { flex-shrink: 0; display: inline-flex; align-items: center; font-size: 9px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 5px; border-radius: 3px; white-space: nowrap; }
+.cc-cat--dryish { background: #E6F1FB; color: #0C447C; }
+.cc-cat--bbulk  { background: #FAEEDA; color: #854F0B; }
+.cc-cat--liquid { background: #F1EFE8; color: #5F5E5A; }
+.cc-line2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; min-width: 0; }
+.cc-route-line { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-ports { font-size: 10px; font-weight: 600; color: #1B3A5C; letter-spacing: 0.02em; font-family: var(--asb-font-mono); white-space: nowrap; }
+.cc-zones { font-size: 9px; font-weight: 400; color: #6B7280; letter-spacing: 0.03em; white-space: nowrap; }
+.cc-mid { color: #B7BEC9; font-weight: 400; font-size: 9px; }
+.cc-arrow { color: #8B95A3; font-weight: 400; }
+.cc-wog { flex-shrink: 0; background: #FAEEDA; color: #854F0B; font-size: 8px; font-weight: 600; letter-spacing: 0.06em; padding: 2px 5px; border-radius: 3px; }
+.cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-bottom: 8px; }
+.cc-field { min-width: 0; }
+.cc-field__k { font-size: 8px; color: #8B95A3; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; margin-bottom: 2px; }
+.cc-field__v { font-size: 11px; font-weight: 500; color: #1B3A5C; font-variant-numeric: tabular-nums; line-height: 1.3; display: inline-flex; align-items: center; flex-wrap: wrap; }
+.cc-qty { display: inline-flex; flex-direction: column; line-height: 1.25; }
+.cc-qty__w { color: #1B3A5C; }
+.cc-qty__v { font-size: 10px; font-weight: 400; margin-top: 1px; }
+.cc-spot { display: inline-flex; background: #EAF3DE; color: #27500A; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 3px; letter-spacing: 0.04em; }
+.cc-tbd { font-size: 10px; font-style: italic; color: #8B95A3; font-weight: 400; }
+.cc-footer { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 0; border-top: 0.5px solid #DDE2EA; padding: 5px 0 7px; margin: 0 -12px 0 -9px; padding-left: 9px; padding-right: 12px; }
+.cc-foot-col { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; padding: 0 8px; }
+.cc-foot-col + .cc-foot-col { border-left: 0.5px solid #DDE2EA; }
+.cc-foot-col--freight { align-items: flex-start; padding-left: 0; flex: 1; min-width: 0; }
+.cc-foot-label { font-size: 7.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #8B95A3; margin-bottom: 3px; }
+.cc-freight { font-size: 10px; font-weight: 500; color: #4B5566; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cc-circ-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-top: 1px; }
+.cc-circ-dot.is-on { background: #97C459; border: 0.5px solid #3B6D11; }
+.cc-circ-dot.is-off { background: #F1EFE8; border: 0.5px solid #B7BEC9; }
+.cc-view { font-size: 10px; font-weight: 500; color: #185FA5; white-space: nowrap; }
