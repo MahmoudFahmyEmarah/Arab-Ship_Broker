@@ -31,9 +31,9 @@ const VESSEL_BROKER_FIELDS = [
   "max_draft_m",
   "is_sanctioned",
   "vessel_review_status",
-  "owner_company",
-  "owner_country",
-  "manager_company",
+  // Counterparty PII (owner_company, owner_country, manager_company, …) is
+  // intentionally NOT selected here — it is locked at the DB layer and only
+  // readable by the vessel's own owner (via v_vessel_detail) or admin.
   "notes",
 ].join(", ");
 
@@ -225,7 +225,7 @@ export async function getAvailabilityById(
          grain_cbm, bale_cbm,
          build_year, flag, flag_category, scope, risk_level,
          is_geared, grain_certified, dg_certified,
-         max_loa_m, max_draft_m, is_sanctioned, owner_company, pi_club,
+         max_loa_m, max_draft_m, is_sanctioned, pi_club,
          preferred_zones
        )`,
     )
@@ -367,8 +367,9 @@ export async function getVesselWithClaimStatus(
   vesselId: string,
 ): Promise<{ vessel: VesselRow | null; isClaimed: boolean }> {
   const [vesselResult, claimResult] = await Promise.all([
+    // Masked view: counterparty PII is NULL unless viewer is admin/owner.
     supabase
-      .from("vessels")
+      .from("v_vessel_detail")
       .select(
         [
           "id",

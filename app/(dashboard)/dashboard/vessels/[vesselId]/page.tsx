@@ -70,8 +70,12 @@ export default async function VesselDetailPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  // Read through the masked view: counterparty PII (owner/manager/
+  // commercial-contact/PIC/website/charterer) resolves to NULL unless the
+  // viewer is admin or this vessel's own claimant. Contact firewall lives
+  // in the DB, not the UI.
   const { data: vessel, error } = await supabase
-    .from("vessels")
+    .from("v_vessel_detail")
     .select("*")
     .eq("id", vesselId)
     .single();
@@ -86,6 +90,14 @@ export default async function VesselDetailPage({
     .maybeSingle();
 
   const isClaimed = !!claim;
+
+  // Commercial/contact card is for the vessel's own owner or admin only.
+  const { data: appUser } = await supabase
+    .from("users")
+    .select("role")
+    .eq("supabase_user_id", user.id)
+    .maybeSingle();
+  const canSeeCommercial = isClaimed || appUser?.role === "admin";
 
   const { data: vesselContactsData } = await supabase
     .from("vessel_contacts")
@@ -270,28 +282,7 @@ export default async function VesselDetailPage({
             )}
           </IntelCard>
 
-          {(v.owner_company ||
-            v.manager_company ||
-            v.pi_club ||
-            v.owner_country ||
-            v.manager_country ||
-            v.commercial_manager_company ||
-            v.commercial_manager_country ||
-            v.commercial_manager_contact ||
-            v.commercial_manager_email ||
-            v.commercial_manager_phone ||
-            v.charter_status ||
-            v.tc_charterer_name ||
-            v.tc_expiry ||
-            v.bbc_charterer_name ||
-            v.bbc_expiry ||
-            v.pi_ig_member === true ||
-            v.pi_ig_member === false ||
-            (v.pi_coverage_types && v.pi_coverage_types.length > 0) ||
-            v.war_risk_trading ||
-            v.war_risk_conditions ||
-            (v.preferred_trading_areas &&
-              v.preferred_trading_areas.length > 0)) && (
+          {canSeeCommercial && (
             <IntelCard title="Commercial Details" icon={Building2}>
               <div className="space-y-2.5 text-sm">
                 {v.owner_company && (
