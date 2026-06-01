@@ -112,7 +112,20 @@ export function CargoCard({
             c.commodity_name
           )}
         </span>
-        <span className={`mvb-chip-st ${chip.cls}`}>{chip.label}</span>
+        <span
+          className={`mvb-chip-st ${chip.cls}`}
+          title={
+            chip.label === "REVIEW"
+              ? "Under Arab ShipBroker review"
+              : chip.label === "URGENT"
+                ? "Laycan within 3 days"
+                : chip.label === "SOON"
+                  ? "Laycan within 7 days"
+                  : "Live / in scope"
+          }
+        >
+          {chip.label}
+        </span>
       </div>
 
       {/* ID line — ref · category + tags */}
@@ -146,7 +159,7 @@ export function CargoCard({
         <div className="mvb-spec"><div className="sk">Laycan</div><div className={`sv${c.is_spot ? "" : ""}`}>{laycan}</div></div>
         <div className="mvb-spec"><div className="sk">Terms</div><div className={`sv${c.load_terms ? "" : " dim"}`}>{dash(c.load_terms)}</div></div>
         <div className="mvb-spec"><div className="sk">L/D rate</div><div className={`sv${ld ? "" : " dim"}`}>{ld ?? "—"}</div></div>
-        <div className="mvb-spec"><div className="sk">IMSBC</div><div className={`sv${imsbc === "—" ? " dim" : ""}`} style={imsbc.startsWith("⚠") ? { color: imsbc.includes("DG") ? "#C84A4A" : "#B17311" } : undefined}>{imsbc}</div></div>
+        <div className="mvb-spec" title="IMSBC group — Group A cargoes may liquefy; DG = dangerous goods (IMDG)"><div className="sk">IMSBC</div><div className={`sv${imsbc === "—" ? " dim" : ""}`} style={imsbc.startsWith("⚠") ? { color: imsbc.includes("DG") ? "#C84A4A" : "#B17311" } : undefined}>{imsbc}</div></div>
       </div>
 
       {/* Commercial block (mirrors the vessel fuel block) */}
@@ -168,7 +181,7 @@ export function CargoCard({
           title={c.for_circulation ? "In circulation" : "Not circulated"}
           style={{ marginLeft: 2 }}
         />
-        <span className={`mvb-matches ${matches === 0 ? "none" : ""}`}>{matches} matches</span>
+        <span className={`mvb-matches ${matches === 0 ? "none" : ""}`} title="Vessels proposed by the matching engine">{matches} matches</span>
         <span className="sp" />
         {onSelect ? (
           <Link className="mvb-vlink strong" href={href} onClick={(e) => e.stopPropagation()}>

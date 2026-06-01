@@ -909,7 +909,7 @@ body { font-family: var(--asb-font); }
 .asb-basetgl__b { border: none; background: transparent; font-size: 11px; font-weight: 500; color: var(--asb-gray-500); padding: 3px 11px; border-radius: 99px; cursor: pointer; font-family: var(--asb-font); }
 .asb-basetgl__b.is-on { background: var(--asb-blue); color: #fff; }
 
-.asb-map__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--asb-gray-500); background: var(--asb-gray-50); z-index: 600; pointer-events: none; }
+.asb-map__empty { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: inline-flex; align-items: center; font-size: 10px; color: var(--asb-gray-700); background: rgba(255,255,255,0.92); border: 0.5px solid var(--asb-gray-200); padding: 4px 10px; border-radius: 99px; z-index: 600; pointer-events: none; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
 
 /* Marker cluster bubble (markercluster override) */
 .asb-cluster-wrap { background: transparent !important; }
@@ -931,3 +931,23 @@ body { font-family: var(--asb-font); }
 .mvb-tag.grain { background: #FBF2DF; color: #B17311; }
 .mvb-tag.spot  { background: #DEF1E2; color: #2A9962; }
 .mvb-tag.wog   { background: #F2F6FB; color: #6B7A99; }
+
+/* ============================================================
+   BUNKER TICKER — sponsored price marquee (reads fuel_prices)
+   ============================================================ */
+.bunker-ticker { display: flex; align-items: stretch; height: 30px; background: #0D2545; color: #fff; font: 11px/1 var(--asb-font); overflow: hidden; }
+.bt-label { flex-shrink: 0; display: flex; align-items: center; padding: 0 12px; font-size: 9px; font-weight: 600; letter-spacing: .1em; color: #7BB8F0; border-right: 1px solid rgba(255,255,255,0.1); }
+.bt-track-wrap { flex: 1; overflow: hidden; position: relative; display: flex; align-items: center; }
+.bt-track { display: inline-flex; align-items: center; white-space: nowrap; animation: bt-scroll 60s linear infinite; will-change: transform; }
+.bunker-ticker:hover .bt-track { animation-play-state: paused; }
+@keyframes bt-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.bt-seg { display: inline-flex; align-items: center; gap: 7px; padding: 0 2px; }
+.bt-sponsor { font-weight: 600; color: #fff; }
+.bt-port { color: rgba(255,255,255,0.55); }
+.bt-mid-dot { color: rgba(255,255,255,0.3); }
+.bt-price-grp { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+.bt-fuel { color: rgba(255,255,255,0.5); font-size: 9px; letter-spacing: .04em; }
+.bt-price { color: #fff; font-variant-numeric: tabular-nums; }
+.bt-dir.up { color: #4ED88A; } .bt-dir.down { color: #FF6B6B; } .bt-dir.flat { color: rgba(255,255,255,0.4); }
+.bt-seg__sep { display: inline-block; width: 1px; height: 12px; background: rgba(255,255,255,0.15); margin: 0 14px; }
+.bt-empty { padding: 0 14px; color: rgba(255,255,255,0.5); font-size: 10px; }

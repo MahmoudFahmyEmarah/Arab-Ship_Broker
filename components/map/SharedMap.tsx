@@ -224,7 +224,7 @@ export function SharedMap({
         <button type="button" aria-label="Zoom out" onClick={() => zoom(-1)}>−</button>
       </div>
       {points.filter((p) => p.lat != null).length === 0 && (
-        <div className="asb-map__empty">No positions with coordinates to plot</div>
+        <div className="asb-map__empty">No mappable coordinates yet — base map shown</div>
       )}
     </div>
   );

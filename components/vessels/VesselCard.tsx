@@ -103,7 +103,7 @@ export function VesselCard({
 
       {v.fuel && (
         <div className="mvb-vc__fuel">
-          <div className="fh">Fuel consumption · MT/day</div>
+          <div className="fh" title="Daily fuel burn — VLSFO (main engine) and LSMGO (aux), at sea and in port">Fuel consumption · MT/day</div>
           <div className="mvb-fuelgrid">
             <div className="mvb-fcell"><div className="fk">VLSFO sea</div><div className="fv">{dash(v.fuel.vs)}</div></div>
             <div className="mvb-fcell"><div className="fk">VLSFO port</div><div className="fv">{dash(v.fuel.vp)}</div></div>
@@ -116,7 +116,7 @@ export function VesselCard({
       <div className="mvb-vc__ft">
         <span className="imo">IMO {v.imo}</span>
         {v.matches != null ? (
-          <span className="mvb-matches">{v.matches} matches</span>
+          <span className="mvb-matches" title="Cargoes proposed by the matching engine">{v.matches} matches</span>
         ) : (
           <span className="mvb-matches none">No position yet</span>
         )}

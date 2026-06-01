@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardProvider } from "@/contexts/DashboardContext";
+import { BunkerTicker } from "@/components/market/BunkerTicker";
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -26,6 +27,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       </button>
 
       <main className="flex-1 ml-[180px] max-[1024px]:ml-0 min-h-screen w-full transition-all duration-300 ease-in-out">
+        <BunkerTicker />
         <div className="p-10 max-[1024px]:p-8 max-[768px]:p-4 max-w-screen-2xl mx-auto w-full">
           {children}
         </div>

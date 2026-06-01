@@ -37,7 +37,7 @@ export function FleetBoard({
   const [showMap, setShowMap] = useState(true);
   const [base, setBase] = useMapBase();
 
-  const hasMap = showMap && points.length > 0;
+  const hasMap = showMap;
 
   return (
     <div>
@@ -46,13 +46,7 @@ export function FleetBoard({
         <button
           type="button"
           onClick={() => setShowMap((s) => !s)}
-          disabled={points.length === 0}
-          className="inline-flex items-center gap-1.5 rounded border border-asb-gray-200 bg-asb-white px-3 py-1.5 text-xs font-medium text-asb-gray-700 transition-colors hover:bg-asb-gray-50 disabled:opacity-40"
-          title={
-            points.length === 0
-              ? "No positions with coordinates to map"
-              : undefined
-          }
+          className="inline-flex items-center gap-1.5 rounded border border-asb-gray-200 bg-asb-white px-3 py-1.5 text-xs font-medium text-asb-gray-700 transition-colors hover:bg-asb-gray-50"
         >
           {showMap ? <X className="h-3.5 w-3.5" /> : <MapIcon className="h-3.5 w-3.5" />}
           {showMap ? "Hide map" : "Show map"}
