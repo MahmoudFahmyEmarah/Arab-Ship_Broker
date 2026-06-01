@@ -28,6 +28,8 @@ import {
 } from "@/lib/schemas/vessel";
 import { cn } from "@/lib/utils";
 import { PostPositionButton } from "@/components/vessels/PostPositionButton";
+import { UpgradeWall } from "@/components/vessels/UpgradeWall";
+import { viewerTierFrom, isSubscriber } from "@/lib/tiers";
 
 type Params = { vesselId: string };
 
@@ -95,10 +97,14 @@ export default async function VesselDetailPage({
   // Commercial/contact card is for the vessel's own owner or admin only.
   const { data: appUser } = await supabase
     .from("users")
-    .select("role")
+    .select("role, subscription_tier, is_market_partner")
     .eq("supabase_user_id", user.id)
     .maybeSingle();
   const canSeeCommercial = isClaimed || appUser?.role === "admin";
+  // Non-owner view: subscribers (T3/T4/partner) get the "brokered by ASB"
+  // locked card; non-subscribers (T1/T2) get the upgrade teaser. Neither
+  // reveals contact — that stays admin/owner-only.
+  const viewerSubscriber = isSubscriber(viewerTierFrom(appUser));
 
   const { data: vesselContactsData } = await supabase
     .from("vessel_contacts")
@@ -371,8 +377,14 @@ export default async function VesselDetailPage({
                   )}
               </div>
             </IntelCard>
-          ) : (
+          ) : viewerSubscriber ? (
             <MaskedCommercialCard />
+          ) : (
+            <UpgradeWall
+              vesselName={v.vessel_name}
+              vesselType={v.vessel_type}
+              builtYear={v.build_year}
+            />
           )}
 
           {vesselContacts.length > 0 && (
