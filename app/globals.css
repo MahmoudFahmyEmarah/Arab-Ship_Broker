@@ -873,3 +873,40 @@ body { font-family: var(--asb-font); }
 .mvb-vc__via b { color: var(--mvb-slate); font-weight: 500; }
 .mvb-vc__via.masked { color: var(--mvb-slate); display: flex; align-items: center; gap: 6px; }
 .mvb-vc__via.masked svg { width: 11px; height: 11px; flex-shrink: 0; opacity: .8; }
+
+/* ============================================================
+   SHARED LEAFLET MAP (Phase 5)
+   Carto Voyager (light) / Dark Matter (dark) base + OpenSeaMap.
+   ============================================================ */
+.asb-map { position: relative; height: 100%; width: 100%; border-radius: 8px; overflow: hidden; border: 0.5px solid var(--asb-gray-200); background: #0d1b2a; }
+.asb-map[data-base="light"] { background: #aadaff; }
+.asb-map__host { position: absolute; inset: 0; }
+.asb-map .leaflet-container { background: inherit; font-family: var(--asb-font); }
+.asb-map .leaflet-control-attribution { background: rgba(255,255,255,0.7); font-size: 9px; color: #555; }
+.asb-map[data-base="dark"] .leaflet-control-attribution { background: rgba(10,22,36,0.7); color: rgba(255,255,255,0.5); }
+
+/* Markers (divIcon) */
+.asb-pin-wrap { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.asb-pin { width: 12px; height: 12px; flex-shrink: 0; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9), 0 1px 4px rgba(0,0,0,0.4); transition: transform .12s ease; }
+.asb-pin--dot { border-radius: 50%; background: var(--c, #7BB8F0); }
+.asb-pin--tri { width: 0; height: 0; box-shadow: none; background: transparent;
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-bottom: 12px solid var(--c, #7BB8F0);
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
+.asb-pin-lbl { font-size: 9px; font-weight: 600; color: #1B3A5C; background: rgba(255,255,255,0.88); padding: 0 4px; border-radius: 3px; letter-spacing: .02em; opacity: 0; transition: opacity .12s ease; }
+.asb-pin-wrap:hover .asb-pin-lbl, .asb-pin-wrap.is-selected .asb-pin-lbl { opacity: 1; }
+.asb-pin-wrap.is-selected .asb-pin { transform: scale(1.45); box-shadow: 0 0 0 2px #185FA5, 0 0 0 4px rgba(24,95,165,0.35), 0 2px 6px rgba(0,0,0,0.5); }
+.asb-pin-wrap.is-selected .asb-pin--tri { box-shadow: none; border-bottom-color: #185FA5; transform: scale(1.45); }
+
+/* Custom zoom buttons */
+.asb-map__zoom { position: absolute; top: 10px; left: 10px; z-index: 500; display: flex; flex-direction: column; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+.asb-map__zoom button { width: 30px; height: 30px; border: none; background: #fff; color: #1B3A5C; font-size: 17px; font-weight: 500; cursor: pointer; line-height: 1; }
+.asb-map__zoom button:first-child { border-bottom: 0.5px solid var(--asb-gray-200); }
+.asb-map__zoom button:hover { background: var(--asb-gray-50); }
+
+/* Light/dark toggle pill */
+.asb-basetgl { display: inline-flex; background: var(--asb-white); border: 0.5px solid var(--asb-gray-200); border-radius: 99px; padding: 2px; gap: 2px; }
+.asb-basetgl__b { border: none; background: transparent; font-size: 11px; font-weight: 500; color: var(--asb-gray-500); padding: 3px 11px; border-radius: 99px; cursor: pointer; font-family: var(--asb-font); }
+.asb-basetgl__b.is-on { background: var(--asb-blue); color: #fff; }
+
+.asb-map__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--asb-gray-500); background: var(--asb-gray-50); z-index: 600; pointer-events: none; }

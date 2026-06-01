@@ -22,7 +22,9 @@ import {
   MyVesselRow,
 } from "@/lib/schemas/vessel";
 import { cn } from "@/lib/utils";
-import { VesselCard, type VesselCardData } from "@/components/vessels/VesselCard";
+import { type VesselCardData } from "@/components/vessels/VesselCard";
+import { FleetBoard } from "@/components/vessels/FleetBoard";
+import { type MapPoint } from "@/components/map/SharedMap";
 
 function getDateUrgency(openDate: string | null): {
   color: string;
@@ -182,6 +184,50 @@ export default async function MyVesselsPage() {
     if (!availByVessel.has(l.vessel_id)) availByVessel.set(l.vessel_id, l);
   }
 
+  // Resolve open-port coordinates for the fleet map.
+  const openLocodes = Array.from(
+    new Set(
+      myVessels
+        .map((v) => v.open_port_locode)
+        .filter((x): x is string => !!x),
+    ),
+  );
+  const portCoord = new Map<string, { lat: number; lon: number }>();
+  if (openLocodes.length) {
+    const { data: portsData } = await supabase
+      .from("ports")
+      .select("locode, latitude, longitude")
+      .in("locode", openLocodes);
+    for (const p of (portsData ?? []) as {
+      locode: string;
+      latitude: number | null;
+      longitude: number | null;
+    }[]) {
+      if (p.latitude != null && p.longitude != null) {
+        portCoord.set(p.locode, { lat: Number(p.latitude), lon: Number(p.longitude) });
+      }
+    }
+  }
+
+  const fleetCards = myVessels.map((v) => ({
+    v,
+    data: toCardData(v, availByVessel.get(v.id)),
+  }));
+  const fleetPoints: MapPoint[] = fleetCards.flatMap(({ v, data }) => {
+    const c = v.open_port_locode ? portCoord.get(v.open_port_locode) : undefined;
+    if (!c) return [];
+    return [
+      {
+        id: data.imo,
+        name: v.vessel_name,
+        lat: c.lat,
+        lon: c.lon,
+        kind: "vessel" as const,
+        zone: v.open_zone,
+      },
+    ];
+  });
+
   const groups = {
     pending: listings.filter((l) => l.review_status === "PENDING"),
     open: listings.filter(
@@ -245,14 +291,10 @@ export default async function MyVesselsPage() {
             </Link>
           </div>
         ) : (
-          <div className="mvb-cardhost">
-            {myVessels.map((v) => (
-              <VesselCard
-                key={v.id}
-                vessel={toCardData(v, availByVessel.get(v.id))}
-              />
-            ))}
-          </div>
+          <FleetBoard
+            vessels={fleetCards.map((c) => c.data)}
+            points={fleetPoints}
+          />
         )}
       </section>
 
