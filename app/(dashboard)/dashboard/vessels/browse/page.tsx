@@ -11,6 +11,7 @@ import { type MapPoint } from "@/components/map/SharedMap";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
+// Production `vessels` has no gross_tonnage; specs only (no PII columns selected).
 type BrowseVessel = Pick<
   VesselRow,
   | "id"
@@ -18,7 +19,6 @@ type BrowseVessel = Pick<
   | "imo_number"
   | "vessel_type"
   | "dwt_grain"
-  | "gross_tonnage"
   | "build_year"
   | "flag"
   | "max_loa_m"
@@ -42,10 +42,11 @@ type OpenPosition = {
   open_port_locode: string | null;
   open_zone: string | null;
   open_date: string | null;
-  me_consumption_mt_day: number | null;
-  me_consumption_port_mt_day: number | null;
-  aux_consumption_mt_day: number | null;
-  aux_consumption_port_mt_day: number | null;
+  // Production stores explicit fuel columns (not me/aux _port).
+  vlsfo_sea_mt_day: number | null;
+  vlsfo_port_mt_day: number | null;
+  lsmgo_sea_mt_day: number | null;
+  lsmgo_port_mt_day: number | null;
 };
 
 const numOrNull = (n: number | null) => (n != null ? String(n) : null);
@@ -77,17 +78,17 @@ function toCardData(v: BrowseVessel, pos: OpenPosition | undefined): VesselCardD
     type: v.vessel_type,
     built: v.build_year,
     dwt: v.dwt_grain != null ? v.dwt_grain.toLocaleString() : null,
-    grt: v.gross_tonnage != null ? v.gross_tonnage.toLocaleString() : null,
+    grt: null, // prod has no gross_tonnage
     loa: v.max_loa_m != null ? String(v.max_loa_m) : null,
     draft: v.max_draft_m != null ? String(v.max_draft_m) : null,
     gear: v.is_geared == null ? null : v.is_geared ? "Geared" : "Gearless",
     status: "OPEN",
     fuel: pos
       ? {
-          vs: numOrNull(pos.me_consumption_mt_day),
-          vp: numOrNull(pos.me_consumption_port_mt_day),
-          ls: numOrNull(pos.aux_consumption_mt_day),
-          lp: numOrNull(pos.aux_consumption_port_mt_day),
+          vs: numOrNull(pos.vlsfo_sea_mt_day),
+          vp: numOrNull(pos.vlsfo_port_mt_day),
+          ls: numOrNull(pos.lsmgo_sea_mt_day),
+          lp: numOrNull(pos.lsmgo_port_mt_day),
         }
       : null,
     matches: hasPosition ? 0 : null,
@@ -142,7 +143,7 @@ export default async function BrowseVesselsPage({
   let vesselsQuery = supabase
     .from("vessels")
     .select(
-      "id, vessel_name, imo_number, vessel_type, dwt_grain, gross_tonnage, build_year, flag, max_loa_m, max_draft_m, is_geared, is_sanctioned",
+      "id, vessel_name, imo_number, vessel_type, dwt_grain, build_year, flag, max_loa_m, max_draft_m, is_geared, is_sanctioned",
     )
     .eq("is_sanctioned", false)
     .order("vessel_name", { ascending: true })
@@ -165,7 +166,7 @@ export default async function BrowseVesselsPage({
     const { data: posData } = await supabase
       .from("vessel_availability")
       .select(
-        "vessel_id, open_port_name, open_port_locode, open_zone, open_date, me_consumption_mt_day, me_consumption_port_mt_day, aux_consumption_mt_day, aux_consumption_port_mt_day, created_at",
+        "vessel_id, open_port_name, open_port_locode, open_zone, open_date, vlsfo_sea_mt_day, vlsfo_port_mt_day, lsmgo_sea_mt_day, lsmgo_port_mt_day, created_at",
       )
       .in("vessel_id", vessels.map((v) => v.id))
       .eq("status", "OPEN")
