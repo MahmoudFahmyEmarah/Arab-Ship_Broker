@@ -5,7 +5,9 @@ import { createServerClient } from "@supabase/ssr";
 import { Plus, Search, Ship } from "lucide-react";
 
 import type { VesselRow } from "@/lib/schemas/vessel";
-import { VesselCard, type VesselCardData } from "@/components/vessels/VesselCard";
+import { type VesselCardData } from "@/components/vessels/VesselCard";
+import { FleetBoard } from "@/components/vessels/FleetBoard";
+import { type MapPoint } from "@/components/map/SharedMap";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -37,6 +39,7 @@ type BrowseVessel = Pick<
 type OpenPosition = {
   vessel_id: string;
   open_port_name: string | null;
+  open_port_locode: string | null;
   open_zone: string | null;
   open_date: string | null;
   me_consumption_mt_day: number | null;
@@ -162,7 +165,7 @@ export default async function BrowseVesselsPage({
     const { data: posData } = await supabase
       .from("vessel_availability")
       .select(
-        "vessel_id, open_port_name, open_zone, open_date, me_consumption_mt_day, me_consumption_port_mt_day, aux_consumption_mt_day, aux_consumption_port_mt_day, created_at",
+        "vessel_id, open_port_name, open_port_locode, open_zone, open_date, me_consumption_mt_day, me_consumption_port_mt_day, aux_consumption_mt_day, aux_consumption_port_mt_day, created_at",
       )
       .in("vessel_id", vessels.map((v) => v.id))
       .eq("status", "OPEN")
@@ -172,6 +175,48 @@ export default async function BrowseVesselsPage({
       if (!posByVessel.has(p.vessel_id)) posByVessel.set(p.vessel_id, p);
     }
   }
+
+  // Resolve open-port coordinates for the market map.
+  const locodes = Array.from(
+    new Set(
+      [...posByVessel.values()]
+        .map((p) => p.open_port_locode)
+        .filter((x): x is string => !!x),
+    ),
+  );
+  const portCoord = new Map<string, { lat: number; lon: number }>();
+  if (locodes.length) {
+    const { data: portsData } = await supabase
+      .from("ports")
+      .select("locode, latitude, longitude")
+      .in("locode", locodes);
+    for (const p of (portsData ?? []) as {
+      locode: string;
+      latitude: number | null;
+      longitude: number | null;
+    }[]) {
+      if (p.latitude != null && p.longitude != null) {
+        portCoord.set(p.locode, { lat: Number(p.latitude), lon: Number(p.longitude) });
+      }
+    }
+  }
+
+  const cards = vessels.map((v) => toCardData(v, posByVessel.get(v.id)));
+  const points: MapPoint[] = vessels.flatMap((v) => {
+    const pos = posByVessel.get(v.id);
+    const c = pos?.open_port_locode ? portCoord.get(pos.open_port_locode) : undefined;
+    if (!c) return [];
+    return [
+      {
+        id: v.imo_number ?? "—",
+        name: v.vessel_name,
+        lat: c.lat,
+        lon: c.lon,
+        kind: "vessel" as const,
+        zone: pos?.open_zone ?? null,
+      },
+    ];
+  });
 
   return (
     <div className="space-y-6 py-2">
@@ -235,15 +280,7 @@ export default async function BrowseVesselsPage({
           </p>
         </div>
       ) : (
-        <div className="mvb-cardhost">
-          {vessels.map((v) => (
-            <VesselCard
-              key={v.id}
-              vessel={toCardData(v, posByVessel.get(v.id))}
-              masked
-            />
-          ))}
-        </div>
+        <FleetBoard vessels={cards} points={points} masked />
       )}
     </div>
   );

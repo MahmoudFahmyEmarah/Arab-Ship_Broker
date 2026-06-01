@@ -26,9 +26,12 @@ const SharedMap = dynamic(
 export function FleetBoard({
   vessels,
   points,
+  masked = false,
 }: {
   vessels: VesselCardData[];
   points: MapPoint[];
+  /** Mask counterparty identity on the cards (public markets). */
+  masked?: boolean;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
@@ -68,6 +71,7 @@ export function FleetBoard({
               <VesselCard
                 key={v.imo}
                 vessel={v}
+                masked={masked}
                 selected={selected === v.imo}
                 onSelect={setSelected}
               />
