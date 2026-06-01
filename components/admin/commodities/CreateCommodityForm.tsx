@@ -11,9 +11,9 @@ const CARGO_TYPES = ["Dry Bulk", "Break Bulk"] as const;
 const IMSBC_CATS = ["Cat_A", "Cat_B", "Cat_C", "DG", "Non_DG"] as const;
 
 const inputCls =
-  "w-full h-9 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-ocean-500";
+  "w-full h-9 px-3 text-sm rounded border border-asb-gray-200 bg-white focus:outline-none  focus:border-asb-blue";
 const labelCls =
-  "block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1";
+  "block text-xs font-bold text-asb-gray-500 uppercase tracking-wider mb-1";
 
 export function CreateCommodityForm() {
   const router = useRouter();
@@ -76,7 +76,7 @@ export function CreateCommodityForm() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-5 py-3 text-sm font-semibold text-ocean-600 bg-ocean-50 hover:bg-ocean-100 border-2 border-dashed border-ocean-200 rounded-2xl transition-colors w-full"
+        className="flex items-center gap-2 px-5 py-3 text-sm font-semibold text-asb-blue bg-asb-blue-light hover:bg-asb-blue-light border-2 border-dashed border-asb-blue rounded transition-colors w-full"
       >
         <Plus className="w-4 h-4" /> Add new commodity
       </button>
@@ -84,8 +84,8 @@ export function CreateCommodityForm() {
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5">
-      <h3 className="text-sm font-bold text-slate-800">New commodity</h3>
+    <div className="bg-white border border-asb-gray-200 rounded p-6 space-y-5">
+      <h3 className="text-sm font-bold text-asb-ink">New commodity</h3>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
@@ -98,7 +98,7 @@ export function CreateCommodityForm() {
             placeholder="e.g. Grain (Wheat)"
             className={inputCls}
           />
-          <p className="text-[10px] text-slate-400 mt-1">
+          <p className="text-[10px] text-asb-gray-400 mt-1">
             This is permanent — it is stored on every cargo listing. Choose
             carefully.
           </p>
@@ -115,10 +115,10 @@ export function CreateCommodityForm() {
                 type="button"
                 onClick={() => set("cargo_type", t)}
                 className={cn(
-                  "flex-1 py-2 text-xs font-semibold rounded-xl border-2 transition-all",
+                  "flex-1 py-2 text-xs font-semibold rounded border-2 transition-all",
                   form.cargo_type === t
-                    ? "border-ocean-500 bg-ocean-50 text-ocean-700"
-                    : "border-slate-200 text-slate-500 hover:border-ocean-200",
+                    ? "border-asb-blue bg-asb-blue-light text-asb-blue"
+                    : "border-asb-gray-200 text-asb-gray-500 hover:border-asb-blue",
                 )}
               >
                 {t}
@@ -153,10 +153,10 @@ export function CreateCommodityForm() {
                 type="button"
                 onClick={() => set("is_dg", v)}
                 className={cn(
-                  "flex-1 py-2 text-xs font-semibold rounded-xl border-2 transition-all",
+                  "flex-1 py-2 text-xs font-semibold rounded border-2 transition-all",
                   form.is_dg === v
-                    ? "border-ocean-500 bg-ocean-50 text-ocean-700"
-                    : "border-slate-200 text-slate-500 hover:border-ocean-200",
+                    ? "border-asb-blue bg-asb-blue-light text-asb-blue"
+                    : "border-asb-gray-200 text-asb-gray-500 hover:border-asb-blue",
                 )}
               >
                 {v ? "Yes" : "No"}
@@ -174,10 +174,10 @@ export function CreateCommodityForm() {
                 type="button"
                 onClick={() => set("is_grain", v)}
                 className={cn(
-                  "flex-1 py-2 text-xs font-semibold rounded-xl border-2 transition-all",
+                  "flex-1 py-2 text-xs font-semibold rounded border-2 transition-all",
                   form.is_grain === v
-                    ? "border-ocean-500 bg-ocean-50 text-ocean-700"
-                    : "border-slate-200 text-slate-500 hover:border-ocean-200",
+                    ? "border-asb-blue bg-asb-blue-light text-asb-blue"
+                    : "border-asb-gray-200 text-asb-gray-500 hover:border-asb-blue",
                 )}
               >
                 {v ? "Yes" : "No"}
@@ -239,7 +239,7 @@ export function CreateCommodityForm() {
             placeholder="e.g. Wheat, HMS, HMS 1/2"
             className={inputCls}
           />
-          <p className="text-[10px] text-slate-400 mt-1">
+          <p className="text-[10px] text-asb-gray-400 mt-1">
             Used in autocomplete search only. Never stored on cargo records.
           </p>
         </div>
@@ -255,17 +255,17 @@ export function CreateCommodityForm() {
         </div>
       </div>
 
-      <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+      <div className="flex justify-end gap-3 pt-2 border-t border-asb-gray-100">
         <button
           onClick={() => setOpen(false)}
-          className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+          className="px-4 py-2 text-sm font-semibold text-asb-gray-700 hover:bg-asb-gray-100 rounded transition-colors"
         >
           Cancel
         </button>
         <button
           onClick={handleSubmit}
           disabled={isPending}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-ocean-600 hover:bg-ocean-700 text-white rounded-xl transition-colors disabled:opacity-60"
+          className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-asb-blue hover:bg-asb-navy text-white rounded transition-colors disabled:opacity-60"
         >
           {isPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />

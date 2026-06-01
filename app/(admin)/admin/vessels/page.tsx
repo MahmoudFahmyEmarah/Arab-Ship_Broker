@@ -18,7 +18,7 @@ const RISK_TABS: { label: string; value: RiskLevel | "ALL" }[] = [
 const SCOPE_COLORS: Record<string, string> = {
   "In Scope": "text-green-700 bg-green-50 border-green-200",
   Marginal: "text-amber-700 bg-amber-50 border-amber-200",
-  "Out of Scope": "text-slate-500 bg-slate-50 border-slate-200",
+  "Out of Scope": "text-asb-gray-500 bg-asb-gray-50 border-asb-gray-200",
 };
 
 export default async function AdminVesselsPage({
@@ -75,7 +75,7 @@ export default async function AdminVesselsPage({
         subtitle={`${vessels.length} vessels · ${sanctionedCount} sanctioned · ${highRiskCount} HIGH risk`}
       />
 
-      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit flex-wrap">
+      <div className="flex items-center gap-1 bg-white border border-asb-gray-200 rounded p-1 w-fit flex-wrap">
         {RISK_TABS.map((tab) => {
           const active = riskFilter === tab.value;
           return (
@@ -85,8 +85,8 @@ export default async function AdminVesselsPage({
               className={cn(
                 "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
                 active
-                  ? "bg-ocean-600 text-white shadow-sm"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+                  ? "bg-asb-blue text-white shadow-sm"
+                  : "text-asb-gray-500 hover:bg-asb-gray-50 hover:text-asb-ink",
               )}
             >
               {tab.label}
@@ -105,21 +105,21 @@ export default async function AdminVesselsPage({
           {sanctionedOnly && (
             <input type="hidden" name="sanctioned" value="1" />
           )}
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-asb-gray-400" />
           <input
             name="q"
             defaultValue={query}
             placeholder="Search vessel name or IMO…"
-            className="w-full pl-9 pr-4 h-9 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-ocean-500"
+            className="w-full pl-9 pr-4 h-9 text-sm rounded border border-asb-gray-200 bg-white focus:outline-none  focus:border-asb-blue"
           />
         </form>
         <Link
           href={buildHref({ sanctioned: sanctionedOnly ? "" : "1" })}
           className={cn(
-            "flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl border font-medium transition-all",
+            "flex items-center gap-1.5 text-xs px-3 py-2 rounded border font-medium transition-all",
             sanctionedOnly
               ? "bg-red-600 text-white border-red-600"
-              : "bg-white text-slate-500 border-slate-200 hover:border-red-300 hover:text-red-600",
+              : "bg-white text-asb-gray-500 border-asb-gray-200 hover:border-red-300 hover:text-red-600",
           )}
         >
           <ShieldAlert className="w-3.5 h-3.5" />
@@ -128,9 +128,9 @@ export default async function AdminVesselsPage({
       </div>
 
       {vessels.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl py-16 text-center">
-          <Ship className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-semibold">No vessels found</p>
+        <div className="bg-white border border-asb-gray-200 rounded py-16 text-center">
+          <Ship className="w-8 h-8 text-asb-gray-400 mx-auto mb-3" />
+          <p className="text-asb-gray-500 font-semibold">No vessels found</p>
         </div>
       ) : (
         <div className="grid grid-cols-3 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 gap-4">
@@ -138,17 +138,17 @@ export default async function AdminVesselsPage({
             <Link
               key={v.id}
               href={`/admin/vessels/${v.id}`}
-              className="group bg-white border border-slate-200 rounded-2xl p-5 hover:border-ocean-300 hover:shadow-md transition-all flex flex-col gap-4"
+              className="group bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
-                    <Ship className="w-4 h-4 text-slate-500" />
+                  <div className="w-9 h-9 rounded bg-asb-gray-50 border border-asb-gray-200 flex items-center justify-center shrink-0 mt-0.5">
+                    <Ship className="w-4 h-4 text-asb-gray-500" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                      <p className="text-sm font-bold text-slate-900 group-hover:text-ocean-700 transition-colors truncate">
+                      <p className="text-sm font-bold text-asb-navy group-hover:text-asb-blue transition-colors truncate">
                         {v.vessel_name}
                       </p>
                       {v.is_sanctioned && (
@@ -157,7 +157,7 @@ export default async function AdminVesselsPage({
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 truncate">
+                    <p className="text-xs text-asb-gray-400 truncate">
                       {v.imo_number ? `IMO ${v.imo_number}` : "No IMO"}
                       {v.vessel_type ? ` · ${v.vessel_type}` : ""}
                     </p>
@@ -198,7 +198,7 @@ export default async function AdminVesselsPage({
               {(v.is_geared || v.grain_certified || v.dg_certified) && (
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {v.is_geared && (
-                    <span className="text-[10px] font-bold text-ocean-700 bg-ocean-50 border border-ocean-200 rounded px-1.5 py-0.5">
+                    <span className="text-[10px] font-bold text-asb-blue bg-asb-blue-light border border-asb-blue rounded px-1.5 py-0.5">
                       Geared
                     </span>
                   )}
@@ -216,16 +216,16 @@ export default async function AdminVesselsPage({
               )}
 
               {/* Scope badge + arrow */}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-auto">
+              <div className="flex items-center justify-between pt-3 border-t border-asb-gray-100 mt-auto">
                 <span
                   className={cn(
                     "text-[10px] font-bold px-2 py-0.5 rounded-lg border",
-                    SCOPE_COLORS[v.scope] ?? "bg-slate-100 text-slate-500 border-slate-200",
+                    SCOPE_COLORS[v.scope] ?? "bg-asb-gray-100 text-asb-gray-500 border-asb-gray-200",
                   )}
                 >
                   {v.scope}
                 </span>
-                <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-ocean-500 group-hover:translate-x-0.5 transition-all" />
+                <ArrowRight className="w-4 h-4 text-asb-gray-400 group-hover:text-asb-blue group-hover:translate-x-0.5 transition-all" />
               </div>
             </Link>
           ))}
@@ -245,13 +245,13 @@ function DataPill({
   value: string;
 }) {
   return (
-    <div className="bg-slate-50 rounded-lg px-2.5 py-2 border border-slate-100">
-      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">
+    <div className="bg-asb-gray-50 rounded-lg px-2.5 py-2 border border-asb-gray-100">
+      <p className="text-[10px] text-asb-gray-400 font-semibold uppercase tracking-wide mb-0.5">
         {label}
       </p>
       <div className="flex items-center gap-1">
-        <Icon className="w-3 h-3 text-slate-400 shrink-0" />
-        <p className="text-xs font-bold text-slate-700 truncate">{value}</p>
+        <Icon className="w-3 h-3 text-asb-gray-400 shrink-0" />
+        <p className="text-xs font-bold text-asb-ink-soft truncate">{value}</p>
       </div>
     </div>
   );

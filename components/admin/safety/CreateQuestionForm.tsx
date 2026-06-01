@@ -18,9 +18,9 @@ const CARGO_TYPES = ["Dry Bulk", "Break Bulk"] as const;
 const IMSBC_CATS = ["Cat_A", "Cat_B", "Cat_C", "DG", "Non_DG"] as const;
 
 const inputCls =
-  "w-full h-9 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-ocean-500";
+  "w-full h-9 px-3 text-sm rounded border border-asb-gray-200 bg-white focus:outline-none  focus:border-asb-blue";
 const labelCls =
-  "block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1";
+  "block text-xs font-bold text-asb-gray-500 uppercase tracking-wider mb-1";
 
 export function CreateQuestionForm() {
   const router = useRouter();
@@ -100,7 +100,7 @@ export function CreateQuestionForm() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-5 py-3 text-sm font-semibold text-ocean-600 bg-ocean-50 hover:bg-ocean-100 border-2 border-dashed border-ocean-200 rounded-2xl transition-colors w-full"
+        className="flex items-center gap-2 px-5 py-3 text-sm font-semibold text-asb-blue bg-asb-blue-light hover:bg-asb-blue-light border-2 border-dashed border-asb-blue rounded transition-colors w-full"
       >
         <Plus className="w-4 h-4" /> Add new safety question
       </button>
@@ -108,8 +108,8 @@ export function CreateQuestionForm() {
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5">
-      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+    <div className="bg-white border border-asb-gray-200 rounded p-6 space-y-5">
+      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded px-3 py-2.5">
         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
         <p className="text-xs text-amber-700">
           <strong>question_key is permanent.</strong> Choose it carefully using
@@ -136,7 +136,7 @@ export function CreateQuestionForm() {
             placeholder="e.g. requires_geared"
             className={cn(inputCls, "font-mono")}
           />
-          <p className="text-[10px] text-slate-400 mt-1">
+          <p className="text-[10px] text-asb-gray-400 mt-1">
             snake_case · permanent · machine reference
           </p>
         </div>
@@ -200,17 +200,17 @@ export function CreateQuestionForm() {
                 type="button"
                 onClick={() => toggleArr("applies_cargo", t)}
                 className={cn(
-                  "flex-1 py-1.5 text-xs font-semibold rounded-xl border-2 transition-all",
+                  "flex-1 py-1.5 text-xs font-semibold rounded border-2 transition-all",
                   form.applies_cargo.includes(t)
-                    ? "border-ocean-500 bg-ocean-50 text-ocean-700"
-                    : "border-slate-200 text-slate-500",
+                    ? "border-asb-blue bg-asb-blue-light text-asb-blue"
+                    : "border-asb-gray-200 text-asb-gray-500",
                 )}
               >
                 {t}
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-slate-400 mt-1">
+          <p className="text-[10px] text-asb-gray-400 mt-1">
             None selected = applies to both
           </p>
         </div>
@@ -226,8 +226,8 @@ export function CreateQuestionForm() {
                 className={cn(
                   "py-1 px-2 text-[11px] font-bold rounded-lg border-2 transition-all",
                   form.applies_cats.includes(c)
-                    ? "border-ocean-500 bg-ocean-50 text-ocean-700"
-                    : "border-slate-200 text-slate-500",
+                    ? "border-asb-blue bg-asb-blue-light text-asb-blue"
+                    : "border-asb-gray-200 text-asb-gray-500",
                 )}
               >
                 {c}
@@ -268,9 +268,9 @@ export function CreateQuestionForm() {
               onChange={(e) =>
                 setForm((f) => ({ ...f, is_required: e.target.checked }))
               }
-              className="rounded border-slate-300"
+              className="rounded border-asb-gray-200"
             />
-            <span className="text-sm font-medium text-slate-700">Required</span>
+            <span className="text-sm font-medium text-asb-ink-soft">Required</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -282,9 +282,9 @@ export function CreateQuestionForm() {
                   is_matchmaking_field: e.target.checked,
                 }))
               }
-              className="rounded border-slate-300"
+              className="rounded border-asb-gray-200"
             />
-            <span className="text-sm font-medium text-slate-700">
+            <span className="text-sm font-medium text-asb-ink-soft">
               Matchmaking field
             </span>
           </label>
@@ -301,7 +301,7 @@ export function CreateQuestionForm() {
               placeholder="e.g. requires_geared"
               className={cn(inputCls, "font-mono")}
             />
-            <p className="text-[10px] text-slate-400 mt-1">
+            <p className="text-[10px] text-asb-gray-400 mt-1">
               Column on cargo_listings that receives this answer
             </p>
           </div>
@@ -322,17 +322,17 @@ export function CreateQuestionForm() {
         </div>
       </div>
 
-      <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+      <div className="flex justify-end gap-3 pt-2 border-t border-asb-gray-100">
         <button
           onClick={() => setOpen(false)}
-          className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+          className="px-4 py-2 text-sm font-semibold text-asb-gray-700 hover:bg-asb-gray-100 rounded transition-colors"
         >
           Cancel
         </button>
         <button
           onClick={handleSubmit}
           disabled={isPending}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-ocean-600 hover:bg-ocean-700 text-white rounded-xl transition-colors disabled:opacity-60"
+          className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-asb-blue hover:bg-asb-navy text-white rounded transition-colors disabled:opacity-60"
         >
           {isPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />

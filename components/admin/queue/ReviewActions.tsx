@@ -106,10 +106,10 @@ export function ReviewActions({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100">
-        <h2 className="text-sm font-bold text-slate-900">Review decision</h2>
-        <p className="text-xs text-slate-400 mt-0.5">
+    <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+      <div className="px-6 py-4 border-b border-asb-gray-100">
+        <h2 className="text-sm font-bold text-asb-navy">Review decision</h2>
+        <p className="text-xs text-asb-gray-400 mt-0.5">
           Each action triggers cascading effects on the listing and the
           submitter&apos;s trust record.
         </p>
@@ -119,7 +119,7 @@ export function ReviewActions({
         <button
           onClick={handleApprove}
           disabled={isPending}
-          className="w-full flex items-center gap-3 px-4 py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded font-semibold text-sm transition-colors"
         >
           {isPending ? (
             <Loader2 className="w-4 h-4 animate-spin shrink-0" />
@@ -134,7 +134,7 @@ export function ReviewActions({
           </div>
         </button>
 
-        <div className="rounded-xl border border-amber-200 overflow-hidden">
+        <div className="rounded border border-amber-200 overflow-hidden">
           <button
             onClick={() => toggleForm("amend")}
             disabled={isPending}
@@ -165,12 +165,12 @@ export function ReviewActions({
                 onChange={(e) => setAmendDetail(e.target.value)}
                 rows={3}
                 placeholder="Describe what was corrected (e.g. 'Corrected load port zone from E.MED to B.SEA')…"
-                className="w-full text-sm px-3 py-2.5 rounded-xl border border-amber-200 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 placeholder:text-slate-400"
+                className="w-full text-sm px-3 py-2.5 rounded border border-amber-200 bg-white resize-none focus:outline-none  focus:ring-amber-400 focus:border-amber-400 placeholder:text-asb-gray-400"
               />
               <button
                 onClick={handleAmend}
                 disabled={isPending || !amendDetail.trim()}
-                className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-colors"
+                className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-bold rounded transition-colors"
               >
                 {isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -182,7 +182,7 @@ export function ReviewActions({
           )}
         </div>
 
-        <div className="rounded-xl border border-red-200 overflow-hidden">
+        <div className="rounded border border-red-200 overflow-hidden">
           <button
             onClick={() => toggleForm("reject")}
             disabled={isPending}
@@ -213,12 +213,12 @@ export function ReviewActions({
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
                 placeholder="Reason for rejection (shown to submitter)…"
-                className="w-full text-sm px-3 py-2.5 rounded-xl border border-red-200 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400 placeholder:text-slate-400"
+                className="w-full text-sm px-3 py-2.5 rounded border border-red-200 bg-white resize-none focus:outline-none  focus:ring-red-400 focus:border-red-400 placeholder:text-asb-gray-400"
               />
               <button
                 onClick={handleReject}
                 disabled={isPending || !reason.trim()}
-                className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-colors"
+                className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-bold rounded transition-colors"
               >
                 {isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -230,7 +230,7 @@ export function ReviewActions({
           )}
         </div>
 
-        <div className="rounded-xl border border-orange-200 overflow-hidden">
+        <div className="rounded border border-orange-200 overflow-hidden">
           <button
             onClick={() => toggleForm("flag")}
             disabled={isPending}
@@ -261,12 +261,12 @@ export function ReviewActions({
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
                 placeholder="Reason for flagging (internal admin note)…"
-                className="w-full text-sm px-3 py-2.5 rounded-xl border border-orange-200 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 placeholder:text-slate-400"
+                className="w-full text-sm px-3 py-2.5 rounded border border-orange-200 bg-white resize-none focus:outline-none  focus:ring-orange-400 focus:border-orange-400 placeholder:text-asb-gray-400"
               />
               <button
                 onClick={handleFlag}
                 disabled={isPending || !reason.trim()}
-                className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-colors"
+                className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-bold rounded transition-colors"
               >
                 {isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin mx-auto" />

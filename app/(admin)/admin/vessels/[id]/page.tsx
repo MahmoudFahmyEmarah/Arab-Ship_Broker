@@ -80,14 +80,14 @@ export default async function AdminVesselDetailPage({
     <div className="space-y-6 max-w-6xl">
       <Link
         href="/admin/vessels"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-asb-gray-500 hover:text-asb-ink transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
         Vessel intelligence
       </Link>
 
       {v.is_sanctioned && (
-        <div className="flex items-center gap-3 bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3 bg-red-50 border border-red-300 rounded px-4 py-3">
           <ShieldAlert className="w-5 h-5 text-red-600 shrink-0" />
           <p className="text-sm font-bold text-red-800">
             SANCTIONED — This vessel is hidden from all broker-facing views and
@@ -103,7 +103,7 @@ export default async function AdminVesselDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+          <div className="bg-white border border-asb-gray-200 rounded p-6">
             <div className="flex items-center gap-2 flex-wrap mb-5">
               <RiskLevelBadge level={v.risk_level} />
               <AdminBadge variant="neutral" label={v.scope} />
@@ -146,10 +146,10 @@ export default async function AdminVesselDetailPage({
                 ["P&I Club", v.pi_club ?? "—"],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                  <p className="text-[10px] font-bold text-asb-gray-400 uppercase tracking-wider mb-0.5">
                     {label}
                   </p>
-                  <p className="text-sm font-semibold text-slate-800">
+                  <p className="text-sm font-semibold text-asb-ink">
                     {value}
                   </p>
                 </div>
@@ -159,8 +159,8 @@ export default async function AdminVesselDetailPage({
 
           {/* Ownership */}
           {(v.owner_company || v.manager_company) && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            <div className="bg-white border border-asb-gray-200 rounded p-5">
+              <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
                 Ownership
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -181,7 +181,7 @@ export default async function AdminVesselDetailPage({
           )}
 
           {v.risk_notes && (
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+            <div className="bg-amber-50 border border-amber-200 rounded p-5">
               <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">
                 Risk notes
               </p>
@@ -192,11 +192,11 @@ export default async function AdminVesselDetailPage({
           )}
 
           {v.notes && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+            <div className="bg-white border border-asb-gray-200 rounded p-5">
+              <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-1">
                 Admin notes
               </p>
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm text-asb-gray-700 leading-relaxed whitespace-pre-wrap">
                 {v.notes}
               </p>
             </div>
@@ -204,9 +204,9 @@ export default async function AdminVesselDetailPage({
 
           {/* Claims */}
           {claimRows.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-100">
-                <p className="text-sm font-bold text-slate-700">
+            <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-asb-gray-100">
+                <p className="text-sm font-bold text-asb-ink-soft">
                   Registered by
                 </p>
               </div>
@@ -217,16 +217,16 @@ export default async function AdminVesselDetailPage({
                     className="flex items-center justify-between px-5 py-3"
                   >
                     <div>
-                      <p className="text-xs font-semibold text-slate-700 font-mono">
+                      <p className="text-xs font-semibold text-asb-ink-soft font-mono">
                         {c.user_id}
                       </p>
-                      <p className="text-[11px] text-slate-400 capitalize">
+                      <p className="text-[11px] text-asb-gray-400 capitalize">
                         {c.role} · {fmt(c.created_at)}
                       </p>
                     </div>
                     <Link
                       href={`/admin/users?q=${c.user_id}`}
-                      className="text-xs font-semibold text-ocean-600 hover:text-ocean-700 flex items-center gap-1"
+                      className="text-xs font-semibold text-asb-blue hover:text-asb-blue flex items-center gap-1"
                     >
                       View user <ExternalLink className="w-3 h-3" />
                     </Link>
@@ -236,20 +236,20 @@ export default async function AdminVesselDetailPage({
             </div>
           )}
 
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+          <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-asb-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Anchor className="w-4 h-4 text-slate-400" />
-                <p className="text-sm font-bold text-slate-700">
+                <Anchor className="w-4 h-4 text-asb-gray-400" />
+                <p className="text-sm font-bold text-asb-ink-soft">
                   Availability postings
                 </p>
               </div>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-asb-gray-400">
                 {availabilityRows.length}
               </span>
             </div>
             {availabilityRows.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-slate-400">
+              <p className="px-5 py-8 text-center text-sm text-asb-gray-400">
                 No availability posted
               </p>
             ) : (
@@ -257,7 +257,7 @@ export default async function AdminVesselDetailPage({
                 {availabilityRows.map((a) => (
                   <div
                     key={a.id}
-                    className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors group"
+                    className="flex items-center justify-between px-5 py-3 hover:bg-asb-gray-50 transition-colors group"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5 flex-wrap">
@@ -267,16 +267,16 @@ export default async function AdminVesselDetailPage({
                         <VesselStatusBadge status={a.status ?? "open"} />
                         <Link
                           href={`/admin/vessel-availability/${a.id}`}
-                          className="text-[11px] font-mono text-slate-400 hover:text-ocean-700"
+                          className="text-[11px] font-mono text-asb-gray-400 hover:text-asb-blue"
                         >
                           {a.ref ?? "—"}
                         </Link>
                       </div>
-                      <p className="text-xs text-slate-600">
+                      <p className="text-xs text-asb-gray-700">
                         {a.open_port_name && a.open_port_locode ? (
                           <Link
                             href={`/dashboard/ports/${a.open_port_locode}`}
-                            className="font-semibold text-slate-700 hover:text-ocean-700 hover:underline"
+                            className="font-semibold text-asb-ink-soft hover:text-asb-blue hover:underline"
                           >
                             {a.open_port_name}
                           </Link>
@@ -289,7 +289,7 @@ export default async function AdminVesselDetailPage({
                     </div>
                     <Link
                       href={`/admin/vessel-availability/${a.id}`}
-                      className="text-slate-300 group-hover:text-ocean-400 shrink-0 ml-3 transition-colors"
+                      className="text-asb-gray-400 group-hover:text-asb-blue shrink-0 ml-3 transition-colors"
                       aria-label="Open availability"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -312,10 +312,10 @@ export default async function AdminVesselDetailPage({
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+      <p className="text-[10px] font-bold text-asb-gray-400 uppercase tracking-wider mb-0.5">
         {label}
       </p>
-      <p className="text-sm font-medium text-slate-700">{value}</p>
+      <p className="text-sm font-medium text-asb-ink-soft">{value}</p>
     </div>
   );
 }

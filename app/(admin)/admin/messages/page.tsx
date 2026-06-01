@@ -57,7 +57,7 @@ export default async function AdminMessagesPage({
       </AdminPageHeader>
 
       {/* Filter tabs */}
-      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit">
+      <div className="flex items-center gap-1 bg-white border border-asb-gray-200 rounded p-1 w-fit">
         {FILTER_TABS.map((tab) => (
           <Link
             key={tab.value}
@@ -65,8 +65,8 @@ export default async function AdminMessagesPage({
             className={cn(
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
               filter === tab.value
-                ? "bg-ocean-600 text-white shadow-sm"
-                : "text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+                ? "bg-asb-blue text-white shadow-sm"
+                : "text-asb-gray-500 hover:bg-asb-gray-50 hover:text-asb-ink",
             )}
           >
             {tab.label}
@@ -75,13 +75,13 @@ export default async function AdminMessagesPage({
       </div>
 
       {messages.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl py-20 text-center">
-          <Mail className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-semibold">
+        <div className="bg-white border border-asb-gray-200 rounded py-20 text-center">
+          <Mail className="w-10 h-10 text-asb-gray-400 mx-auto mb-3" />
+          <p className="text-asb-gray-500 font-semibold">
             {filter === "unread" ? "No unread messages" : "No messages"}
           </p>
           {filter === "unread" && unreadCount === 0 && (
-            <p className="text-slate-400 text-sm mt-1">
+            <p className="text-asb-gray-400 text-sm mt-1">
               All messages have been read.
             </p>
           )}

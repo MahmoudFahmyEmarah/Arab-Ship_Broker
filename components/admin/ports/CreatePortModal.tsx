@@ -72,21 +72,21 @@ export function CreatePortModal() {
   };
 
   const inputCls =
-    "w-full h-9 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-ocean-400";
+    "w-full h-9 px-3 text-sm rounded border border-asb-gray-200 bg-white focus:outline-none  focus:border-asb-blue focus:border-asb-blue";
   const labelCls =
-    "block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5";
+    "block text-xs font-bold text-asb-gray-500 uppercase tracking-wider mb-1.5";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-asb-navy-deep/50 backdrop-blur-sm">
+      <div className="bg-white rounded shadow-2xl w-full max-w-lg border border-asb-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-asb-gray-100">
           <div className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-ocean-600" />
-            <h2 className="text-base font-bold text-slate-900">Add new port</h2>
+            <MapPin className="w-5 h-5 text-asb-blue" />
+            <h2 className="text-base font-bold text-asb-navy">Add new port</h2>
           </div>
           <button
             onClick={close}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-1.5 text-asb-gray-400 hover:text-asb-ink hover:bg-asb-gray-100 rounded-lg transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -105,7 +105,7 @@ export function CreatePortModal() {
                 maxLength={10}
                 className={cn(inputCls, "font-mono")}
               />
-              <p className="text-[10px] text-slate-400 mt-1">
+              <p className="text-[10px] text-asb-gray-400 mt-1">
                 UN/LOCODE format: 2-letter country + 3-letter code
               </p>
             </div>
@@ -162,10 +162,10 @@ export function CreatePortModal() {
                   type="button"
                   onClick={() => set("port_type", t)}
                   className={cn(
-                    "flex-1 py-2 text-xs font-semibold rounded-xl border-2 transition-all",
+                    "flex-1 py-2 text-xs font-semibold rounded border-2 transition-all",
                     form.port_type === t
-                      ? "border-ocean-500 bg-ocean-50 text-ocean-700"
-                      : "border-slate-200 text-slate-500 hover:border-ocean-200",
+                      ? "border-asb-blue bg-asb-blue-light text-asb-blue"
+                      : "border-asb-gray-200 text-asb-gray-500 hover:border-asb-blue",
                   )}
                 >
                   {t}
@@ -184,23 +184,23 @@ export function CreatePortModal() {
             />
           </div>
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-asb-gray-400">
             Ports created here are immediately verified and available in port
             autocomplete.
           </p>
         </div>
 
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-asb-gray-100">
           <button
             onClick={close}
-            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            className="px-4 py-2 text-sm font-semibold text-asb-gray-700 hover:bg-asb-gray-100 rounded transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={isPending}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-ocean-600 hover:bg-ocean-700 text-white rounded-xl transition-colors disabled:opacity-60"
+            className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-asb-blue hover:bg-asb-navy text-white rounded transition-colors disabled:opacity-60"
           >
             {isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />

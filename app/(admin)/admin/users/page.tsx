@@ -112,7 +112,7 @@ export default async function AdminUsersPage({
         subtitle={`${users.length} user${users.length !== 1 ? "s" : ""} shown`}
       />
 
-      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit flex-wrap">
+      <div className="flex items-center gap-1 bg-white border border-asb-gray-200 rounded p-1 w-fit flex-wrap">
         {TIER_TABS.map((tab) => {
           const active = tierFilter === tab.value;
           const count = tab.value !== "ALL" ? countMap[tab.value] : undefined;
@@ -124,8 +124,8 @@ export default async function AdminUsersPage({
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
                 active
-                  ? "bg-ocean-600 text-white shadow-sm"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+                  ? "bg-asb-blue text-white shadow-sm"
+                  : "text-asb-gray-500 hover:bg-asb-gray-50 hover:text-asb-ink",
               )}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -136,7 +136,7 @@ export default async function AdminUsersPage({
                     "text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none",
                     active
                       ? "bg-white/20 text-white"
-                      : "bg-slate-100 text-slate-600",
+                      : "bg-asb-gray-100 text-asb-gray-700",
                   )}
                 >
                   {count}
@@ -156,22 +156,22 @@ export default async function AdminUsersPage({
           <input type="hidden" name="tier" value={tierFilter} />
           <input type="hidden" name="sort" value={sortCol} />
           {showInactive && <input type="hidden" name="inactive" value="1" />}
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-asb-gray-400" />
           <input
             name="q"
             defaultValue={query}
             placeholder="Search name or email…"
-            className="w-full pl-9 pr-4 h-9 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-ocean-400"
+            className="w-full pl-9 pr-4 h-9 text-sm rounded border border-asb-gray-200 bg-white focus:outline-none  focus:border-asb-blue focus:border-asb-blue"
           />
         </form>
 
         <Link
           href={buildHref({ inactive: showInactive ? "" : "1" })}
           className={cn(
-            "text-xs px-3 py-2 rounded-xl border font-medium transition-all",
+            "text-xs px-3 py-2 rounded border font-medium transition-all",
             showInactive
-              ? "bg-slate-900 text-white border-slate-900"
-              : "bg-white text-slate-500 border-slate-200 hover:border-slate-300",
+              ? "bg-asb-navy-deep text-white border-asb-navy-deep"
+              : "bg-white text-asb-gray-500 border-asb-gray-200 hover:border-asb-gray-200",
           )}
         >
           {showInactive ? "Hiding active" : "Show inactive"}
@@ -179,10 +179,10 @@ export default async function AdminUsersPage({
       </div>
 
       {users.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl py-16 text-center">
-          <Users className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-semibold">No users found</p>
-          <p className="text-slate-400 text-sm mt-1">
+        <div className="bg-white border border-asb-gray-200 rounded py-16 text-center">
+          <Users className="w-8 h-8 text-asb-gray-400 mx-auto mb-3" />
+          <p className="text-asb-gray-500 font-semibold">No users found</p>
+          <p className="text-asb-gray-400 text-sm mt-1">
             {query ? "Try a different search term" : "Adjust the filters"}
           </p>
         </div>
@@ -192,17 +192,17 @@ export default async function AdminUsersPage({
             <Link
               key={user.id}
               href={`/admin/users/${user.id}`}
-              className="group bg-white border border-slate-200 rounded-2xl p-5 hover:border-ocean-300 hover:shadow-md transition-all flex flex-col gap-4"
+              className="group bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
-                    <Users className="w-4 h-4 text-slate-500" />
+                  <div className="w-9 h-9 rounded bg-asb-gray-50 border border-asb-gray-200 flex items-center justify-center shrink-0 mt-0.5">
+                    <Users className="w-4 h-4 text-asb-gray-500" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="text-sm font-bold text-slate-900 group-hover:text-ocean-700 transition-colors truncate">
+                      <p className="text-sm font-bold text-asb-navy group-hover:text-asb-blue transition-colors truncate">
                         {user.full_name || user.name || "—"}
                       </p>
                       {!user.is_active && (
@@ -211,7 +211,7 @@ export default async function AdminUsersPage({
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 truncate mt-0.5 capitalize">
+                    <p className="text-xs text-asb-gray-400 truncate mt-0.5 capitalize">
                       {user.role.replace("_", " ")}
                     </p>
                   </div>
@@ -220,9 +220,9 @@ export default async function AdminUsersPage({
               </div>
 
               {/* Contact */}
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
-                <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="truncate text-slate-600">{user.email}</span>
+              <div className="flex items-center gap-1.5 text-xs text-asb-gray-700 bg-asb-gray-50 rounded px-3 py-2 border border-asb-gray-100">
+                <Mail className="w-3.5 h-3.5 text-asb-gray-400 shrink-0" />
+                <span className="truncate text-asb-gray-700">{user.email}</span>
               </div>
 
               {/* Pills */}
@@ -253,15 +253,15 @@ export default async function AdminUsersPage({
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end pt-3 border-t border-slate-100 mt-auto">
-                <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-ocean-500 group-hover:translate-x-0.5 transition-all" />
+              <div className="flex items-center justify-end pt-3 border-t border-asb-gray-100 mt-auto">
+                <ArrowRight className="w-4 h-4 text-asb-gray-400 group-hover:text-asb-blue group-hover:translate-x-0.5 transition-all" />
               </div>
             </Link>
           ))}
         </div>
       )}
 
-      <p className="text-xs text-slate-400 text-right">
+      <p className="text-xs text-asb-gray-400 text-right">
         {users.length} user{users.length !== 1 ? "s" : ""} ·{" "}
         {tierFilter !== "ALL" ? tierFilter : "all tiers"} ·{" "}
         {showInactive ? "including inactive" : "active only"}
@@ -282,21 +282,21 @@ function DataPill({
   highlight?: boolean;
 }) {
   return (
-    <div className="bg-slate-50 rounded-lg px-2.5 py-2 border border-slate-100">
-      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">
+    <div className="bg-asb-gray-50 rounded-lg px-2.5 py-2 border border-asb-gray-100">
+      <p className="text-[10px] text-asb-gray-400 font-semibold uppercase tracking-wide mb-0.5">
         {label}
       </p>
       <div className="flex items-center gap-1">
         <Icon
           className={cn(
             "w-3 h-3 shrink-0",
-            highlight ? "text-red-400" : "text-slate-400",
+            highlight ? "text-red-400" : "text-asb-gray-400",
           )}
         />
         <p
           className={cn(
             "text-xs font-bold truncate",
-            highlight ? "text-red-600" : "text-slate-700",
+            highlight ? "text-red-600" : "text-asb-ink-soft",
           )}
         >
           {value}

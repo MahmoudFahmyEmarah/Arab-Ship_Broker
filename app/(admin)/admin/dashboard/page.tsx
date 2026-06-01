@@ -81,7 +81,7 @@ export default async function AdminDashboardPage() {
       />
 
       {slaBreached && (
-        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl px-5 py-4">
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded px-5 py-4">
           <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-red-900">
@@ -101,7 +101,7 @@ export default async function AdminDashboardPage() {
       )}
 
       <div>
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+        <h2 className="text-xs font-bold text-asb-gray-400 uppercase tracking-widest mb-3">
           Platform health
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -149,7 +149,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div>
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+        <h2 className="text-xs font-bold text-asb-gray-400 uppercase tracking-widest mb-3">
           Trust system
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -191,7 +191,7 @@ export default async function AdminDashboardPage() {
         (stats.vessels_high_risk ?? 0) > 0 ||
         (stats.messages_unread ?? 0) > 0) && (
         <div>
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+          <h2 className="text-xs font-bold text-asb-gray-400 uppercase tracking-widest mb-3">
             Needs attention
           </h2>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
@@ -229,26 +229,26 @@ export default async function AdminDashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Activity chart */}
-        <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="lg:col-span-3 bg-white rounded border border-asb-gray-200 p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">
+              <h2 className="text-sm font-bold text-asb-navy">
                 Platform activity
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">Last 30 days</p>
+              <p className="text-xs text-asb-gray-400 mt-0.5">Last 30 days</p>
             </div>
           </div>
           <ActivityChart data={activity} />
         </div>
 
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 flex flex-col">
+        <div className="lg:col-span-2 bg-white rounded border border-asb-gray-200 p-6 flex flex-col">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-slate-900">
+            <h2 className="text-sm font-bold text-asb-navy">
               Oldest pending items
             </h2>
             <Link
               href="/admin/queue"
-              className="text-xs font-semibold text-ocean-600 hover:text-ocean-700 flex items-center gap-1"
+              className="text-xs font-semibold text-asb-blue hover:text-asb-blue flex items-center gap-1"
             >
               View all <ArrowRight className="w-3.5 h-3.5" />
             </Link>
@@ -258,10 +258,10 @@ export default async function AdminDashboardPage() {
             <div className="flex-1 flex items-center justify-center text-center py-8">
               <div>
                 <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                <p className="text-sm font-medium text-slate-600">
+                <p className="text-sm font-medium text-asb-gray-700">
                   Queue is clear
                 </p>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-asb-gray-400 mt-1">
                   All submissions reviewed
                 </p>
               </div>
@@ -272,37 +272,37 @@ export default async function AdminDashboardPage() {
                 <Link
                   key={item.id}
                   href={`/admin/queue/${item.id}`}
-                  className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group border border-transparent hover:border-slate-200"
+                  className="flex items-start gap-3 p-3 rounded hover:bg-asb-gray-50 transition-colors group border border-transparent hover:border-asb-gray-200"
                 >
                   <div
                     className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
                       item.listing_type === "cargo"
-                        ? "bg-ocean-50"
+                        ? "bg-asb-blue-light"
                         : "bg-foam-50",
                     )}
                   >
                     {item.listing_type === "cargo" ? (
-                      <Package className="w-4 h-4 text-ocean-600" />
+                      <Package className="w-4 h-4 text-asb-blue" />
                     ) : (
                       <Ship className="w-4 h-4 text-foam-600" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-slate-900 truncate">
+                    <p className="text-xs font-semibold text-asb-navy truncate">
                       {item.listing_type === "cargo"
                         ? `${item.commodity_name ?? "Cargo"} · ${item.qty_max_mt?.toLocaleString() ?? "?"} MT`
                         : `${item.vessel_name ?? "Vessel"} · ${item.dwt_grain?.toLocaleString() ?? "?"} DWT`}
                     </p>
-                    <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                    <p className="text-[11px] text-asb-gray-400 mt-0.5 truncate">
                       {item.submitter_name ?? item.submitter_email ?? "Unknown"}{" "}
                       · {item.review_reason ?? "—"}
                     </p>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[11px] text-asb-gray-400">
                       {formatDate(item.created_at)}
                     </p>
                   </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-ocean-400 shrink-0 mt-1 transition-colors" />
+                  <ArrowRight className="w-3.5 h-3.5 text-asb-gray-400 group-hover:text-asb-blue shrink-0 mt-1 transition-colors" />
                 </Link>
               ))}
             </div>
@@ -312,7 +312,7 @@ export default async function AdminDashboardPage() {
 
       {/* ── Register summary row ──────────────────────────────── */}
       <div>
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+        <h2 className="text-xs font-bold text-asb-gray-400 uppercase tracking-widest mb-3">
           Register
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

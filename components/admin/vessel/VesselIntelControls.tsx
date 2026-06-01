@@ -27,22 +27,22 @@ interface VesselIntelControlsProps {
 const RISK_LEVELS: { value: RiskLevel; cls: string; activeCls: string }[] = [
   {
     value: "CLEAR",
-    cls: "border-slate-200 text-slate-600 hover:border-green-400",
+    cls: "border-asb-gray-200 text-asb-gray-700 hover:border-green-400",
     activeCls: "bg-green-600 text-white border-green-600",
   },
   {
     value: "LOW",
-    cls: "border-slate-200 text-slate-600 hover:border-blue-400",
+    cls: "border-asb-gray-200 text-asb-gray-700 hover:border-blue-400",
     activeCls: "bg-blue-600 text-white border-blue-600",
   },
   {
     value: "MEDIUM",
-    cls: "border-slate-200 text-slate-600 hover:border-amber-400",
+    cls: "border-asb-gray-200 text-asb-gray-700 hover:border-amber-400",
     activeCls: "bg-amber-500 text-white border-amber-500",
   },
   {
     value: "HIGH",
-    cls: "border-slate-200 text-slate-600 hover:border-red-400",
+    cls: "border-asb-gray-200 text-asb-gray-700 hover:border-red-400",
     activeCls: "bg-red-600 text-white border-red-600",
   },
 ];
@@ -50,18 +50,18 @@ const RISK_LEVELS: { value: RiskLevel; cls: string; activeCls: string }[] = [
 const SCOPE_VALUES: { value: VesselScope; cls: string; activeCls: string }[] = [
   {
     value: "In Scope",
-    cls: "border-slate-200 text-slate-600 hover:border-green-400",
+    cls: "border-asb-gray-200 text-asb-gray-700 hover:border-green-400",
     activeCls: "bg-green-600 text-white border-green-600",
   },
   {
     value: "Marginal",
-    cls: "border-slate-200 text-slate-600 hover:border-amber-400",
+    cls: "border-asb-gray-200 text-asb-gray-700 hover:border-amber-400",
     activeCls: "bg-amber-500 text-white border-amber-500",
   },
   {
     value: "Out of Scope",
-    cls: "border-slate-200 text-slate-600 hover:border-slate-500",
-    activeCls: "bg-slate-700 text-white border-slate-700",
+    cls: "border-asb-gray-200 text-asb-gray-700 hover:border-asb-gray-400",
+    activeCls: "bg-asb-navy text-white border-asb-gray-700",
   },
 ];
 
@@ -116,22 +116,22 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
       <ControlCard title="Vessel Review">
         <div
           className={cn(
-            "rounded-xl p-4 border mb-3",
+            "rounded p-4 border mb-3",
             isInReview
               ? "bg-orange-50 border-orange-200"
-              : "bg-slate-50 border-slate-200",
+              : "bg-asb-gray-50 border-asb-gray-200",
           )}
         >
           <div className="flex items-center gap-2 mb-1">
             {isInReview ? (
               <ClipboardCheck className="w-4 h-4 text-orange-600" />
             ) : (
-              <ClipboardCheck className="w-4 h-4 text-slate-400" />
+              <ClipboardCheck className="w-4 h-4 text-asb-gray-400" />
             )}
             <p
               className={cn(
                 "text-sm font-bold",
-                isInReview ? "text-orange-800" : "text-slate-600",
+                isInReview ? "text-orange-800" : "text-asb-gray-700",
               )}
             >
               {isInReview ? "IN REVIEW" : "No active review"}
@@ -140,7 +140,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
           <p
             className={cn(
               "text-xs",
-              isInReview ? "text-orange-600" : "text-slate-400",
+              isInReview ? "text-orange-600" : "text-asb-gray-400",
             )}
           >
             {isInReview
@@ -154,7 +154,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
           )}
         </div>
 
-        <p className="text-xs text-slate-500 mb-1.5">
+        <p className="text-xs text-asb-gray-500 mb-1.5">
           Reason shown to vessel owner (required to activate)
         </p>
         <textarea
@@ -162,7 +162,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
           onChange={(e) => setReviewReason(e.target.value)}
           rows={3}
           placeholder="e.g. Vessel documentation requires verification before new positions can be posted…"
-          className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 resize-none focus:outline-none focus:ring-2 focus:ring-ocean-500 placeholder:text-slate-400"
+          className="w-full text-sm px-3 py-2 rounded border border-asb-gray-200 resize-none focus:outline-none  focus:border-asb-blue placeholder:text-asb-gray-400"
         />
 
         <div className="flex gap-2 mt-2">
@@ -170,7 +170,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
             <button
               disabled={isPending || !reviewReason.trim()}
               onClick={handleSetInReview}
-              className="flex-1 py-2.5 text-xs font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition-colors disabled:opacity-50"
+              className="flex-1 py-2.5 text-xs font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded transition-colors disabled:opacity-50"
             >
               {isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -183,7 +183,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
               <button
                 disabled={isPending}
                 onClick={handleSetInReview}
-                className="flex-1 py-2.5 text-xs font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition-colors disabled:opacity-50"
+                className="flex-1 py-2.5 text-xs font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded transition-colors disabled:opacity-50"
               >
                 {isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -194,7 +194,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
               <button
                 disabled={isPending}
                 onClick={handleClearReview}
-                className="flex-1 py-2.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                className="flex-1 py-2.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
               >
                 {isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -207,7 +207,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
             </>
           )}
         </div>
-        <p className="text-[10px] text-slate-400 mt-2">
+        <p className="text-[10px] text-asb-gray-400 mt-2">
           This flags the vessel record itself — independent of individual
           availability posting reviews.
         </p>
@@ -216,7 +216,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
       <ControlCard title="Sanctions status">
         <div
           className={cn(
-            "rounded-xl p-4 border mb-3",
+            "rounded p-4 border mb-3",
             vessel.is_sanctioned
               ? "bg-red-50 border-red-200"
               : "bg-green-50 border-green-200",
@@ -257,7 +257,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
                 "Vessel unsanctioned",
               )
             }
-            className="w-full py-2.5 text-sm font-semibold text-green-600 bg-green-50 hover:bg-green-100 border border-green-200 rounded-xl transition-colors disabled:opacity-50"
+            className="w-full py-2.5 text-sm font-semibold text-green-600 bg-green-50 hover:bg-green-100 border border-green-200 rounded transition-colors disabled:opacity-50"
           >
             {isPending ? (
               <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -274,7 +274,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
                 "Vessel sanctioned — hidden from all results",
               )
             }
-            className="w-full py-2.5 text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-colors disabled:opacity-50"
+            className="w-full py-2.5 text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors disabled:opacity-50"
           >
             {isPending ? (
               <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -283,7 +283,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
             )}
           </button>
         )}
-        <p className="text-[10px] text-slate-400 text-center mt-2">
+        <p className="text-[10px] text-asb-gray-400 text-center mt-2">
           For Iranian-flagged or Sudan-linked vessels.
         </p>
       </ControlCard>
@@ -304,7 +304,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
                   )
                 }
                 className={cn(
-                  "py-2.5 text-xs font-bold rounded-xl border transition-all disabled:opacity-60",
+                  "py-2.5 text-xs font-bold rounded border transition-all disabled:opacity-60",
                   active ? activeCls : cls,
                 )}
               >
@@ -318,7 +318,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
             );
           })}
         </div>
-        <p className="text-xs text-slate-500 mb-1.5">
+        <p className="text-xs text-asb-gray-500 mb-1.5">
           Risk notes (shown to admin only)
         </p>
         <textarea
@@ -329,7 +329,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
           }}
           rows={2}
           placeholder="Why this risk rating was assigned…"
-          className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 resize-none focus:outline-none focus:ring-2 focus:ring-ocean-500 placeholder:text-slate-400"
+          className="w-full text-sm px-3 py-2 rounded border border-asb-gray-200 resize-none focus:outline-none  focus:border-asb-blue placeholder:text-asb-gray-400"
         />
         {riskNotesDirty && (
           <button
@@ -348,12 +348,12 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
                 } else toast.error(r.error ?? "Action failed.");
               });
             }}
-            className="mt-1.5 w-full py-2 text-xs font-semibold text-ocean-600 bg-ocean-50 hover:bg-ocean-100 border border-ocean-200 rounded-xl transition-colors disabled:opacity-50"
+            className="mt-1.5 w-full py-2 text-xs font-semibold text-asb-blue bg-asb-blue-light hover:bg-asb-blue-light border border-asb-blue rounded transition-colors disabled:opacity-50"
           >
             Save risk notes
           </button>
         )}
-        <p className="text-[10px] text-slate-400 mt-2">
+        <p className="text-[10px] text-asb-gray-400 mt-2">
           HIGH risk → all availability postings go to review queue regardless of
           trust tier.
         </p>
@@ -375,7 +375,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
                   )
                 }
                 className={cn(
-                  "w-full py-2.5 text-xs font-bold rounded-xl border text-left px-4 transition-all disabled:opacity-60",
+                  "w-full py-2.5 text-xs font-bold rounded border text-left px-4 transition-all disabled:opacity-60",
                   active ? activeCls : cls,
                 )}
               >
@@ -389,7 +389,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
             );
           })}
         </div>
-        <p className="text-[10px] text-slate-400 mt-2">
+        <p className="text-[10px] text-asb-gray-400 mt-2">
           Platform focuses on vessels under 30K DWT (In Scope).
         </p>
       </ControlCard>
@@ -403,7 +403,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
           }}
           rows={3}
           placeholder="Admin notes about this vessel…"
-          className="w-full text-sm px-3 py-2.5 rounded-xl border border-slate-200 resize-none focus:outline-none focus:ring-2 focus:ring-ocean-500 placeholder:text-slate-400"
+          className="w-full text-sm px-3 py-2.5 rounded border border-asb-gray-200 resize-none focus:outline-none  focus:border-asb-blue placeholder:text-asb-gray-400"
         />
         {notesDirty && (
           <button
@@ -418,7 +418,7 @@ export function VesselIntelControls({ vessel }: VesselIntelControlsProps) {
                 } else toast.error(r.error ?? "Action failed.");
               });
             }}
-            className="mt-2 w-full py-2 text-xs font-semibold text-ocean-600 bg-ocean-50 hover:bg-ocean-100 border border-ocean-200 rounded-xl transition-colors disabled:opacity-50"
+            className="mt-2 w-full py-2 text-xs font-semibold text-asb-blue bg-asb-blue-light hover:bg-asb-blue-light border border-asb-blue rounded transition-colors disabled:opacity-50"
           >
             Save notes
           </button>
@@ -436,9 +436,9 @@ function ControlCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-100">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+    <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-asb-gray-100">
+        <h3 className="text-xs font-bold text-asb-gray-500 uppercase tracking-wider">
           {title}
         </h3>
       </div>

@@ -133,14 +133,14 @@ export default async function AdminVesselAvailabilityDetailPage({
     <div className="space-y-6 max-w-5xl">
       <Link
         href="/admin/vessel-availability"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-asb-gray-500 hover:text-asb-ink transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
         Vessel availability
       </Link>
 
       {vessel?.is_sanctioned && (
-        <div className="flex items-center gap-3 bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3 bg-red-50 border border-red-300 rounded px-4 py-3">
           <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
           <p className="text-sm font-bold text-red-800">
             SANCTIONED VESSEL — This posting should not be live.
@@ -220,7 +220,7 @@ export default async function AdminVesselAvailabilityDetailPage({
               <div className="mt-3 flex justify-end">
                 <Link
                   href={`/admin/vessels/${vessel.id}`}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-ocean-600 hover:text-ocean-700"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-asb-blue hover:text-asb-blue"
                 >
                   Open vessel record <ExternalLink className="w-3 h-3" />
                 </Link>
@@ -237,11 +237,11 @@ export default async function AdminVesselAvailabilityDetailPage({
                     <span>
                       <Link
                         href={`/dashboard/ports/${va.open_port_locode}`}
-                        className="hover:text-ocean-700 hover:underline"
+                        className="hover:text-asb-blue hover:underline"
                       >
                         {va.open_port_name}
                       </Link>
-                      <span className="text-slate-400">
+                      <span className="text-asb-gray-400">
                         {` (${va.open_port_locode})`}
                       </span>
                     </span>
@@ -311,7 +311,7 @@ export default async function AdminVesselAvailabilityDetailPage({
 
           {va.notes && (
             <InfoCard title="Notes" icon={Anchor}>
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm text-asb-gray-700 leading-relaxed whitespace-pre-wrap">
                 {va.notes}
               </p>
             </InfoCard>
@@ -324,27 +324,27 @@ export default async function AdminVesselAvailabilityDetailPage({
                   <Link
                     key={rq.id}
                     href={`/admin/queue/${rq.id}`}
-                    className="flex items-start justify-between gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200"
+                    className="flex items-start justify-between gap-3 p-2.5 rounded hover:bg-asb-gray-50 transition-colors border border-transparent hover:border-asb-gray-200"
                   >
                     <div>
                       <div className="flex items-center gap-2 mb-0.5">
                         <ReviewStatusBadge status={rq.status} />
                         {rq.action_taken && (
-                          <span className="text-[11px] text-slate-400 capitalize">
+                          <span className="text-[11px] text-asb-gray-400 capitalize">
                             {rq.action_taken}
                           </span>
                         )}
                       </div>
                       {rq.amendment_detail && (
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-asb-gray-500">
                           {rq.amendment_detail}
                         </p>
                       )}
-                      <p className="text-[11px] text-slate-300 mt-0.5">
+                      <p className="text-[11px] text-asb-gray-400 mt-0.5">
                         {fmt(rq.reviewed_at ?? rq.created_at)}
                       </p>
                     </div>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-300 shrink-0 mt-0.5" />
+                    <ExternalLink className="w-3.5 h-3.5 text-asb-gray-400 shrink-0 mt-0.5" />
                   </Link>
                 ))}
               </div>
@@ -354,22 +354,22 @@ export default async function AdminVesselAvailabilityDetailPage({
 
         <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           {owner && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            <div className="bg-white border border-asb-gray-200 rounded p-5">
+              <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
                 Owner
               </p>
               <div className="flex items-start gap-3">
-                <div className="w-9 h-9 bg-ocean-100 rounded-full flex items-center justify-center shrink-0">
-                  <User className="w-4 h-4 text-ocean-600" />
+                <div className="w-9 h-9 bg-asb-blue-light rounded-full flex items-center justify-center shrink-0">
+                  <User className="w-4 h-4 text-asb-blue" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">
+                  <p className="text-sm font-semibold text-asb-ink">
                     {owner.full_name || "—"}
                   </p>
-                  <p className="text-xs text-slate-400">{owner.email || "—"}</p>
+                  <p className="text-xs text-asb-gray-400">{owner.email || "—"}</p>
                   <Link
                     href={`/admin/users/${owner.id}`}
-                    className="text-xs font-semibold text-ocean-600 hover:text-ocean-700 mt-1 inline-flex items-center gap-1"
+                    className="text-xs font-semibold text-asb-blue hover:text-asb-blue mt-1 inline-flex items-center gap-1"
                   >
                     View user <ExternalLink className="w-3 h-3" />
                   </Link>
@@ -400,10 +400,10 @@ function InfoCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5">
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
-        <Icon className="w-4 h-4 text-slate-400" />
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+    <div className="bg-white border border-asb-gray-200 rounded p-5">
+      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-asb-gray-100">
+        <Icon className="w-4 h-4 text-asb-gray-400" />
+        <h3 className="text-xs font-bold text-asb-gray-500 uppercase tracking-wider">
           {title}
         </h3>
       </div>
@@ -417,10 +417,10 @@ function Grid2({ children }: { children: React.ReactNode }) {
 function Cell({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+      <p className="text-[10px] font-bold text-asb-gray-400 uppercase tracking-wider mb-0.5">
         {label}
       </p>
-      <p className="text-sm font-semibold text-slate-800">{value}</p>
+      <p className="text-sm font-semibold text-asb-ink">{value}</p>
     </div>
   );
 }

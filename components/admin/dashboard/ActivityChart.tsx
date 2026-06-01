@@ -29,7 +29,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
 
   if (!data.length) {
     return (
-      <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
+      <div className="flex items-center justify-center h-48 text-asb-gray-400 text-sm">
         No activity data yet.
       </div>
     );
@@ -53,7 +53,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
               className="w-2.5 h-2.5 rounded-sm shrink-0"
               style={{ backgroundColor: s.color }}
             />
-            <span className="text-xs text-slate-500">{s.label}</span>
+            <span className="text-xs text-asb-gray-500">{s.label}</span>
           </div>
         ))}
       </div>

@@ -49,12 +49,12 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
   return (
     <div
       className={cn(
-        "bg-white border rounded-2xl overflow-hidden transition-all",
-        msg.is_read ? "border-slate-200" : "border-ocean-300 shadow-sm",
+        "bg-white border rounded overflow-hidden transition-all",
+        msg.is_read ? "border-asb-gray-200" : "border-asb-blue shadow-sm",
       )}
     >
       <div
-        className="flex items-start gap-4 px-5 py-4 cursor-pointer hover:bg-slate-50 transition-colors"
+        className="flex items-start gap-4 px-5 py-4 cursor-pointer hover:bg-asb-gray-50 transition-colors"
         onClick={() => {
           setExpanded((e) => !e);
           if (!msg.is_read)
@@ -63,9 +63,9 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
       >
         <div className="mt-0.5 shrink-0">
           {msg.is_read ? (
-            <MailOpen className="w-5 h-5 text-slate-300" />
+            <MailOpen className="w-5 h-5 text-asb-gray-400" />
           ) : (
-            <Mail className="w-5 h-5 text-ocean-500" />
+            <Mail className="w-5 h-5 text-asb-blue" />
           )}
         </div>
 
@@ -75,15 +75,15 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
               className={cn(
                 "text-sm truncate",
                 msg.is_read
-                  ? "font-medium text-slate-700"
-                  : "font-bold text-slate-900",
+                  ? "font-medium text-asb-ink-soft"
+                  : "font-bold text-asb-navy",
               )}
             >
               {msg.name}
             </p>
-            <p className="text-xs text-slate-400">{msg.email}</p>
+            <p className="text-xs text-asb-gray-400">{msg.email}</p>
             {!msg.is_read && (
-              <span className="text-[10px] font-bold text-ocean-600 bg-ocean-50 border border-ocean-200 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] font-bold text-asb-blue bg-asb-blue-light border border-asb-blue px-1.5 py-0.5 rounded">
                 New
               </span>
             )}
@@ -91,18 +91,18 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
           <p
             className={cn(
               "text-sm truncate",
-              msg.is_read ? "text-slate-500" : "text-slate-700 font-medium",
+              msg.is_read ? "text-asb-gray-500" : "text-asb-ink-soft font-medium",
             )}
           >
             {msg.message.substring(0, 120)}
             {msg.message.length > 120 ? "…" : ""}
           </p>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-asb-gray-400 mt-1">
             {fmtDate(msg.created_at)}
           </p>
         </div>
 
-        <div className="shrink-0 text-slate-400">
+        <div className="shrink-0 text-asb-gray-400">
           {expanded ? (
             <ChevronUp className="w-4 h-4" />
           ) : (
@@ -112,11 +112,11 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
       </div>
 
       {expanded && (
-        <div className="px-5 pb-5 border-t border-slate-100">
-          <div className="flex items-center gap-4 py-3 text-xs text-slate-500 flex-wrap">
+        <div className="px-5 pb-5 border-t border-asb-gray-100">
+          <div className="flex items-center gap-4 py-3 text-xs text-asb-gray-500 flex-wrap">
             <a
               href={`mailto:${msg.email}`}
-              className="flex items-center gap-1.5 text-ocean-600 hover:text-ocean-700 font-semibold"
+              className="flex items-center gap-1.5 text-asb-blue hover:text-asb-blue font-semibold"
             >
               <Mail className="w-3.5 h-3.5" />
               {msg.email}
@@ -124,7 +124,7 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
             {msg.phone && (
               <a
                 href={`tel:${msg.phone}`}
-                className="flex items-center gap-1.5 text-ocean-600 hover:text-ocean-700 font-semibold"
+                className="flex items-center gap-1.5 text-asb-blue hover:text-asb-blue font-semibold"
               >
                 <Phone className="w-3.5 h-3.5" />
                 {msg.phone}
@@ -133,15 +133,15 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
             {msg.how_did_you_find_us && (
               <span>
                 Found us via:{" "}
-                <span className="font-medium text-slate-700">
+                <span className="font-medium text-asb-ink-soft">
                   {msg.how_did_you_find_us}
                 </span>
               </span>
             )}
           </div>
 
-          <div className="bg-slate-50 rounded-xl p-4 mb-4">
-            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+          <div className="bg-asb-gray-50 rounded p-4 mb-4">
+            <p className="text-sm text-asb-ink-soft leading-relaxed whitespace-pre-wrap">
               {msg.message}
             </p>
           </div>
@@ -149,7 +149,7 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
           <div className="flex items-center gap-3">
             <a
               href={`mailto:${msg.email}?subject=Re: Your Arab ShipBroker enquiry`}
-              className="flex items-center gap-2 text-sm font-semibold text-white bg-ocean-600 hover:bg-ocean-700 px-4 py-2 rounded-xl transition-colors"
+              className="flex items-center gap-2 text-sm font-semibold text-white bg-asb-blue hover:bg-asb-navy px-4 py-2 rounded transition-colors"
             >
               <Mail className="w-4 h-4" />
               Reply via email
@@ -161,7 +161,7 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
                 onClick={() =>
                   act(() => markMessageRead(msg.id, false), "Marked as unread")
                 }
-                className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 text-xs font-semibold text-asb-gray-500 hover:bg-asb-gray-100 border border-asb-gray-200 px-3 py-2 rounded transition-colors disabled:opacity-50"
               >
                 {isPending ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -176,7 +176,7 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
                 onClick={() =>
                   act(() => markMessageRead(msg.id, true), "Marked as read")
                 }
-                className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 text-xs font-semibold text-asb-gray-500 hover:bg-asb-gray-100 border border-asb-gray-200 px-3 py-2 rounded transition-colors disabled:opacity-50"
               >
                 {isPending ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -192,7 +192,7 @@ export function MessageRow({ message: msg }: { message: AdminMessageRow }) {
               onClick={() =>
                 act(() => deleteMessage(msg.id), "Message deleted")
               }
-              className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 border border-slate-200 hover:border-red-200 px-3 py-2 rounded-xl transition-colors disabled:opacity-50 ml-auto"
+              className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 border border-asb-gray-200 hover:border-red-200 px-3 py-2 rounded transition-colors disabled:opacity-50 ml-auto"
             >
               {isPending ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -228,7 +228,7 @@ export function MarkAllReadButton() {
     <button
       disabled={isPending}
       onClick={handleClick}
-      className="flex items-center gap-2 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
+      className="flex items-center gap-2 text-sm font-semibold text-asb-gray-700 bg-white hover:bg-asb-gray-50 border border-asb-gray-200 px-4 py-2 rounded transition-colors disabled:opacity-50"
     >
       {isPending ? (
         <Loader2 className="w-4 h-4 animate-spin" />

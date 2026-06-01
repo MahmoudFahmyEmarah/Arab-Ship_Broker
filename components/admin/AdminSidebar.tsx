@@ -101,14 +101,14 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
   };
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-white border-r border-slate-100">
-      <div className="h-15.5 px-4 flex items-center justify-between shrink-0 border-b border-slate-100">
+    <div className="flex flex-col h-full bg-white border-r border-asb-gray-100">
+      <div className="h-15.5 px-4 flex items-center justify-between shrink-0 border-b border-asb-gray-100">
         <Link
           href="/admin/dashboard"
           onClick={onClose}
-          className="flex items-center gap-3 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-400/40"
+          className="flex items-center gap-3 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-asb-blue/40"
         >
-          <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-ocean-100 bg-ocean-50 shrink-0 flex items-center justify-center">
+          <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-asb-gray-200 bg-asb-blue-light shrink-0 flex items-center justify-center">
             <Image
               src="/logo.png"
               alt="Arab ShipBroker"
@@ -117,7 +117,7 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
             />
           </div>
           <div className="leading-none">
-            <p className="text-[13px] font-bold text-slate-900 tracking-tight">
+            <p className="text-[13px] font-bold text-asb-navy tracking-tight">
               Arab ShipBroker
             </p>
             <p className="text-[9px] font-bold text-coral-600 uppercase tracking-[0.22em] mt-0.75">
@@ -129,7 +129,7 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
         {mobileOpen && (
           <button
             onClick={onClose}
-            className="hidden max-lg:inline-flex p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+            className="hidden max-lg:inline-flex p-1.5 text-asb-gray-400 hover:text-asb-ink rounded-lg transition-colors"
             aria-label="Close menu"
           >
             <X className="w-4 h-4" />
@@ -140,7 +140,7 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-4 sidebar-scroll space-y-5">
         {NAV_SECTIONS.map((section) => (
           <div key={section.label}>
-            <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-400/80 uppercase tracking-[0.14em]">
+            <p className="px-3 mb-1.5 text-[10px] font-bold text-asb-gray-400/80 uppercase tracking-[0.14em]">
               {section.label}
             </p>
             <div className="space-y-0.5">
@@ -153,16 +153,16 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
                     href={item.href}
                     onClick={onClose}
                     className={cn(
-                      "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150",
+                      "group flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all duration-150",
                       active
-                        ? "bg-ocean-50 text-ocean-700 font-semibold"
-                        : "text-slate-500 font-medium hover:bg-slate-50/80 hover:text-slate-800",
+                        ? "bg-asb-blue-light text-asb-blue font-semibold"
+                        : "text-asb-gray-500 font-medium hover:bg-asb-gray-50/80 hover:text-asb-ink",
                     )}
                   >
                     <span
                       className={cn(
                         "w-0.5 h-4 rounded-full shrink-0 transition-all duration-150",
-                        active ? "bg-ocean-500" : "bg-transparent",
+                        active ? "bg-asb-blue" : "bg-transparent",
                       )}
                       aria-hidden
                     />
@@ -171,8 +171,8 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
                       className={cn(
                         "w-4 h-4 shrink-0 transition-colors duration-150",
                         active
-                          ? "text-ocean-600"
-                          : "text-slate-400 group-hover:text-slate-600",
+                          ? "text-asb-blue"
+                          : "text-asb-gray-400 group-hover:text-asb-ink",
                       )}
                     />
 
@@ -185,7 +185,7 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
                     )}
 
                     {active && (
-                      <ChevronRight className="w-3.5 h-3.5 text-ocean-400/60 shrink-0" />
+                      <ChevronRight className="w-3.5 h-3.5 text-asb-blue/60 shrink-0" />
                     )}
                   </Link>
                 );
@@ -195,16 +195,16 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
         ))}
       </nav>
 
-      <div className="px-3 py-4 border-t border-slate-100 shrink-0 space-y-1.5">
-        <div className="flex items-center gap-2.5 px-3 py-2.5 bg-ocean-50 rounded-xl border border-ocean-100/80 mb-1">
-          <div className="w-7 h-7 bg-ocean-600 rounded-full flex items-center justify-center shrink-0 shadow-inner">
+      <div className="px-3 py-4 border-t border-asb-gray-100 shrink-0 space-y-1.5">
+        <div className="flex items-center gap-2.5 px-3 py-2.5 bg-asb-blue-light rounded border border-asb-gray-200/80 mb-1">
+          <div className="w-7 h-7 bg-asb-blue rounded-full flex items-center justify-center shrink-0 shadow-inner">
             <ShieldCheck className="w-3.5 h-3.5 text-white" />
           </div>
           <div className="flex-1 overflow-hidden leading-none">
-            <p className="text-xs font-bold text-ocean-900 truncate">
+            <p className="text-xs font-bold text-asb-navy truncate">
               Administrator
             </p>
-            <p className="text-[10px] text-ocean-500 mt-0.5 font-medium">
+            <p className="text-[10px] text-asb-blue mt-0.5 font-medium">
               Full platform access
             </p>
           </div>
@@ -212,7 +212,7 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
 
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all duration-150"
+          className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-asb-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all duration-150"
         >
           <LogOut className="w-4 h-4 shrink-0" />
           Sign out
@@ -225,7 +225,7 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
     <>
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm hidden max-lg:block transition-opacity duration-300",
+          "fixed inset-0 z-40 bg-asb-navy-deep/40 backdrop-blur-sm hidden max-lg:block transition-opacity duration-300",
           mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         )}
         onClick={onClose}

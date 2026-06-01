@@ -79,10 +79,10 @@ function DetailCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5">
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
-        <Icon className="w-4 h-4 text-slate-400" />
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+    <div className="bg-white border border-asb-gray-200 rounded p-5">
+      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-asb-gray-100">
+        <Icon className="w-4 h-4 text-asb-gray-400" />
+        <h3 className="text-xs font-bold text-asb-gray-500 uppercase tracking-wider">
           {title}
         </h3>
       </div>
@@ -110,13 +110,13 @@ function DetailCell({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
+      <p className="text-[11px] font-semibold text-asb-gray-400 uppercase tracking-wider mb-0.5">
         {label}
       </p>
       <p
         className={cn(
           "text-sm font-semibold",
-          highlight ? "text-red-600" : "text-slate-800",
+          highlight ? "text-red-600" : "text-asb-ink",
         )}
       >
         {value}
@@ -179,38 +179,38 @@ export default async function QueueItemPage({
     <div className="space-y-6 max-w-5xl py-2">
       <Link
         href="/admin/queue"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-asb-gray-500 hover:text-asb-ink transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to review queue
       </Link>
 
       <div
         className={cn(
-          "bg-white border rounded-2xl p-5 shadow-sm",
-          slaBreached ? "border-red-300" : "border-slate-200",
+          "bg-white border rounded p-5 shadow-sm",
+          slaBreached ? "border-red-300" : "border-asb-gray-200",
         )}
       >
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div
               className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                "w-10 h-10 rounded flex items-center justify-center shrink-0",
                 isCargo
-                  ? "bg-ocean-50 border border-ocean-100"
+                  ? "bg-asb-blue-light border border-asb-gray-200"
                   : "bg-foam-50 border border-foam-100",
               )}
             >
               {isCargo ? (
-                <Package className="w-5 h-5 text-ocean-600" />
+                <Package className="w-5 h-5 text-asb-blue" />
               ) : (
                 <Ship className="w-5 h-5 text-foam-600" />
               )}
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider">
                 {isCargo ? "Cargo listing" : "Vessel availability"} — Queue item
               </p>
-              <h1 className="text-lg font-bold text-slate-900 mt-0.5">
+              <h1 className="text-lg font-bold text-asb-navy mt-0.5">
                 {item.cargo_ref ?? item.vessel_name ?? item.listing_id}
               </h1>
             </div>
@@ -227,28 +227,28 @@ export default async function QueueItemPage({
             )}
           </div>
         </div>
-        <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-3 max-[768px]:grid-cols-1 gap-4 text-xs text-slate-500">
+        <div className="mt-4 pt-4 border-t border-asb-gray-100 grid grid-cols-3 max-[768px]:grid-cols-1 gap-4 text-xs text-asb-gray-500">
           <div>
-            <span className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
               Submitted
             </span>
-            <p className="font-semibold text-slate-700 mt-0.5">
+            <p className="font-semibold text-asb-ink-soft mt-0.5">
               {formatDate(item.created_at)} ({age} ago)
             </p>
           </div>
           <div>
-            <span className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
               Review reason
             </span>
-            <p className="font-semibold text-slate-700 mt-0.5">
+            <p className="font-semibold text-asb-ink-soft mt-0.5">
               {item.review_reason ?? "—"}
             </p>
           </div>
           <div>
-            <span className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
               Random sample
             </span>
-            <p className="font-semibold text-slate-700 mt-0.5">
+            <p className="font-semibold text-asb-ink-soft mt-0.5">
               {item.is_random_sample ? "Yes" : "No"}
             </p>
           </div>
@@ -268,11 +268,11 @@ export default async function QueueItemPage({
                         <span>
                           <Link
                             href={`/dashboard/ports/${s(cargoFull.load_port_locode)}`}
-                            className="hover:text-ocean-700 hover:underline"
+                            className="hover:text-asb-blue hover:underline"
                           >
                             {s(cargoFull.load_port_name)}
                           </Link>
-                          <span className="text-slate-400">{` (${s(cargoFull.load_port_locode)})`}</span>
+                          <span className="text-asb-gray-400">{` (${s(cargoFull.load_port_locode)})`}</span>
                         </span>
                       ) : (
                         `${s(cargoFull.load_port_name)} (${s(cargoFull.load_port_locode)})`
@@ -295,11 +295,11 @@ export default async function QueueItemPage({
                         <span>
                           <Link
                             href={`/dashboard/ports/${s(cargoFull.disch_port_locode)}`}
-                            className="hover:text-ocean-700 hover:underline"
+                            className="hover:text-asb-blue hover:underline"
                           >
                             {s(cargoFull.disch_port_name)}
                           </Link>
-                          <span className="text-slate-400">{` (${s(cargoFull.disch_port_locode)})`}</span>
+                          <span className="text-asb-gray-400">{` (${s(cargoFull.disch_port_locode)})`}</span>
                         </span>
                       ) : (
                         `${s(cargoFull.disch_port_name)} (${s(cargoFull.disch_port_locode)})`
@@ -486,12 +486,12 @@ export default async function QueueItemPage({
                     {safetyAnswers.map((a) => (
                       <div
                         key={a.question_key}
-                        className="flex justify-between items-center text-sm py-1 border-b border-slate-50 last:border-0"
+                        className="flex justify-between items-center text-sm py-1 border-b border-asb-gray-100 last:border-0"
                       >
-                        <span className="text-slate-500 font-mono text-xs">
+                        <span className="text-asb-gray-500 font-mono text-xs">
                           {a.question_key}
                         </span>
-                        <span className="font-semibold text-slate-800">
+                        <span className="font-semibold text-asb-ink">
                           {a.answer_value ?? "—"}
                         </span>
                       </div>
@@ -502,7 +502,7 @@ export default async function QueueItemPage({
 
               {Boolean(cargoFull.notes) && (
                 <DetailCard title="Broker notes" icon={Info}>
-                  <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  <p className="text-sm text-asb-gray-700 leading-relaxed whitespace-pre-wrap">
                     {s(cargoFull.notes)}
                   </p>
                 </DetailCard>
@@ -511,7 +511,7 @@ export default async function QueueItemPage({
               <div className="flex justify-end">
                 <Link
                   href={`/admin/cargo/${item.listing_id}`}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-ocean-600 hover:text-ocean-700"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-asb-blue hover:text-asb-blue"
                 >
                   Open full cargo record{" "}
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -574,7 +574,7 @@ export default async function QueueItemPage({
                       <div className="mt-3 flex justify-end">
                         <Link
                           href={`/admin/vessels/${s(v.id)}`}
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ocean-600 hover:text-ocean-700"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-asb-blue hover:text-asb-blue"
                         >
                           Open vessel record{" "}
                           <ExternalLink className="w-3.5 h-3.5" />
@@ -594,11 +594,11 @@ export default async function QueueItemPage({
                         <span>
                           <Link
                             href={`/dashboard/ports/${s(vesselFull.open_port_locode)}`}
-                            className="hover:text-ocean-700 hover:underline"
+                            className="hover:text-asb-blue hover:underline"
                           >
                             {s(vesselFull.open_port_name)}
                           </Link>
-                          <span className="text-slate-400">{` (${s(vesselFull.open_port_locode)})`}</span>
+                          <span className="text-asb-gray-400">{` (${s(vesselFull.open_port_locode)})`}</span>
                         </span>
                       ) : (
                         `${s(vesselFull.open_port_name)} (${s(vesselFull.open_port_locode)})`
@@ -662,7 +662,7 @@ export default async function QueueItemPage({
 
               {Boolean(vesselFull.notes) && (
                 <DetailCard title="Notes" icon={Info}>
-                  <p className="text-sm text-slate-600 leading-relaxed">
+                  <p className="text-sm text-asb-gray-700 leading-relaxed">
                     {s(vesselFull.notes)}
                   </p>
                 </DetailCard>
@@ -671,7 +671,7 @@ export default async function QueueItemPage({
               <div className="flex justify-end">
                 <Link
                   href={`/admin/vessel-availability/${item.listing_id}`}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-ocean-600 hover:text-ocean-700"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-asb-blue hover:text-asb-blue"
                 >
                   Open full availability record{" "}
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -682,65 +682,65 @@ export default async function QueueItemPage({
         </div>
 
         <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5">
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+          <div className="bg-white border border-asb-gray-200 rounded p-5">
+            <h2 className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
               Submitter
             </h2>
             <div className="flex items-start gap-3 mb-3">
-              <div className="w-9 h-9 bg-ocean-100 rounded-full flex items-center justify-center shrink-0">
-                <User className="w-4 h-4 text-ocean-600" />
+              <div className="w-9 h-9 bg-asb-blue-light rounded-full flex items-center justify-center shrink-0">
+                <User className="w-4 h-4 text-asb-blue" />
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-900">
+                <p className="text-sm font-bold text-asb-navy">
                   {item.submitter_name ?? "—"}
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-asb-gray-400">
                   {item.submitter_email ?? "—"}
                 </p>
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400">Trust tier</span>
+                <span className="text-asb-gray-400">Trust tier</span>
                 {item.submitter_trust_tier && (
                   <TrustTierBadge tier={item.submitter_trust_tier} />
                 )}
               </div>
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400">Clean posts</span>
-                <span className="font-semibold text-slate-700">
+                <span className="text-asb-gray-400">Clean posts</span>
+                <span className="font-semibold text-asb-ink-soft">
                   {item.submitter_clean_posts ?? 0}
                 </span>
               </div>
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400">Strike count</span>
+                <span className="text-asb-gray-400">Strike count</span>
                 <span
                   className={cn(
                     "font-semibold",
                     (item.submitter_strike_count ?? 0) > 0
                       ? "text-red-600"
-                      : "text-slate-700",
+                      : "text-asb-ink-soft",
                   )}
                 >
                   {item.submitter_strike_count ?? 0}
                 </span>
               </div>
             </div>
-            <div className="mt-3 pt-3 border-t border-slate-100">
+            <div className="mt-3 pt-3 border-t border-asb-gray-100">
               <Link
                 href={`/admin/users?q=${encodeURIComponent(item.submitter_email ?? "")}`}
-                className="text-xs font-semibold text-ocean-600 hover:text-ocean-700 flex items-center gap-1"
+                className="text-xs font-semibold text-asb-blue hover:text-asb-blue flex items-center gap-1"
               >
                 View user profile <ExternalLink className="w-3 h-3" />
               </Link>
             </div>
           </div>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+          <div className="bg-asb-gray-50 border border-asb-gray-200 rounded p-4">
+            <h2 className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-2">
               Action effects
             </h2>
-            <div className="space-y-2 text-xs text-slate-500">
+            <div className="space-y-2 text-xs text-asb-gray-500">
               <p>
                 <span className="font-semibold text-green-700">Approve</span> —
                 Listing goes live · clean_posts +1 · trust auto-upgrade at 5
@@ -757,7 +757,7 @@ export default async function QueueItemPage({
                 <span className="font-semibold text-orange-700">Flag</span> —
                 Listing held · strike_count +1 · account reviewed
               </p>
-              <p className="text-slate-400 pt-1 border-t border-slate-200 mt-1">
+              <p className="text-asb-gray-400 pt-1 border-t border-asb-gray-200 mt-1">
                 At 2 strikes: account auto-downgrades to FLAGGED tier
               </p>
             </div>
@@ -769,22 +769,22 @@ export default async function QueueItemPage({
               listingType={item.listing_type}
             />
           ) : (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 text-center">
+            <div className="bg-white border border-asb-gray-200 rounded p-5 text-center">
               {item.status === "APPROVED" ? (
                 <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
               ) : (
                 <XCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
               )}
-              <p className="text-sm font-bold text-slate-700 capitalize">
+              <p className="text-sm font-bold text-asb-ink-soft capitalize">
                 {item.status.toLowerCase()}
               </p>
               {item.reviewed_at && (
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-asb-gray-400 mt-1">
                   {formatDate(item.reviewed_at)}
                 </p>
               )}
               {item.amendment_detail && (
-                <p className="text-xs text-slate-500 mt-2 bg-slate-50 rounded-lg p-2 text-left">
+                <p className="text-xs text-asb-gray-500 mt-2 bg-asb-gray-50 rounded-lg p-2 text-left">
                   {item.amendment_detail}
                 </p>
               )}

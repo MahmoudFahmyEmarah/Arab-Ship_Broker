@@ -39,7 +39,7 @@ export default async function AdminCommoditiesPage({
       />
 
       {/* Warning about question_key analogue */}
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded px-4 py-3">
         <AlertTriangle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
         <p className="text-xs text-blue-700 leading-relaxed">
           <strong>Note:</strong> Deactivating a commodity hides it from the
@@ -59,13 +59,13 @@ export default async function AdminCommoditiesPage({
       {(showInactive || inactive.length > 0) && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+            <h2 className="text-sm font-bold text-asb-gray-400 uppercase tracking-wider">
               Inactive ({inactive.length})
             </h2>
             {!showInactive && inactive.length > 0 && (
               <a
                 href="?inactive=1"
-                className="text-xs text-ocean-600 hover:text-ocean-700 font-semibold"
+                className="text-xs text-asb-blue hover:text-asb-blue font-semibold"
               >
                 Show inactive
               </a>
@@ -79,7 +79,7 @@ export default async function AdminCommoditiesPage({
 
       {/* Create new */}
       <div>
-        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider mb-3">
           Add new commodity
         </h2>
         <CreateCommodityForm />
@@ -97,14 +97,14 @@ function CommoditySection({
 }) {
   return (
     <div>
-      <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
+      <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider mb-3">
         {title}{" "}
-        <span className="text-slate-400 font-normal normal-case ml-1">
+        <span className="text-asb-gray-400 font-normal normal-case ml-1">
           ({commodities.length})
         </span>
       </h2>
       {commodities.length === 0 ? (
-        <p className="text-sm text-slate-400 py-4">None</p>
+        <p className="text-sm text-asb-gray-400 py-4">None</p>
       ) : (
         <CommodityTable commodities={commodities} />
       )}

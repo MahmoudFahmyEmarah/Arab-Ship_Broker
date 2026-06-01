@@ -24,7 +24,7 @@ const VARIANT_STYLES: Record<BadgeVariant, string> = {
   approved: "bg-green-50   text-green-700  border-green-200",
   rejected: "bg-red-50     text-red-700    border-red-200",
   flagged: "bg-red-50     text-red-700    border-red-200",
-  new: "bg-slate-100  text-slate-600  border-slate-200",
+  new: "bg-asb-gray-100  text-asb-gray-700  border-asb-gray-200",
   verified: "bg-green-50   text-green-700  border-green-200",
   high: "bg-red-50     text-red-700    border-red-200",
   medium: "bg-amber-50   text-amber-700  border-amber-200",
@@ -32,11 +32,11 @@ const VARIANT_STYLES: Record<BadgeVariant, string> = {
   clear: "bg-green-50   text-green-700  border-green-200",
   sanctioned: "bg-red-100    text-red-800    border-red-300",
   active: "bg-green-50   text-green-700  border-green-200",
-  inactive: "bg-slate-100  text-slate-500  border-slate-200",
+  inactive: "bg-asb-gray-100  text-asb-gray-500  border-asb-gray-200",
   open: "bg-green-50   text-green-700  border-green-200",
-  fixed: "bg-slate-100  text-slate-600  border-slate-200",
+  fixed: "bg-asb-gray-100  text-asb-gray-700  border-asb-gray-200",
   subs: "bg-amber-50   text-amber-700  border-amber-200",
-  neutral: "bg-slate-50   text-slate-600  border-slate-200",
+  neutral: "bg-asb-gray-50   text-asb-gray-700  border-asb-gray-200",
 };
 
 interface AdminBadgeProps {

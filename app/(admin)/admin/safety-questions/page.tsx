@@ -32,7 +32,7 @@ type SafetyQuestionRow = {
 const ANSWER_TYPE_COLORS: Record<string, string> = {
   boolean: "bg-green-50 text-green-700 border-green-200",
   number: "bg-blue-50 text-blue-700 border-blue-200",
-  text: "bg-slate-100 text-slate-600 border-slate-200",
+  text: "bg-asb-gray-100 text-asb-gray-700 border-asb-gray-200",
   select: "bg-purple-50 text-purple-700 border-purple-200",
   multi_select: "bg-indigo-50 text-indigo-700 border-indigo-200",
 };
@@ -57,7 +57,7 @@ export default async function AdminSafetyQuestionsPage() {
         subtitle={`${active.length} active · ${inactive.length} inactive`}
       />
 
-      <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded px-4 py-3">
         <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
         <div className="text-xs text-red-700 leading-relaxed space-y-1">
           <p>
@@ -74,11 +74,11 @@ export default async function AdminSafetyQuestionsPage() {
       </div>
 
       <div>
-        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider mb-3">
           Active questions ({active.length})
         </h2>
         {active.length === 0 ? (
-          <p className="text-sm text-slate-400 py-4">No active questions</p>
+          <p className="text-sm text-asb-gray-400 py-4">No active questions</p>
         ) : (
           <div className="space-y-2">
             {active.map((q) => (
@@ -90,7 +90,7 @@ export default async function AdminSafetyQuestionsPage() {
 
       {inactive.length > 0 && (
         <div>
-          <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">
+          <h2 className="text-sm font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
             Inactive ({inactive.length})
           </h2>
           <div className="space-y-2 opacity-60">
@@ -102,7 +102,7 @@ export default async function AdminSafetyQuestionsPage() {
       )}
 
       <div>
-        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider mb-3">
           Add new safety question
         </h2>
         <CreateQuestionForm />
@@ -115,21 +115,21 @@ function QuestionCard({ question: q }: { question: SafetyQuestionRow }) {
   return (
     <div
       className={cn(
-        "bg-white border rounded-2xl p-5",
-        q.is_active ? "border-slate-200" : "border-slate-100",
+        "bg-white border rounded p-5",
+        q.is_active ? "border-asb-gray-200" : "border-asb-gray-100",
       )}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-2">
-            <code className="text-xs font-bold font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+            <code className="text-xs font-bold font-mono text-asb-gray-700 bg-asb-gray-100 px-2 py-0.5 rounded-md">
               {q.question_key}
             </code>
             <span
               className={cn(
                 "text-[10px] font-bold px-2 py-0.5 rounded-md border",
                 ANSWER_TYPE_COLORS[q.answer_type] ??
-                  "bg-slate-100 text-slate-600",
+                  "bg-asb-gray-100 text-asb-gray-700",
               )}
             >
               {q.answer_type}
@@ -141,20 +141,20 @@ function QuestionCard({ question: q }: { question: SafetyQuestionRow }) {
                 label={`→ ${q.matchmaking_column ?? "matchmaking"}`}
               />
             )}
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span className="text-[10px] text-asb-gray-400 font-mono">
               sort: {q.sort_order}
             </span>
           </div>
 
-          <p className="text-sm font-semibold text-slate-900 mb-1.5">
+          <p className="text-sm font-semibold text-asb-navy mb-1.5">
             {q.question_text}
           </p>
 
-          <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
+          <div className="flex items-center gap-3 text-xs text-asb-gray-400 flex-wrap">
             {q.section_label && (
               <span>
                 Section:{" "}
-                <span className="font-medium text-slate-600">
+                <span className="font-medium text-asb-gray-700">
                   {q.section_label}
                 </span>
               </span>
@@ -162,7 +162,7 @@ function QuestionCard({ question: q }: { question: SafetyQuestionRow }) {
             {q.applies_to_cargo_type && (
               <span>
                 Types:{" "}
-                <span className="font-medium text-slate-600">
+                <span className="font-medium text-asb-gray-700">
                   {q.applies_to_cargo_type.join(", ")}
                 </span>
               </span>
@@ -170,7 +170,7 @@ function QuestionCard({ question: q }: { question: SafetyQuestionRow }) {
             {q.applies_to_categories && (
               <span>
                 Categories:{" "}
-                <span className="font-medium text-slate-600">
+                <span className="font-medium text-asb-gray-700">
                   {q.applies_to_categories.join(", ")}
                 </span>
               </span>
@@ -178,7 +178,7 @@ function QuestionCard({ question: q }: { question: SafetyQuestionRow }) {
             {q.select_options && q.select_options.length > 0 && (
               <span>
                 Options:{" "}
-                <span className="font-medium text-slate-600">
+                <span className="font-medium text-asb-gray-700">
                   {q.select_options.join(", ")}
                 </span>
               </span>
@@ -186,7 +186,7 @@ function QuestionCard({ question: q }: { question: SafetyQuestionRow }) {
           </div>
 
           {q.help_text && (
-            <p className="text-xs text-slate-400 mt-1.5 italic">
+            <p className="text-xs text-asb-gray-400 mt-1.5 italic">
               {q.help_text}
             </p>
           )}

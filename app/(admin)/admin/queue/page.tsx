@@ -104,7 +104,7 @@ export default async function AdminQueuePage({
         subtitle={`${countMap["PENDING"] ?? 0} items pending review`}
       />
 
-      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit flex-wrap">
+      <div className="flex items-center gap-1 bg-white border border-asb-gray-200 rounded p-1 w-fit flex-wrap">
         {STATUS_TABS.map((tab) => {
           const active = statusFilter === tab.value;
           const Icon = tab.icon;
@@ -116,8 +116,8 @@ export default async function AdminQueuePage({
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
                 active
-                  ? "bg-ocean-600 text-white shadow-sm"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+                  ? "bg-asb-blue text-white shadow-sm"
+                  : "text-asb-gray-500 hover:bg-asb-gray-50 hover:text-asb-ink",
               )}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -130,7 +130,7 @@ export default async function AdminQueuePage({
                       ? "bg-white/20 text-white"
                       : tab.value === "PENDING"
                         ? "bg-amber-100 text-amber-700"
-                        : "bg-slate-100 text-slate-600",
+                        : "bg-asb-gray-100 text-asb-gray-700",
                   )}
                 >
                   {count}
@@ -142,7 +142,7 @@ export default async function AdminQueuePage({
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-400 font-medium">Type:</span>
+        <span className="text-xs text-asb-gray-400 font-medium">Type:</span>
         {[
           { label: "All", value: "all" },
           { label: "Cargo", value: "cargo" },
@@ -154,8 +154,8 @@ export default async function AdminQueuePage({
             className={cn(
               "text-xs px-2.5 py-1 rounded-lg font-medium border transition-all",
               typeFilter === t.value
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-500 border-slate-200 hover:border-slate-300",
+                ? "bg-asb-navy-deep text-white border-asb-navy-deep"
+                : "bg-white text-asb-gray-500 border-asb-gray-200 hover:border-asb-gray-200",
             )}
           >
             {t.label}
@@ -164,14 +164,14 @@ export default async function AdminQueuePage({
       </div>
 
       {items.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl py-20 text-center">
+        <div className="bg-white border border-asb-gray-200 rounded py-20 text-center">
           <CheckCircle2 className="w-10 h-10 text-green-400 mx-auto mb-3" />
-          <p className="text-slate-600 font-semibold">
+          <p className="text-asb-gray-700 font-semibold">
             {statusFilter === "PENDING"
               ? "Queue is clear — nothing pending"
               : `No ${statusFilter.toLowerCase()} items`}
           </p>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-asb-gray-400 text-sm mt-1">
             {statusFilter === "PENDING"
               ? "All submissions have been reviewed."
               : "Adjust the filter to see other items."}
@@ -187,30 +187,30 @@ export default async function AdminQueuePage({
               <Link
                 key={item.id}
                 href={`/admin/queue/${item.id}`}
-                className="group bg-white border border-slate-200 rounded-2xl p-5 hover:border-ocean-300 hover:shadow-md transition-all flex flex-col gap-4"
+                className="group bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2.5 min-w-0">
                     <div
                       className={cn(
-                        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5",
-                        isCargo ? "bg-ocean-50 border border-ocean-100" : "bg-foam-50 border border-foam-100",
+                        "w-9 h-9 rounded flex items-center justify-center shrink-0 mt-0.5",
+                        isCargo ? "bg-asb-blue-light border border-asb-gray-200" : "bg-foam-50 border border-foam-100",
                       )}
                     >
                       {isCargo ? (
-                        <Package className="w-4 h-4 text-ocean-600" />
+                        <Package className="w-4 h-4 text-asb-blue" />
                       ) : (
                         <Ship className="w-4 h-4 text-foam-600" />
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-900 group-hover:text-ocean-700 transition-colors truncate">
+                      <p className="text-sm font-bold text-asb-navy group-hover:text-asb-blue transition-colors truncate">
                         {isCargo
                           ? (item.commodity_name ?? "Cargo")
                           : (item.vessel_name ?? "Vessel")}
                       </p>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                      <p className="text-xs text-asb-gray-400 truncate mt-0.5">
                         {isCargo
                           ? (item.cargo_type ?? "Cargo listing")
                           : (item.vessel_type ?? "Vessel availability")}
@@ -281,13 +281,13 @@ export default async function AdminQueuePage({
 
                 {/* Reason */}
                 {item.review_reason && (
-                  <p className="text-xs text-slate-500 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100 line-clamp-2">
+                  <p className="text-xs text-asb-gray-500 bg-asb-gray-50 rounded px-3 py-2 border border-asb-gray-100 line-clamp-2">
                     {item.review_reason}
                   </p>
                 )}
 
                 {/* Footer */}
-                <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-auto">
+                <div className="flex items-center justify-between pt-3 border-t border-asb-gray-100 mt-auto">
                   <div className="flex items-center gap-2 flex-wrap">
                     {item.submitter_trust_tier && (
                       <TrustTierBadge tier={item.submitter_trust_tier} />
@@ -305,19 +305,19 @@ export default async function AdminQueuePage({
                           "text-[11px]",
                           age.urgent && item.status === "PENDING"
                             ? "text-red-600 font-semibold"
-                            : "text-slate-400",
+                            : "text-asb-gray-400",
                         )}
                       >
                         {age.label}
                       </span>
                     </div>
                     {item.is_random_sample && (
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] font-bold text-asb-gray-400 bg-asb-gray-100 px-1.5 py-0.5 rounded">
                         Sample
                       </span>
                     )}
                   </div>
-                  <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-ocean-500 group-hover:translate-x-0.5 transition-all" />
+                  <ArrowRight className="w-4 h-4 text-asb-gray-400 group-hover:text-asb-blue group-hover:translate-x-0.5 transition-all" />
                 </div>
               </Link>
             );
@@ -326,7 +326,7 @@ export default async function AdminQueuePage({
       )}
 
       {items.length > 0 && (
-        <p className="text-xs text-slate-400 text-right">
+        <p className="text-xs text-asb-gray-400 text-right">
           Showing {items.length} item{items.length !== 1 ? "s" : ""}
           {statusFilter !== "ALL" ? ` · ${statusFilter}` : ""}
         </p>
@@ -345,13 +345,13 @@ function DataPill({
   value: string;
 }) {
   return (
-    <div className="bg-slate-50 rounded-lg px-2.5 py-2 border border-slate-100">
-      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">
+    <div className="bg-asb-gray-50 rounded-lg px-2.5 py-2 border border-asb-gray-100">
+      <p className="text-[10px] text-asb-gray-400 font-semibold uppercase tracking-wide mb-0.5">
         {label}
       </p>
       <div className="flex items-center gap-1">
-        <Icon className="w-3 h-3 text-slate-400 shrink-0" />
-        <p className="text-xs font-bold text-slate-700 truncate">{value}</p>
+        <Icon className="w-3 h-3 text-asb-gray-400 shrink-0" />
+        <p className="text-xs font-bold text-asb-ink-soft truncate">{value}</p>
       </div>
     </div>
   );

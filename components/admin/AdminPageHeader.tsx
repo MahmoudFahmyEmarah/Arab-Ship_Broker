@@ -21,10 +21,10 @@ export function AdminPageHeader({
       )}
     >
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-2xl font-bold text-asb-navy tracking-tight">
           {title}
         </h1>
-        {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-asb-gray-500 mt-1">{subtitle}</p>}
       </div>
       {children && (
         <div className="flex items-center gap-2 flex-wrap">{children}</div>

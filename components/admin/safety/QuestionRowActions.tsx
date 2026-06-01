@@ -34,7 +34,7 @@ export function QuestionRowActions({ question: q }: { question: Q }) {
           `"${q.question_key}" deactivated`,
         )
       }
-      className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+      className="flex items-center gap-1.5 text-xs font-semibold text-asb-gray-500 hover:text-red-600 hover:bg-red-50 border border-asb-gray-200 hover:border-red-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
     >
       {isPending ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
