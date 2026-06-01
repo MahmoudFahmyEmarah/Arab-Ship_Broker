@@ -16,6 +16,7 @@ import {
   Ship,
   Loader2,
   Plus,
+  Sparkles,
 } from "lucide-react";
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -80,7 +81,9 @@ function buildNavSections(
     links: [{ label: "Settings", href: "/dashboard/account", icon: User }],
   });
 
-  const workspaceLinks: NavLink[] = [];
+  const workspaceLinks: NavLink[] = [
+    { label: "Circular Parser", href: "/dashboard/circulars", icon: Sparkles },
+  ];
   if (hasCargoProfile) {
     workspaceLinks.push(
       { label: "My Listings", href: "/dashboard/cargo/my", icon: Package },
