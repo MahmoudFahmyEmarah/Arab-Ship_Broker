@@ -31,7 +31,42 @@ type BrowseVessel = Pick<
  * Partner"). Only non-PII vessel particulars are selected; no owner/manager
  * company or contact columns are queried.
  */
-function toCardData(v: BrowseVessel): VesselCardData {
+/** Latest circulated open position for a vessel (RLS permits non-owners to
+ *  read APPROVED + OPEN + for_circulation rows only). Fuel consumption lives
+ *  on the availability row, so the fuel block is sourced here. */
+type OpenPosition = {
+  vessel_id: string;
+  open_port_name: string | null;
+  open_zone: string | null;
+  open_date: string | null;
+  me_consumption_mt_day: number | null;
+  me_consumption_port_mt_day: number | null;
+  aux_consumption_mt_day: number | null;
+  aux_consumption_port_mt_day: number | null;
+};
+
+const numOrNull = (n: number | null) => (n != null ? String(n) : null);
+
+function laycanDot(openDate: string | null): "green" | "amber" | "red" {
+  if (!openDate) return "green";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.ceil((new Date(openDate).getTime() - today.getTime()) / 86_400_000);
+  if (diff < 0) return "red";
+  if (diff <= 7) return "amber";
+  return "green";
+}
+
+const fmtOpenDate = (s: string | null) => {
+  if (!s) return "";
+  const d = new Date(s);
+  return Number.isNaN(d.getTime())
+    ? s
+    : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+function toCardData(v: BrowseVessel, pos: OpenPosition | undefined): VesselCardData {
+  const hasPosition = !!pos?.open_port_name;
   return {
     imo: v.imo_number ?? "—",
     name: v.vessel_name,
@@ -44,9 +79,23 @@ function toCardData(v: BrowseVessel): VesselCardData {
     draft: v.max_draft_m != null ? String(v.max_draft_m) : null,
     gear: v.is_geared == null ? null : v.is_geared ? "Geared" : "Gearless",
     status: "OPEN",
-    fuel: null,
-    matches: null,
-    position: null,
+    fuel: pos
+      ? {
+          vs: numOrNull(pos.me_consumption_mt_day),
+          vp: numOrNull(pos.me_consumption_port_mt_day),
+          ls: numOrNull(pos.aux_consumption_mt_day),
+          lp: numOrNull(pos.aux_consumption_port_mt_day),
+        }
+      : null,
+    matches: hasPosition ? 0 : null,
+    position: hasPosition
+      ? {
+          port: pos!.open_port_name as string,
+          zone: pos!.open_zone,
+          date: fmtOpenDate(pos!.open_date),
+          lyc: laycanDot(pos!.open_date),
+        }
+      : null,
     href: `/dashboard/vessels/${v.id}`,
   };
 }
@@ -104,6 +153,25 @@ export default async function BrowseVesselsPage({
 
   const { data: vesselsData } = await vesselsQuery;
   const vessels = (vesselsData ?? []) as BrowseVessel[];
+
+  // Enrich with each vessel's latest circulated open position (fuel + open
+  // port). RLS limits this to APPROVED + OPEN + for_circulation rows, so only
+  // tonnage genuinely in circulation is shown; identity stays masked.
+  const posByVessel = new Map<string, OpenPosition>();
+  if (vessels.length) {
+    const { data: posData } = await supabase
+      .from("vessel_availability")
+      .select(
+        "vessel_id, open_port_name, open_zone, open_date, me_consumption_mt_day, me_consumption_port_mt_day, aux_consumption_mt_day, aux_consumption_port_mt_day, created_at",
+      )
+      .in("vessel_id", vessels.map((v) => v.id))
+      .eq("status", "OPEN")
+      .eq("review_status", "APPROVED")
+      .order("created_at", { ascending: false });
+    for (const p of (posData ?? []) as (OpenPosition & { created_at: string })[]) {
+      if (!posByVessel.has(p.vessel_id)) posByVessel.set(p.vessel_id, p);
+    }
+  }
 
   return (
     <div className="space-y-6 py-2">
@@ -169,7 +237,11 @@ export default async function BrowseVesselsPage({
       ) : (
         <div className="mvb-cardhost">
           {vessels.map((v) => (
-            <VesselCard key={v.id} vessel={toCardData(v)} masked />
+            <VesselCard
+              key={v.id}
+              vessel={toCardData(v, posByVessel.get(v.id))}
+              masked
+            />
           ))}
         </div>
       )}
