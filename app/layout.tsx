@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, Geist_Mono, Inter, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { PropellerLoader } from "@/components/portal/PropellerLoader";
 
@@ -23,6 +23,14 @@ const inter = Inter({
   weight: ["400", "500", "600"],
 });
 
+// Arabic-capable webfont for bilingual brand/UI text (pairs with Inter).
+// Exposed as --font-arabic; applied only to Arabic (dir="rtl") elements.
+const notoArabic = Noto_Sans_Arabic({
+  variable: "--font-arabic",
+  subsets: ["arabic"],
+  weight: ["400", "500", "600"],
+});
+
 export const metadata: Metadata = {
   title: "Arab ShipBroker - Maritime Brokerage for MENA",
   description: "Connecting Buyers and Sellers in the MENA Maritime Market",
@@ -36,7 +44,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} antialiased flex flex-col min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${notoArabic.variable} antialiased flex flex-col min-h-screen`}
       >
         <Suspense fallback={null}>
           <PropellerLoader />

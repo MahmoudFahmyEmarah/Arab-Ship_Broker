@@ -147,6 +147,31 @@ export function Navbar() {
                 >
                   MENA Maritime
                 </span>
+                {/* Arabic brand name (RTL, Arabic webfont). Colour tracks the
+                    English so it stays white over the hero and legible on the
+                    solid header. */}
+                <span
+                  dir="rtl"
+                  lang="ar"
+                  style={{ fontFamily: "var(--font-arabic)" }}
+                  className={cn(
+                    "text-[13px] font-semibold leading-tight mt-1 truncate transition-colors duration-300",
+                    showTransparent ? "text-white" : "text-ocean-950",
+                  )}
+                >
+                  الوسيط العربي للسفن
+                </span>
+                <span
+                  dir="rtl"
+                  lang="ar"
+                  style={{ fontFamily: "var(--font-arabic)" }}
+                  className={cn(
+                    "text-[10px] italic leading-tight truncate transition-colors duration-300 max-sm:hidden",
+                    showTransparent ? "text-white/75" : "text-ocean-700",
+                  )}
+                >
+                  محمد داود وشركاه
+                </span>
               </div>
             </Link>
 
