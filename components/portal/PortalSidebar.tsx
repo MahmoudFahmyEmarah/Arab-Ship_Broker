@@ -15,7 +15,6 @@ import {
   IconSidebar,
   IconBell,
   IconSignOut,
-  IconStar,
 } from "./icons";
 
 export type PortalRole = "cargo_owner" | "vessel_owner" | "broker" | "admin";
@@ -77,13 +76,13 @@ export function PortalSidebar({
     ...(isCargo
       ? [
           { href: `${basePath}/cargo/my`, label: "My Cargo", glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} /> },
-          { href: `${basePath}/cargo/post`, label: "Post Cargo", action: true, glyph: () => <IconCargo className="nav-icon" size={16} color="var(--asb-blue)" plus /> },
+          { href: `${basePath}/cargo/create`, label: "Post Cargo", action: true, glyph: () => <IconCargo className="nav-icon" size={16} color="var(--asb-blue)" plus /> },
         ]
       : []),
     ...(isVessel
       ? [
           { href: `${basePath}/vessels`, label: "My Vessels", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> },
-          { href: `${basePath}/vessels/post-position`, label: "Post Position", action: true, glyph: () => <IconVessel className="nav-icon" size={16} color="var(--asb-blue)" plus /> },
+          { href: `${basePath}/vessels/register`, label: "Post Position", action: true, glyph: () => <IconVessel className="nav-icon" size={16} color="var(--asb-blue)" plus /> },
         ]
       : []),
     { section: "Discover" },
@@ -165,8 +164,8 @@ export function PortalSidebar({
 
       <div style={{ borderTop: "var(--bd)" }}>
         {!collapsed && <div className="nav-section">Account</div>}
+        {/* Billing is a tab inside Settings (not a separate page). */}
         <NavItem href={`${basePath}/account`} label="Settings" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconSettings className="nav-icon" size={16} color={c(a)} />} />
-        <NavItem href={`${basePath}/billing`} label="Billing" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconStar className="nav-icon" size={16} color={c(a)} />} />
 
         <div
           style={{

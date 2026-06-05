@@ -74,7 +74,7 @@ function toFleetVM(v: VesselView, portCoords?: Record<string, [number, number]>)
 export function MyVesselsFleetBoard({
   views,
   portCoords,
-  postHref = "/dashboard/vessels/post-position",
+  postHref = "/dashboard/vessels/register",
   addHref = "/dashboard/vessels/register",
 }: {
   views: VesselView[];

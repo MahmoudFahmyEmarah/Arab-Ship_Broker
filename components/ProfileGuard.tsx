@@ -25,14 +25,14 @@ const PROFILE_META: Record<
     description:
       "You need a Cargo profile to post cargo listings and run cargo matchmaking.",
     icon: Package,
-    addHref: "/dashboard/profile/add-cargo",
+    addHref: "/dashboard/cargo/create",
   },
   vessel: {
     label: "Vessel Profile",
     description:
       "You need a Vessel profile to post vessel availability and find cargo matches.",
     icon: Ship,
-    addHref: "/dashboard/profile/add-vessel",
+    addHref: "/dashboard/vessels/register",
   },
 };
 

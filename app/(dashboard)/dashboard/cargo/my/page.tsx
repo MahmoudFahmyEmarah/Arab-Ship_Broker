@@ -8,7 +8,7 @@ export default async function MyCargoPage() {
   const portCoords = await loadPortCoords(views.flatMap((c) => [c.route.polCode, c.route.podCode]));
   return (
     <ProfileGuard requires="cargo">
-      <CargoBoard views={views} variant="my" source={source} portCoords={portCoords} postHref="/dashboard/cargo/post" />
+      <CargoBoard views={views} variant="my" source={source} portCoords={portCoords} postHref="/dashboard/cargo/create" />
     </ProfileGuard>
   );
 }

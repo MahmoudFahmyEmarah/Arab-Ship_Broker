@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { Shield } from "lucide-react";
 
 import { AccountEditForm } from "@/components/account/AccountEditForm";
+import { SettingsTabs } from "@/components/account/SettingsTabs";
 
 export const metadata = {
   title: "Account Settings — Arab ShipBroker",
@@ -64,7 +65,9 @@ export default async function AccountSettingsPage() {
   const u = appUser as UserRow;
 
   return (
-    <div className="max-w-2xl space-y-8 px-6 py-6 md:px-8">
+    <SettingsTabs
+      account={
+    <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-asb-navy">Account Settings</h1>
         <p className="text-asb-gray-500 text-sm mt-1">
@@ -123,5 +126,7 @@ export default async function AccountSettingsPage() {
         }}
       />
     </div>
+      }
+    />
   );
 }
