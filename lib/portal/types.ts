@@ -54,6 +54,21 @@ export interface CargoView {
 
 export type VesselStatusView = "open" | "review" | "fixed";
 
+// Ownership card data — fetched on panel open from the firewalled
+// v_vessel_detail. `entitled` is false for non-owner market viewers, in which
+// case every field is null and the card shows the brokered/masked state.
+export interface VesselOwnershipView {
+  entitled: boolean;
+  ownerName: string | null;
+  ownerImo: string | null;
+  ownerCountry: string | null;
+  ownerFleet: number | null;
+  ownerDesk: string | null;
+  managerName: string | null;
+  managerFleet: number | null;
+  managerDesk: string | null;
+}
+
 export interface VesselView {
   id: string;
   name: string;
@@ -82,6 +97,7 @@ export interface VesselView {
     lsmgoPort: number | string;
   };
   // Detail-panel extras (optional; "—" when the source row has no value)
+  vesselId?: string; // the vessels.id — keys the firewalled v_vessel_detail lookup
   dwtBale?: string;
   loa?: string;
   beam?: string;

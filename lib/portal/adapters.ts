@@ -136,6 +136,7 @@ export function vesselFromAvailability(
   };
   return {
     id: row.id,
+    vesselId: row.vessel_id,
     name: v.vessel_name,
     imo: v.imo_number ?? "—",
     type: v.vessel_type,
@@ -182,6 +183,7 @@ function statusFromAvailability(
 export function vesselFromMyVessel(row: MyVesselRow): VesselView {
   return {
     id: row.id,
+    vesselId: row.id,
     name: row.vessel_name,
     imo: row.imo_number ?? "—",
     type: row.vessel_type,

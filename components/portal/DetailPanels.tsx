@@ -4,12 +4,12 @@
 // (asb/detail-panel.jsx). Real values from the view models; "—" where the
 // source row has no value (no invented data). Rules-engine tooltips deferred.
 import * as React from "react";
-import { CargoView, VesselView } from "@/lib/portal/types";
+import { CargoView, VesselView, VesselOwnershipView } from "@/lib/portal/types";
 import { MatchVesselView, MatchCargoView } from "@/lib/portal/match-views";
-import { fetchCargoMatches, fetchAvailabilityMatches } from "@/lib/portal/actions";
+import { fetchCargoMatches, fetchAvailabilityMatches, fetchVesselOwnership } from "@/lib/portal/actions";
 import { FieldRow } from "./ui";
 import { IconBack, IconClose } from "./icons";
-import { orgForCargo, orgForVessel, ORG_TYPE_LABEL } from "@/lib/portal/org";
+import { orgForCargo, ORG_TYPE_LABEL } from "@/lib/portal/org";
 
 const dash = (v: React.ReactNode) =>
   v === null || v === undefined || v === "" || v === "—" ? "—" : v;
@@ -299,26 +299,66 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
           <VesselMatchList availabilityId={v.id} />
         </div>
 
-        {(() => {
-          // Ownership — registry owner + ship manager (DEMO org until the vessel
-          // carries owner_org_id; firewall masks counterparty PII at the DB layer).
-          const { owner, manager } = orgForVessel(v.imo || v.name);
-          return (
-            <div className="section">
-              <h4>Ownership</h4>
-              <div className="grid-2">
-                <FieldRow label="Registered owner" value={owner.name} />
-                <FieldRow label="Owner IMO" value={owner.imo ?? "—"} />
-                <FieldRow label="Fleet (owner)" value={owner.fleetTotal != null ? String(owner.fleetTotal) : "—"} />
-                <FieldRow label="Ship manager" value={manager.name} />
-                <FieldRow label="Country" value={owner.country} />
-                <FieldRow label="Desk email" value={owner.desk.email} valueClass="blue" />
-              </div>
-            </div>
-          );
-        })()}
+        <VesselOwnership vesselId={v.vesselId} />
 
         <PrivacyNote text="Your vessel data is encrypted. Visible only to Arab ShipBroker until you publish a position." />
+      </div>
+    </div>
+  );
+}
+
+// Ownership / commercial management — real company link from the firewalled
+// v_vessel_detail. The DB returns identity only to admin or the vessel's own
+// owner; a non-owner market viewer gets `entitled: false` and the masked
+// "brokered" card. No counterparty email/phone is ever shown (firewall).
+function VesselOwnership({ vesselId }: { vesselId?: string }) {
+  const [data, setData] = React.useState<VesselOwnershipView | null | undefined>(undefined);
+  React.useEffect(() => {
+    let alive = true;
+    if (!vesselId) {
+      setData(null);
+      return;
+    }
+    fetchVesselOwnership(vesselId)
+      .then((r) => alive && setData(r))
+      .catch(() => alive && setData(null));
+    return () => {
+      alive = false;
+    };
+  }, [vesselId]);
+
+  if (data === undefined) {
+    return (
+      <div className="section">
+        <h4>Ownership &amp; commercial management</h4>
+        <div className="pm-loading">Loading…</div>
+      </div>
+    );
+  }
+
+  // Not entitled (market viewer) or no link yet → masked / brokered state.
+  if (!data || !data.entitled) {
+    return (
+      <div className="section">
+        <h4>Ownership &amp; commercial management</h4>
+        <div style={{ padding: "10px 12px", background: "var(--asb-gray-50)", borderRadius: 3, fontSize: 11, color: "var(--asb-gray-500)", lineHeight: 1.5 }}>
+          🔒 Owner identity protected — brokered by Arab ShipBroker. Contact details are released only through the desk.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="section">
+      <h4>Ownership &amp; commercial management</h4>
+      <div className="grid-2">
+        <FieldRow label="Registered owner" value={dash(data.ownerName)} />
+        <FieldRow label="Owner IMO" value={dash(data.ownerImo)} />
+        <FieldRow label="Owner country" value={dash(data.ownerCountry)} />
+        <FieldRow label="Fleet (owner)" value={data.ownerFleet != null ? String(data.ownerFleet) : "—"} />
+        <FieldRow label="Commercial manager" value={dash(data.managerName)} />
+        <FieldRow label="Fleet (manager)" value={data.managerFleet != null ? String(data.managerFleet) : "—"} />
+        <FieldRow label="Desk" value={dash(data.ownerDesk ?? data.managerDesk)} />
       </div>
     </div>
   );

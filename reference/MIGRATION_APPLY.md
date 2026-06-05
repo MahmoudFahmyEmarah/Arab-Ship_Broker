@@ -23,6 +23,7 @@ them, so you can also just `supabase db push` once the PRs are merged.
 | 8 | `…000840_org_seed` | **80 real companies** into `organizations` | `SELECT count(*) FROM organizations;` → 80. |
 | 9 | `…000850_cargo_multiport` | **Multi-port** (`load_ports`/`disch_ports` jsonb) persists | `\d cargo_listings` shows `load_ports`, `disch_ports`. |
 | 10 | `…000860_port_routes` | **Stored ECDIS routes** (map draws exact + distance matrix source) | `SELECT count(*) FROM port_routes;` → 20. |
+| 11 | `…000870_org_vessel_link` | **Vessel → company link** — backfills `vessels.owner_org_id`/`manager_org_id` from `owner_company`/`manager_company` name-match (100% over the workbook); re-publishes `v_vessel_detail` with the gated org link + registry facts. Requires `…000840` (orgs) first. | `SELECT count(*) FROM vessels WHERE owner_org_id IS NOT NULL;` → >0. `SELECT owner_org_name, owner_org_fleet FROM v_vessel_detail WHERE owner_org_id IS NOT NULL LIMIT 1;` (as admin) returns the firm. |
 
 ## After applying
 - **Landing**: hero shows the real cargo/vessel/zone counts (was the fallback 167/62/14).
@@ -30,6 +31,7 @@ them, so you can also just `supabase db push` once the PRs are merged.
 - **Post Cargo**: classification auto-fill, CSS packing, MOL, multi-port all persist.
 - **Bunker**: add a supplier + credential in **/admin/bunker**; the ticker reads live and the DEMO label drops.
 - **Org**: companies are real; members fill in as users sign up.
+- **Vessel ownership**: the detail-panel Ownership card shows the vessel's real owner + commercial manager (from the company registry) to the owner/admin; non-owner market viewers see the brokered/masked card. No more DEMO `orgForVessel` stub, no fabricated desk email.
 
 ## Also confirm (Vercel)
 Supabase env vars (`NEXT_PUBLIC_SUPABASE_URL`, anon key) are set for the **Production** scope — else the live site builds but can't read the DB.

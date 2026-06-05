@@ -65,7 +65,12 @@ export function orgForCargo(key: string): { org: Org; handler: OrgMember } {
 
 const OWNER_IDS = ["orientseas", "abkshipping", "denizid"];
 const MANAGER_IDS = ["thalatta", "suezship"];
-/** DEMO: deterministic vessel → registry owner + ship manager. */
+/**
+ * @deprecated SUPERSEDED — the vessel Ownership card now reads the real
+ * owner_org_id / manager_org_id link via the firewalled v_vessel_detail
+ * (migration …000870 + fetchVesselOwnership). Kept only for reference.
+ * DEMO: deterministic vessel → registry owner + ship manager.
+ */
 export function orgForVessel(key: string): { owner: Org; manager: Org } {
   const h = hash(String(key || ""));
   return { owner: byId(OWNER_IDS[h % OWNER_IDS.length])!, manager: byId(MANAGER_IDS[(h >> 3) % MANAGER_IDS.length])! };
