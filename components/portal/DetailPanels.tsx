@@ -208,6 +208,8 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
           );
         })()}
 
+        <EstimateVoyageLink href={`/dashboard/voyage-estimator?cargo=${cargo.id}`} />
+
         <PrivacyNote text="Your data is encrypted end-to-end. Visible only to Arab ShipBroker until your listing is approved." />
       </div>
     </div>
@@ -301,6 +303,8 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
 
         <VesselOwnership vesselId={v.vesselId} />
 
+        <EstimateVoyageLink href={`/dashboard/voyage-estimator?vessel=${v.vesselId ?? v.id}`} />
+
         <PrivacyNote text="Your vessel data is encrypted. Visible only to Arab ShipBroker until you publish a position." />
       </div>
     </div>
@@ -374,6 +378,17 @@ function MatchBox({ count, label, sub }: { count: number; label: string; sub: st
       </div>
       <a style={{ fontSize: 11, color: "var(--asb-blue)", cursor: "pointer" }}>View matches →</a>
     </div>
+  );
+}
+
+function EstimateVoyageLink({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 16, padding: "10px 12px", background: "var(--asb-blue-light)", border: "0.5px solid var(--asb-blue)", borderRadius: "var(--r-chip, 4px)", color: "var(--asb-blue)", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+    >
+      Estimate voyage →
+    </a>
   );
 }
 

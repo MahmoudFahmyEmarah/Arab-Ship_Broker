@@ -1,0 +1,183 @@
+/* Economic Calculators — Voyage Cost Estimator · Ports DA · Suez Toll.
+ * Ported from the approved prototype (asb/voyage-estimator.css) onto the app's
+ * design tokens (app/globals.css). Navy #1B3A5C, blue #185FA5, 0.5px borders,
+ * Arial, no shadows. Green = auto-from-DB, blue = editable, amber = manual.
+ */
+
+/* The shell fills the dashboard main and owns its own scroll region. */
+.ve-page { flex: 1; min-height: 0; display: flex; }
+.ve-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--asb-gray-50);
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.ve-shell .ve-head {
+  padding: 10px 20px;
+  border-bottom: var(--bd);
+  background: var(--asb-white, #fff);
+}
+.ve-head__row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.ve-head__title { font-size: 17px; font-weight: 600; color: var(--asb-navy); line-height: 1.15; }
+.ve-head__sub { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--asb-gray-500); margin-top: 2px; }
+.ve-head-right { display: inline-flex; align-items: center; gap: 14px; }
+.ve-head-fuel { display: inline-flex; align-items: center; gap: 6px; }
+.ve-fuel-pill {
+  display: inline-flex; padding: 4px 9px; border-radius: 99px;
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.ve-fuel-pill.is-vlsfo { background: #E6F1FB; color: #0C447C; }
+.ve-fuel-pill.is-lsmgo { background: #EAF3DE; color: #27500A; }
+.ve-fuel-live { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--asb-green); letter-spacing: 0.02em; }
+.ve-fuel-live__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--asb-green); display: inline-block; }
+.ve-head-fuel__meta { font-size: 10px; color: var(--asb-gray-500); font-weight: 500; }
+@media (max-width: 880px) { .ve-head-fuel__meta { display: none; } }
+.ve-btn {
+  background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200);
+  border-radius: 6px; padding: 7px 14px; font-size: 12px; font-weight: 600;
+  color: var(--asb-navy); cursor: pointer; white-space: nowrap;
+}
+.ve-btn:hover { border-color: var(--asb-blue); color: var(--asb-blue); }
+
+/* ── Selector bar ── */
+.ve-selector { display: grid; gap: 18px; align-items: end; padding: 10px 20px; background: var(--asb-gray-50); border-bottom: 0.5px solid var(--asb-gray-200); }
+.ve-selector--two { grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr); }
+.ve-selector--one { grid-template-columns: minmax(220px, 480px); }
+@media (max-width: 720px) { .ve-selector { grid-template-columns: 1fr; gap: 10px; } }
+.ve-selector__field { min-width: 0; }
+.ve-selector__label { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--asb-gray-500); font-weight: 500; margin-bottom: 4px; }
+.ve-selector__control { position: relative; border: 0.5px solid var(--asb-blue); border-radius: 4px; background: var(--asb-white, #fff); }
+.ve-selector__control select { width: 100%; appearance: none; background: transparent; border: none; padding: 9px 28px 9px 10px; font-family: inherit; font-size: 13px; color: var(--asb-navy); font-weight: 500; }
+.ve-selector__control select:focus { outline: none; }
+.ve-selector__caret { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--asb-blue); pointer-events: none; }
+
+/* ── Content scroll region ── */
+.ve-content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px 32px; }
+.ve-empty { display: flex; align-items: center; justify-content: center; height: 220px; font-size: 13px; color: var(--asb-gray-500); }
+
+/* ── Upper panel: Vessel · Cargo · Legs ── */
+.ve-upper { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr); gap: 8px; align-items: start; }
+@media (max-width: 1180px) { .ve-upper { grid-template-columns: 1fr 1fr; } .ve-upper .ve-legs { grid-column: 1 / -1; } }
+@media (max-width: 720px) { .ve-upper { grid-template-columns: 1fr; } }
+.ve-legs { min-width: 0; }
+.ve-upper .ve-table { font-size: 11px; }
+
+/* ── Info cards ── */
+.ve-info-card { background: var(--asb-gray-50); border: 0.5px solid var(--asb-gray-200); border-radius: 6px; }
+.ve-info-card__head { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--asb-gray-500); font-weight: 600; padding: 8px 12px; border-bottom: 0.5px solid var(--asb-gray-200); background: var(--asb-white, #fff); }
+.ve-info-card__body { padding: 8px 12px; }
+.ve-info-card__row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; border-bottom: 0.5px solid var(--asb-gray-200); gap: 10px; }
+.ve-info-card__row:last-child { border-bottom: none; }
+.ve-info-card__k { color: var(--asb-gray-500); }
+.ve-info-card__v { font-variant-numeric: tabular-nums; font-family: var(--asb-font); font-weight: 500; text-align: right; }
+.ve-info-card__v.is-auto { color: var(--asb-green); }
+.ve-info-card__v.is-editable { color: var(--asb-blue); border-bottom: 1px dashed var(--asb-blue); cursor: text; }
+.ve-info-card__v.is-amber { color: var(--asb-amber); }
+.ve-warn { color: var(--asb-amber); font-size: 10px; font-weight: 600; }
+
+.ve-legend { margin: 12px 0; font-size: 11px; color: var(--asb-gray-500); line-height: 1.5; }
+
+/* ── Tables (legs + line items) ── */
+.ve-table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200); border-radius: 6px; overflow: hidden; }
+.ve-table thead th { background: var(--asb-navy); color: #fff; font-weight: 500; padding: 8px 10px; text-align: left; text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; border-right: 0.5px solid rgba(255,255,255,0.1); }
+.ve-table tbody td { padding: 8px 10px; border-bottom: 0.5px solid var(--asb-gray-200); vertical-align: middle; }
+.ve-table tbody tr:nth-child(even) td { background: var(--asb-gray-50); }
+.ve-table tbody tr.is-disabled td { color: var(--asb-gray-400); background: var(--asb-gray-50); }
+.ve-table .is-auto { color: var(--asb-green); }
+.ve-table .is-editable { color: var(--asb-blue); border-bottom: 1px dashed var(--asb-blue); text-decoration: none; }
+.ve-table__total td { background: var(--asb-gray-100) !important; border-top: 1px solid var(--asb-navy); border-bottom: none; font-size: 12px; }
+
+/* ── Expenses + revenue ── */
+.ve-pl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+@media (max-width: 880px) { .ve-pl-grid { grid-template-columns: 1fr; } }
+.ve-pl-card { background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200); border-radius: 6px; padding: 12px 14px; }
+.ve-pl-card__title { font-size: 13px; font-weight: 600; color: var(--asb-navy); margin-bottom: 8px; }
+.ve-pl-section { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--asb-gray-500); font-weight: 600; margin: 10px 0 4px; }
+.ve-pl-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; font-size: 12px; border-bottom: 0.5px dashed var(--asb-gray-200); gap: 12px; }
+.ve-pl-row:last-child { border-bottom: none; }
+.ve-pl-row span:last-child { font-variant-numeric: tabular-nums; font-family: var(--asb-font); font-weight: 500; text-align: right; }
+.ve-pl-row .is-auto { color: var(--asb-green); }
+.ve-pl-row .is-editable { color: var(--asb-blue); border-bottom: 1px dashed var(--asb-blue); }
+.ve-pl-row .is-amber { color: var(--asb-amber); }
+.ve-pl-row .is-muted { color: var(--asb-gray-500); }
+.ve-pl-row.is-subtotal { font-size: 12px; font-weight: 600; color: var(--asb-navy); border-bottom: 0.5px solid var(--asb-navy); padding: 6px 0; }
+.ve-pl-row.is-grand { margin-top: 10px; padding: 10px 0; border-top: 2px solid var(--asb-navy); border-bottom: none; font-size: 13px; font-weight: 600; color: var(--asb-navy); }
+.ve-pl-row--linked > span:first-child { display: flex; flex-direction: column; gap: 1px; }
+.ve-linked-src { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--asb-blue); font-weight: 600; }
+.ve-spacer { height: 12px; }
+
+/* ── Results strip ── */
+.ve-results { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+@media (max-width: 720px) { .ve-results { grid-template-columns: 1fr 1fr; } }
+.ve-result { background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200); border-radius: 6px; padding: 12px 14px; }
+.ve-result__k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--asb-gray-500); font-weight: 600; margin-bottom: 6px; }
+.ve-result__v { font-family: var(--asb-font); font-size: 23px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.ve-result__v--navy { color: var(--asb-navy); }
+.ve-result__v--amber { color: var(--asb-amber); }
+.ve-result__v--green { color: var(--asb-green); }
+.ve-result__unit { font-size: 13px; font-weight: 500; color: var(--asb-gray-500); margin-left: 4px; }
+.ve-result--tce { background: #E6F1FB; border: 1px solid var(--asb-blue); }
+.ve-result--tce .ve-result__k { color: var(--asb-blue); }
+.ve-result--tce .ve-result__v { color: var(--asb-blue); font-size: 25px; font-weight: 700; }
+
+.ve-data-bar { margin-top: 16px; padding: 9px 12px; background: #E6F1FB; border: 0.5px solid var(--asb-blue); border-radius: 4px; color: var(--asb-blue); font-size: 11px; line-height: 1.5; }
+
+/* ── Calculator inputs (PDA + Suez) ── */
+.ve-calc { display: flex; flex-direction: column; gap: 14px; }
+.ve-input-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 8px; }
+@media (max-width: 880px) { .ve-input-grid { grid-template-columns: 1fr; } }
+.ve-input-card { background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200); border-radius: 6px; overflow: hidden; }
+.ve-input-card__head { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--asb-gray-500); font-weight: 600; padding: 8px 12px; border-bottom: 0.5px solid var(--asb-gray-200); background: var(--asb-gray-50); }
+.ve-input-card__body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.ve-kv { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; padding: 2px 0; gap: 10px; }
+.ve-kv > span:first-child { color: var(--asb-gray-500); }
+.ve-kv > span:last-child { font-family: var(--asb-font); font-variant-numeric: tabular-nums; font-weight: 500; }
+.ve-kv .is-auto { color: var(--asb-green); }
+.ve-field { display: flex; flex-direction: column; gap: 4px; }
+.ve-field__label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--asb-gray-500); font-weight: 500; }
+.ve-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ve-inp { width: 100%; box-sizing: border-box; border: 0.5px solid var(--asb-gray-200); border-radius: 4px; background: var(--asb-white, #fff); padding: 7px 9px; font-family: inherit; font-size: 13px; color: var(--asb-navy); }
+.ve-inp:focus { outline: none; border-color: var(--asb-blue); }
+.ve-inp[readonly] { background: var(--asb-gray-50); color: var(--asb-gray-700); }
+.ve-inp--num { font-family: var(--asb-font); text-align: right; font-variant-numeric: tabular-nums; }
+.ve-seg { display: inline-flex; border: 0.5px solid var(--asb-gray-200); border-radius: 5px; overflow: hidden; background: var(--asb-gray-50); width: fit-content; }
+.ve-seg__btn { background: none; border: none; border-right: 0.5px solid var(--asb-gray-200); font-family: inherit; font-size: 12px; color: var(--asb-gray-500); font-weight: 500; padding: 6px 14px; cursor: pointer; white-space: nowrap; }
+.ve-seg__btn:last-child { border-right: none; }
+.ve-seg__btn:hover { color: var(--asb-navy); }
+.ve-seg__btn.is-active { background: var(--asb-navy); color: #fff; }
+.ve-seg--sm .ve-seg__btn { padding: 5px 11px; font-size: 11px; }
+.ve-note-sub { font-size: 10px; color: var(--asb-gray-500); line-height: 1.5; }
+
+/* ── Line-item table (PDA + Suez) ── */
+.ve-li-table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200); border-radius: 6px; overflow: hidden; }
+.ve-li-table thead th { background: var(--asb-navy); color: #fff; font-weight: 500; padding: 8px 12px; text-align: left; text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; border-right: 0.5px solid rgba(255,255,255,0.1); }
+.ve-li-table th.num, .ve-li-table td.num { text-align: right; font-family: var(--asb-font); font-variant-numeric: tabular-nums; }
+.ve-li-table th.no, .ve-li-table td.no { width: 36px; text-align: center; color: var(--asb-gray-500); }
+.ve-li-table th.notes, .ve-li-table td.notes { color: var(--asb-gray-500); font-size: 11px; }
+.ve-li-table tbody td { padding: 8px 12px; border-bottom: 0.5px solid var(--asb-gray-200); vertical-align: middle; }
+.ve-li-table tbody tr:nth-child(even) td { background: var(--asb-gray-50); }
+.ve-li-table td.is-editable { color: var(--asb-blue); border-bottom: 1px dashed var(--asb-blue); }
+.ve-li-table tr.is-disabled td { color: var(--asb-gray-400); }
+.ve-li-table tr.ve-li-table__hl td { background: #E6F1FB !important; }
+.ve-li-table tr.ve-li-table__sub td { background: var(--asb-gray-100) !important; border-top: 0.5px solid var(--asb-navy); color: var(--asb-navy); }
+.ve-li-table tr.ve-li-table__total td { background: var(--asb-gray-100) !important; border-top: 1.5px solid var(--asb-navy); border-bottom: none; color: var(--asb-navy); font-size: 13px; }
+.ve-note-line { font-size: 11px; color: var(--asb-gray-500); line-height: 1.5; padding-top: 2px; }
+@media (max-width: 720px) { .ve-li-table, .ve-table { display: block; overflow-x: auto; white-space: nowrap; } }
+
+/* Suez "not applicable" state */
+.ve-suez-na { background: var(--asb-gray-50); border: 0.5px solid var(--asb-gray-200); border-radius: 6px; padding: 24px; text-align: center; color: var(--asb-gray-500); }
+.ve-suez-na__title { font-size: 15px; font-weight: 600; color: var(--asb-gray-700); margin-bottom: 6px; }
+.ve-suez-na__sub { font-size: 12px; line-height: 1.6; }
+
+/* ── Locked state (T1/T2) ── */
+.estimator-locked { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-height: 360px; gap: 12px; text-align: center; padding: 40px 24px; }
+.locked-icon { font-size: 33px; color: var(--asb-gray-500); opacity: 0.5; margin-bottom: 8px; }
+.locked-title { font-size: 19px; font-weight: 600; color: var(--asb-navy); }
+.locked-features { font-size: 14px; color: var(--asb-gray-500); line-height: 1.8; }
+.locked-tier-note { font-size: 13px; color: var(--asb-gray-500); opacity: 0.7; }
+.locked-upgrade-btn { margin-top: 8px; padding: 10px 24px; background: var(--asb-blue); color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+.locked-upgrade-btn:hover { background: #1570bb; }

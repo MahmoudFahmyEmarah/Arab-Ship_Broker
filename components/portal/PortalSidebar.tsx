@@ -6,6 +6,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useViewerTier, isCalculatorLocked } from "@/lib/portal/tier";
 import {
   IconDashboard,
   IconCargo,
@@ -27,6 +28,7 @@ interface NavDef {
   glyph: Glyph;
   action?: boolean;
   section?: string;
+  disabled?: boolean;
 }
 
 // Module-scope (stable) nav item — `activeHref`/`collapsed` are passed in so the
@@ -36,10 +38,30 @@ function NavItem({
   label,
   glyph,
   action,
+  disabled,
   activeHref,
   collapsed,
 }: NavDef & { activeHref?: string; collapsed: boolean }) {
   const active = href === activeHref;
+  if (disabled) {
+    // Tier-gated (T3+) — shown but not navigable, with an explanatory tooltip.
+    return (
+      <div
+        className="nav-item"
+        title="Available from Subscriber tier (T3+)"
+        style={{ opacity: 0.45, cursor: "not-allowed", ...(collapsed ? { justifyContent: "center", padding: "10px 0" } : null) }}
+        aria-disabled="true"
+      >
+        {glyph(false)}
+        {!collapsed && (
+          <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+            {label}
+            <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--asb-gray-500)", border: "0.5px solid var(--asb-gray-300, #cdd5e0)", borderRadius: 3, padding: "0 3px" }}>T3+</span>
+          </span>
+        )}
+      </div>
+    );
+  }
   return (
     <Link
       href={href}
@@ -64,6 +86,7 @@ export function PortalSidebar({
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
+  const econLocked = isCalculatorLocked(useViewerTier());
 
   const isCargo = role === "broker" || role === "cargo_owner" || role === "admin";
   const isVessel = role === "broker" || role === "vessel_owner" || role === "admin";
@@ -90,9 +113,9 @@ export function PortalSidebar({
     ...(isVessel ? [{ href: `${basePath}/vessels/browse`, label: "Tonnage Market", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> }] : []),
     { href: `${basePath}/alerts`, label: "My Alerts", glyph: (a: boolean) => <IconBell className="nav-icon" size={16} color={c(a)} /> },
     { section: "Economic Calculators" },
-    { href: `${basePath}/voyage-estimator`, label: "Voyage Cost Estimator", glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
-    { href: `${basePath}/ports-da`, label: "Ports DA Calculator", glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
-    { href: `${basePath}/suez-toll`, label: "Suez Canal Toll", glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/voyage-estimator`, label: "Voyage Cost Estimator", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/ports-da`, label: "Ports DA Calculator", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/suez-toll`, label: "Suez Canal Toll", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
     ...(role === "admin"
       ? [
           { section: "Admin" } as const,

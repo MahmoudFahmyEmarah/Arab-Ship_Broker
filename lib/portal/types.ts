@@ -98,6 +98,9 @@ export interface VesselView {
   };
   // Detail-panel extras (optional; "—" when the source row has no value)
   vesselId?: string; // the vessels.id — keys the firewalled v_vessel_detail lookup
+  gt?: number | null;    // registered Gross Tonnage (real; estimator falls back to DWT×0.54)
+  scnrt?: number | null; // Suez Canal Net Registered Tonnage (from the SC certificate)
+  loaM?: number | null;  // LOA in metres (numeric, for calculators)
   dwtBale?: string;
   loa?: string;
   beam?: string;

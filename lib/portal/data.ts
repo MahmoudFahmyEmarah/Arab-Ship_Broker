@@ -92,6 +92,34 @@ async function availabilityMatchCounts(
   return Object.fromEntries(entries);
 }
 
+// Live bunker prices for the calculators — the SAME admin-managed fuel_prices
+// table the bunker ticker reads. Falls back to the econ defaults if unset.
+export async function loadFuelPrices(): Promise<{ vlsfo: number; lsmgo: number; port: string; updated: string }> {
+  const fallback = { vlsfo: 585, lsmgo: 725, port: "Singapore", updated: "" };
+  if (!isSupabaseConfigured()) return fallback;
+  try {
+    const supabase = await getSupabaseServerClient();
+    const { data } = await supabase
+      .from("fuel_prices")
+      .select("vlsfo_usd_mt, lsmgo_usd_mt, port_area, updated_at")
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const fp = data as { vlsfo_usd_mt?: number | null; lsmgo_usd_mt?: number | null; port_area?: string | null; updated_at?: string | null } | null;
+    if (!fp) return fallback;
+    return {
+      vlsfo: fp.vlsfo_usd_mt ?? fallback.vlsfo,
+      lsmgo: fp.lsmgo_usd_mt ?? fallback.lsmgo,
+      port: fp.port_area ?? fallback.port,
+      updated: fp.updated_at ? new Date(fp.updated_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : fallback.updated,
+    };
+  } catch (err) {
+    console.error("[portal] fuel price load failed:", err);
+    return fallback;
+  }
+}
+
 export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<CargoView>> {
   if (isSupabaseConfigured()) {
     try {

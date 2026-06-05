@@ -1,43 +1,38 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createServerClient } from "@supabase/ssr";
-import { Calculator } from "lucide-react";
-import { VoyageEstimatorCalculator } from "@/components/voyage/VoyageEstimatorCalculator";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { loadViewerContext, loadVesselViews, loadCargoViews, loadFuelPrices } from "@/lib/portal/data";
+import { isCalculatorLocked } from "@/lib/portal/tier";
+import { VoyageEstimator, CalculatorLocked } from "@/components/portal/calculators";
 
-export const metadata = {
-  title: "Voyage Estimator — Arab ShipBroker",
-};
+export const metadata = { title: "Voyage Cost Estimator — Arab ShipBroker" };
 
-export default async function VoyageEstimatorPage() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
-  );
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default async function VoyageEstimatorPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vessel?: string; cargo?: string }>;
+}) {
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-6 px-6 py-6 md:px-8">
-      <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-asb-blue-light p-2">
-          <Calculator className="h-5 w-5 text-asb-blue" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-asb-navy">Voyage Estimator</h1>
-          <p className="mt-1 text-sm text-asb-gray-500">
-            Full voyage P&amp;L with per-fuel bunkers (VLSFO &amp; LSMGO, at sea
-            and in port). Prefill from an open vessel or a cargo, adjust the
-            inputs, and the result updates live. Saved estimates are private to
-            you.
-          </p>
-        </div>
-      </div>
+  const { tier } = await loadViewerContext();
+  // Server-side tier gate (T3+) — do not rely on the client hiding it.
+  if (isCalculatorLocked(tier)) return <CalculatorLocked title="Voyage Cost Estimator" />;
 
-      <VoyageEstimatorCalculator />
-    </div>
+  const params = await searchParams;
+  const [vessels, cargos, fuel] = await Promise.all([
+    loadVesselViews(),
+    loadCargoViews(),
+    loadFuelPrices(),
+  ]);
+
+  return (
+    <VoyageEstimator
+      vessels={vessels.views}
+      cargos={cargos.views}
+      fuel={fuel}
+      initialVesselId={params.vessel}
+      initialCargoId={params.cargo}
+    />
   );
 }

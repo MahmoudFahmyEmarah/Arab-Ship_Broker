@@ -134,9 +134,13 @@ export function vesselFromAvailability(
     lsmgo_sea_mt_day?: number | null;
     lsmgo_port_mt_day?: number | null;
   };
+  const vv = v as unknown as { gt?: number | null; scnrt?: number | null; max_loa_m?: number | null };
   return {
     id: row.id,
     vesselId: row.vessel_id,
+    gt: vv.gt ?? null,
+    scnrt: vv.scnrt ?? null,
+    loaM: vv.max_loa_m ?? null,
     name: v.vessel_name,
     imo: v.imo_number ?? "—",
     type: v.vessel_type,
@@ -181,9 +185,13 @@ function statusFromAvailability(
 }
 
 export function vesselFromMyVessel(row: MyVesselRow): VesselView {
+  const rr = row as unknown as { gt?: number | null; scnrt?: number | null };
   return {
     id: row.id,
     vesselId: row.id,
+    gt: rr.gt ?? null,
+    scnrt: rr.scnrt ?? null,
+    loaM: row.max_loa_m ?? null,
     name: row.vessel_name,
     imo: row.imo_number ?? "—",
     type: row.vessel_type,

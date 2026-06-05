@@ -27,8 +27,24 @@ export function num(s: string | number | null | undefined): number {
 }
 const f = (s: string | number) => parseFloat(String(s)) || 0;
 
+export interface FuelPrices { vlsfo: number; lsmgo: number; port: string; updated: string }
+
+// GT / SCNRT — use the real registered values from the vessel record when
+// present; fall back to the prototype's DWT approximation (flagged in the UI as
+// estimated) until the Suez Canal certificate / GT columns are populated.
 export function vesselSCNRT(v: VesselView): number {
-  return Math.round(num(v.dwt) * 0.45);
+  return v.scnrt != null ? v.scnrt : Math.round(num(v.dwt) * 0.45);
+}
+export function vesselGT(v: VesselView): number {
+  return v.gt != null ? v.gt : Math.round(num(v.dwt) * 0.54);
+}
+export const scnrtIsEstimated = (v: VesselView) => v.scnrt == null;
+
+// Suez direction from the zone pair (Med ↔ Red-Sea/Gulf/Asia/E.Africa).
+export function detectSuezDirection(polZone: string, podZone: string): "Southbound" | "Northbound" {
+  if (MED.has(polZone) && RED_AG.has(podZone)) return "Southbound";
+  if (RED_AG.has(polZone) && MED.has(podZone)) return "Northbound";
+  return "Southbound";
 }
 
 // ── Ports DA (King Abdullah Port / Kanoo model) ────────────────────────────
@@ -106,17 +122,29 @@ export interface VoyageLeg {
   vlsfo: number;
   lsmgo: number;
   note: string;
+  suez?: boolean;
+  nmAuto?: boolean;
 }
 
-export function calcVoyage(vessel: VesselView, cargo: CargoView) {
+export interface VoyageOpts {
+  fuel?: FuelPrices;
+  insurance?: number;
+  stevedoring?: number;
+  podPDAManual?: number;
+}
+
+export function calcVoyage(vessel: VesselView, cargo: CargoView, opts: VoyageOpts = {}) {
   const speedLaden = 12.5;
   const speedBallast = 13.0;
+  const fuel = opts.fuel ?? FUEL_PRICES;
   const vlsfoSea = f(vessel.fuel.vlsfoSea);
   const lsmgoPort = f(vessel.fuel.lsmgoPort);
   const qty = num(cargo.qtyMt);
 
-  const ladenNM = lookupNM(cargo.route.polCode, cargo.route.podCode) ?? 1500;
-  const ballastNM = lookupNM(vessel.openPortLocode, cargo.route.polCode) ?? 900;
+  const ladenNMauto = lookupNM(cargo.route.polCode, cargo.route.podCode);
+  const ballastNMauto = lookupNM(vessel.openPortLocode, cargo.route.polCode);
+  const ladenNM = ladenNMauto ?? 1500;
+  const ballastNM = ballastNMauto ?? 900;
   const ladenDays = ladenNM / (speedLaden * 24);
   const ballastDays = ballastNM / (speedBallast * 24);
 
@@ -138,34 +166,49 @@ export function calcVoyage(vessel: VesselView, cargo: CargoView) {
   const totalDays = ballastDays + ladenDays + suezDays + loadDays + dischDays;
   const totalNM = ballastNM + ladenNM + suezNM;
 
-  const bunker = totalVLSFO * FUEL_PRICES.vlsfo + totalLSMGO * FUEL_PRICES.lsmgo;
-  const polPDA = 38000;
-  const podPDA = 42000;
+  const bunkerVLSFO = totalVLSFO * fuel.vlsfo;
+  const bunkerLSMGO = totalLSMGO * fuel.lsmgo;
+  const bunker = bunkerVLSFO + bunkerLSMGO;
+
+  // POL PDA is computed by the SAME Ports DA model used on the Ports DA page,
+  // so the estimator and that page agree to the cent (KAP/Kanoo proforma).
+  const polDA = calcPortDA({ days: Math.max(Math.ceil(loadDays || 1), 1), qtyMT: qty, stevedoringAccount: "Charterer" });
+  const polPDA = polDA.usdIncl;
+  // POD has no rate table yet → manual fallback, flagged amber in the UI.
+  const podPDAauto = false;
+  const podPDA = opts.podPDAManual ?? 42000;
+
   const scnrt = vesselSCNRT(vessel);
   const suezTotal = suez ? calcSuezToll({ scnrt, cargoStatus: "Laden", sdrUsd: SUEZ_SDR_USD }).total : 0;
 
   const grossFreight = qty * (cargo.freightIdea || 0);
   const commissionAmt = grossFreight * ((cargo.commission || 0) / 100);
   const netFreight = grossFreight - commissionAmt;
-  const grossExpenses = bunker + polPDA + podPDA + suezTotal;
+  const insurance = opts.insurance ?? 0;
+  const stevedoring = opts.stevedoring ?? 0;
+  const grossExpenses = bunker + polPDA + podPDA + suezTotal + insurance + stevedoring;
   const tce = totalDays > 0 ? (netFreight - grossExpenses) / totalDays : 0;
 
   const legs: VoyageLeg[] = [
-    { name: "Ballast leg", from: vessel.openPort, to: cargo.route.polName, nm: ballastNM, days: ballastDays, vlsfo: ballastVLSFO, lsmgo: 0, note: "Open port → load port" },
-    { name: "Laden leg", from: cargo.route.polName, to: cargo.route.podName, nm: ladenNM, days: ladenDays, vlsfo: ladenVLSFO, lsmgo: 0, note: "Load → discharge" },
-    { name: "Suez transit", from: suez ? "Port Said" : "—", to: suez ? "Suez" : "—", nm: suezNM, days: suezDays, vlsfo: suezVLSFO, lsmgo: 0, note: suez ? "Cost → Suez tab" : "Not required" },
-    { name: "Port: Loading", from: cargo.route.polName, to: "—", nm: null, days: loadDays, vlsfo: 0, lsmgo: loadLSMGO, note: "Qty ÷ load rate" },
-    { name: "Port: Discharging", from: cargo.route.podName, to: "—", nm: null, days: dischDays, vlsfo: 0, lsmgo: dischLSMGO, note: "Qty ÷ disch rate" },
+    { name: "Ballast leg", from: vessel.openPort, to: cargo.route.polName, nm: ballastNM, days: ballastDays, vlsfo: ballastVLSFO, lsmgo: 0, nmAuto: ballastNMauto != null, note: ballastNMauto != null ? "Auto from distance table." : "Manual — distance not in Phase-1 table." },
+    { name: "Laden leg", from: cargo.route.polName, to: cargo.route.podName, nm: ladenNM, days: ladenDays, vlsfo: ladenVLSFO, lsmgo: 0, nmAuto: ladenNMauto != null, note: ladenNMauto != null ? "Auto from distance table." : "Manual entry required." },
+    { name: "Suez transit", from: suez ? "Port Said" : "—", to: suez ? "Suez" : "—", nm: suezNM, days: suezDays, vlsfo: suezVLSFO, lsmgo: 0, suez, note: suez ? "Cost → see Suez Canal Toll." : "Not required for this route." },
+    { name: "Port: Loading", from: cargo.route.polName, to: "—", nm: null, days: loadDays, vlsfo: 0, lsmgo: loadLSMGO, note: "Qty ÷ load rate." },
+    { name: "Port: Discharging", from: cargo.route.podName, to: "—", nm: null, days: dischDays, vlsfo: 0, lsmgo: dischLSMGO, note: "Qty ÷ discharge rate." },
   ];
 
   return {
     legs,
     totals: { nm: totalNM, days: totalDays, vlsfo: totalVLSFO, lsmgo: totalLSMGO },
-    costs: { bunker, polPDA, podPDA, suezTotal, grossFreight, commissionAmt, netFreight, grossExpenses, tce },
-    suez: { required: suez, scnrt, total: suezTotal },
-    ports: { polDays: loadDays, podDays: dischDays },
+    speed: { laden: speedLaden, ballast: speedBallast },
+    costs: { bunkerVLSFO, bunkerLSMGO, bunker, polPDA, podPDA, podPDAauto, suezTotal, insurance, stevedoring, grossFreight, commissionAmt, netFreight, grossExpenses, tce },
+    suez: { required: suez, scnrt, total: suezTotal, direction: detectSuezDirection(cargo.route.polZone, cargo.route.podZone) },
+    ports: { polDays: loadDays, podDays: dischDays, polDA },
+    fuel,
   };
 }
+
+export type VoyageCalc = ReturnType<typeof calcVoyage>;
 
 export const usd = (n: number) =>
   n.toLocaleString("en-US", { maximumFractionDigits: 0 });
