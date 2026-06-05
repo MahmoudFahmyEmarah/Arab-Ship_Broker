@@ -205,3 +205,11 @@
 .mvb-fmap.base-dark .mvb-ais:not(.is-sel) svg path{fill:#5E80AE;}
 .mvb-fmap.base-dark .mvb-ais__lbl{background:rgba(13,27,42,.88);color:#E6F1FB;}
 .mvb-fmap.base-dark .mvb-zone-lbl{text-shadow:0 1px 3px rgba(0,0,0,.85),0 0 2px rgba(0,0,0,.85);}
+
+/* Fleet map fullscreen toggle (parity with MarketMap) */
+.mvb-fmap.is-fullscreen { position: fixed; inset: 0; z-index: 9999; }
+.mvb-fmap__bar { position: relative; }
+.mvb-fmap__fs { margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: 0.5px solid var(--mvb-line); background: transparent; color: var(--mvb-ink, #1B3A5C); cursor: pointer; flex-shrink: 0; align-self: center; }
+.mvb-fmap__fs:hover { background: rgba(0,0,0,0.05); }
+.mvb-fmap.base-dark .mvb-fmap__fs { color: rgba(255,255,255,0.8); border-color: rgba(255,255,255,0.15); }
+.mvb-fmap.base-dark .mvb-fmap__fs:hover { background: rgba(255,255,255,0.08); }
