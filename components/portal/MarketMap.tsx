@@ -15,6 +15,8 @@ import { CargoView, VesselView } from "@/lib/portal/types";
 import { FALLBACK_PORTS } from "@/lib/portal/port-coords";
 import { MapFilterPanel } from "./MapFilterPanel";
 import { CARGO_FACETS, VESSEL_FACETS, passesFacets, type Selections } from "@/lib/portal/map-filters";
+import { VoyOpexPanel } from "./VoyOpexPanel";
+import { useViewerTier } from "@/lib/portal/tier";
 
 const ZONE_COLOR: Record<string, string> = {
   AG: "#534AB7",
@@ -149,6 +151,8 @@ const G = {
   maximize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>,
   minimize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M16 21v-3a2 2 0 0 1 2-2h3M8 21v-3a2 2 0 0 0-2-2H3" /></svg>,
   filter: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>,
+  voy: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8M8 10h8M8 14h3M8 18h3M15 14v4" /></svg>,
+  lock: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>,
 };
 
 type Popup =
@@ -194,6 +198,9 @@ export default function MarketMap({
   const [ready, setReady] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
   const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [voyOpen, setVoyOpen] = React.useState(false);
+  const tier = useViewerTier();
+  const voyLocked = tier === "T1" || tier === "T2";
   const [selections, setSelections] = React.useState<Selections>({});
   const [cargoOn, setCargoOn] = React.useState(true);
   const [vesselsOn, setVesselsOn] = React.useState(true);
@@ -502,6 +509,13 @@ export default function MarketMap({
           {G.filter}
           {Object.values(selections).some((s) => s.size > 0) && <span className="bar-badge bar-badge--cargo" />}
         </BarIcon>
+        <BarIcon
+          on={voyOpen && !voyLocked}
+          onClick={() => (voyLocked ? undefined : setVoyOpen((o) => !o))}
+          title={voyLocked ? "Voy OPEX — upgrade to Subscriber (T3) to unlock" : "Voy OPEX estimator"}
+        >
+          {voyLocked ? G.lock : G.voy}
+        </BarIcon>
         <div className="bar-spacer" />
         <div className="bar-divider" />
         <BarIcon onClick={() => setBase(base === "light" ? "dark" : "light")} title={base === "light" ? "Light base · switch to dark" : "Dark base · switch to light"}>
@@ -528,6 +542,8 @@ export default function MarketMap({
         onToggleOption={toggleOption}
         onReset={() => setSelections({})}
       />
+
+      <VoyOpexPanel open={voyOpen && !voyLocked} onClose={() => setVoyOpen(false)} />
     </div>
   );
 }

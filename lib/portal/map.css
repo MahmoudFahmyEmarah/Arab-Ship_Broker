@@ -923,3 +923,30 @@
   cursor: pointer;
 }
 .asb-map .filter-reset:hover { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+
+/* ── Voy OPEX slide-over (tier-gated) — left of the 44px right-bar ── */
+.asb-map .voy-panel { position: absolute; top: 0; right: 44px; bottom: 0; width: 0; overflow: hidden; z-index: 595; background: rgba(10,22,36,0.97); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); border-left: 0.5px solid rgba(255,255,255,0.08); transition: width 0.18s ease; }
+.asb-map .voy-panel.open { width: 300px; }
+.asb-map.is-fullscreen .voy-panel.open { width: 340px; }
+.asb-map .voy-panel__inner { width: 300px; height: 100%; overflow-y: auto; padding: 10px 12px 14px; color: rgba(255,255,255,0.86); display: flex; flex-direction: column; gap: 10px; }
+.asb-map.is-fullscreen .voy-panel__inner { width: 340px; }
+.asb-map .voy-panel__head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 0.5px solid rgba(255,255,255,0.08); }
+.asb-map .voy-panel__title { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #97C459; }
+.asb-map .voy-panel__close { border: 0; background: transparent; color: rgba(255,255,255,0.55); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+.asb-map .voy-panel__close:hover { color: #fff; background: rgba(255,255,255,0.07); }
+.asb-map .voy-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.asb-map .voy-pill { font-size: 10.5px; padding: 3px 9px; border-radius: 999px; border: 0.5px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.7); cursor: pointer; }
+.asb-map .voy-pill.is-on { background: rgba(151,196,89,0.22); border-color: #97C459; color: #d7eebd; font-weight: 600; }
+.asb-map .voy-tabs { display: flex; gap: 2px; border-bottom: 0.5px solid rgba(255,255,255,0.1); }
+.asb-map .voy-tab { font-size: 11px; padding: 6px 8px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: rgba(255,255,255,0.55); cursor: pointer; }
+.asb-map .voy-tab.is-on { color: #fff; border-bottom-color: #7BB8F0; font-weight: 600; }
+.asb-map .voy-body { display: flex; flex-direction: column; gap: 8px; }
+.asb-map .voy-field { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: rgba(255,255,255,0.7); gap: 8px; }
+.asb-map .voy-field__in { display: inline-flex; align-items: center; gap: 4px; }
+.asb-map .voy-field__in input, .asb-map .voy-field__in select { width: 96px; height: 28px; border-radius: 6px; border: 0.5px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); color: #fff; font-size: 12px; padding: 0 7px; }
+.asb-map .voy-field__in em { color: rgba(255,255,255,0.4); font-style: normal; font-size: 10px; }
+.asb-map .voy-line { display: flex; align-items: center; justify-content: space-between; font-size: 12px; padding: 6px 0; border-top: 0.5px solid rgba(255,255,255,0.08); }
+.asb-map .voy-line b { font-variant-numeric: tabular-nums; }
+.asb-map .voy-note { font-size: 10px; color: rgba(255,255,255,0.4); line-height: 1.4; }
+.asb-map .voy-total { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 2px; border-top: 0.5px solid rgba(255,255,255,0.16); font-size: 13px; }
+.asb-map .voy-total b { color: #97C459; font-size: 15px; font-variant-numeric: tabular-nums; }
