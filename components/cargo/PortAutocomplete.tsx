@@ -57,8 +57,19 @@ export function PortAutocomplete({
     setIsLoading(true);
     try {
       const supabase = getSupabaseBrowserClient();
-      const ports = await searchPorts(supabase, q);
-      setResults(ports);
+      // Curated ports table answers first; the full UN/LOCODE reference (≈13.5k)
+      // backstops it so any port is findable. Merge, de-duped by LOCODE.
+      const [tableRes, refRes] = await Promise.all([
+        searchPorts(supabase, q).catch(() => [] as PortOption[]),
+        fetch(`/api/ports/search?q=${encodeURIComponent(q)}`)
+          .then((r) => r.json())
+          .then((d) => (d.results ?? []) as PortOption[])
+          .catch(() => [] as PortOption[]),
+      ]);
+      const norm = (l: string) => l.replace(/\s+/g, "").toUpperCase();
+      const seen = new Set(tableRes.map((p) => norm(p.locode)));
+      const merged = [...tableRes, ...refRes.filter((p) => !seen.has(norm(p.locode)))];
+      setResults(merged.slice(0, 12));
     } catch {
       setResults([]);
     } finally {

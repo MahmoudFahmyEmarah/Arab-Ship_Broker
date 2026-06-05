@@ -9,6 +9,7 @@ import { MatchVesselView, MatchCargoView } from "@/lib/portal/match-views";
 import { fetchCargoMatches, fetchAvailabilityMatches } from "@/lib/portal/actions";
 import { FieldRow } from "./ui";
 import { IconBack, IconClose } from "./icons";
+import { orgForCargo, orgForVessel, ORG_TYPE_LABEL } from "@/lib/portal/org";
 
 const dash = (v: React.ReactNode) =>
   v === null || v === undefined || v === "" || v === "—" ? "—" : v;
@@ -80,6 +81,22 @@ function VesselMatchList({ availabilityId }: { availabilityId: string }) {
   );
 }
 
+function PortRange({ label, ports }: { label: string; ports: { locode: string; name: string; zone: string; status: string }[] }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--asb-gray-400)", marginBottom: 4 }}>{label}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {ports.map((p, i) => (
+          <div key={i} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span>{i + 1}. {p.name} <span style={{ color: "var(--asb-gray-400)" }}>({p.locode}{p.zone ? ` · ${p.zone}` : ""})</span></span>
+            <span style={{ fontSize: 10, color: "var(--asb-gray-500)" }}>{p.status}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose: () => void }) {
   const typeLabel = cargo.type === "Dry Bulk" ? "DRY BULK" : cargo.type === "Break Bulk" ? "BREAK BULK" : cargo.type.toUpperCase();
   return (
@@ -116,6 +133,16 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
             <FieldRow label="Discharge port" value={`${cargo.route.podName} · ${cargo.route.podCode}`} />
             <FieldRow label="Zone direction" value={`${cargo.route.polZone} → ${cargo.route.podZone}`} />
           </div>
+          {((cargo.loadPorts?.length ?? 0) > 1 || (cargo.dischPorts?.length ?? 0) > 1) && (
+            <div className="grid-2" style={{ marginTop: 8 }}>
+              {(cargo.loadPorts?.length ?? 0) > 1 && (
+                <PortRange label="Load range (POL)" ports={cargo.loadPorts!} />
+              )}
+              {(cargo.dischPorts?.length ?? 0) > 1 && (
+                <PortRange label="Disch range (POD)" ports={cargo.dischPorts!} />
+              )}
+            </div>
+          )}
         </div>
 
         <div className="section">
@@ -160,6 +187,26 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
           <MatchBox count={cargo.matches} label="vessel matches found" sub="via Arab ShipBroker review" />
           <CargoMatchList cargoId={cargo.id} />
         </div>
+
+        {(() => {
+          // Org model — listing circulates under the company desk; the handler is
+          // shown to the owning desk / admin (DEMO org until owner_org_id is seeded).
+          const { org, handler } = orgForCargo(cargo.refId || cargo.id);
+          return (
+            <div className="section">
+              <h4>Posted by</h4>
+              <div className="grid-2">
+                <FieldRow label="Company" value={org.name} />
+                <FieldRow label="Type" value={ORG_TYPE_LABEL[org.type]} />
+                <FieldRow label="Country" value={org.country} />
+                <FieldRow label="Subscription" value={org.tier} />
+                <FieldRow label="Handled by" value={handler.name} />
+                <FieldRow label="Desk" value={org.desk.name} />
+                <FieldRow label="Desk email" value={org.desk.email} valueClass="blue" />
+              </div>
+            </div>
+          );
+        })()}
 
         <PrivacyNote text="Your data is encrypted end-to-end. Visible only to Arab ShipBroker until your listing is approved." />
       </div>
@@ -251,6 +298,25 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
           <MatchBox count={v.matches} label="cargo matches available" sub={`in ${v.openPortZone} and adjacent zones`} />
           <VesselMatchList availabilityId={v.id} />
         </div>
+
+        {(() => {
+          // Ownership — registry owner + ship manager (DEMO org until the vessel
+          // carries owner_org_id; firewall masks counterparty PII at the DB layer).
+          const { owner, manager } = orgForVessel(v.imo || v.name);
+          return (
+            <div className="section">
+              <h4>Ownership</h4>
+              <div className="grid-2">
+                <FieldRow label="Registered owner" value={owner.name} />
+                <FieldRow label="Owner IMO" value={owner.imo ?? "—"} />
+                <FieldRow label="Fleet (owner)" value={owner.fleetTotal != null ? String(owner.fleetTotal) : "—"} />
+                <FieldRow label="Ship manager" value={manager.name} />
+                <FieldRow label="Country" value={owner.country} />
+                <FieldRow label="Desk email" value={owner.desk.email} valueClass="blue" />
+              </div>
+            </div>
+          );
+        })()}
 
         <PrivacyNote text="Your vessel data is encrypted. Visible only to Arab ShipBroker until you publish a position." />
       </div>

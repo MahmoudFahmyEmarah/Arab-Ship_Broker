@@ -19,6 +19,9 @@ export interface CargoView {
     podCode: string;
     podZone: string;
   };
+  // Multi-port range (index 0 = the primary in `route`). Empty/absent = single-port.
+  loadPorts?: { locode: string; name: string; zone: string; status: string }[];
+  dischPorts?: { locode: string; name: string; zone: string; status: string }[];
   qty: { min: number | null; max: number | null };
   qtyMt: string;
   vol: string;

@@ -93,7 +93,7 @@ function lookupNM(a?: string | null, b?: string | null): number | null {
 }
 const MED = new Set(["E.MED", "W.MED", "C.MED", "ADRIATIC", "B.SEA", "NCONT"]);
 const RED_AG = new Set(["R.SEA", "AG", "A.SEA", "ECAF", "ECI", "F.EAST"]);
-function needsSuez(polZone: string, podZone: string): boolean {
+export function needsSuez(polZone: string, podZone: string): boolean {
   return (MED.has(polZone) && RED_AG.has(podZone)) || (RED_AG.has(polZone) && MED.has(podZone));
 }
 
