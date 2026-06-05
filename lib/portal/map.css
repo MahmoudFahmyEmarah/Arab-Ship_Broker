@@ -984,7 +984,7 @@
 /* ── Sea-following route distance chip (POL→POD) ── */
 .asb-map .route-tag-wrap { pointer-events: none; }
 .asb-map .route-tag {
-  position: absolute; transform: translate(-50%, -50%); white-space: nowrap;
+  position: absolute; transform: translate(-50%, calc(-50% - 16px)); white-space: nowrap;
   display: inline-flex; align-items: center; gap: 5px;
   background: rgba(10, 22, 36, 0.92); color: #fff; font-size: 10.5px; font-weight: 600;
   font-variant-numeric: tabular-nums; padding: 2px 7px; border-radius: 999px;
