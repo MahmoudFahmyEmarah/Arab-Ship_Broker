@@ -26,6 +26,7 @@ import {
   LOAD_TERMS,
   PACKAGING_TYPES,
   CSS_CATEGORIES,
+  TOLERANCE_HOLDERS,
 } from "@/lib/schemas/cargo";
 import {
   submitCargo,
@@ -39,6 +40,7 @@ import { PortAutocomplete } from "./PortAutocomplete";
 import { SafetyQuestionsStep } from "./SafetyQuestionsStep";
 import { cn } from "@/lib/utils";
 import { activeOrg, currentMember, ORG_TYPE_LABEL } from "@/lib/portal/org";
+import { needsSuez } from "@/lib/portal/econ";
 
 const STEPS = [
   { id: "commodity", label: "Cargo & Quantity", icon: Package },
@@ -629,6 +631,59 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   </div>
                 );
               })()}
+
+              {/* MOL — quantity tolerance % + option holder (MOLOO/MOLCHOPT) */}
+              {selectedCommodity && (
+                <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-asb-ink-soft">
+                      Quantity tolerance (MOL %)
+                      <span className="text-asb-gray-400 font-normal ml-1 text-xs">— optional</span>
+                    </label>
+                    <Controller
+                      control={form.control}
+                      name="tolerance_pct"
+                      render={({ field }) => (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            step={1}
+                            value={field.value ?? ""}
+                            onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                            placeholder="e.g. 5"
+                            className="w-28 h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none focus:border-asb-blue focus:bg-white transition-all"
+                          />
+                          <span className="text-xs text-asb-gray-400">%</span>
+                        </div>
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-asb-ink-soft">Option holder</label>
+                    <Controller
+                      control={form.control}
+                      name="tolerance_holder"
+                      render={({ field, fieldState }) => (
+                        <>
+                          <select
+                            value={field.value ?? ""}
+                            onChange={(e) => field.onChange((e.target.value || undefined) as typeof field.value)}
+                            className="w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none focus:border-asb-blue focus:bg-white transition-all"
+                          >
+                            <option value="">—</option>
+                            {TOLERANCE_HOLDERS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                          {fieldState.error && <p className="text-xs text-red-500">{fieldState.error.message}</p>}
+                        </>
+                      )}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -686,6 +741,16 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   />
                 )}
               />
+
+              {loadPort && dischPort && needsSuez(loadPort.zone, dischPort.zone) && (
+                <div className="flex items-start gap-2 text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2 text-amber-800">
+                  <span className="font-semibold whitespace-nowrap">⚓ Suez transit</span>
+                  <span className="text-amber-700">
+                    This {loadPort.zone} → {dischPort.zone} route transits the Suez
+                    Canal — canal tolls apply (estimate them in the Voyage Estimator).
+                  </span>
+                </div>
+              )}
             </div>
           )}
 

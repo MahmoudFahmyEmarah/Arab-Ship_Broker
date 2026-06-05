@@ -44,6 +44,8 @@ export async function submitCargo(
         load_rate: payload.load_rate ?? null,
         disch_rate: payload.disch_rate ?? null,
         load_terms: payload.load_terms ?? null,
+        tolerance_pct: payload.tolerance_pct ?? null,
+        tolerance_holder: payload.tolerance_holder ?? null,
         laytime_basis: payload.laytime_basis ?? null,
         laytime_structure: payload.laytime_structure || null,
         freight_idea_usd_mt: payload.freight_idea_usd_mt ?? null,
