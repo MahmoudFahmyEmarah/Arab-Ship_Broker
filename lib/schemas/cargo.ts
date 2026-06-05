@@ -251,6 +251,14 @@ export const cargoFormSchema = z
 
     packaging_type: z.enum(PACKAGING_TYPES).optional(),
     css_category: z.string().optional(), // CSS-01…12 when cargo_type = Break Bulk
+
+    // Multi-port: full ordered range (index 0 = primary load/disch port above).
+    load_ports: z
+      .array(z.object({ locode: z.string(), name: z.string(), country: z.string(), zone: z.string(), status: z.string() }))
+      .optional(),
+    disch_ports: z
+      .array(z.object({ locode: z.string(), name: z.string(), country: z.string(), zone: z.string(), status: z.string() }))
+      .optional(),
     bag_weight_kg: z
       .number()
       .min(10, "Bag weight must be 10–1,500 kg")
@@ -432,6 +440,8 @@ export type CargoListingRow = {
   disch_port_name: string;
   disch_zone: ZoneCode;
   disch_country: string;
+  load_ports?: { locode: string; name: string; zone: string; country: string; status: string }[] | null;
+  disch_ports?: { locode: string; name: string; zone: string; country: string; status: string }[] | null;
   laycan_from: string | null;
   laycan_to: string | null;
   is_spot: boolean;

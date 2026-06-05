@@ -39,6 +39,8 @@ export async function submitCargo(
         volume_cbm: payload.volume_cbm ?? null,
         load_port_locode: payload.load_port_locode,
         disch_port_locode: payload.disch_port_locode,
+        load_ports: payload.load_ports ?? null,
+        disch_ports: payload.disch_ports ?? null,
         laycan_from: payload.laycan_from || null,
         laycan_to: payload.laycan_to || null,
         load_rate: payload.load_rate ?? null,

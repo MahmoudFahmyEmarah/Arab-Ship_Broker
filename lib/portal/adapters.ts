@@ -15,6 +15,16 @@ import {
 } from "@/lib/schemas/vessel";
 import { CargoView, VesselView, CargoScope, VesselStatusView } from "./types";
 
+function portList(
+  v: CargoListingRow["load_ports"],
+): { locode: string; name: string; zone: string; status: string }[] | undefined {
+  if (!Array.isArray(v) || v.length === 0) return undefined;
+  const rows = v
+    .filter((p) => p && p.locode)
+    .map((p) => ({ locode: p.locode, name: p.name ?? "", zone: p.zone ?? "", status: p.status ?? "" }));
+  return rows.length ? rows : undefined;
+}
+
 function daysFromNow(dateStr: string | null): number | null {
   if (!dateStr) return null;
   const d = new Date(dateStr).getTime();
@@ -70,6 +80,8 @@ export function toCargoView(
       podCode: row.disch_port_locode,
       podZone: row.disch_zone,
     },
+    loadPorts: portList(row.load_ports),
+    dischPorts: portList(row.disch_ports),
     qty: { min: row.qty_min_mt, max: row.qty_max_mt },
     qtyMt: numFmt.format(row.qty_max_mt),
     vol: row.volume_cbm != null ? numFmt.format(row.volume_cbm) : "—",

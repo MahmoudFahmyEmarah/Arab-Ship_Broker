@@ -72,29 +72,31 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
     mode === "edit" && !!initialData,
   );
 
-  const [loadPort, setLoadPort] = useState<PortOption | null>(
+  // Multi-port: up to 4 POL + 4 POD, each a port + call status. Index 0 is the
+  // primary (drives load_port_locode/zone + matching); the rest are the range.
+  type PortCall = { port: PortOption | null; status: string };
+  const mkCall = (locode: string, name: string, country: string, zone: string, status = "Confirmed"): PortCall => ({
+    port: { locode, trade_name: name, country, zone: zone as PortOption["zone"], port_type: "Sea Port" },
+    status,
+  });
+  type PortRow = { locode: string; name?: string; country?: string; zone?: string; status?: string };
+  const initPorts = (rows: PortRow[] | undefined, primary: () => PortCall): PortCall[] =>
+    Array.isArray(rows) && rows.length
+      ? rows.map((p) => mkCall(p.locode, p.name ?? "", p.country ?? "", p.zone ?? "", p.status ?? "Confirmed"))
+      : [primary()];
+  const idata = initialData as (CargoListingRow & { load_ports?: PortRow[]; disch_ports?: PortRow[] }) | undefined;
+  const [polCalls, setPolCalls] = useState<PortCall[]>(
     initialData
-      ? {
-          locode: initialData.load_port_locode,
-          trade_name: initialData.load_port_name,
-          country: initialData.load_country,
-          zone: initialData.load_zone,
-          port_type: "Sea Port",
-        }
-      : null,
+      ? initPorts(idata?.load_ports, () => mkCall(initialData.load_port_locode, initialData.load_port_name, initialData.load_country, initialData.load_zone))
+      : [{ port: null, status: "Confirmed" }],
   );
-
-  const [dischPort, setDischPort] = useState<PortOption | null>(
+  const [podCalls, setPodCalls] = useState<PortCall[]>(
     initialData
-      ? {
-          locode: initialData.disch_port_locode,
-          trade_name: initialData.disch_port_name,
-          country: initialData.disch_country,
-          zone: initialData.disch_zone,
-          port_type: "Sea Port",
-        }
-      : null,
+      ? initPorts(idata?.disch_ports, () => mkCall(initialData.disch_port_locode, initialData.disch_port_name, initialData.disch_country, initialData.disch_zone))
+      : [{ port: null, status: "Confirmed" }],
   );
+  const loadPort = polCalls[0]?.port ?? null;
+  const dischPort = podCalls[0]?.port ?? null;
 
   // In edit mode we need the real imsbc_category from the commodity table,
   // not a hard-coded "Cat_C". We resolve it after mount.
@@ -193,6 +195,26 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
     resolve();
   }, [mode, initialData, form]);
 
+  // ── Multi-port helpers ──
+  const CALL_STATUSES = ["Confirmed", "Indicated", "TBA"];
+  const callsOf = (which: "pol" | "pod") => (which === "pol" ? polCalls : podCalls);
+  const setterOf = (which: "pol" | "pod") => (which === "pol" ? setPolCalls : setPodCalls);
+  const syncPrimary = (which: "pol" | "pod", locode: string) =>
+    form.setValue(which === "pol" ? "load_port_locode" : "disch_port_locode", locode, { shouldValidate: true });
+  const pickPort = (which: "pol" | "pod", i: number, locode: string, port: PortOption) => {
+    setterOf(which)((arr) => arr.map((c, idx) => (idx === i ? { ...c, port } : c)));
+    if (i === 0) syncPrimary(which, locode);
+  };
+  const setStatus = (which: "pol" | "pod", i: number, status: string) =>
+    setterOf(which)((arr) => arr.map((c, idx) => (idx === i ? { ...c, status } : c)));
+  const addCall = (which: "pol" | "pod") =>
+    setterOf(which)((arr) => (arr.length >= 4 ? arr : [...arr, { port: null, status: "Confirmed" }]));
+  const removeCall = (which: "pol" | "pod", i: number) => {
+    const remaining = callsOf(which).filter((_, idx) => idx !== i);
+    setterOf(which)(remaining);
+    if (i === 0) syncPrimary(which, remaining[0]?.port?.locode ?? "");
+  };
+
   const handleCommodityChange = (commodity: CommodityOption) => {
     setSelectedCommodity(commodity);
     form.setValue("commodity_id", commodity.id, { shouldValidate: true });
@@ -258,9 +280,21 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
     setIsSubmitting(true);
     try {
       const supabase = getSupabaseBrowserClient();
+      const portRows = (calls: PortCall[]) =>
+        calls
+          .filter((c) => c.port)
+          .map((c) => ({
+            locode: c.port!.locode,
+            name: c.port!.trade_name,
+            country: c.port!.country,
+            zone: String(c.port!.zone),
+            status: c.status,
+          }));
       const payload: CargoFormValues = {
         ...data,
         safety_answers: safetyAnswers,
+        load_ports: portRows(polCalls),
+        disch_ports: portRows(podCalls),
       };
 
       if (mode === "edit" && initialData?.id) {
@@ -704,43 +738,87 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
               </div>
 
 
-              <Controller
-                control={form.control}
-                name="load_port_locode"
-                render={({ fieldState }) => (
-                  <PortAutocomplete
-                    label="Load Port (POL)"
-                    selectedPort={loadPort}
-                    onChange={(locode, port) => {
-                      form.setValue("load_port_locode", locode, {
-                        shouldValidate: true,
-                      });
-                      setLoadPort(port);
-                    }}
-                    error={fieldState.error?.message}
-                    placeholder="Search load port…"
-                  />
-                )}
-              />
+              {/* ── Load Port(s) — up to 4 ── */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-asb-ink-soft">Load Port(s) (POL)</span>
+                  {polCalls.length < 4 && (
+                    <button type="button" className="text-xs text-asb-blue font-semibold hover:underline" onClick={() => addCall("pol")}>
+                      + Add {polCalls.length === 1 ? "2nd" : `port ${polCalls.length + 1}`} load port
+                    </button>
+                  )}
+                </div>
+                {polCalls.map((c, i) => (
+                  <div key={i} className="space-y-1.5 border border-asb-gray-100 rounded p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1">
+                        {i === 0 ? (
+                          <Controller
+                            control={form.control}
+                            name="load_port_locode"
+                            render={({ fieldState }) => (
+                              <PortAutocomplete label={`Primary`} selectedPort={c.port} onChange={(locode, port) => pickPort("pol", i, locode, port)} error={fieldState.error?.message} placeholder="Search load port…" />
+                            )}
+                          />
+                        ) : (
+                          <PortAutocomplete label={`Alt ${i}`} selectedPort={c.port} onChange={(locode, port) => pickPort("pol", i, locode, port)} placeholder={`Search load port ${i + 1}…`} />
+                        )}
+                      </div>
+                      {i > 0 && (
+                        <button type="button" onClick={() => removeCall("pol", i)} className="mt-7 text-asb-gray-400 hover:text-red-500" aria-label="Remove port">✕</button>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5">
+                      {CALL_STATUSES.map((s) => (
+                        <button key={s} type="button" onClick={() => setStatus("pol", i, s)} className={cn("text-xs px-2.5 py-1 rounded-full border transition-colors", c.status === s ? "bg-asb-blue-light border-asb-blue text-asb-blue font-semibold" : "border-asb-gray-200 text-asb-gray-500 hover:border-asb-gray-300")}>
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-              <Controller
-                control={form.control}
-                name="disch_port_locode"
-                render={({ fieldState }) => (
-                  <PortAutocomplete
-                    label="Discharge Port (POD)"
-                    selectedPort={dischPort}
-                    onChange={(locode, port) => {
-                      form.setValue("disch_port_locode", locode, {
-                        shouldValidate: true,
-                      });
-                      setDischPort(port);
-                    }}
-                    error={fieldState.error?.message}
-                    placeholder="Search discharge port…"
-                  />
-                )}
-              />
+              {/* ── Discharge Port(s) — up to 4 ── */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-asb-ink-soft">Discharge Port(s) (POD)</span>
+                  {podCalls.length < 4 && (
+                    <button type="button" className="text-xs text-asb-blue font-semibold hover:underline" onClick={() => addCall("pod")}>
+                      + Add {podCalls.length === 1 ? "2nd" : `port ${podCalls.length + 1}`} disch port
+                    </button>
+                  )}
+                </div>
+                {podCalls.map((c, i) => (
+                  <div key={i} className="space-y-1.5 border border-asb-gray-100 rounded p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1">
+                        {i === 0 ? (
+                          <Controller
+                            control={form.control}
+                            name="disch_port_locode"
+                            render={({ fieldState }) => (
+                              <PortAutocomplete label={`Primary`} selectedPort={c.port} onChange={(locode, port) => pickPort("pod", i, locode, port)} error={fieldState.error?.message} placeholder="Search discharge port…" />
+                            )}
+                          />
+                        ) : (
+                          <PortAutocomplete label={`Alt ${i}`} selectedPort={c.port} onChange={(locode, port) => pickPort("pod", i, locode, port)} placeholder={`Search discharge port ${i + 1}…`} />
+                        )}
+                      </div>
+                      {i > 0 && (
+                        <button type="button" onClick={() => removeCall("pod", i)} className="mt-7 text-asb-gray-400 hover:text-red-500" aria-label="Remove port">✕</button>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5">
+                      {CALL_STATUSES.map((s) => (
+                        <button key={s} type="button" onClick={() => setStatus("pod", i, s)} className={cn("text-xs px-2.5 py-1 rounded-full border transition-colors", c.status === s ? "bg-asb-blue-light border-asb-blue text-asb-blue font-semibold" : "border-asb-gray-200 text-asb-gray-500 hover:border-asb-gray-300")}>
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
 
               {loadPort && dischPort && needsSuez(loadPort.zone, dischPort.zone) && (
                 <div className="flex items-start gap-2 text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2 text-amber-800">

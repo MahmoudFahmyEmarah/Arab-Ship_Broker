@@ -81,6 +81,22 @@ function VesselMatchList({ availabilityId }: { availabilityId: string }) {
   );
 }
 
+function PortRange({ label, ports }: { label: string; ports: { locode: string; name: string; zone: string; status: string }[] }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--asb-gray-400)", marginBottom: 4 }}>{label}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {ports.map((p, i) => (
+          <div key={i} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span>{i + 1}. {p.name} <span style={{ color: "var(--asb-gray-400)" }}>({p.locode}{p.zone ? ` · ${p.zone}` : ""})</span></span>
+            <span style={{ fontSize: 10, color: "var(--asb-gray-500)" }}>{p.status}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose: () => void }) {
   const typeLabel = cargo.type === "Dry Bulk" ? "DRY BULK" : cargo.type === "Break Bulk" ? "BREAK BULK" : cargo.type.toUpperCase();
   return (
@@ -117,6 +133,16 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
             <FieldRow label="Discharge port" value={`${cargo.route.podName} · ${cargo.route.podCode}`} />
             <FieldRow label="Zone direction" value={`${cargo.route.polZone} → ${cargo.route.podZone}`} />
           </div>
+          {((cargo.loadPorts?.length ?? 0) > 1 || (cargo.dischPorts?.length ?? 0) > 1) && (
+            <div className="grid-2" style={{ marginTop: 8 }}>
+              {(cargo.loadPorts?.length ?? 0) > 1 && (
+                <PortRange label="Load range (POL)" ports={cargo.loadPorts!} />
+              )}
+              {(cargo.dischPorts?.length ?? 0) > 1 && (
+                <PortRange label="Disch range (POD)" ports={cargo.dischPorts!} />
+              )}
+            </div>
+          )}
         </div>
 
         <div className="section">
