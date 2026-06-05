@@ -65,6 +65,10 @@ export function MapFilterPanel({
   onToggleVesselLayer,
   selections,
   onToggleOption,
+  qtyMin,
+  qtyMax,
+  onQtyMin,
+  onQtyMax,
   onReset,
 }: {
   open: boolean;
@@ -77,6 +81,10 @@ export function MapFilterPanel({
   onToggleVesselLayer: () => void;
   selections: Selections;
   onToggleOption: (facetId: string, value: string) => void;
+  qtyMin: number | "";
+  qtyMax: number | "";
+  onQtyMin: (v: number | "") => void;
+  onQtyMax: (v: number | "") => void;
   onReset: () => void;
 }) {
   if (!open) return null;
@@ -108,6 +116,27 @@ export function MapFilterPanel({
                 disabled={!cargoLayer}
               />
             ))}
+            {/* Quantity range (MT) */}
+            <div className="filter-facet">
+              <div className="filter-facet__label">Quantity (MT)</div>
+              <div className="filter-range">
+                <input
+                  type="number"
+                  placeholder="min"
+                  disabled={!cargoLayer}
+                  value={qtyMin}
+                  onChange={(e) => onQtyMin(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+                <span>–</span>
+                <input
+                  type="number"
+                  placeholder="max"
+                  disabled={!cargoLayer}
+                  value={qtyMax}
+                  onChange={(e) => onQtyMax(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+              </div>
+            </div>
           </div>
         )}
 

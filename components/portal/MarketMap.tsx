@@ -238,6 +238,8 @@ export default function MarketMap({
   const tier = useViewerTier();
   const voyLocked = tier === "T1" || tier === "T2";
   const [selections, setSelections] = React.useState<Selections>({});
+  const [qtyMin, setQtyMin] = React.useState<number | "">("");
+  const [qtyMax, setQtyMax] = React.useState<number | "">("");
   // Click-to-pair (dashboard = both sides present): anchor cargo + picked vessel.
   const [pairCargo, setPairCargo] = React.useState<CargoView | null>(null);
   const [pairVessel, setPairVessel] = React.useState<VesselView | null>(null);
@@ -250,8 +252,15 @@ export default function MarketMap({
 
   // Filter facets drive real marker visibility (§2b shared facet model).
   const visCargos = React.useMemo(
-    () => cargos.filter((c) => passesFacets(c, CARGO_FACETS, selections)),
-    [cargos, selections],
+    () =>
+      cargos.filter((c) => {
+        if (!passesFacets(c, CARGO_FACETS, selections)) return false;
+        const q = cargoQtyMax(c);
+        if (qtyMin !== "" && q < qtyMin) return false;
+        if (qtyMax !== "" && q > qtyMax) return false;
+        return true;
+      }),
+    [cargos, selections, qtyMin, qtyMax],
   );
   const visVessels = React.useMemo(
     () => vessels.filter((v) => passesFacets(v, VESSEL_FACETS, selections)),
@@ -592,7 +601,15 @@ export default function MarketMap({
         onToggleVesselLayer={() => setVesselsOn((v) => !v)}
         selections={selections}
         onToggleOption={toggleOption}
-        onReset={() => setSelections({})}
+        qtyMin={qtyMin}
+        qtyMax={qtyMax}
+        onQtyMin={setQtyMin}
+        onQtyMax={setQtyMax}
+        onReset={() => {
+          setSelections({});
+          setQtyMin("");
+          setQtyMax("");
+        }}
       />
 
       <VoyOpexPanel open={voyOpen && !voyLocked} onClose={() => setVoyOpen(false)} />

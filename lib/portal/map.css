@@ -975,3 +975,8 @@
 .asb-map .pair-card__chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
 .asb-map .pair-card__chips span { font-size: 10px; color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.05); border: 0.5px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 2px 6px; }
 .asb-map .pair-card__note { font-size: 9.5px; color: rgba(255,255,255,0.4); line-height: 1.4; margin-top: 8px; padding-top: 7px; border-top: 0.5px solid rgba(255,255,255,0.08); }
+
+.asb-map .filter-range { display: flex; align-items: center; gap: 6px; }
+.asb-map .filter-range input { width: 72px; height: 26px; border-radius: 6px; border: 0.5px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); color: #fff; font-size: 11px; padding: 0 6px; }
+.asb-map .filter-range input:disabled { opacity: 0.35; }
+.asb-map .filter-range span { color: rgba(255,255,255,0.4); font-size: 11px; }
