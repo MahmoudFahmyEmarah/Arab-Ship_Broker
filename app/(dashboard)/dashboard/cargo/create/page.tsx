@@ -5,7 +5,7 @@ import { PostingAsChip } from "@/components/portal/PostingAsChip";
 export default function CreateCargoPage() {
   return (
     <ProfileGuard requires="cargo">
-      <div className="px-6 py-6 md:px-8 space-y-6">
+      <div className="px-6 py-5 md:px-8 space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-asb-navy">Post New Cargo</h1>

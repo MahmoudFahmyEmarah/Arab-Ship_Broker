@@ -398,11 +398,11 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
         >
           {/* ── Step 0: Cargo & Quantity ── */}
           {step === 0 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
-              <div className="flex items-center gap-3 mb-2">
-                <Package className="w-7 h-7 text-asb-blue" />
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-1">
+                <Package className="w-6 h-6 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-asb-navy">
+                  <h2 className="text-lg font-bold text-asb-navy">
                     Cargo &amp; Quantity
                   </h2>
                   <p className="text-sm text-asb-gray-500">
@@ -723,11 +723,11 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
           {/* ── Step 1: Ports ── */}
           {step === 1 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
-              <div className="flex items-center gap-3 mb-2">
-                <MapPin className="w-7 h-7 text-asb-blue" />
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-1">
+                <MapPin className="w-6 h-6 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-asb-navy">
+                  <h2 className="text-lg font-bold text-asb-navy">
                     Ports
                   </h2>
                   <p className="text-sm text-asb-gray-500">
@@ -834,11 +834,11 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
           {/* ── Step 2: Laycan & Terms ── */}
           {step === 2 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
-              <div className="flex items-center gap-3 mb-2">
-                <Calendar className="w-7 h-7 text-asb-blue" />
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-1">
+                <Calendar className="w-6 h-6 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-asb-navy">
+                  <h2 className="text-lg font-bold text-asb-navy">
                     Laycan & Commercial Terms
                   </h2>
                   <p className="text-sm text-asb-gray-500">
@@ -1078,9 +1078,9 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           {step === 3 && selectedCommodity && (
             <div className="animate-in fade-in slide-in-from-bottom-3">
               <div className="flex items-center gap-3 mb-6">
-                <ShieldCheck className="w-7 h-7 text-asb-blue" />
+                <ShieldCheck className="w-6 h-6 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-asb-navy">
+                  <h2 className="text-lg font-bold text-asb-navy">
                     Safety & Vessel Requirements
                   </h2>
                   <p className="text-sm text-asb-gray-500">
@@ -1104,11 +1104,11 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
           {/* ── Step 4: Review ── */}
           {step === 4 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
-              <div className="flex items-center gap-3 mb-2">
-                <CheckCircle className="w-7 h-7 text-asb-blue" />
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-1">
+                <CheckCircle className="w-6 h-6 text-asb-blue" />
                 <div>
-                  <h2 className="text-xl font-bold text-asb-navy">
+                  <h2 className="text-lg font-bold text-asb-navy">
                     Review & Submit
                   </h2>
                   <p className="text-sm text-asb-gray-500">
