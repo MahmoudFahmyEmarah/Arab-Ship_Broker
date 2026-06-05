@@ -6,7 +6,6 @@ import {
   getLatestEdition, getEdition, getArchive, formatRange,
   SIZE_BAND_ORDER, type InsightBucket, type InsightEdition,
 } from "@/lib/market-insights";
-import { InsightsEmailCapture } from "./email-capture";
 
 export const metadata = {
   title: "Market Insights — Arab ShipBroker",
@@ -19,6 +18,15 @@ const nf = new Intl.NumberFormat("en-US");
 function weekLabel(weekId: string) {
   const m = weekId.match(/W(\d+)/);
   return m ? `Week ${parseInt(m[1], 10)}` : weekId;
+}
+
+// Public-facing regime labels. DISPLAY ONLY — the underlying regime value stays
+// "Dry bulk (IMSBC)" / "Break-bulk (CSS)" in the data, DB and member views; the
+// public page just shows friendlier terms (no "IMSBC" jargon).
+function publicRegimeLabel(label: string): string {
+  if (/IMSBC/i.test(label)) return "Bulk Cargos";
+  if (/Break-?bulk/i.test(label)) return "Break-bulk";
+  return label; // Grain · Other
 }
 
 // ── Small presentational pieces (server-rendered) ──
@@ -94,6 +102,8 @@ export default async function MarketInsightsPage({
   const sizeBands = [...p.size_bands].sort(
     (a, b) => SIZE_BAND_ORDER.indexOf(a.label as never) - SIZE_BAND_ORDER.indexOf(b.label as never),
   );
+  // Friendly public labels for the cargo-mix regimes (display only).
+  const regimeMix = p.regime_mix.map((b) => ({ ...b, label: publicRegimeLabel(b.label) }));
 
   return (
     <div className="bg-slate-50 min-h-screen">
@@ -149,7 +159,7 @@ export default async function MarketInsightsPage({
         <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-4 mb-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">Cargo mix by regime</div>
-            <BarList items={p.regime_mix} />
+            <BarList items={regimeMix} />
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">Size-band distribution</div>
@@ -179,46 +189,58 @@ export default async function MarketInsightsPage({
           Aggregated data only. No individual cargo, counterparty, or broker detail. Groups under {p.floor} roll into “Other”; quantities shown as bands.
         </div>
 
-        {/* ── Conversion hook (Part 4) ── */}
-        <div className="rounded-3xl border border-ocean-200 bg-gradient-to-br from-ocean-950 to-ocean-800 text-white p-8 max-sm:p-6">
-          <div className="max-w-2xl">
-            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-foam-300 mb-3">This is a fraction of what members see</div>
-            <h2 className="text-2xl max-sm:text-xl font-bold tracking-tight mb-3">The public weekly is the headline. Members work the whole board.</h2>
-            <p className="text-ocean-100/80 text-sm leading-relaxed">
-              The edition above is the aggregated teaser. Inside the portal, the same data opens up
+        {/* ── Conversion: members see more ── */}
+        <div className="relative overflow-hidden rounded-3xl border border-ocean-700/60 bg-gradient-to-br from-ocean-950 via-ocean-900 to-ocean-800 text-white p-10 max-sm:p-7 shadow-[0_8px_40px_rgba(8,20,38,0.35)]">
+          {/* subtle glow so the panel reads as a feature, not a grey footnote */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full opacity-50"
+            style={{ background: "radial-gradient(circle, rgba(16,163,188,0.28) 0%, transparent 70%)" }}
+          />
+          <div className="relative max-w-2xl">
+            <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-foam-300 mb-4">
+              <ShieldCheck className="w-3.5 h-3.5" /> This is a fraction of what members see
+            </div>
+            <h2 className="text-3xl max-sm:text-2xl font-extrabold tracking-tight text-white leading-tight mb-3">
+              The public weekly is the headline.
+              <br className="max-sm:hidden" /> Members work the whole board.
+            </h2>
+            <p className="text-ocean-100/85 text-[15px] leading-relaxed">
+              The edition above is the aggregated teaser. Inside the portal the same data opens
               into the cuts that actually move a fixture — gated because that depth is the membership.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 max-sm:grid-cols-1 gap-3 mt-6 mb-7">
+          <div className="relative grid grid-cols-2 max-sm:grid-cols-1 gap-3.5 mt-8 mb-8">
             {MEMBER_DEPTH.map((m) => (
-              <div key={m.title} className="flex items-start gap-3 rounded-2xl bg-white/5 border border-white/10 p-4">
-                <Lock className="w-4 h-4 text-foam-300 mt-0.5 shrink-0" />
-                <div>
-                  <div className="font-semibold text-sm">{m.title}</div>
-                  <div className="text-xs text-ocean-100/70 mt-0.5 leading-relaxed">{m.blurb}</div>
+              <div
+                key={m.title}
+                className="group flex items-start gap-3.5 rounded-2xl bg-white/[0.06] border border-white/12 p-4 transition-all duration-200 hover:bg-white/[0.1] hover:border-foam-400/40 hover:-translate-y-0.5"
+              >
+                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-foam-400/15 border border-foam-400/25 shrink-0 transition-colors group-hover:bg-foam-400/25">
+                  <Lock className="w-4 h-4 text-foam-300" />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-[15px] text-white">{m.title}</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-foam-300/80 border border-foam-300/30 rounded px-1.5 py-0.5">Members</span>
+                  </div>
+                  <div className="text-[13px] text-ocean-100/75 mt-1 leading-relaxed">{m.blurb}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex items-center gap-3 flex-wrap">
             <Link
               href="/auth/signup"
-              className="inline-flex items-center gap-2 h-12 px-7 rounded-xl bg-white text-ocean-950 font-bold text-sm hover:bg-slate-50 transition-colors shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+              className="inline-flex items-center gap-2 h-12 px-8 rounded-xl bg-white text-ocean-950 font-bold text-sm hover:bg-slate-50 transition-all hover:-translate-y-0.5 shadow-[0_4px_20px_rgba(0,0,0,0.25)]"
             >
               Get Access <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link href="/services" className="inline-flex items-center gap-2 h-12 px-6 rounded-xl bg-white/8 border border-white/15 text-white font-semibold text-sm hover:bg-white/12 transition-colors">
+            <Link href="/services" className="inline-flex items-center gap-2 h-12 px-6 rounded-xl bg-white/8 border border-white/15 text-white font-semibold text-sm hover:bg-white/14 transition-colors">
               How membership works
             </Link>
-          </div>
-
-          {/* Email capture */}
-          <div className="mt-7 pt-6 border-t border-white/10">
-            <div className="text-sm font-semibold mb-1">Get the weekly edition in your inbox</div>
-            <p className="text-xs text-ocean-100/70 mb-3">One email each Monday. The aggregated edition — no spam, unsubscribe anytime.</p>
-            <InsightsEmailCapture />
           </div>
         </div>
       </div>
