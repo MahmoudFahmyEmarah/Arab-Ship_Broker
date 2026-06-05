@@ -34,10 +34,10 @@ async function loadArchiveAccess(supabase: SupabaseClient): Promise<TemporalAcce
     const { data } = await supabase
       .from("users")
       .select("role, trust_tier")
-      .eq("supabase_user_id", user.id)
+      .eq("id", user.id)
       .single();
     const row = data as { role?: string; trust_tier?: string } | null;
-    return getTemporalAccess(row?.role ?? "", row?.trust_tier ?? "NEW");
+    return getTemporalAccess(normalizeRole(row?.role) ?? "", row?.trust_tier ?? "NEW");
   } catch {
     return getTemporalAccess("", "NEW"); // safest default: most restrictive window
   }
@@ -220,11 +220,35 @@ export async function loadMyVesselsList(): Promise<VesselOpt[]> {
   if (isSupabaseConfigured()) {
     try {
       const supabase = await getSupabaseServerClient();
-      const { data } = await supabase.from("v_my_vessels").select("id, vessel_name, imo_number").order("claimed_at", { ascending: false });
-      if (data?.length) {
-        return (data as { id: string; vessel_name: string; imo_number: string | null }[]).map((r) => ({
-          id: r.id, name: r.vessel_name, imo: r.imo_number ?? "—",
-        }));
+      // Prod has no v_my_vessels: a user's fleet = distinct vessels behind the
+      // availability positions they own (listing_ownership).
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: own } = await supabase
+          .from("listing_ownership")
+          .select("listing_id")
+          .eq("owner_user_id", user.id)
+          .eq("listing_type", "vessel_availability")
+          .eq("is_current", true)
+          .eq("role", "primary");
+        const ids = (own ?? []).map((o: { listing_id: string }) => o.listing_id);
+        if (ids.length) {
+          const { data } = await supabase
+            .from("vessel_availability")
+            .select("vessel:vessels ( id, vessel_name, imo_number )")
+            .in("id", ids);
+          type VJoin = { id: string; vessel_name: string; imo_number: string | null };
+          const seen = new Set<string>();
+          const out: VesselOpt[] = [];
+          for (const row of (data ?? []) as { vessel: VJoin | VJoin[] | null }[]) {
+            const v = Array.isArray(row.vessel) ? row.vessel[0] : row.vessel;
+            if (v && !seen.has(v.id)) {
+              seen.add(v.id);
+              out.push({ id: v.id, name: v.vessel_name, imo: v.imo_number ?? "—" });
+            }
+          }
+          if (out.length) return out;
+        }
       }
     } catch (err) {
       console.error("[portal] my vessels list load failed:", err);
@@ -249,8 +273,8 @@ export async function loadViewerContext(): Promise<{ tier: Tier; role: AppRole |
     if (!user) return { tier: "T3", role: null, userName: null };
     const { data } = await supabase
       .from("users")
-      .select("role, full_name, subscription_tier, is_market_partner")
-      .eq("supabase_user_id", user.id)
+      .select("role, full_name, subscription_tier")
+      .eq("id", user.id)
       .single();
     const vt = viewerTierFrom(data as { subscription_tier?: string | null; is_market_partner?: boolean | null } | null);
     const tier = (vt.isMarketPartner ? "T3" : vt.tier) as Tier;
