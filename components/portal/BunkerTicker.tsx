@@ -104,16 +104,40 @@ function BTCallout() {
 }
 
 export function BunkerTicker() {
+  // Live feed from get_bunker_ticker() (anon RPC). Until it returns rows the
+  // ticker stays on the anonymized demo data + DEMO disclaimer.
+  const [live, setLive] = React.useState<Sponsor[] | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+        const { data } = await getSupabaseBrowserClient().rpc("get_bunker_ticker");
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          setLive(data as Sponsor[]);
+        }
+      } catch {
+        /* stay on demo */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isDemo = live === null;
+  const source = live ?? SPONSORS;
   const sponsors = React.useMemo(
     () =>
-      SPONSORS.map((s) => ({ ...s, _state: freshness(s.ageDays) }))
+      source
+        .map((s) => ({ ...s, _state: freshness(s.ageDays) }))
         .filter((s) => s._state !== "hidden")
         .sort(
           (a, b) =>
             ORDER[a._state as Exclude<Fresh, "hidden">] -
               ORDER[b._state as Exclude<Fresh, "hidden">] || a.ageDays - b.ageDays,
         ),
-    [],
+    [source],
   );
   const trackRef = React.useRef<HTMLDivElement>(null);
 
@@ -137,21 +161,23 @@ export function BunkerTicker() {
   );
 
   return (
-    <div className="bunker-ticker" role="region" aria-label="Bunker prices ticker (demo)">
-      <div
-        className="bt-demo"
-        title="Demonstration only — these are placeholder prices, not live market data."
-      >
-        <span className="bt-demo__tag">DEMO</span>
-        <span className="bt-demo__txt">Sample data</span>
-      </div>
+    <div className="bunker-ticker" role="region" aria-label={`Bunker prices ticker${isDemo ? " (demo)" : ""}`}>
+      {isDemo && (
+        <div
+          className="bt-demo"
+          title="Demonstration only — these are placeholder prices, not live market data."
+        >
+          <span className="bt-demo__tag">DEMO</span>
+          <span className="bt-demo__txt">Sample data</span>
+        </div>
+      )}
       <div className="bt-track-wrap">
         <div className="bt-track" ref={trackRef}>
           {copy("a")}
           {copy("b")}
         </div>
       </div>
-      <div className="bt-updated" title="Demo feed · placeholder timestamp">
+      <div className="bt-updated" title={isDemo ? "Demo feed · placeholder timestamp" : "Live supplier feed"}>
         <span className="bt-updated__pulse" aria-hidden />
         Updated 06:00 UTC
       </div>
