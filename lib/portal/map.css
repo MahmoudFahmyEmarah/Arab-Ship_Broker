@@ -980,3 +980,15 @@
 .asb-map .filter-range input { width: 72px; height: 26px; border-radius: 6px; border: 0.5px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); color: #fff; font-size: 11px; padding: 0 6px; }
 .asb-map .filter-range input:disabled { opacity: 0.35; }
 .asb-map .filter-range span { color: rgba(255,255,255,0.4); font-size: 11px; }
+
+/* ── Sea-following route distance chip (POL→POD) ── */
+.asb-map .route-tag-wrap { pointer-events: none; }
+.asb-map .route-tag {
+  position: absolute; transform: translate(-50%, -50%); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(10, 22, 36, 0.92); color: #fff; font-size: 10.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums; padding: 2px 7px; border-radius: 999px;
+  border: 0.5px solid rgba(255, 255, 255, 0.18); box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.asb-map .route-tag i { font-style: normal; font-size: 8.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #EF9F27; }
+.asb-map .route-tag.is-exact i { color: #97C459; }

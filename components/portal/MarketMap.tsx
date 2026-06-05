@@ -17,6 +17,7 @@ import { MapFilterPanel } from "./MapFilterPanel";
 import { CARGO_FACETS, VESSEL_FACETS, passesFacets, type Selections } from "@/lib/portal/map-filters";
 import { VoyOpexPanel } from "./VoyOpexPanel";
 import { useViewerTier } from "@/lib/portal/tier";
+import { routeGeometry } from "@/lib/portal/routeGeometry";
 
 const ZONE_COLOR: Record<string, string> = {
   AG: "#534AB7",
@@ -478,12 +479,43 @@ export default function MarketMap({
     const pol = coordFor(c.route?.polCode);
     const pod = coordFor(c.route?.podCode);
     if (!pol || !pod) return;
-    L.polyline([pol, pod], { color: "#185FA5", weight: 1.8, dashArray: "6 5", opacity: 0.85 }).addTo(route);
-    L.circleMarker(pol, { radius: 6, color: "#97C459", fill: false, weight: 1.8 }).addTo(route);
-    L.circleMarker(pod, { radius: 6, color: "#E24B4A", fill: false, weight: 1.8 }).addTo(route);
-    map.fitBounds([pol, pod], { padding: [80, 80], maxZoom: 7, animate: true });
+
+    // Sea-following route: exact stored geometry (ECDIS) if the pair is in the
+    // table, else a land-avoiding corridor/arc estimate. Never a straight chord.
+    const geo =
+      routeGeometry({
+        polCode: c.route?.polCode,
+        podCode: c.route?.podCode,
+        polLL: pol,
+        podLL: pod,
+        polZone: c.route?.polZone,
+        podZone: c.route?.podZone,
+      }) ?? { pts: [pol, pod], nm: null, exact: false, source: "arc" as const };
+    const line = geo.pts.length >= 2 ? geo.pts : [pol, pod];
+
+    // 1) soft halo casing for legibility on any basemap
+    L.polyline(line, { color: base === "dark" ? "#0B1B30" : "#FFFFFF", weight: 5.5, opacity: 0.55, lineJoin: "round", lineCap: "round", interactive: false }).addTo(route);
+    // 2) the sailed track — SOLID when exact (ECDIS), DASHED when estimated
+    L.polyline(line, { color: "#185FA5", weight: 2.2, opacity: 0.95, lineJoin: "round", lineCap: "round", dashArray: geo.exact ? undefined : "7 6", interactive: false }).addTo(route);
+    // 3) POL (green) / POD (red) end dots
+    L.circleMarker(pol, { radius: 6, color: "#97C459", fill: false, weight: 1.8, interactive: false }).addTo(route);
+    L.circleMarker(pod, { radius: 6, color: "#E24B4A", fill: false, weight: 1.8, interactive: false }).addTo(route);
+    // 4) distance chip at the track midpoint (ECDIS vs est. tag)
+    if (geo.nm != null) {
+      const mid = line[Math.floor(line.length / 2)];
+      L.marker(mid, {
+        interactive: false,
+        icon: L.divIcon({
+          className: "route-tag-wrap",
+          html: `<span class="route-tag${geo.exact ? " is-exact" : ""}">${geo.nm.toLocaleString()} NM<i>${geo.exact ? "ECDIS" : "est."}</i></span>`,
+          iconSize: [0, 0],
+        }),
+      }).addTo(route);
+    }
+    // 5) fit the WHOLE curved track (corridors swing wide of the chord)
+    map.fitBounds(L.latLngBounds(line as [number, number][]), { padding: [70, 70], maxZoom: 7, animate: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedCargoId, ready]);
+  }, [focusedCargoId, ready, base]);
 
   // Focused vessel → flyTo
   React.useEffect(() => {
