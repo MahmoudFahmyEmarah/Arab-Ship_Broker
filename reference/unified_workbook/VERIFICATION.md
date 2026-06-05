@@ -86,9 +86,13 @@ they're the agreed next tranche of append-only schema work.
 
 ## 4. Blockers (cannot be satisfied from this file alone)
 
-1. **Map coordinates absent.** Neither the vessel rows nor the ports sheet carry
-   lat/lng — only LOCODE + zone. Precise map plotting needs a LOCODE→lat/lng source
-   for these 276 LOCODEs (separate deliverable).
+1. ~~**Map coordinates absent.**~~ **RESOLVED** (migration `…000710`). Root cause was
+   a bug, not just missing data: the prior backfill `…000350` keyed coordinates on
+   *spaced* locodes (`'UA ODS'`) while the ports table uses 5-char no-space
+   (`UAODS`), so its join matched zero rows and the map had nothing to plot.
+   `…000710` backfills display-grade city/terminal centroids for **all 275**
+   ports-sheet LOCODEs, keyed correctly (matched on a normalised locode so it's
+   format-agnostic). Coordinates are centroid-grade, not berth-precise.
 2. **Org / sub-user model not seedable here.** The 80 companies are shipowner/manager
    firms with no desk-email/phone and no people/emails; contact PII is per-vessel. The
    `organizations + organization_members + desk contact` design (locked separately) has
@@ -99,6 +103,8 @@ they're the agreed next tranche of append-only schema work.
   lives only in an ephemeral upload).
 - Verified the classification dictionaries match the seeded engine (no drift).
 - Added migration `…000705` resolving all 92 unmapped cargoes (33 commodities).
+- Added migration `…000710` fixing the map: corrected port-coordinate backfill for
+  all 275 LOCODEs (the prior `…000350` matched zero rows due to a locode-format bug).
 - Catalogued the 7 CORRECTION + 20 PROPOSED schema deltas for the next tranche.
 
 **Not applied to production** — migrations are staged in the repo; applying to the
