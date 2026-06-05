@@ -66,6 +66,24 @@ export const PACKAGING_TYPES = [
 ] as const;
 export type PackagingType = (typeof PACKAGING_TYPES)[number];
 
+// Break-bulk packing = the 12 official CSS Code categories (IMO CSS Code annexes),
+// from the ArabShipBroker_CSS_BreakBulk sheet. Used when cargo_type = Break Bulk;
+// bulk cargo keeps the simple PACKAGING_TYPES above.
+export const CSS_CATEGORIES = [
+  { id: "CSS-01", label: "Containers on non-cellular ships" },
+  { id: "CSS-02", label: "Portable tanks (tank-containers)" },
+  { id: "CSS-03", label: "Portable receptacles" },
+  { id: "CSS-04", label: "Wheel-based (rolling) cargoes" },
+  { id: "CSS-05", label: "Heavy cargo items" },
+  { id: "CSS-06", label: "Coiled sheet steel" },
+  { id: "CSS-07", label: "Heavy metal products" },
+  { id: "CSS-08", label: "Anchor chains" },
+  { id: "CSS-09", label: "Metal scrap in bulk" },
+  { id: "CSS-10", label: "Flexible intermediate bulk containers (FIBC)" },
+  { id: "CSS-11", label: "Logs (under-deck stow)" },
+  { id: "CSS-12", label: "Unit loads" },
+] as const;
+
 export const TOLERANCE_HOLDERS = ["MOLOO", "MOLCHOPT"] as const;
 export type ToleranceHolder = (typeof TOLERANCE_HOLDERS)[number];
 
@@ -232,6 +250,7 @@ export const cargoFormSchema = z
     disch_port_locode: z.string().min(1, "Discharge port is required"),
 
     packaging_type: z.enum(PACKAGING_TYPES).optional(),
+    css_category: z.string().optional(), // CSS-01…12 when cargo_type = Break Bulk
     bag_weight_kg: z
       .number()
       .min(10, "Bag weight must be 10–1,500 kg")

@@ -31,6 +31,8 @@ export async function submitCargo(
         cargo_type: payload.cargo_type,
         is_dg_cargo: payload.is_dg_cargo,
         is_grain_cargo: payload.is_grain_cargo,
+        packaging_type: payload.packaging_type ?? null,
+        css_category: payload.css_category ?? null,
         qty_min_mt: payload.qty_min_mt,
         qty_max_mt: payload.qty_max_mt,
         stowage_factor: sfInFt3Lt ?? null,

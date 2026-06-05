@@ -24,6 +24,8 @@ import {
   PortOption,
   computeCargoVolumeCbm,
   LOAD_TERMS,
+  PACKAGING_TYPES,
+  CSS_CATEGORIES,
 } from "@/lib/schemas/cargo";
 import {
   submitCargo,
@@ -412,6 +414,56 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                       />
                     )}
                   />
+                </div>
+              )}
+
+              {/* Packing — break-bulk uses the 12 CSS Code categories; bulk keeps
+                  the simple packaging types. */}
+              {selectedCommodity && (
+                <div>
+                  <label className="text-sm font-semibold text-asb-ink-soft">
+                    {values.cargo_type === "Break Bulk" ? "Packing (CSS category)" : "Packaging"}
+                    <span className="text-asb-gray-400 font-normal ml-1 text-xs">
+                      {values.cargo_type === "Break Bulk"
+                        ? "— IMO CSS Code securing category"
+                        : "— optional"}
+                    </span>
+                  </label>
+                  {values.cargo_type === "Break Bulk" ? (
+                    <Controller
+                      control={form.control}
+                      name="css_category"
+                      render={({ field }) => (
+                        <select
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value || undefined)}
+                          className="mt-1.5 w-full max-w-md h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none focus:border-asb-blue focus:bg-white transition-all"
+                        >
+                          <option value="">Select CSS category…</option>
+                          {CSS_CATEGORIES.map((c) => (
+                            <option key={c.id} value={c.id}>{c.id} · {c.label}</option>
+                          ))}
+                        </select>
+                      )}
+                    />
+                  ) : (
+                    <Controller
+                      control={form.control}
+                      name="packaging_type"
+                      render={({ field }) => (
+                        <select
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange((e.target.value || undefined) as typeof field.value)}
+                          className="mt-1.5 w-48 max-[768px]:w-full h-10 px-3 rounded border border-asb-gray-200 bg-asb-gray-50 text-sm focus:outline-none focus:border-asb-blue focus:bg-white transition-all"
+                        >
+                          <option value="">Select…</option>
+                          {PACKAGING_TYPES.map((p) => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      )}
+                    />
+                  )}
                 </div>
               )}
 
@@ -933,6 +985,16 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   value={values.cargo_type ?? "—"}
                 />
                 <ReviewRow label="IMSBC" value={values.imsbc_category ?? "—"} />
+                <ReviewRow
+                  label="Packing"
+                  value={
+                    values.cargo_type === "Break Bulk"
+                      ? values.css_category
+                        ? `${values.css_category} · ${CSS_CATEGORIES.find((c) => c.id === values.css_category)?.label ?? ""}`
+                        : "—"
+                      : values.packaging_type ?? "—"
+                  }
+                />
                 <ReviewRow
                   label="Quantity"
                   value={`${values.qty_min_mt?.toLocaleString()} – ${values.qty_max_mt?.toLocaleString()} MT`}
