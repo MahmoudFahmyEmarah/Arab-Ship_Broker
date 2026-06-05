@@ -36,6 +36,7 @@ import { CommoditySelector } from "./CommoditySelector";
 import { PortAutocomplete } from "./PortAutocomplete";
 import { SafetyQuestionsStep } from "./SafetyQuestionsStep";
 import { cn } from "@/lib/utils";
+import { activeOrg, currentMember, ORG_TYPE_LABEL } from "@/lib/portal/org";
 
 const STEPS = [
   { id: "commodity", label: "Cargo & Quantity", icon: Package },
@@ -945,7 +946,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                 {values.stowage_factor && (
                   <ReviewRow
                     label="Stowage factor"
-                    value={`${values.stowage_factor} m³/t`}
+                    value={`${Number(values.stowage_factor).toFixed(2)} m³/t · ${Math.round(Number(values.stowage_factor) * 35.87)} ft³/t`}
                   />
                 )}
                 <ReviewRow
@@ -985,6 +986,37 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   <ReviewRow label="Broker ref" value={values.broker} />
                 )}
               </div>
+
+              {/* Org model — Posted by + company-desk visibility (handoff §6) */}
+              {(() => {
+                const org = activeOrg();
+                const me = currentMember();
+                return (
+                  <div className="bg-white border border-asb-gray-200 rounded p-4">
+                    <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
+                      Posted by
+                    </p>
+                    <div className="bg-asb-gray-50 rounded border border-asb-gray-200 divide-y divide-slate-200">
+                      <ReviewRow label="Company" value={org.name} />
+                      <ReviewRow label="Type" value={ORG_TYPE_LABEL[org.type]} />
+                      <ReviewRow label="Country" value={org.country} />
+                      <ReviewRow label="Subscription" value={org.tier} />
+                      <ReviewRow label="Handled by" value={me.name} />
+                      <ReviewRow label="Desk" value={org.desk.name} />
+                      <ReviewRow label="Desk email" value={org.desk.email} />
+                      <ReviewRow label="Desk phone" value={org.desk.phone} />
+                    </div>
+                    <p className="text-xs text-asb-gray-400 mt-3">
+                      This listing circulates under the{" "}
+                      <strong className="text-asb-gray-600">{org.desk.name}</strong>{" "}
+                      — enquiries route to {org.desk.email}. Counterparties see the
+                      company, flagged “handled by {me.name}”; no individual direct
+                      line is shown. If {me.name} leaves, the listing stays with{" "}
+                      {org.name}.
+                    </p>
+                  </div>
+                );
+              })()}
 
               {Object.keys(safetyAnswers).length > 0 && (
                 <div>
