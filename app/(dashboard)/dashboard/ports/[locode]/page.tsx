@@ -219,7 +219,7 @@ export default async function PortActivityPage({
     ZONE_LABELS[port.zone as ZoneCode] ?? port.zone ?? "Unknown zone";
 
   return (
-    <div className="space-y-8 max-w-4xl py-2">
+    <div className="space-y-8 max-w-4xl px-6 py-6 md:px-8">
       <Link
         href="/dashboard/cargo"
         className="inline-flex items-center gap-1.5 text-sm text-asb-gray-500 hover:text-asb-ink transition-colors"

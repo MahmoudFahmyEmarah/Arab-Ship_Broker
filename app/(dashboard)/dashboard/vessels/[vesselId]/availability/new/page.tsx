@@ -47,7 +47,7 @@ export default async function NewAvailabilityPage({ params }: PageProps) {
 
   return (
     <ProfileGuard requires="vessel">
-      <div className="py-2 space-y-6">
+      <div className="px-6 py-6 md:px-8 space-y-6">
         <div className="flex items-start gap-3">
           <Link
             href={`/dashboard/vessels/${prefilledVessel.id}`}

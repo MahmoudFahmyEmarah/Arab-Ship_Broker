@@ -64,7 +64,7 @@ export default async function AccountSettingsPage() {
   const u = appUser as UserRow;
 
   return (
-    <div className="max-w-2xl space-y-8 py-2">
+    <div className="max-w-2xl space-y-8 px-6 py-6 md:px-8">
       <div>
         <h1 className="text-2xl font-bold text-asb-navy">Account Settings</h1>
         <p className="text-asb-gray-500 text-sm mt-1">

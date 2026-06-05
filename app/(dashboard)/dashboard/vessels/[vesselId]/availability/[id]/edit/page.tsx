@@ -60,7 +60,7 @@ export default async function EditAvailabilityPage({
   }
 
   return (
-    <div className="py-2 space-y-6">
+    <div className="px-6 py-6 md:px-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-asb-navy">Edit position</h1>
         <p className="text-sm text-asb-gray-500 mt-1">

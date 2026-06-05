@@ -162,7 +162,7 @@ export default async function VesselDetailPage({
   }
 
   return (
-    <div className="py-2 space-y-6 max-w-5xl">
+    <div className="px-6 py-6 md:px-8 space-y-6 max-w-5xl">
       <div className="flex items-start justify-between gap-4 max-[768px]:flex-col">
         <div className="flex items-start gap-4">
           <Link

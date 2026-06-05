@@ -113,6 +113,7 @@ export default function FleetMap({
   const layerRef = React.useRef<L.LayerGroup | null>(null);
   const baseRef = React.useRef<L.TileLayer | null>(null);
   const ctrlRef = React.useRef<HTMLDivElement>(null);
+  const roRef = React.useRef<ResizeObserver | null>(null);
   const [ready, setReady] = React.useState(false);
   const [show, setShow] = React.useState<Record<LayerKey, boolean>>({ vessels: true, cargo: true, zones: true });
   const [activeZone, setActiveZone] = React.useState<string | null>(null);
@@ -131,12 +132,17 @@ export default function FleetMap({
     mapRef.current = map;
     setReady(true);
     const t = setTimeout(() => { try { map.invalidateSize(); } catch {} }, 220);
+    // Re-measure on container resize (fixes Leaflet-in-flex gray gap).
+    const ro = new ResizeObserver(() => { try { mapRef.current?.invalidateSize(); } catch {} });
+    ro.observe(hostRef.current);
+    roRef.current = ro;
     return () => clearTimeout(t);
   }, []);
 
   React.useEffect(
     () => () => {
-      try { mapRef.current?.remove(); } catch {}
+      try { roRef.current?.disconnect(); mapRef.current?.remove(); } catch {}
+      roRef.current = null;
       mapRef.current = null;
     },
     [],

@@ -93,7 +93,7 @@ export default async function CargoDetailPage({
     (listing.status === "IN" || listing.status === "PARTIAL");
 
   return (
-    <div className="space-y-8 py-2 max-w-5xl">
+    <div className="space-y-8 px-6 py-6 md:px-8 max-w-5xl">
       {/* Header */}
       <div className="flex flex-row items-start justify-between gap-4 max-[768px]:flex-col">
         <div>

@@ -182,6 +182,7 @@ export default function MarketMap({
   const routeRef = React.useRef<L.LayerGroup | null>(null);
   const baseRef = React.useRef<L.TileLayer | null>(null);
   const cargoMk = React.useRef<Record<string, L.Marker>>({});
+  const roRef = React.useRef<ResizeObserver | null>(null);
 
   const [ready, setReady] = React.useState(false);
   const [cargoOn, setCargoOn] = React.useState(true);
@@ -247,14 +248,27 @@ export default function MarketMap({
         map.invalidateSize();
       } catch {}
     }, 60);
+
+    // Keep the map filling its flex panel: re-measure whenever the container
+    // resizes (fixes the Leaflet-in-flex "gray gap" once the 50/50 layout
+    // settles, on map toggle, and on window resize).
+    const ro = new ResizeObserver(() => {
+      try {
+        mapRef.current?.invalidateSize();
+      } catch {}
+    });
+    ro.observe(hostRef.current);
+    roRef.current = ro;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(
     () => () => {
       try {
+        roRef.current?.disconnect();
         mapRef.current?.remove();
       } catch {}
+      roRef.current = null;
       mapRef.current = null;
     },
     [],

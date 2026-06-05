@@ -21,7 +21,7 @@ export default async function VoyageEstimatorPage() {
   if (!user) redirect("/auth/login");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 py-2">
+    <div className="mx-auto max-w-5xl space-y-6 px-6 py-6 md:px-8">
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-asb-blue-light p-2">
           <Calculator className="h-5 w-5 text-asb-blue" />

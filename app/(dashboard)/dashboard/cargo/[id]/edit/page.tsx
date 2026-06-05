@@ -50,7 +50,7 @@ export default async function EditCargoPage({
   }
 
   return (
-    <div className="py-2 space-y-6">
+    <div className="px-6 py-6 md:px-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-asb-navy">
           Edit Cargo Listing
