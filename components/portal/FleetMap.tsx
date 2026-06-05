@@ -115,8 +115,21 @@ export default function FleetMap({
   const ctrlRef = React.useRef<HTMLDivElement>(null);
   const roRef = React.useRef<ResizeObserver | null>(null);
   const [ready, setReady] = React.useState(false);
+  const [fullscreen, setFullscreen] = React.useState(false);
   const [show, setShow] = React.useState<Record<LayerKey, boolean>>({ vessels: true, cargo: true, zones: true });
   const [activeZone, setActiveZone] = React.useState<string | null>(null);
+
+  // Fullscreen: reflow Leaflet after the size change; Esc exits.
+  React.useEffect(() => {
+    const t = setTimeout(() => { try { mapRef.current?.invalidateSize(); } catch {} }, 240);
+    return () => clearTimeout(t);
+  }, [fullscreen]);
+  React.useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
   const [base, setBase] = useMapBase();
 
   const sel = posted.find((v) => v.id === selected) || null;
@@ -260,10 +273,25 @@ export default function FleetMap({
   const LAYERS: [LayerKey, string][] = [["vessels", "Vessels"], ["cargo", "Cargo"], ["zones", "Zones"]];
 
   return (
-    <div className={"mvb-fmap base-" + base}>
+    <div className={"mvb-fmap base-" + base + (fullscreen ? " is-fullscreen" : "")}>
       <div className="mvb-fmap__bar">
         <span className="mvb-fmap__ttl">Fleet positions</span>
         <span className="mvb-fmap__rep">Open port + preferred-trade direction · select a card to frame</span>
+        <button
+          type="button"
+          className="mvb-fmap__fs"
+          title={fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
+          aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          onClick={() => setFullscreen((f) => !f)}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {fullscreen ? (
+              <path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M16 21v-3a2 2 0 0 1 2-2h3M8 21v-3a2 2 0 0 0-2-2H3" />
+            ) : (
+              <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" />
+            )}
+          </svg>
+        </button>
       </div>
       <div className="mvb-fmap__canvas mvb-fmap__canvas--leaflet">
         <div ref={hostRef} className="mvb-fmap__leaflet" />

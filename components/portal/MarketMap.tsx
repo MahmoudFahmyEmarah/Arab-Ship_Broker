@@ -13,6 +13,11 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "@/lib/portal/map.css";
 import { CargoView, VesselView } from "@/lib/portal/types";
 import { FALLBACK_PORTS } from "@/lib/portal/port-coords";
+import { MapFilterPanel } from "./MapFilterPanel";
+import { CARGO_FACETS, VESSEL_FACETS, passesFacets, type Selections } from "@/lib/portal/map-filters";
+import { VoyOpexPanel } from "./VoyOpexPanel";
+import { useViewerTier } from "@/lib/portal/tier";
+import { routeGeometry } from "@/lib/portal/routeGeometry";
 
 const ZONE_COLOR: Record<string, string> = {
   AG: "#534AB7",
@@ -110,11 +115,47 @@ function cargoIcon(c: CargoView, state: CargoState, selected: boolean) {
     anchor: [22, 30] as [number, number],
   };
 }
-function vesselTriangleHTML(v: VesselView, selected: boolean): string {
+function vesselTriangleHTML(v: VesselView, selected: boolean, dim = false): string {
   const { w, h } = vesselSize(v);
   const colour = vesselColor(v);
   const course = vesselCourse(v);
-  return `<div class="vessel-tri-wrap${selected ? " is-selected" : ""}" style="width:${Math.max(w, 28)}px;height:${Math.max(h, 28)}px;"><div class="v-tri" style="border-left:${w / 2}px solid transparent;border-right:${w / 2}px solid transparent;border-bottom:${h}px solid ${colour};filter:drop-shadow(0 0 3px ${colour}80);transform:rotate(${course}deg);"></div><div class="v-label">${v.name}</div></div>`;
+  return `<div class="vessel-tri-wrap${selected ? " is-selected" : ""}${dim ? " is-dim" : ""}" style="width:${Math.max(w, 28)}px;height:${Math.max(h, 28)}px;"><div class="v-tri" style="border-left:${w / 2}px solid transparent;border-right:${w / 2}px solid transparent;border-bottom:${h}px solid ${colour};filter:drop-shadow(0 0 3px ${colour}80);transform:rotate(${course}deg);"></div><div class="v-label">${v.name}</div></div>`;
+}
+
+// ── Dashboard click-to-pair (firewall-safe: qualitative LABEL, never a raw
+//    score or TCE number; no counterparty contact anywhere) ──────────────────
+function dwtNum(v: VesselView): number {
+  return parseInt(String(v.dwt || "").replace(/[,\s]/g, ""), 10) || 0;
+}
+function cargoQtyMax(c: CargoView): number {
+  if (c.qty?.max != null) return c.qty.max;
+  return parseInt(String(c.qtyMt || "").replace(/[^\d]/g, ""), 10) || 0;
+}
+function pairEligible(c: CargoView, v: VesselView): boolean {
+  const z = v.openPortZone;
+  const zoneOk = !!z && (z === c.route.polZone || z === c.route.podZone);
+  const dwt = dwtNum(v);
+  const q = cargoQtyMax(c);
+  const dwtOk = dwt > 0 && q > 0 && dwt >= q * 0.8 && dwt <= q * 1.2;
+  const grainOk = !c.isGrain || v.grainCertified === true; // grain hard-block
+  const dgOk = !c.isDg || v.dgCertified === true; // DG hard-block
+  return zoneOk && dwtOk && grainOk && dgOk;
+}
+type FitBand = "Strong" | "Good" | "Possible" | "Weak";
+function fitLabel(c: CargoView, v: VesselView): FitBand {
+  if (c.isGrain && !v.grainCertified) return "Weak";
+  if (c.isDg && !v.dgCertified) return "Weak";
+  const dwt = dwtNum(v);
+  const q = cargoQtyMax(c);
+  const util = dwt > 0 ? q / dwt : 0;
+  let s = 0;
+  if (util >= 0.9 && util <= 1.0) s += 2;
+  else if (util >= 0.8 && util <= 1.1) s += 1;
+  const z = v.openPortZone;
+  if (z === c.route.polZone) s += 2;
+  else if (z === c.route.podZone) s += 1;
+  if (!c.requiresGeared || v.geared) s += 1;
+  return s >= 4 ? "Strong" : s >= 3 ? "Good" : s >= 1 ? "Possible" : "Weak";
 }
 
 // ── Persisted light/dark base ──────────────────────────────────────────────
@@ -144,6 +185,11 @@ const G = {
   moon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>,
   plus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>,
   minus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14" /></svg>,
+  maximize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>,
+  minimize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M16 21v-3a2 2 0 0 1 2-2h3M8 21v-3a2 2 0 0 0-2-2H3" /></svg>,
+  filter: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>,
+  voy: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8M8 10h8M8 14h3M8 18h3M15 14v4" /></svg>,
+  lock: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>,
 };
 
 type Popup =
@@ -176,6 +222,7 @@ export default function MarketMap({
     },
     [portCoords],
   );
+
   const hostRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<L.Map | null>(null);
   const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
@@ -186,11 +233,48 @@ export default function MarketMap({
   const roRef = React.useRef<ResizeObserver | null>(null);
 
   const [ready, setReady] = React.useState(false);
+  const [fullscreen, setFullscreen] = React.useState(false);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [voyOpen, setVoyOpen] = React.useState(false);
+  const tier = useViewerTier();
+  const voyLocked = tier === "T1" || tier === "T2";
+  const [selections, setSelections] = React.useState<Selections>({});
+  const [qtyMin, setQtyMin] = React.useState<number | "">("");
+  const [qtyMax, setQtyMax] = React.useState<number | "">("");
+  // Click-to-pair (dashboard = both sides present): anchor cargo + picked vessel.
+  const [pairCargo, setPairCargo] = React.useState<CargoView | null>(null);
+  const [pairVessel, setPairVessel] = React.useState<VesselView | null>(null);
+  const isDashboard = cargos.length > 0 && vessels.length > 0;
   const [cargoOn, setCargoOn] = React.useState(true);
   const [vesselsOn, setVesselsOn] = React.useState(true);
   const [zonesOn, setZonesOn] = React.useState(true);
   const [base, setBase] = useMapBase();
   const [popup, setPopup] = React.useState<Popup | null>(null);
+
+  // Filter facets drive real marker visibility (§2b shared facet model).
+  const visCargos = React.useMemo(
+    () =>
+      cargos.filter((c) => {
+        if (!passesFacets(c, CARGO_FACETS, selections)) return false;
+        const q = cargoQtyMax(c);
+        if (qtyMin !== "" && q < qtyMin) return false;
+        if (qtyMax !== "" && q > qtyMax) return false;
+        return true;
+      }),
+    [cargos, selections, qtyMin, qtyMax],
+  );
+  const visVessels = React.useMemo(
+    () => vessels.filter((v) => passesFacets(v, VESSEL_FACETS, selections)),
+    [vessels, selections],
+  );
+  const toggleOption = React.useCallback((facetId: string, value: string) => {
+    setSelections((prev) => {
+      const set = new Set(prev[facetId] ?? []);
+      if (set.has(value)) set.delete(value);
+      else set.add(value);
+      return { ...prev, [facetId]: set };
+    });
+  }, []);
   const [, force] = React.useReducer((x) => x + 1, 0);
 
   // Init once
@@ -328,7 +412,7 @@ export default function MarketMap({
 
     if (cargoOn) {
       const state = cargoStateForZoom(map.getZoom());
-      cargos.forEach((c) => {
+      visCargos.forEach((c) => {
         const ll = coordFor(c.route?.polCode);
         if (!ll) return;
         const jx = ((c.id || "").charCodeAt(0) % 7) * 0.04 - 0.12;
@@ -343,6 +427,11 @@ export default function MarketMap({
           L.DomEvent.stopPropagation(ev);
           setPopup({ kind: "cargo", data: c, ll: mk.getLatLng() });
           onSelectCargo?.(c);
+          // Dashboard: clicking a cargo anchors a pairing — eligible vessels highlight.
+          if (isDashboard) {
+            setPairCargo(c);
+            setPairVessel(null);
+          }
         });
         cargoMk.current[c.id] = mk;
         cluster.addLayer(mk);
@@ -350,27 +439,34 @@ export default function MarketMap({
     }
 
     if (vesselsOn) {
-      vessels.forEach((v) => {
+      visVessels.forEach((v) => {
         const ll = coordFor(v.openPortLocode);
         if (!ll) return;
         const jx = ((v.id || "").charCodeAt(0) % 7) * 0.05 - 0.15;
         const jy = ((v.id || "").charCodeAt(1) % 7) * 0.05 - 0.15;
         const sel = focusedVesselId === v.id;
+        const dim = !!pairCargo && !pairEligible(pairCargo, v);
         const box = Math.max(vesselSize(v).w, vesselSize(v).h, 28);
         const mk = L.marker([ll[0] + jy, ll[1] + jx], {
-          icon: L.divIcon({ html: vesselTriangleHTML(v, sel), className: "vessel-marker", iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
+          icon: L.divIcon({ html: vesselTriangleHTML(v, sel, dim), className: "vessel-marker", iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
           riseOnHover: true,
         });
         mk.on("click", (ev) => {
           L.DomEvent.stopPropagation(ev);
-          setPopup({ kind: "vessel", data: v, ll: mk.getLatLng() });
-          onSelectVessel?.(v);
+          // If a cargo is anchored, picking a vessel forms the pair card instead
+          // of the normal vessel popup.
+          if (pairCargo) {
+            setPairVessel(v);
+          } else {
+            setPopup({ kind: "vessel", data: v, ll: mk.getLatLng() });
+            onSelectVessel?.(v);
+          }
         });
         cluster.addLayer(mk);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cargos, vessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready]);
+  }, [visCargos, visVessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready, pairCargo, isDashboard]);
 
   // Focused cargo → route + fit
   React.useEffect(() => {
@@ -383,12 +479,43 @@ export default function MarketMap({
     const pol = coordFor(c.route?.polCode);
     const pod = coordFor(c.route?.podCode);
     if (!pol || !pod) return;
-    L.polyline([pol, pod], { color: "#185FA5", weight: 1.8, dashArray: "6 5", opacity: 0.85 }).addTo(route);
-    L.circleMarker(pol, { radius: 6, color: "#97C459", fill: false, weight: 1.8 }).addTo(route);
-    L.circleMarker(pod, { radius: 6, color: "#E24B4A", fill: false, weight: 1.8 }).addTo(route);
-    map.fitBounds([pol, pod], { padding: [80, 80], maxZoom: 7, animate: true });
+
+    // Sea-following route: exact stored geometry (ECDIS) if the pair is in the
+    // table, else a land-avoiding corridor/arc estimate. Never a straight chord.
+    const geo =
+      routeGeometry({
+        polCode: c.route?.polCode,
+        podCode: c.route?.podCode,
+        polLL: pol,
+        podLL: pod,
+        polZone: c.route?.polZone,
+        podZone: c.route?.podZone,
+      }) ?? { pts: [pol, pod], nm: null, exact: false, source: "arc" as const };
+    const line = geo.pts.length >= 2 ? geo.pts : [pol, pod];
+
+    // 1) soft halo casing for legibility on any basemap
+    L.polyline(line, { color: base === "dark" ? "#0B1B30" : "#FFFFFF", weight: 5.5, opacity: 0.55, lineJoin: "round", lineCap: "round", interactive: false }).addTo(route);
+    // 2) the sailed track — SOLID when exact (ECDIS), DASHED when estimated
+    L.polyline(line, { color: "#185FA5", weight: 2.2, opacity: 0.95, lineJoin: "round", lineCap: "round", dashArray: geo.exact ? undefined : "7 6", interactive: false }).addTo(route);
+    // 3) POL (green) / POD (red) end dots
+    L.circleMarker(pol, { radius: 6, color: "#97C459", fill: false, weight: 1.8, interactive: false }).addTo(route);
+    L.circleMarker(pod, { radius: 6, color: "#E24B4A", fill: false, weight: 1.8, interactive: false }).addTo(route);
+    // 4) distance chip at the track midpoint (ECDIS vs est. tag)
+    if (geo.nm != null) {
+      const mid = line[Math.floor(line.length / 2)];
+      L.marker(mid, {
+        interactive: false,
+        icon: L.divIcon({
+          className: "route-tag-wrap",
+          html: `<span class="route-tag${geo.exact ? " is-exact" : ""}">${geo.nm.toLocaleString()} NM<i>${geo.exact ? "ECDIS" : "est."}</i></span>`,
+          iconSize: [0, 0],
+        }),
+      }).addTo(route);
+    }
+    // 5) fit the WHOLE curved track (corridors swing wide of the chord)
+    map.fitBounds(L.latLngBounds(line as [number, number][]), { padding: [70, 70], maxZoom: 7, animate: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedCargoId, ready]);
+  }, [focusedCargoId, ready, base]);
 
   // Focused vessel → flyTo
   React.useEffect(() => {
@@ -400,6 +527,22 @@ export default function MarketMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedVesselId, ready]);
 
+  // Fullscreen: reflow Leaflet tiles after the size change; Esc exits.
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      try { mapRef.current?.invalidateSize(); } catch {}
+    }, 240);
+    return () => clearTimeout(t);
+  }, [fullscreen]);
+  React.useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
   const point = popup && mapRef.current ? mapRef.current.latLngToContainerPoint(popup.ll) : null;
 
   const BarIcon = ({ on, onClick, title, children }: { on?: boolean; onClick: () => void; title: string; children: React.ReactNode }) => (
@@ -410,7 +553,7 @@ export default function MarketMap({
   );
 
   return (
-    <div className={`asb-map base-${base}`}>
+    <div className={`asb-map base-${base}${fullscreen ? " is-fullscreen" : ""}`}>
       <div className="map-canvas">
         <div ref={hostRef} className="leaflet-host" />
 
@@ -454,6 +597,18 @@ export default function MarketMap({
           {G.zones}
           {zonesOn && <span className="bar-badge bar-badge--zone" />}
         </BarIcon>
+        <div className="bar-divider" />
+        <BarIcon on={filtersOpen} onClick={() => setFiltersOpen((o) => !o)} title="Filters">
+          {G.filter}
+          {Object.values(selections).some((s) => s.size > 0) && <span className="bar-badge bar-badge--cargo" />}
+        </BarIcon>
+        <BarIcon
+          on={voyOpen && !voyLocked}
+          onClick={() => (voyLocked ? undefined : setVoyOpen((o) => !o))}
+          title={voyLocked ? "Voy OPEX — upgrade to Subscriber (T3) to unlock" : "Voy OPEX estimator"}
+        >
+          {voyLocked ? G.lock : G.voy}
+        </BarIcon>
         <div className="bar-spacer" />
         <div className="bar-divider" />
         <BarIcon onClick={() => setBase(base === "light" ? "dark" : "light")} title={base === "light" ? "Light base · switch to dark" : "Dark base · switch to light"}>
@@ -461,7 +616,74 @@ export default function MarketMap({
         </BarIcon>
         <BarIcon onClick={() => mapRef.current?.zoomIn()} title="Zoom in">{G.plus}</BarIcon>
         <BarIcon onClick={() => mapRef.current?.zoomOut()} title="Zoom out">{G.minus}</BarIcon>
+        <div className="bar-divider" />
+        <BarIcon on={fullscreen} onClick={() => setFullscreen((f) => !f)} title={fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}>
+          {fullscreen ? G.minimize : G.maximize}
+        </BarIcon>
       </div>
+
+      <MapFilterPanel
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        cargos={cargos}
+        vessels={vessels}
+        cargoLayer={cargoOn}
+        vesselLayer={vesselsOn}
+        onToggleCargoLayer={() => setCargoOn((v) => !v)}
+        onToggleVesselLayer={() => setVesselsOn((v) => !v)}
+        selections={selections}
+        onToggleOption={toggleOption}
+        qtyMin={qtyMin}
+        qtyMax={qtyMax}
+        onQtyMin={setQtyMin}
+        onQtyMax={setQtyMax}
+        onReset={() => {
+          setSelections({});
+          setQtyMin("");
+          setQtyMax("");
+        }}
+      />
+
+      <VoyOpexPanel open={voyOpen && !voyLocked} onClose={() => setVoyOpen(false)} />
+
+      {pairCargo && (
+        <div className="pair-card">
+          <div className="pair-card__head">
+            <span className="pair-card__ttl">Pairing</span>
+            <button
+              type="button"
+              className="pair-card__close"
+              aria-label="Clear pairing"
+              onClick={() => { setPairCargo(null); setPairVessel(null); }}
+            >×</button>
+          </div>
+          <div className="pair-card__route">{pairCargo.cargo} · <span className="mono">{pairCargo.refId}</span></div>
+          {!pairVessel ? (
+            <div className="pair-card__hint">
+              Pick a highlighted vessel — {visVessels.filter((v) => pairEligible(pairCargo, v)).length} eligible
+            </div>
+          ) : (
+            (() => {
+              const band = fitLabel(pairCargo, pairVessel);
+              return (
+                <>
+                  <div className="pair-card__to">→ {pairVessel.name}</div>
+                  <div className={`pair-band band-${band.toLowerCase()}`}>{band} fit</div>
+                  <div className="pair-card__chips">
+                    <span>{pairVessel.type}</span>
+                    <span>{pairVessel.dwt} DWT</span>
+                    <span>{pairVessel.openPortZone}</span>
+                  </div>
+                  <div className="pair-card__note">
+                    Indicative fit label via Arab ShipBroker — open the Voyage
+                    Estimator for full economics. No counterparty contact is shared.
+                  </div>
+                </>
+              );
+            })()
+          )}
+        </div>
+      )}
     </div>
   );
 }
