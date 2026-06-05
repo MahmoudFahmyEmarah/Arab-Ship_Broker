@@ -179,6 +179,49 @@
   border: none !important;
   padding: 0 !important;
 }
+/* ── Top-center platform title (work-in-progress identity) ──────────── */
+.asb-map .map-title {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--asb-navy, #0B1F3A);
+  background: rgba(255, 255, 255, 0.82);
+  border: 0.5px solid rgba(11, 31, 58, 0.12);
+  border-radius: 999px;
+  padding: 4px 12px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 1px 4px rgba(11, 31, 58, 0.08);
+  white-space: nowrap;
+}
+.asb-map .map-title__beta {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--asb-blue, #2D6CDF);
+  background: var(--asb-blue-light, #EAF1FD);
+  border: 0.5px solid var(--asb-blue, #2D6CDF);
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.2;
+}
+/* On dark / satellite map bases, lift the title for contrast */
+.asb-map.base-dark .map-title,
+.asb-map.base-satellite .map-title {
+  color: #fff;
+  background: rgba(11, 31, 58, 0.6);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
 .asb-map .filter-chip {
   padding: 3px 10px;
   border-radius: 4px;

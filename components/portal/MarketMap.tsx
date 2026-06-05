@@ -558,6 +558,10 @@ export default function MarketMap({
       <div className="map-canvas">
         <div ref={hostRef} className="leaflet-host" />
 
+        <div className="map-title">
+          Arab ShipBroker Platform <span className="map-title__beta">BETA</span>
+        </div>
+
         <div className="filter-bar">
           {["A.Gulf", "R.Sea", "E.Med", "B.Sea"].map((k, i) => (
             <div key={k} className={`filter-chip${i < 2 ? " active" : ""}`}>{k}</div>

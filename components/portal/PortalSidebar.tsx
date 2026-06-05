@@ -134,7 +134,10 @@ export function PortalSidebar({
       >
         {!collapsed && (
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--asb-navy)", lineHeight: 1.1 }}>Arab ShipBroker</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--asb-navy)", lineHeight: 1.1 }}>Arab ShipBroker</span>
+              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "var(--asb-blue)", background: "var(--asb-blue-light)", border: "0.5px solid var(--asb-blue)", borderRadius: 3, padding: "1px 4px", lineHeight: 1.2 }}>BETA</span>
+            </div>
             <div style={{ fontSize: 9, color: "var(--asb-gray-500)", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 2 }}>Portal</div>
           </div>
         )}
