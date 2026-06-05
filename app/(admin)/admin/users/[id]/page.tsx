@@ -55,7 +55,7 @@ export default async function AdminUserDetailPage({
   const { data: user, error } = await supabase
     .from("users")
     .select(
-      "id, supabase_user_id, name, full_name, email, role, trust_tier, is_active, clean_posts, strike_count, company, phone, notes, created_at, updated_at",
+      "id, name, full_name, email, role, trust_tier, is_active, clean_posts, strike_count, company, phone, notes, created_at, updated_at",
     )
     .eq("id", id)
     .single();
@@ -66,7 +66,7 @@ export default async function AdminUserDetailPage({
   const { data: cargoOwnership } = await supabase
     .from("listing_ownership")
     .select("listing_id")
-    .eq("owner_user_id", u.supabase_user_id)
+    .eq("owner_user_id", u.id)
     .eq("listing_type", "cargo")
     .eq("is_current", true);
 
@@ -87,7 +87,7 @@ export default async function AdminUserDetailPage({
   const { data: vesselOwnership } = await supabase
     .from("listing_ownership")
     .select("listing_id")
-    .eq("owner_user_id", u.supabase_user_id)
+    .eq("owner_user_id", u.id)
     .eq("listing_type", "vessel_availability")
     .eq("is_current", true);
 
@@ -110,7 +110,7 @@ export default async function AdminUserDetailPage({
     .select(
       "id, listing_type, status, action_taken, review_reason, reviewed_at, created_at",
     )
-    .eq("submitted_by", u.supabase_user_id)
+    .eq("submitted_by", u.id)
     .order("created_at", { ascending: false })
     .limit(20);
 

@@ -111,7 +111,7 @@ export default async function AdminVesselAvailabilityDetailPage({
     const { data: u } = await adminClient
       .from("users")
       .select("id, full_name, email, trust_tier")
-      .eq("supabase_user_id", ownershipRow.owner_user_id)
+      .eq("id", ownershipRow.owner_user_id)
       .maybeSingle();
     owner = (u as OwnerRow | null) ?? null;
   }
