@@ -132,7 +132,7 @@ export function Navbar() {
               <div className="flex flex-col leading-none min-w-0">
                 <span
                   className={cn(
-                    "font-bold text-[15px] tracking-tight transition-colors duration-300",
+                    "font-bold text-[15px] tracking-tight truncate transition-colors duration-300",
                     showTransparent ? "text-white" : "text-ocean-950",
                   )}
                 >
@@ -149,7 +149,7 @@ export function Navbar() {
               </div>
             </Link>
 
-            <div className="hidden lg:flex items-center">
+            <div className="hidden md:flex items-center">
               <div className="flex items-center gap-0.5">
                 {navigation.map((item) => {
                   const isActive = pathname === item.href;
@@ -158,7 +158,7 @@ export function Navbar() {
                       key={item.name}
                       href={item.href}
                       className={cn(
-                        "relative px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200",
+                        "relative px-4 max-lg:px-2.5 py-2 text-sm font-medium rounded-xl transition-all duration-200",
                         showTransparent
                           ? isActive
                             ? "text-white"
@@ -190,7 +190,7 @@ export function Navbar() {
 
               <div
                 className={cn(
-                  "w-px h-4 mx-5 transition-colors duration-300",
+                  "w-px h-4 mx-5 max-lg:mx-2.5 transition-colors duration-300",
                   showTransparent ? "bg-white/15" : "bg-slate-200",
                 )}
                 aria-hidden
@@ -203,7 +203,7 @@ export function Navbar() {
                   <Link
                     href="/dashboard"
                     className={cn(
-                      "flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-xl transition-all duration-200",
+                      "flex items-center gap-2 text-sm font-medium px-4 max-lg:px-2.5 py-2 rounded-xl transition-all duration-200",
                       showTransparent
                         ? "text-white/80 hover:text-white hover:bg-white/8"
                         : "text-slate-600 hover:text-ocean-700 hover:bg-ocean-50",
@@ -226,7 +226,7 @@ export function Navbar() {
                   <Link
                     href="/auth/login"
                     className={cn(
-                      "flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-xl transition-all duration-200",
+                      "flex items-center gap-1.5 text-sm font-medium px-4 max-lg:px-2.5 py-2 rounded-xl transition-all duration-200",
                       showTransparent
                         ? "text-white/75 hover:text-white hover:bg-white/8"
                         : "text-slate-500 hover:text-slate-900",
@@ -238,7 +238,7 @@ export function Navbar() {
                   <Link
                     href="/auth/signup"
                     className={cn(
-                      "flex items-center gap-1.5 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-200",
+                      "flex items-center gap-1.5 text-sm font-semibold px-5 max-lg:px-3.5 py-2.5 rounded-xl transition-all duration-200",
                       showTransparent
                         ? "bg-white text-ocean-950 hover:bg-white/90 shadow-[0_2px_12px_rgba(0,0,0,0.15)]"
                         : "bg-ocean-600 text-white hover:bg-ocean-700 shadow-[0_1px_6px_rgba(45,109,168,0.25)]",
@@ -256,7 +256,7 @@ export function Navbar() {
               aria-expanded={mobileMenuOpen}
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               className={cn(
-                "lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200",
+                "md:hidden inline-flex items-center justify-center w-9 h-9 rounded-xl shrink-0 transition-all duration-200",
                 showTransparent
                   ? "text-white/80 hover:text-white hover:bg-white/10"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100",
@@ -299,7 +299,7 @@ export function Navbar() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-30 bg-ocean-950/55 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-30 bg-ocean-950/55 backdrop-blur-sm md:hidden"
               onClick={() => setMobileMenuOpen(false)}
             />
 
@@ -309,7 +309,7 @@ export function Navbar() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: -8 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-              className="fixed top-17.5 max-lg:top-15.5 left-4 right-4 z-40 bg-white rounded-2xl shadow-xl border border-slate-200/80 overflow-hidden lg:hidden"
+              className="fixed top-15.5 left-4 right-4 z-40 bg-white rounded-2xl shadow-xl border border-slate-200/80 overflow-hidden md:hidden"
             >
               <div className="flex items-center gap-2.5 px-4 pt-4 pb-3 border-b border-slate-100">
                 <div className="w-7 h-7 bg-ocean-50 rounded-lg flex items-center justify-center shrink-0">
