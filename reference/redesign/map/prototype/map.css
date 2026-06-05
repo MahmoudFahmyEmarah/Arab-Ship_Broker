@@ -1,0 +1,1106 @@
+/* asb/map.css — Leaflet-based map system (v3 spec)
+ * Dual bars, Voy OPEX panel, cargo thumbnails, AIS triangles, popups.
+ */
+
+/* ── Container & layout ─────────────────────────────────────────────── */
+.asb-map {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: #0d1b2a;
+  color: #fff;
+  font-family: var(--asb-font, "Inter", sans-serif);
+  overflow: hidden;
+}
+.asb-map.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+.asb-map .map-canvas {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+.asb-map .leaflet-host {
+  position: absolute;
+  inset: 0;
+  background: #0d1b2a;
+}
+/* Leaflet attribution + controls styling */
+.asb-map .leaflet-control-attribution {
+  background: rgba(10, 22, 36, 0.7) !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+  font-size: 9px !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+}
+.asb-map .leaflet-control-attribution a {
+  color: rgba(123, 184, 240, 0.8) !important;
+}
+
+/* Default Leaflet popup hidden — we draw our own */
+.asb-map .leaflet-popup-content-wrapper,
+.asb-map .leaflet-popup-tip { display: none; }
+
+/* Cluster default override */
+.asb-map .marker-cluster { background: transparent !important; }
+.asb-map .marker-cluster div { background: transparent !important; }
+
+/* ── Bars ───────────────────────────────────────────────────────────── */
+.asb-map .left-bar,
+.asb-map .right-bar {
+  width: 44px;
+  flex-shrink: 0;
+  background: rgba(10, 22, 36, 0.95);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 2px;
+  z-index: 600;
+  position: relative;
+}
+.asb-map .left-bar  { border-right: 0.5px solid rgba(255, 255, 255, 0.07); }
+.asb-map .right-bar { border-left:  0.5px solid rgba(255, 255, 255, 0.07); }
+
+.asb-map .bar-divider {
+  width: 26px;
+  height: 0.5px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 3px 0;
+  flex-shrink: 0;
+}
+.asb-map .bar-spacer { flex: 1; }
+
+.asb-map .bar-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 16px;
+  transition: background 0.15s ease, color 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+.asb-map .bar-icon:hover  { background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.8); }
+.asb-map .bar-icon.active { background: rgba(24, 95, 165, 0.25);   color: #7BB8F0; }
+.asb-map .bar-icon i,
+.asb-map .voy-opex-icon i { font-size: 16px; line-height: 1; }
+
+.asb-map .bar-badge {
+  position: absolute;
+  top: 5px; right: 5px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(10, 22, 36, 0.95);
+  pointer-events: none;
+}
+.asb-map .bar-badge--cargo  { background: #97C459; }
+.asb-map .bar-badge--vessel { background: #7BB8F0; }
+
+/* Voy OPEX icon — featured */
+.asb-map .voy-opex-icon {
+  width: 34px; height: 34px;
+  border-radius: 6px;
+  background: rgba(24, 95, 165, 0.2);
+  color: #7BB8F0;
+  border: 0.5px solid rgba(24, 95, 165, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+.asb-map .voy-opex-icon:hover  { background: rgba(24, 95, 165, 0.35); border-color: #7BB8F0; }
+.asb-map .voy-opex-icon.active { background: #185FA5; color: #fff; border-color: #185FA5; }
+
+/* Tooltips */
+.asb-map .tooltip-r,
+.asb-map .tooltip-l {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #0C1F30;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 700;
+}
+.asb-map .tooltip-r { left: calc(100% + 8px); }
+.asb-map .tooltip-l { right: calc(100% + 8px); }
+.asb-map .tooltip-r::before {
+  content: "";
+  position: absolute;
+  right: 100%; top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+  border-right-color: #0C1F30;
+}
+.asb-map .tooltip-l::after {
+  content: "";
+  position: absolute;
+  left: 100%; top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+  border-left-color: #0C1F30;
+}
+.asb-map .bar-icon:hover .tooltip-r,
+.asb-map .bar-icon:hover .tooltip-l,
+.asb-map .voy-opex-icon:hover .tooltip-l { opacity: 1; }
+
+/* ── Filter sub-panel (opens from the right-bar Filters icon) ────────── */
+.asb-map .filter-panel {
+  position: absolute;
+  right: 44px; top: 0; bottom: 0;
+  width: 0;
+  background: rgba(10, 20, 32, 0.97);
+  border-left: 0.5px solid rgba(255, 255, 255, 0.08);
+  z-index: 581;
+  transition: width 0.22s ease;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--asb-font, "Inter", sans-serif);
+}
+.asb-map .filter-panel.open { width: 244px; }
+.asb-map.is-fullscreen .filter-panel.open { width: 280px; }
+.asb-map .filter-panel__inner {
+  width: 244px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 12px 10px;
+  box-sizing: border-box;
+}
+.asb-map.is-fullscreen .filter-panel__inner { width: 280px; }
+.asb-map .filter-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 9px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 12px;
+}
+.asb-map .filter-panel__head i { color: #7BB8F0; font-size: 14px; }
+.asb-map .filter-panel__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7BB8F0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex: 1;
+}
+.asb-map .filter-panel__close {
+  width: 22px; height: 22px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.asb-map .filter-panel__close:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
+
+.asb-map .fp-section { margin-bottom: 16px; }
+.asb-map .fp-section__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+}
+.asb-map .fp-section__title {
+  flex: 1;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+}
+.asb-map .fp-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.asb-map .fp-tri {
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 8px solid #7BB8F0;
+  flex-shrink: 0;
+}
+/* iOS-style switch for the whole layer */
+.asb-map .fp-switch {
+  width: 30px; height: 17px;
+  border-radius: 99px;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.16s ease;
+  padding: 0;
+}
+.asb-map .fp-switch.on { background: rgba(24, 95, 165, 0.95); }
+.asb-map .fp-switch__knob {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.16s ease;
+}
+.asb-map .fp-switch.on .fp-switch__knob { transform: translateX(13px); }
+.asb-map .fp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  transition: opacity 0.16s ease;
+}
+.asb-map .fp-chips.is-muted { opacity: 0.32; }
+.asb-map .fp-chip {
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 9.5px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+}
+.asb-map .fp-chip:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.4); color: #fff; }
+.asb-map .fp-chip.on {
+  background: rgba(24, 95, 165, 0.85);
+  border-color: #7BB8F0;
+  color: #fff;
+}
+.asb-map .fp-chip:disabled { cursor: not-allowed; }
+.asb-map .fp-foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+}
+.asb-map .fp-reset {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.asb-map .fp-reset:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.asb-map .fp-reset i { font-size: 12px; }
+
+/* ── Layer pill strip (bottom-left) ─────────────────────────────────── */
+.asb-map .layer-strip {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 500;
+}
+.asb-map .layer-pill {
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 9px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0.5px solid;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  user-select: none;
+  /* solid dark glass so the label stays legible on either basemap */
+  backdrop-filter: blur(3px);
+}
+.asb-map .layer-pill.on  { background: rgba(13, 27, 42, 0.92); color: #8FC3F5; border-color: rgba(123, 184, 240, 0.7); }
+.asb-map .layer-pill.off { background: rgba(13, 27, 42, 0.82); color: rgba(255, 255, 255, 0.62); border-color: rgba(255, 255, 255, 0.18); }
+/* Home side — locked on, not a control (no pointer, no hover lift). */
+.asb-map .layer-pill.is-locked { cursor: default; }
+/* The single opponent toggle: dashed outline when off (reads as "add"),
+   solid when revealing the opposing side. */
+.asb-map .layer-pill.opp.off { border-style: dashed; }
+.asb-map .layer-pill.opp.on  { background: rgba(24, 95, 165, 0.32); color: #BFE0FF; border-color: rgba(123, 184, 240, 0.85); }
+.asb-map .layer-pill .pill-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.asb-map .layer-pill .pill-tri {
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+
+/* Opponent markers (the opposing side, shown via the single toggle) read as
+   secondary: desaturated + dimmed, so home markers stay dominant. The shape
+   already differs (cargo dot/thumbnail vs. vessel triangle). */
+.asb-map .leaflet-marker-icon.cargo-marker.is-opponent,
+.asb-map .leaflet-marker-icon.vessel-marker.is-opponent {
+  opacity: 0.5 !important;
+  filter: grayscale(0.6) brightness(0.95);
+}
+.asb-map .leaflet-marker-icon.cargo-marker.is-opponent:hover,
+.asb-map .leaflet-marker-icon.vessel-marker.is-opponent:hover {
+  opacity: 0.92 !important;
+  filter: none;
+}
+
+/* ── Dashboard click-to-pair (part 5) ── */
+.asb-map .leaflet-marker-icon.is-anchor {
+  filter: drop-shadow(0 0 7px #7BB8F0) !important;
+  z-index: 1200 !important;
+}
+.asb-map .leaflet-marker-icon.is-eligible {
+  filter: drop-shadow(0 0 6px #97C459);
+  z-index: 1000 !important;
+}
+.asb-map .leaflet-marker-icon.is-faded {
+  opacity: 0.26 !important;
+  filter: grayscale(0.7);
+}
+.asb-map .dash-pair-hint {
+  position: absolute;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 650;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(8, 16, 28, 0.92);
+  border: 0.5px solid rgba(123, 184, 240, 0.4);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  backdrop-filter: blur(3px);
+  white-space: nowrap;
+}
+.asb-map .dash-pair-hint strong { color: #8FC3F5; font-weight: 600; }
+.asb-map .dash-pair-hint__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #7BB8F0;
+  animation: pair-pulse 1.4s ease infinite;
+}
+@keyframes pair-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(123,184,240,0.5); }
+  70%  { box-shadow: 0 0 0 6px rgba(123,184,240,0); }
+  100% { box-shadow: 0 0 0 0 rgba(123,184,240,0); }
+}
+.asb-map .dash-pair-hint button {
+  background: none; border: none; color: rgba(255,255,255,0.5);
+  cursor: pointer; font-size: 12px; padding: 0 0 0 2px; line-height: 1;
+}
+.asb-map .dash-pair-hint button:hover { color: #fff; }
+.asb-map .dash-pair-card {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 660;
+  width: 300px;
+  background: rgba(8, 16, 28, 0.96);
+  border: 0.5px solid rgba(123, 184, 240, 0.35);
+  border-radius: 8px;
+  padding: 12px 13px 13px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  font-family: var(--asb-font, "Inter", sans-serif);
+}
+.asb-map .dash-pair-card__close {
+  position: absolute; top: 7px; right: 9px;
+  background: none; border: none; color: rgba(255,255,255,0.5);
+  font-size: 16px; line-height: 1; cursor: pointer;
+}
+.asb-map .dash-pair-card__close:hover { color: #fff; }
+.asb-map .dash-pair-card__head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.asb-map .dash-pair-card__eyebrow {
+  font-size: 8px; text-transform: uppercase; letter-spacing: 0.09em;
+  color: rgba(255,255,255,0.45); font-weight: 600;
+}
+.asb-map .dash-pair-card__pair {
+  display: flex; align-items: baseline; gap: 6px; margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.asb-map .dash-pair-card__cargo,
+.asb-map .dash-pair-card__vessel { font-size: 13px; font-weight: 600; color: #fff; }
+.asb-map .dash-pair-card__arrow { color: #8FC3F5; }
+.asb-map .dash-pair-card__grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 7px 12px; margin-bottom: 11px;
+}
+.asb-map .dash-pair-card__k {
+  font-size: 8px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: rgba(255,255,255,0.4); margin-bottom: 1px;
+}
+.asb-map .dash-pair-card__v {
+  font-size: 11px; color: rgba(255,255,255,0.92); font-weight: 500;
+}
+.asb-map .dash-pair-card__v.mono { font-family: var(--asb-font-mono, monospace); letter-spacing: 0.02em; }
+.asb-map .dash-pair-card__btn {
+  width: 100%; padding: 7px; border-radius: 5px;
+  background: rgba(24, 95, 165, 0.9); border: 0.5px solid #7BB8F0;
+  color: #fff; font-size: 11px; font-weight: 500; cursor: pointer;
+  font-family: inherit;
+}
+.asb-map .dash-pair-card__btn:hover { background: #185FA5; }
+.asb-map .dash-pair-card .asb-badge.muted {
+  background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.7);
+}
+
+/* ── Cargo markers — zoom-aware (Prompt: density fix) ───────────────── */
+/* Common wrapper — used for hover tooltip positioning across all states. */
+.cargo-marker-wrap {
+  position: relative;
+  cursor: pointer;
+  font-family: var(--asb-font, "Inter", sans-serif);
+  box-sizing: border-box;
+}
+.cargo-marker-wrap .cargo-hover-tip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0C1F30;
+  color: #fff;
+  font-size: 9px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.cargo-marker-wrap:hover .cargo-hover-tip { opacity: 1; }
+
+/* STATE A — Zoom ≤ 6: 8px dot only, no label, no box. */
+.cargo-dot-marker {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.cargo-dot-marker[data-scope="in"]      { background: #97C459; }
+.cargo-dot-marker[data-scope="partial"] { background: #EF9F27; }
+.cargo-dot-marker[data-scope="out"]     { background: #E24B4A; }
+.cargo-dot-marker.is-selected {
+  width: 12px; height: 12px;
+  box-shadow: 0 0 0 2px rgba(24, 95, 165, 0.7);
+}
+
+/* STATE B — Zoom 7–8: pill (dot + name, no icon). */
+.cargo-pill-marker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 4px;
+  background: rgba(10, 22, 36, 0.70);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-left: 2px solid #97C459;   /* overridden inline */
+  border-radius: 3px;
+  backdrop-filter: blur(2px);
+  white-space: nowrap;
+}
+.cargo-pill-marker .pill-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cargo-pill-marker .pill-name {
+  font-size: 8px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+}
+.cargo-pill-marker.is-selected {
+  background: rgba(24, 95, 165, 0.85);
+  border-color: #7BB8F0;
+}
+.cargo-pill-marker.is-selected .pill-name { color: #fff; }
+
+/* STATE C — Zoom ≥ 9: full thumbnail (44×30, more transparent). */
+.cargo-thumb-marker {
+  width: 44px; height: 30px;
+  background: rgba(10, 22, 36, 0.65);
+  border: 0.5px solid rgba(255, 255, 255, 0.10);
+  border-left: 2px solid #97C459;     /* overridden inline */
+  border-radius: 3px;
+  padding: 3px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  backdrop-filter: blur(2px);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.cargo-thumb-marker i {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.80);
+  line-height: 1;
+}
+.cargo-thumb-marker span {
+  font-size: 7.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 38px;
+  letter-spacing: 0.02em;
+}
+.cargo-thumb-marker:hover {
+  border-color: rgba(123, 184, 240, 0.7);
+  transform: translateY(-2px);
+}
+.cargo-thumb-marker.is-selected {
+  border-color: #7BB8F0;
+  background: rgba(24, 95, 165, 0.55);
+  transform: scale(1.08);
+}
+.cargo-thumb-marker .wog-dot {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: #EF9F27;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.6);
+}
+
+/* ── Vessel triangle markers ────────────────────────────────────────── */
+.vessel-tri-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.vessel-tri-wrap .v-tri {
+  width: 0; height: 0;
+  transition: filter 0.15s ease;
+}
+.vessel-tri-wrap .v-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 3px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  background: rgba(10, 22, 36, 0.85);
+  padding: 1px 5px;
+  border-radius: 3px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  font-family: var(--asb-font, "Inter", sans-serif);
+  letter-spacing: 0.02em;
+}
+.vessel-tri-wrap:hover .v-label { opacity: 1; }
+.vessel-tri-wrap .v-core {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vessel-tri-wrap.is-selected::before {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  border: 1.5px solid #7BB8F0;
+  animation: vessel-pulse 1.5s ease infinite;
+  pointer-events: none;
+}
+@keyframes vessel-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.4); opacity: 0.4; }
+}
+
+/* ── Cluster bubble (markercluster override) ────────────────────────── */
+.asb-cluster {
+  background: rgba(24, 95, 165, 0.85);
+  border: 1.5px solid #7BB8F0;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--asb-font, "Inter", sans-serif);
+  box-shadow: 0 0 12px rgba(24, 95, 165, 0.35);
+}
+
+/* ── Map popup (custom, replaces leaflet popup) ─────────────────────── */
+.asb-map .map-popup {
+  position: absolute;
+  width: 240px;
+  background: #0C1F30;
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  padding: 11px;
+  z-index: 550;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--asb-font, "Inter", sans-serif);
+  transform: translate(-50%, calc(-100% - 14px));
+  pointer-events: auto;
+}
+.asb-map .map-popup__close {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 18px; height: 18px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.asb-map .map-popup__close:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.asb-map .map-popup__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 2px;
+  padding-right: 18px;
+  letter-spacing: 0.01em;
+}
+.asb-map .map-popup__sub {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+  letter-spacing: 0.03em;
+}
+.asb-map .map-popup__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  margin-bottom: 9px;
+}
+.asb-map .map-popup__k {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 1px;
+}
+.asb-map .map-popup__v {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.asb-map .map-popup__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+.asb-map .map-popup__btn {
+  padding: 5px 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 0.5px solid transparent;
+  font-family: inherit;
+  text-align: center;
+  transition: filter 0.12s ease;
+}
+.asb-map .map-popup__btn:hover { filter: brightness(1.12); }
+.asb-map .map-popup__btn--view  { background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.7); }
+.asb-map .map-popup__btn--voy   { background: rgba(24, 95, 165, 0.25); color: #7BB8F0; border-color: rgba(24, 95, 165, 0.4); }
+.asb-map .map-popup__btn--match { background: #185FA5; color: #fff; }
+
+/* ── Voy OPEX side panel ────────────────────────────────────────────── */
+.asb-map .voy-panel {
+  position: absolute;
+  right: 44px; top: 0; bottom: 0;
+  width: 0;
+  background: rgba(10, 20, 32, 0.97);
+  border-left: 0.5px solid rgba(255, 255, 255, 0.08);
+  z-index: 580;
+  transition: width 0.22s ease;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--asb-font, "Inter", sans-serif);
+}
+.asb-map .voy-panel.open { width: 280px; }
+.asb-map.is-fullscreen .voy-panel.open { width: 320px; }
+.asb-map .voy-panel__inner {
+  width: 280px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 12px 10px;
+  box-sizing: border-box;
+}
+.asb-map.is-fullscreen .voy-panel__inner { width: 320px; }
+.asb-map .voy-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 9px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 10px;
+}
+.asb-map .voy-panel__head i {
+  color: #7BB8F0;
+  font-size: 14px;
+}
+.asb-map .voy-panel__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7BB8F0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex: 1;
+}
+.asb-map .voy-panel__close {
+  width: 22px; height: 22px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.asb-map .voy-panel__close:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
+
+.asb-map .prefill-slot {
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  padding: 7px 9px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.asb-map .prefill-slot:hover { border-color: rgba(24, 95, 165, 0.4); }
+.asb-map .prefill-slot.filled {
+  background: rgba(24, 95, 165, 0.08);
+  border: 0.5px solid rgba(24, 95, 165, 0.3);
+}
+.asb-map .slot-label {
+  font-size: 7.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.32);
+  margin-bottom: 3px;
+  font-weight: 600;
+}
+.asb-map .slot-value { font-size: 10px; color: #fff; font-weight: 500; }
+.asb-map .slot-sub   { font-size: 9px; color: rgba(255, 255, 255, 0.45); margin-top: 1px; }
+.asb-map .slot-hint  { font-size: 9px; color: rgba(255, 255, 255, 0.3); font-style: italic; }
+
+.asb-map .voy-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.asb-map .voy-grouppill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px 4px 7px;
+  border-radius: 99px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-family: inherit;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.45);
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.asb-map .voy-grouppill:hover { border-color: rgba(255, 255, 255, 0.4); color: rgba(255, 255, 255, 0.8); }
+.asb-map .voy-grouppill.on {
+  background: rgba(24, 95, 165, 0.85);
+  border-color: #7BB8F0;
+  color: #fff;
+}
+.asb-map .voy-grouppill__tick {
+  width: 11px; height: 11px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  position: relative;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.asb-map .voy-grouppill.on .voy-grouppill__tick {
+  background: #fff;
+  border-color: #fff;
+}
+.asb-map .voy-grouppill.on .voy-grouppill__tick::after {
+  content: "";
+  position: absolute;
+  left: 3px; top: 0.5px;
+  width: 3px; height: 6px;
+  border: solid #1a5fa5;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.asb-map .voy-empty {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.42);
+  font-style: italic;
+  text-align: center;
+  padding: 22px 8px;
+  line-height: 1.5;
+}
+
+.asb-map .mod-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 10px;
+  margin-bottom: 12px;
+}
+.asb-map .mod-tab {
+  padding: 7px 4px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  line-height: 1.3;
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+}
+.asb-map .mod-tab i { font-size: 13px; line-height: 1; }
+.asb-map .mod-tab:hover {
+  border-color: rgba(24, 95, 165, 0.4);
+  color: rgba(255, 255, 255, 0.7);
+}
+.asb-map .mod-tab.active {
+  background: rgba(24, 95, 165, 0.2);
+  border-color: rgba(24, 95, 165, 0.5);
+  color: #7BB8F0;
+}
+
+.asb-map .voy-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 2px;
+  margin-right: -2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+.asb-map .voy-panel__body::-webkit-scrollbar { width: 6px; }
+.asb-map .voy-panel__body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }
+
+.asb-map .sec-title {
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.32);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+}
+.asb-map .sec-block { margin-bottom: 12px; }
+
+.asb-map .voy-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+.asb-map .voy-row.one { grid-template-columns: 1fr; }
+.asb-map .voy-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.asb-map .voy-label {
+  font-size: 8.5px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+.asb-map .voy-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+.asb-map .voy-input:focus {
+  outline: none;
+  border-color: rgba(24, 95, 165, 0.6);
+  color: #fff;
+  background: rgba(24, 95, 165, 0.08);
+}
+.asb-map .voy-input--readonly {
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.asb-map .total-row {
+  background: rgba(24, 95, 165, 0.1);
+  border: 0.5px solid rgba(24, 95, 165, 0.25);
+  border-radius: 5px;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+.asb-map .total-label { font-size: 9px; color: rgba(255, 255, 255, 0.5); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+.asb-map .total-value { font-size: 13px; font-weight: 600; color: #7BB8F0; font-variant-numeric: tabular-nums; }
+
+.asb-map .run-btn {
+  width: 100%;
+  padding: 9px 0;
+  margin-top: 10px;
+  background: #185FA5;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  transition: background 0.12s ease;
+}
+.asb-map .run-btn:hover { background: #1f6fb8; }
+.asb-map .run-foot {
+  font-size: 8.5px;
+  color: rgba(255, 255, 255, 0.25);
+  text-align: center;
+  margin-top: 6px;
+  letter-spacing: 0.03em;
+}
+
+/* ── Voy OPEX icon — locked (T1/T2) ─────────────────────────────────── */
+.asb-map .voy-opex-icon.is-locked {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: auto;            /* keep tooltip working */
+  border-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.25);
+  background: transparent;
+}
+.asb-map .voy-opex-icon.is-locked:hover { background: transparent; }
+
+/* ════════════════════════════════════════════════════════════════════
+   CONSISTENCY AMENDMENT (1 Jun 2026)
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared light base ───────────────────────────────────────────────
+   Carto Voyager tiles + dark-glass chrome read fine on a light base. */
+.asb-map.base-light { background: #dce7f2; }
+.asb-map.base-light .leaflet-host { background: #dce7f2; }
+
+/* ── Icon bar mirrored to the map's INNER (left) edge ────────────────
+   Cargo/Tonnage Market: cards left, map right, bar on the map's left edge.
+   row-reverse floats the (last-child) right bar to the left; overflow is
+   opened so the left-pointing tooltips can show over the cards, not the map. */
+.asb-map.bar-inner-left { flex-direction: row-reverse; overflow: visible; }
+.asb-map.bar-inner-left .right-bar {
+  border-left: none;
+  border-right: 0.5px solid rgba(255, 255, 255, 0.07);
+}
+.asb-map.bar-inner-left .filter-panel { left: 44px; right: auto; border-left: none; border-right: 0.5px solid rgba(255, 255, 255, 0.08); }
+/* Centre the layer pills along the bottom so they clear the
+   Leaflet attribution ("map sources") sitting bottom-right. */
+.asb-map.bar-inner-left .layer-strip {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  justify-content: center;
+}
+.asb-map.bar-inner-left .voy-panel {
+  left: 44px; right: auto;
+  border-left: none;
+  border-right: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Shared base toggle (pill variant, used in the fleet-map panel) ──── */
+.asb-basetgl {
+  display: inline-flex;
+  border: 0.5px solid #DDE5F0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+.asb-basetgl__b {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff;
+  border: 0;
+  border-left: 0.5px solid #DDE5F0;
+  color: #6B7A99;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.asb-basetgl__b:first-child { border-left: 0; }
+.asb-basetgl__b i { font-size: 12px; line-height: 1; }
+.asb-basetgl__b.is-on { background: #0D2545; color: #fff; }
+.asb-basetgl__b:not(.is-on):hover { background: #EEF3FA; }

@@ -144,6 +144,8 @@ const G = {
   moon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>,
   plus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>,
   minus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14" /></svg>,
+  maximize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>,
+  minimize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M16 21v-3a2 2 0 0 1 2-2h3M8 21v-3a2 2 0 0 0-2-2H3" /></svg>,
 };
 
 type Popup =
@@ -186,6 +188,7 @@ export default function MarketMap({
   const roRef = React.useRef<ResizeObserver | null>(null);
 
   const [ready, setReady] = React.useState(false);
+  const [fullscreen, setFullscreen] = React.useState(false);
   const [cargoOn, setCargoOn] = React.useState(true);
   const [vesselsOn, setVesselsOn] = React.useState(true);
   const [zonesOn, setZonesOn] = React.useState(true);
@@ -400,6 +403,22 @@ export default function MarketMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedVesselId, ready]);
 
+  // Fullscreen: reflow Leaflet tiles after the size change; Esc exits.
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      try { mapRef.current?.invalidateSize(); } catch {}
+    }, 240);
+    return () => clearTimeout(t);
+  }, [fullscreen]);
+  React.useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
   const point = popup && mapRef.current ? mapRef.current.latLngToContainerPoint(popup.ll) : null;
 
   const BarIcon = ({ on, onClick, title, children }: { on?: boolean; onClick: () => void; title: string; children: React.ReactNode }) => (
@@ -410,7 +429,7 @@ export default function MarketMap({
   );
 
   return (
-    <div className={`asb-map base-${base}`}>
+    <div className={`asb-map base-${base}${fullscreen ? " is-fullscreen" : ""}`}>
       <div className="map-canvas">
         <div ref={hostRef} className="leaflet-host" />
 
@@ -461,6 +480,10 @@ export default function MarketMap({
         </BarIcon>
         <BarIcon onClick={() => mapRef.current?.zoomIn()} title="Zoom in">{G.plus}</BarIcon>
         <BarIcon onClick={() => mapRef.current?.zoomOut()} title="Zoom out">{G.minus}</BarIcon>
+        <div className="bar-divider" />
+        <BarIcon on={fullscreen} onClick={() => setFullscreen((f) => !f)} title={fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}>
+          {fullscreen ? G.minimize : G.maximize}
+        </BarIcon>
       </div>
     </div>
   );
