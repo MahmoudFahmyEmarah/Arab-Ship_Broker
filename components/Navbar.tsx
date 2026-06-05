@@ -25,6 +25,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { LogoutButton } from "@/components/LogoutButton";
 
 const navigation = [
+  { name: "Insights", href: "/market-insights" },
   { name: "Services", href: "/services" },
   { name: "Contact", href: "/contact" },
 ];
