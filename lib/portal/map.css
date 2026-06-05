@@ -950,3 +950,28 @@
 .asb-map .voy-note { font-size: 10px; color: rgba(255,255,255,0.4); line-height: 1.4; }
 .asb-map .voy-total { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 2px; border-top: 0.5px solid rgba(255,255,255,0.16); font-size: 13px; }
 .asb-map .voy-total b { color: #97C459; font-size: 15px; font-variant-numeric: tabular-nums; }
+
+/* ── Dashboard click-to-pair ── */
+.asb-map .vessel-tri-wrap.is-dim { opacity: 0.22; transition: opacity 0.15s ease; }
+.asb-map .pair-card {
+  position: absolute; left: 12px; bottom: 12px; z-index: 620; width: 230px;
+  background: rgba(10,22,36,0.97); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  border: 0.5px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 10px 12px;
+  color: rgba(255,255,255,0.86); box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.asb-map .pair-card__head { display: flex; align-items: center; justify-content: space-between; }
+.asb-map .pair-card__ttl { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #7BB8F0; }
+.asb-map .pair-card__close { border: 0; background: transparent; color: rgba(255,255,255,0.55); font-size: 16px; line-height: 1; cursor: pointer; }
+.asb-map .pair-card__close:hover { color: #fff; }
+.asb-map .pair-card__route { font-size: 12.5px; font-weight: 600; margin-top: 4px; }
+.asb-map .pair-card__route .mono { color: rgba(255,255,255,0.5); font-size: 11px; }
+.asb-map .pair-card__hint { font-size: 11px; color: rgba(255,255,255,0.55); margin-top: 6px; }
+.asb-map .pair-card__to { font-size: 12.5px; margin-top: 4px; color: #fff; }
+.asb-map .pair-band { display: inline-block; margin-top: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 9px; border-radius: 999px; }
+.asb-map .pair-band.band-strong   { background: rgba(151,196,89,0.22); color: #c4e39a; border: 0.5px solid #97C459; }
+.asb-map .pair-band.band-good      { background: rgba(123,184,240,0.20); color: #b9d9f7; border: 0.5px solid #7BB8F0; }
+.asb-map .pair-band.band-possible  { background: rgba(239,159,39,0.20); color: #f3c684; border: 0.5px solid #EF9F27; }
+.asb-map .pair-band.band-weak      { background: rgba(226,75,74,0.18); color: #f0a3a2; border: 0.5px solid #E24B4A; }
+.asb-map .pair-card__chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.asb-map .pair-card__chips span { font-size: 10px; color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.05); border: 0.5px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 2px 6px; }
+.asb-map .pair-card__note { font-size: 9.5px; color: rgba(255,255,255,0.4); line-height: 1.4; margin-top: 8px; padding-top: 7px; border-top: 0.5px solid rgba(255,255,255,0.08); }

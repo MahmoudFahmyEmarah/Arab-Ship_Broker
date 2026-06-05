@@ -114,11 +114,47 @@ function cargoIcon(c: CargoView, state: CargoState, selected: boolean) {
     anchor: [22, 30] as [number, number],
   };
 }
-function vesselTriangleHTML(v: VesselView, selected: boolean): string {
+function vesselTriangleHTML(v: VesselView, selected: boolean, dim = false): string {
   const { w, h } = vesselSize(v);
   const colour = vesselColor(v);
   const course = vesselCourse(v);
-  return `<div class="vessel-tri-wrap${selected ? " is-selected" : ""}" style="width:${Math.max(w, 28)}px;height:${Math.max(h, 28)}px;"><div class="v-tri" style="border-left:${w / 2}px solid transparent;border-right:${w / 2}px solid transparent;border-bottom:${h}px solid ${colour};filter:drop-shadow(0 0 3px ${colour}80);transform:rotate(${course}deg);"></div><div class="v-label">${v.name}</div></div>`;
+  return `<div class="vessel-tri-wrap${selected ? " is-selected" : ""}${dim ? " is-dim" : ""}" style="width:${Math.max(w, 28)}px;height:${Math.max(h, 28)}px;"><div class="v-tri" style="border-left:${w / 2}px solid transparent;border-right:${w / 2}px solid transparent;border-bottom:${h}px solid ${colour};filter:drop-shadow(0 0 3px ${colour}80);transform:rotate(${course}deg);"></div><div class="v-label">${v.name}</div></div>`;
+}
+
+// ── Dashboard click-to-pair (firewall-safe: qualitative LABEL, never a raw
+//    score or TCE number; no counterparty contact anywhere) ──────────────────
+function dwtNum(v: VesselView): number {
+  return parseInt(String(v.dwt || "").replace(/[,\s]/g, ""), 10) || 0;
+}
+function cargoQtyMax(c: CargoView): number {
+  if (c.qty?.max != null) return c.qty.max;
+  return parseInt(String(c.qtyMt || "").replace(/[^\d]/g, ""), 10) || 0;
+}
+function pairEligible(c: CargoView, v: VesselView): boolean {
+  const z = v.openPortZone;
+  const zoneOk = !!z && (z === c.route.polZone || z === c.route.podZone);
+  const dwt = dwtNum(v);
+  const q = cargoQtyMax(c);
+  const dwtOk = dwt > 0 && q > 0 && dwt >= q * 0.8 && dwt <= q * 1.2;
+  const grainOk = !c.isGrain || v.grainCertified === true; // grain hard-block
+  const dgOk = !c.isDg || v.dgCertified === true; // DG hard-block
+  return zoneOk && dwtOk && grainOk && dgOk;
+}
+type FitBand = "Strong" | "Good" | "Possible" | "Weak";
+function fitLabel(c: CargoView, v: VesselView): FitBand {
+  if (c.isGrain && !v.grainCertified) return "Weak";
+  if (c.isDg && !v.dgCertified) return "Weak";
+  const dwt = dwtNum(v);
+  const q = cargoQtyMax(c);
+  const util = dwt > 0 ? q / dwt : 0;
+  let s = 0;
+  if (util >= 0.9 && util <= 1.0) s += 2;
+  else if (util >= 0.8 && util <= 1.1) s += 1;
+  const z = v.openPortZone;
+  if (z === c.route.polZone) s += 2;
+  else if (z === c.route.podZone) s += 1;
+  if (!c.requiresGeared || v.geared) s += 1;
+  return s >= 4 ? "Strong" : s >= 3 ? "Good" : s >= 1 ? "Possible" : "Weak";
 }
 
 // ── Persisted light/dark base ──────────────────────────────────────────────
@@ -202,6 +238,10 @@ export default function MarketMap({
   const tier = useViewerTier();
   const voyLocked = tier === "T1" || tier === "T2";
   const [selections, setSelections] = React.useState<Selections>({});
+  // Click-to-pair (dashboard = both sides present): anchor cargo + picked vessel.
+  const [pairCargo, setPairCargo] = React.useState<CargoView | null>(null);
+  const [pairVessel, setPairVessel] = React.useState<VesselView | null>(null);
+  const isDashboard = cargos.length > 0 && vessels.length > 0;
   const [cargoOn, setCargoOn] = React.useState(true);
   const [vesselsOn, setVesselsOn] = React.useState(true);
   const [zonesOn, setZonesOn] = React.useState(true);
@@ -377,6 +417,11 @@ export default function MarketMap({
           L.DomEvent.stopPropagation(ev);
           setPopup({ kind: "cargo", data: c, ll: mk.getLatLng() });
           onSelectCargo?.(c);
+          // Dashboard: clicking a cargo anchors a pairing — eligible vessels highlight.
+          if (isDashboard) {
+            setPairCargo(c);
+            setPairVessel(null);
+          }
         });
         cargoMk.current[c.id] = mk;
         cluster.addLayer(mk);
@@ -390,21 +435,28 @@ export default function MarketMap({
         const jx = ((v.id || "").charCodeAt(0) % 7) * 0.05 - 0.15;
         const jy = ((v.id || "").charCodeAt(1) % 7) * 0.05 - 0.15;
         const sel = focusedVesselId === v.id;
+        const dim = !!pairCargo && !pairEligible(pairCargo, v);
         const box = Math.max(vesselSize(v).w, vesselSize(v).h, 28);
         const mk = L.marker([ll[0] + jy, ll[1] + jx], {
-          icon: L.divIcon({ html: vesselTriangleHTML(v, sel), className: "vessel-marker", iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
+          icon: L.divIcon({ html: vesselTriangleHTML(v, sel, dim), className: "vessel-marker", iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
           riseOnHover: true,
         });
         mk.on("click", (ev) => {
           L.DomEvent.stopPropagation(ev);
-          setPopup({ kind: "vessel", data: v, ll: mk.getLatLng() });
-          onSelectVessel?.(v);
+          // If a cargo is anchored, picking a vessel forms the pair card instead
+          // of the normal vessel popup.
+          if (pairCargo) {
+            setPairVessel(v);
+          } else {
+            setPopup({ kind: "vessel", data: v, ll: mk.getLatLng() });
+            onSelectVessel?.(v);
+          }
         });
         cluster.addLayer(mk);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visCargos, visVessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready]);
+  }, [visCargos, visVessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready, pairCargo, isDashboard]);
 
   // Focused cargo → route + fit
   React.useEffect(() => {
@@ -544,6 +596,45 @@ export default function MarketMap({
       />
 
       <VoyOpexPanel open={voyOpen && !voyLocked} onClose={() => setVoyOpen(false)} />
+
+      {pairCargo && (
+        <div className="pair-card">
+          <div className="pair-card__head">
+            <span className="pair-card__ttl">Pairing</span>
+            <button
+              type="button"
+              className="pair-card__close"
+              aria-label="Clear pairing"
+              onClick={() => { setPairCargo(null); setPairVessel(null); }}
+            >×</button>
+          </div>
+          <div className="pair-card__route">{pairCargo.cargo} · <span className="mono">{pairCargo.refId}</span></div>
+          {!pairVessel ? (
+            <div className="pair-card__hint">
+              Pick a highlighted vessel — {visVessels.filter((v) => pairEligible(pairCargo, v)).length} eligible
+            </div>
+          ) : (
+            (() => {
+              const band = fitLabel(pairCargo, pairVessel);
+              return (
+                <>
+                  <div className="pair-card__to">→ {pairVessel.name}</div>
+                  <div className={`pair-band band-${band.toLowerCase()}`}>{band} fit</div>
+                  <div className="pair-card__chips">
+                    <span>{pairVessel.type}</span>
+                    <span>{pairVessel.dwt} DWT</span>
+                    <span>{pairVessel.openPortZone}</span>
+                  </div>
+                  <div className="pair-card__note">
+                    Indicative fit label via Arab ShipBroker — open the Voyage
+                    Estimator for full economics. No counterparty contact is shared.
+                  </div>
+                </>
+              );
+            })()
+          )}
+        </div>
+      )}
     </div>
   );
 }
