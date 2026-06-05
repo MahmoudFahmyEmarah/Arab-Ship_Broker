@@ -115,6 +115,13 @@ export function vesselFromAvailability(
 ): VesselView {
   const v = row.vessel;
   const days = daysFromNow(row.open_date);
+  // Prod stores explicit fuel columns (vlsfo/lsmgo sea+port), not me/aux _port.
+  const pf = row as unknown as {
+    vlsfo_sea_mt_day?: number | null;
+    vlsfo_port_mt_day?: number | null;
+    lsmgo_sea_mt_day?: number | null;
+    lsmgo_port_mt_day?: number | null;
+  };
   return {
     id: row.id,
     name: v.vessel_name,
@@ -137,10 +144,10 @@ export function vesselFromAvailability(
     status: statusFromAvailability(row.status),
     matches,
     fuel: {
-      vlsfoSea: row.me_consumption_mt_day ?? "—",
-      vlsfoPort: row.me_consumption_port_mt_day ?? "—",
-      lsmgoSea: row.aux_consumption_mt_day ?? "—",
-      lsmgoPort: row.aux_consumption_port_mt_day ?? "—",
+      vlsfoSea: pf.vlsfo_sea_mt_day ?? "—",
+      vlsfoPort: pf.vlsfo_port_mt_day ?? "—",
+      lsmgoSea: pf.lsmgo_sea_mt_day ?? "—",
+      lsmgoPort: pf.lsmgo_port_mt_day ?? "—",
     },
     draft: meters(v.max_draft_m),
     preferredZones: v.preferred_zones,
