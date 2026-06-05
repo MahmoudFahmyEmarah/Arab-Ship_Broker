@@ -24,6 +24,7 @@ them, so you can also just `supabase db push` once the PRs are merged.
 | 9 | `…000850_cargo_multiport` | **Multi-port** (`load_ports`/`disch_ports` jsonb) persists | `\d cargo_listings` shows `load_ports`, `disch_ports`. |
 | 10 | `…000860_port_routes` | **Stored ECDIS routes** (map draws exact + distance matrix source) | `SELECT count(*) FROM port_routes;` → 20. |
 | 11 | `…000870_org_vessel_link` | **Vessel → company link** — backfills `vessels.owner_org_id`/`manager_org_id` from `owner_company`/`manager_company` name-match (100% over the workbook); re-publishes `v_vessel_detail` with the gated org link + registry facts. Requires `…000840` (orgs) first. | `SELECT count(*) FROM vessels WHERE owner_org_id IS NOT NULL;` → >0. `SELECT owner_org_name, owner_org_fleet FROM v_vessel_detail WHERE owner_org_id IS NOT NULL LIMIT 1;` (as admin) returns the firm. |
+| 12 | `…000880_org_member_claim` | **Member claim-on-signup** — `organization_members.status` + RPCs `fn_search_organizations` / `fn_request_org_membership` / `fn_my_membership` (self) and `fn_pending_membership_requests` / `fn_decide_org_membership` (admin). Requests are PENDING (is_current=false → no firewall access) until an admin approves. Requires `…000840`. | `SELECT public.fn_search_organizations('ship');` returns rows. `\d organization_members` shows `status`. |
 
 ## After applying
 - **Landing**: hero shows the real cargo/vessel/zone counts (was the fallback 167/62/14).
@@ -32,6 +33,7 @@ them, so you can also just `supabase db push` once the PRs are merged.
 - **Bunker**: add a supplier + credential in **/admin/bunker**; the ticker reads live and the DEMO label drops.
 - **Org**: companies are real; members fill in as users sign up.
 - **Vessel ownership**: the detail-panel Ownership card shows the vessel's real owner + commercial manager (from the company registry) to the owner/admin; non-owner market viewers see the brokered/masked card. No more DEMO `orgForVessel` stub, no fabricated desk email.
+- **Company membership**: signed-in users get a **Company** tab in account settings to search the registry and request to join their firm; the request shows as pending until a platform admin confirms it in **/admin/org-members**. Approval is what opens the firm's fleet/desk to that person (firewall gate).
 
 ## Also confirm (Vercel)
 Supabase env vars (`NEXT_PUBLIC_SUPABASE_URL`, anon key) are set for the **Production** scope — else the live site builds but can't read the DB.

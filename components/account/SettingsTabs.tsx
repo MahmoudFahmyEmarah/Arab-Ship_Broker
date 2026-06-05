@@ -6,8 +6,9 @@
 // node so its data stays on the server; the billing panel is client-only.
 import * as React from "react";
 import { BillingPanel } from "@/components/portal/BillingPanel";
+import { CompanyPanel } from "@/components/account/CompanyPanel";
 
-type Tab = "account" | "billing";
+type Tab = "account" | "company" | "billing";
 
 function TabButton({
   on,
@@ -41,14 +42,17 @@ export function SettingsTabs({ account }: { account: React.ReactNode }) {
         <TabButton on={tab === "account"} onClick={() => setTab("account")}>
           Account
         </TabButton>
+        <TabButton on={tab === "company"} onClick={() => setTab("company")}>
+          Company
+        </TabButton>
         <TabButton on={tab === "billing"} onClick={() => setTab("billing")}>
           Subscription &amp; Billing
         </TabButton>
       </div>
 
-      {tab === "account" ? (
-        account
-      ) : (
+      {tab === "account" && account}
+      {tab === "company" && <CompanyPanel />}
+      {tab === "billing" && (
         <div
           className="bg-white border border-asb-gray-200 rounded overflow-hidden"
           style={{ minHeight: "70vh", display: "flex", flexDirection: "column" }}

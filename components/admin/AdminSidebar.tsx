@@ -14,6 +14,7 @@ import {
   Layers,
   HelpCircle,
   Mail,
+  Building2,
   X,
   ShieldCheck,
   ChevronRight,
@@ -76,6 +77,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Platform",
     items: [
       { label: "Users", href: "/admin/users", icon: Users },
+      { label: "Company Members", href: "/admin/org-members", icon: Building2 },
       { label: "Messages", href: "/admin/messages", icon: Mail },
     ],
   },
