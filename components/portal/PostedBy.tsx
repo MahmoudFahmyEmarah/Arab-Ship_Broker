@@ -1,5 +1,16 @@
 import { orgForCargo, ORG_TYPE_LABEL } from "@/lib/portal/org";
 
+// Module-scope row so a fresh component type isn't created on every render
+// (React lint: "Cannot create components during render"). Pure props.
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-4 py-1.5 border-b border-asb-gray-100 last:border-0">
+      <span className="text-xs text-asb-gray-400 font-semibold uppercase tracking-wider">{k}</span>
+      <span className="text-sm text-asb-navy text-right">{v}</span>
+    </div>
+  );
+}
+
 // "Posted by" card — the cargo listing circulates under the company DESK;
 // counterparties see the company + "handled by {name}", never the person's
 // direct line. If the handler leaves, the listing stays with the firm.
@@ -13,12 +24,6 @@ export function PostedBy({
   internal?: boolean;
 }) {
   const { org, handler } = orgForCargo(cargoKey);
-  const Row = ({ k, v }: { k: string; v: string }) => (
-    <div className="flex justify-between gap-4 py-1.5 border-b border-asb-gray-100 last:border-0">
-      <span className="text-xs text-asb-gray-400 font-semibold uppercase tracking-wider">{k}</span>
-      <span className="text-sm text-asb-navy text-right">{v}</span>
-    </div>
-  );
   return (
     <div className="bg-white border border-asb-gray-200 rounded p-4">
       <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-2">Posted by</p>
