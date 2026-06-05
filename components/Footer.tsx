@@ -8,8 +8,8 @@ export function Footer() {
 
   return (
     <footer className="bg-ocean-900 text-slate-300 border-t border-ocean-800">
-      <div className="w-full px-8 max-lg:px-6 max-md:px-4 py-16 max-[1024px]:py-12 max-[768px]:py-10">
-        <div className="grid grid-cols-12 gap-12 max-[1024px]:grid-cols-1 max-[1024px]:gap-10 max-[768px]:gap-8">
+      <div className="container py-16 max-[1024px]:py-12 max-[768px]:py-10">
+        <div className="grid grid-cols-12 gap-10 max-[1024px]:grid-cols-1 max-[1024px]:gap-10 max-[768px]:gap-8">
           {/* Brand & About Section */}
           <div className="col-span-5 max-[1024px]:col-span-1 space-y-6">
             <Link
@@ -48,11 +48,11 @@ export function Footer() {
           </div>
 
           {/* Quick Links */}
-          <div className="col-span-3 max-[1024px]:col-span-1 space-y-6 min-[1025px]:text-center">
+          <div className="col-span-3 max-[1024px]:col-span-1 space-y-6">
             <h3 className="text-white font-semibold text-sm uppercase tracking-wider">
               Quick Links
             </h3>
-            <nav className="flex flex-col space-y-3 min-[1025px]:items-center">
+            <nav className="flex flex-col space-y-3">
               <Link
                 href="/services"
                 className="text-ocean-200/80 hover:text-foam-300 transition-colors text-sm w-fit focus:outline-none focus-visible:ring-2 focus-visible:ring-foam-400 rounded-sm"
@@ -76,17 +76,17 @@ export function Footer() {
           </div>
 
           {/* Contact Info */}
-          <div className="col-span-4 max-[1024px]:col-span-1 space-y-6 min-[1025px]:text-right">
+          <div className="col-span-4 max-[1024px]:col-span-1 space-y-6">
             <h3 className="text-white font-semibold text-sm uppercase tracking-wider">
               Contact Info
             </h3>
             <address className="not-italic space-y-4">
-              <div className="flex items-start space-x-3 text-sm min-[1025px]:justify-end">
+              <div className="flex items-start space-x-3 text-sm">
                 <Phone
                   className="h-5 w-5 text-foam-400 shrink-0 mt-0.5"
                   aria-hidden="true"
                 />
-                <div className="flex flex-col space-y-2 min-[1025px]:items-end">
+                <div className="flex flex-col space-y-2">
                   <a
                     href="tel:+201010329231"
                     className="text-ocean-200/80 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-foam-400 rounded-sm w-fit"
@@ -103,7 +103,7 @@ export function Footer() {
                   </a>
                 </div>
               </div>
-              <div className="flex items-center space-x-3 text-sm min-[1025px]:justify-end">
+              <div className="flex items-center space-x-3 text-sm">
                 <Mail
                   className="h-5 w-5 text-foam-400 shrink-0"
                   aria-hidden="true"
@@ -115,7 +115,7 @@ export function Footer() {
                   info@arabshipbroker.com
                 </a>
               </div>
-              <div className="flex items-start space-x-3 text-sm min-[1025px]:justify-end">
+              <div className="flex items-start space-x-3 text-sm">
                 <MapPin
                   className="h-5 w-5 text-foam-400 shrink-0 mt-0.5"
                   aria-hidden="true"
