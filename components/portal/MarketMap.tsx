@@ -85,32 +85,65 @@ function hoverTip(c: CargoView): string {
   return `<div class="cargo-hover-tip">${shortCargoName(c)} · ${c.qtyMt} MT · ${route}</div>`;
 }
 
+// Cargo regime → one of three families, each with a distinct map glyph + shape
+// (color stays the laycan-urgency scope; shape/glyph encodes the commodity
+// regime). Grain (dry-bulk grain), IMSBC (dry-bulk non-grain), Break-bulk.
+type CargoRegime = "grain" | "imsbc" | "breakbulk";
+function cargoRegime(c: CargoView): CargoRegime {
+  if (c.type === "Break Bulk") return "breakbulk";
+  if (c.isGrain) return "grain";
+  return "imsbc";
+}
+function regimeGlyph(regime: CargoRegime): string {
+  const s = `width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  if (regime === "grain") {
+    // wheat ear
+    return `<svg ${s}><path d="M12 22V8"/><path d="M12 8c0-2 1.6-3.5 3.5-3.5C15.5 6.5 14 8 12 8Z"/><path d="M12 8c0-2-1.6-3.5-3.5-3.5C8.5 6.5 10 8 12 8Z"/><path d="M12 13c0-2 1.6-3.5 3.5-3.5C15.5 11.5 14 13 12 13Z"/><path d="M12 13c0-2-1.6-3.5-3.5-3.5C8.5 11.5 10 13 12 13Z"/></svg>`;
+  }
+  if (regime === "breakbulk") {
+    // crate / box
+    return `<svg ${s}><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M9 3v18"/></svg>`;
+  }
+  // IMSBC dry bulk — layered stack
+  return `<svg ${s}><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>`;
+}
+
 type CargoState = "dot" | "pill" | "thumb";
 function cargoStateForZoom(z: number): CargoState {
   if (z <= 6) return "dot";
   if (z <= 8) return "pill";
   return "thumb";
 }
+// SCAMIN / compilation-scale tier — drives scale-dependent decluttering in CSS
+// (which labels/feature detail are allowed to display at the current scale).
+function zoomTier(z: number): "far" | "mid" | "near" {
+  if (z <= 6) return "far";
+  if (z <= 8) return "mid";
+  return "near";
+}
 function cargoIcon(c: CargoView, state: CargoState, selected: boolean) {
   const scope = cargoStripColor(c);
   const sel = selected ? " is-selected" : "";
+  const regime = cargoRegime(c);
+  const rg = ` rg-${regime}`;
   if (state === "dot") {
+    // shape encodes regime (circle / square / diamond), colour encodes urgency.
     return {
-      html: `<div class="cargo-marker-wrap cargo-dot-marker${sel}" data-scope="${scope}">${hoverTip(c)}</div>`,
+      html: `<div class="cargo-marker-wrap cargo-dot-marker${rg}${sel}" data-scope="${scope}" data-regime="${regime}">${hoverTip(c)}</div>`,
       size: [12, 12] as [number, number],
       anchor: [6, 6] as [number, number],
     };
   }
   if (state === "pill") {
     return {
-      html: `<div class="cargo-marker-wrap cargo-pill-marker${sel}" data-scope="${scope}" style="border-left-color:${SCOPE_COLOR[scope]}"><span class="pill-dot" style="background:${SCOPE_COLOR[scope]}"></span><span class="pill-name">${shortCargoName(c)}</span>${hoverTip(c)}</div>`,
-      size: [80, 14] as [number, number],
-      anchor: [40, 7] as [number, number],
+      html: `<div class="cargo-marker-wrap cargo-pill-marker${rg}${sel}" data-scope="${scope}" data-regime="${regime}" style="border-left-color:${SCOPE_COLOR[scope]}"><span class="pill-glyph" style="color:${SCOPE_COLOR[scope]}">${regimeGlyph(regime)}</span><span class="pill-name">${shortCargoName(c)}</span>${hoverTip(c)}</div>`,
+      size: [88, 16] as [number, number],
+      anchor: [44, 8] as [number, number],
     };
   }
   const wog = c.wog ? '<span class="wog-dot"></span>' : "";
   return {
-    html: `<div class="cargo-marker-wrap cargo-thumb-marker${sel}" data-scope="${scope}" style="border-left-color:${SCOPE_COLOR[scope]}">${cargoThumbIcon()}<span>${shortCargoName(c)}</span>${wog}${hoverTip(c)}</div>`,
+    html: `<div class="cargo-marker-wrap cargo-thumb-marker${rg}${sel}" data-scope="${scope}" data-regime="${regime}" style="border-left-color:${SCOPE_COLOR[scope]}">${regimeGlyph(regime)}<span>${shortCargoName(c)}</span>${wog}${hoverTip(c)}</div>`,
     size: [44, 30] as [number, number],
     anchor: [22, 30] as [number, number],
   };
@@ -224,6 +257,7 @@ export default function MarketMap({
   );
 
   const hostRef = React.useRef<HTMLDivElement>(null);
+  const rootRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<L.Map | null>(null);
   const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
   const zonesRef = React.useRef<L.LayerGroup | null>(null);
@@ -315,6 +349,7 @@ export default function MarketMap({
     });
     map.on("move zoom", () => force());
     map.on("zoomend", () => {
+      rootRef.current?.setAttribute("data-zoom", zoomTier(map.getZoom()));
       const state = cargoStateForZoom(map.getZoom());
       Object.entries(cargoMk.current).forEach(([id, mk]) => {
         const c = cargos.find((x) => x.id === id);
@@ -331,6 +366,7 @@ export default function MarketMap({
       try {
         map.fitBounds([[12, 22], [47, 60]], { padding: [20, 20] });
         map.invalidateSize();
+        rootRef.current?.setAttribute("data-zoom", zoomTier(map.getZoom()));
       } catch {}
     }, 60);
 
@@ -554,7 +590,7 @@ export default function MarketMap({
   );
 
   return (
-    <div className={`asb-map base-${base}${fullscreen ? " is-fullscreen" : ""}`}>
+    <div ref={rootRef} data-zoom="far" className={`asb-map base-${base}${fullscreen ? " is-fullscreen" : ""}`}>
       <div className="map-canvas">
         <div ref={hostRef} className="leaflet-host" />
 

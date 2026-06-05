@@ -12,6 +12,10 @@
   color: #fff;
   font-family: var(--asb-font, "Inter", sans-serif);
   overflow: hidden;
+  /* Contain Leaflet's internal pane/control z-indexes (400–1000) in a private
+     stacking context so they can never render on top of an external overlay
+     (e.g. the page loader). The map sits at its own z within the layout. */
+  isolation: isolate;
 }
 .asb-map.is-fullscreen {
   position: fixed;
@@ -303,22 +307,41 @@
 }
 .cargo-marker-wrap .cargo-hover-tip {
   position: absolute;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% + 7px);
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(3px);
   background: #0C1F30;
   color: #fff;
-  font-size: 9px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  font-size: 9.5px;
+  line-height: 1.3;
+  padding: 5px 9px;
+  border-radius: 5px;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
-  z-index: 100;
+  /* Float above neighbouring markers (the cluster/marker panes are isolated, so
+     this large value only competes inside the map's own stacking context). */
+  z-index: 1200;
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
-.cargo-marker-wrap:hover .cargo-hover-tip { opacity: 1; }
+/* little caret pointing down to the marker */
+.cargo-marker-wrap .cargo-hover-tip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: #0C1F30;
+}
+.cargo-marker-wrap:hover .cargo-hover-tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* Raise the hovered marker above its neighbours so the tip never sits behind another pin. */
+.cargo-marker-wrap:hover { z-index: 1000; }
 
 /* STATE A — Zoom ≤ 6: 8px dot only, no label, no box. */
 .cargo-dot-marker {
@@ -332,6 +355,23 @@
 .cargo-dot-marker.is-selected {
   width: 12px; height: 12px;
   box-shadow: 0 0 0 2px rgba(24, 95, 165, 0.7);
+}
+/* Regime shape (colour = laycan urgency, shape = commodity regime):
+   grain = circle · IMSBC = square · break-bulk = diamond. */
+.cargo-dot-marker.rg-grain     { border-radius: 50%; }
+.cargo-dot-marker.rg-imsbc     { border-radius: 2px; }
+.cargo-dot-marker.rg-breakbulk { border-radius: 1px; transform: rotate(45deg); }
+.cargo-dot-marker.rg-breakbulk.is-selected { transform: rotate(45deg); }
+
+/* Regime glyph inside pill + thumb markers */
+.cargo-pill-marker .pill-glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 11px; height: 11px; flex-shrink: 0;
+}
+.cargo-pill-marker .pill-glyph svg { width: 11px; height: 11px; }
+.cargo-thumb-marker > svg {
+  width: 12px; height: 12px; flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* STATE B — Zoom 7–8: pill (dot + name, no icon). */
@@ -443,6 +483,19 @@
   letter-spacing: 0.02em;
 }
 .vessel-tri-wrap:hover .v-label { opacity: 1; }
+
+/* ── SCAMIN / compilation-scale decluttering ─────────────────────────────
+   ECDIS-style scale-dependent display, driven by data-zoom on .asb-map:
+     far  (z ≤ 6): suppress per-feature name labels — shapes + clusters only,
+                   so a zoomed-out chart isn't a wall of overlapping text;
+     mid  (7–8) : names appear on hover (the default behaviour);
+     near (≥ 9) : vessel names show without hover (detail allowed at large
+                   scale); the big region zone labels fade out as they become
+                   clutter once you're inside the region. */
+.asb-map[data-zoom="far"] .vessel-tri-wrap .v-label { display: none; }
+.asb-map[data-zoom="near"] .vessel-tri-wrap .v-label { opacity: 0.92; }
+.asb-map .asb-zone-label { transition: opacity 0.2s ease; }
+.asb-map[data-zoom="near"] .asb-zone-label { opacity: 0; }
 .vessel-tri-wrap.is-selected::before {
   content: "";
   position: absolute;
