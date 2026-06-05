@@ -1,0 +1,597 @@
+[
+ {
+  "market_name": "Agri Products",
+  "regime": "GRAIN",
+  "code": "DEFAULT→GRAIN",
+  "group/cat": "-",
+  "note": "DEFAULT: agricultural → grain regime unless processed (then IMSBC seed cake)"
+ },
+ {
+  "market_name": "Agri Straw",
+  "regime": "IMSBC",
+  "code": "VEGETABLE PRODUCTS",
+  "group/cat": "C",
+  "note": "Fibrous vegetable product"
+ },
+ {
+  "market_name": "Alfalfa Pellets",
+  "regime": "IMSBC",
+  "code": "ALFALFA",
+  "group/cat": "C",
+  "note": "IMSBC ALFALFA"
+ },
+ {
+  "market_name": "Bagged Cargo",
+  "regime": "CSS",
+  "code": "CSS-12",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Barley",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Bauxite",
+  "regime": "IMSBC",
+  "code": "BAUXITE",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Bentonite",
+  "regime": "IMSBC",
+  "code": "BENTONITE",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Big Bags",
+  "regime": "CSS",
+  "code": "CSS-10",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Calcined Coke",
+  "regime": "IMSBC",
+  "code": "PETROLEUM COKE (CALCINED)",
+  "group/cat": "B",
+  "note": "Calcined petroleum coke"
+ },
+ {
+  "market_name": "Cement",
+  "regime": "IMSBC",
+  "code": "CEMENT",
+  "group/cat": "C",
+  "note": "Loose/bulk cement (rare). Bagged cement → CSS."
+ },
+ {
+  "market_name": "Cement Bb",
+  "regime": "CSS",
+  "code": "CSS-12",
+  "group/cat": "-",
+  "note": "Bagged cement → CSS unit-load"
+ },
+ {
+  "market_name": "Cement Bb + Steel",
+  "regime": "MULTI-PARCEL",
+  "code": "-",
+  "group/cat": "-",
+  "note": "Each parcel = separate cargo line, self-classified"
+ },
+ {
+  "market_name": "Cement Copper",
+  "regime": "IMSBC",
+  "code": "CEMENT COPPER",
+  "group/cat": "A",
+  "note": "COPPER CONCENTRATE — liquefies (Group A). NOT construction cement. Separate entry."
+ },
+ {
+  "market_name": "China Clay",
+  "regime": "IMSBC",
+  "code": "CLAY",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Clinker",
+  "regime": "IMSBC",
+  "code": "CEMENT CLINKERS",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Coal",
+  "regime": "IMSBC",
+  "code": "COAL",
+  "group/cat": "A and B",
+  "note": ""
+ },
+ {
+  "market_name": "Copper Concentrates",
+  "regime": "IMSBC",
+  "code": "COPPER CONCENTRATE",
+  "group/cat": "A",
+  "note": "LIQUEFIES — Group A"
+ },
+ {
+  "market_name": "Corn",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Corn + Soybean Meal",
+  "regime": "MULTI-PARCEL",
+  "code": "-",
+  "group/cat": "-",
+  "note": "Each parcel = separate cargo line, self-classified"
+ },
+ {
+  "market_name": "Corn + Wheat",
+  "regime": "MULTI-PARCEL",
+  "code": "-",
+  "group/cat": "-",
+  "note": "Each parcel = separate cargo line, self-classified"
+ },
+ {
+  "market_name": "Corn Germ + Sunflower Seeds",
+  "regime": "MULTI-PARCEL",
+  "code": "-",
+  "group/cat": "-",
+  "note": "Each parcel = separate cargo line, self-classified"
+ },
+ {
+  "market_name": "Dap",
+  "regime": "IMSBC",
+  "code": "AMMONIUM PHOSPHATE",
+  "group/cat": "C",
+  "note": "Diammonium phosphate"
+ },
+ {
+  "market_name": "Ddgs",
+  "regime": "IMSBC",
+  "code": "DISTILLERS DRIED GRAINS WITH SOLUBLES",
+  "group/cat": "C",
+  "note": "Distillers grains — IMSBC entry"
+ },
+ {
+  "market_name": "Dolomite",
+  "regime": "IMSBC",
+  "code": "DOLOMITE",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Fertilisers",
+  "regime": "IMSBC",
+  "code": "DEFAULT→see note",
+  "group/cat": "C (default)",
+  "note": "DEFAULT: routes to IMSBC Group C unless broker specifies a hazardous fertiliser (then re-resolve)"
+ },
+ {
+  "market_name": "Fertilisers Npk",
+  "regime": "IMSBC",
+  "code": "NPK FERTILIZER",
+  "group/cat": "verify (some B)",
+  "note": "NPK — some grades Group B; verify per grade"
+ },
+ {
+  "market_name": "Gbfs",
+  "regime": "CSS",
+  "code": "CSS-10",
+  "group/cat": "-",
+  "note": "Granulated blast furnace slag → CSS-10 (per ruling)"
+ },
+ {
+  "market_name": "Grain",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Grit",
+  "regime": "IMSBC",
+  "code": "STONE CHIPPINGS",
+  "group/cat": "C",
+  "note": "Assumed stone chippings — verify"
+ },
+ {
+  "market_name": "Hbi",
+  "regime": "IMSBC",
+  "code": "DIRECT REDUCED IRON (B)",
+  "group/cat": "B",
+  "note": "Hot briquetted iron — DRI family"
+ },
+ {
+  "market_name": "Iron Ore",
+  "regime": "IMSBC",
+  "code": "IRON ORE",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Iron Oxide",
+  "regime": "IMSBC",
+  "code": "IRON OXIDE",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Limestone",
+  "regime": "IMSBC",
+  "code": "LIMESTONE",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Linseed",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Linseeds",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Logs",
+  "regime": "CSS",
+  "code": "CSS-11",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Maize",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Map",
+  "regime": "IMSBC",
+  "code": "AMMONIUM PHOSPHATE",
+  "group/cat": "C",
+  "note": "Monoammonium phosphate"
+ },
+ {
+  "market_name": "Marble Blocks",
+  "regime": "CSS",
+  "code": "CSS-05",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Metcoke",
+  "regime": "IMSBC",
+  "code": "COKE",
+  "group/cat": "C",
+  "note": "Metallurgical coke"
+ },
+ {
+  "market_name": "Minerals",
+  "regime": "IMSBC",
+  "code": "MINERAL CONCENTRATES",
+  "group/cat": "C (default)",
+  "note": "DEFAULT: generic minerals → IMSBC C; if a concentrate, may be Group A — verify"
+ },
+ {
+  "market_name": "Oats",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Olive Cake",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Olive Pits",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Olive Pomace",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Olive Pulp",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Peas",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Perlite",
+  "regime": "IMSBC",
+  "code": "PERLITE ROCK",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Petcoke",
+  "regime": "IMSBC",
+  "code": "PETROLEUM COKE",
+  "group/cat": "B",
+  "note": "Uncalcined petroleum coke"
+ },
+ {
+  "market_name": "Pig Iron",
+  "regime": "IMSBC",
+  "code": "PIG IRON",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Potash",
+  "regime": "IMSBC",
+  "code": "POTASH",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Rapeseed Meal",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Rice",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Rock Phosphate",
+  "regime": "IMSBC",
+  "code": "PHOSPHATE ROCK",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Rye",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Salt",
+  "regime": "IMSBC",
+  "code": "SALT",
+  "group/cat": "C",
+  "note": "Bagged salt → CSS"
+ },
+ {
+  "market_name": "Salt + Rice",
+  "regime": "MULTI-PARCEL",
+  "code": "-",
+  "group/cat": "-",
+  "note": "Each parcel = separate cargo line, self-classified"
+ },
+ {
+  "market_name": "Scrap",
+  "regime": "CSS",
+  "code": "CSS-09",
+  "group/cat": "-",
+  "note": "Metal scrap in bulk → CSS-09 (per ruling). Borings/shavings/turnings are IMSBC."
+ },
+ {
+  "market_name": "Silica Sand",
+  "regime": "IMSBC",
+  "code": "SAND",
+  "group/cat": "C",
+  "note": ""
+ },
+ {
+  "market_name": "Slag",
+  "regime": "CSS",
+  "code": "CSS-10",
+  "group/cat": "-",
+  "note": "→ CSS-10 FIBC/big bags (per ruling)"
+ },
+ {
+  "market_name": "Softwood Pulp",
+  "regime": "CSS",
+  "code": "CSS-12",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Sorghum",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Soybean Meal",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Soybeans",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Steel Bars",
+  "regime": "CSS",
+  "code": "CSS-07",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Steel Billets",
+  "regime": "CSS",
+  "code": "CSS-07",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Steel Coils",
+  "regime": "CSS",
+  "code": "CSS-06",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Steel Products",
+  "regime": "CSS",
+  "code": "CSS-07",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Steel Rebars",
+  "regime": "CSS",
+  "code": "CSS-07",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "Steel Wire Rod + Debars",
+  "regime": "MULTI-PARCEL",
+  "code": "-",
+  "group/cat": "-",
+  "note": "Each parcel = separate cargo line, self-classified"
+ },
+ {
+  "market_name": "Sugar",
+  "regime": "CSS",
+  "code": "CSS-12",
+  "group/cat": "-",
+  "note": "Bagged sugar → CSS unit-load"
+ },
+ {
+  "market_name": "Sugar + Rice",
+  "regime": "MULTI-PARCEL",
+  "code": "-",
+  "group/cat": "-",
+  "note": "Each parcel = separate cargo line, self-classified"
+ },
+ {
+  "market_name": "Sulphate",
+  "regime": "IMSBC",
+  "code": "AMMONIUM SULPHATE",
+  "group/cat": "C",
+  "note": "Assumed ammonium sulphate — verify if other"
+ },
+ {
+  "market_name": "Sunflower Bagasse Pellets",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Sunflower Meal",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Sunflower Meal Pellets",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Sunflower Seeds",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Urea",
+  "regime": "IMSBC",
+  "code": "UREA",
+  "group/cat": "C",
+  "note": "Bagged/big-bag urea → CSS"
+ },
+ {
+  "market_name": "Wheat",
+  "regime": "GRAIN",
+  "code": "GRAIN",
+  "group/cat": "-",
+  "note": "Grain Code; grain stability booklet + Doc of Authorization (hard block if absent)"
+ },
+ {
+  "market_name": "Wheat Bran",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Wheat Bran Pellets",
+  "regime": "IMSBC",
+  "code": "SEED CAKE",
+  "group/cat": "B",
+  "note": "Processed/oil-extracted → IMSBC SEED CAKE Group B (self-heating)"
+ },
+ {
+  "market_name": "Wheat Flour",
+  "regime": "CSS",
+  "code": "CSS-12",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ },
+ {
+  "market_name": "White Cement",
+  "regime": "IMSBC",
+  "code": "CEMENT",
+  "group/cat": "C",
+  "note": "Treated as cement"
+ },
+ {
+  "market_name": "White Clinker",
+  "regime": "IMSBC",
+  "code": "CEMENT CLINKERS",
+  "group/cat": "C",
+  "note": "Treated as cement clinkers"
+ },
+ {
+  "market_name": "Wire Rod In Coils",
+  "regime": "CSS",
+  "code": "CSS-06",
+  "group/cat": "-",
+  "note": "Break-bulk"
+ }
+]

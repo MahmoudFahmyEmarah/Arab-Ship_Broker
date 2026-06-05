@@ -1,0 +1,497 @@
+[
+ {
+  "FIELD": "VESSEL_NAME",
+  "PLAIN MEANING": "The ship's name.",
+  "PURPOSE": "IDENTITY",
+  "FEEDS / LOGIC TRIGGER": "Display, recall.",
+  "TYPE & RULE": "Text",
+  "LIVES IN": "vessels",
+  "CTO NOTE": ""
+ },
+ {
+  "FIELD": "IMO",
+  "PLAIN MEANING": "7-digit permanent ship ID. Never changes, even if renamed/reflagged.",
+  "PURPOSE": "IDENTITY",
+  "FEEDS / LOGIC TRIGGER": "The ONE key. Build once, reuse forever.",
+  "TYPE & RULE": "7 digits, unique",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "This is the primary key of the whole registry. A vessel is built ONCE against its IMO and reused — never rebuilt."
+ },
+ {
+  "FIELD": "VESSEL_TYPE",
+  "PLAIN MEANING": "Cargo Ship or Bulk Carrier. Only two values.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Gates which cargoes can be offered.",
+  "TYPE & RULE": "Enum: Cargo Ship / Bulk Carrier",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Old data said 'General Cargo','MPP' etc. — all normalise to Cargo Ship. Deck/Gear/Features are separate optional attributes, NOT types."
+ },
+ {
+  "FIELD": "DWT",
+  "PLAIN MEANING": "Deadweight: max weight (cargo+fuel+stores) the ship can carry.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "THE matching figure. Cargo qty vs DWT decides Strong/Good/Possible/Weak.",
+  "TYPE & RULE": "Integer MT",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "DWT IS the match number, full stop. Do not match on DWCC/grain/bale. Tolerance: within -5% Strong; below -5% Medium; over = reject. %-based, admin-set."
+ },
+ {
+  "FIELD": "BUILT",
+  "PLAIN MEANING": "Year built.",
+  "PURPOSE": "IDENTITY",
+  "FEEDS / LOGIC TRIGGER": "Age = charterer acceptance, insurance.",
+  "TYPE & RULE": "Year (text)",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Some charterers reject >20-25yr ships. Future filter, not a hard gate now."
+ },
+ {
+  "FIELD": "FLAG",
+  "PLAIN MEANING": "Country of registration.",
+  "PURPOSE": "IDENTITY",
+  "FEEDS / LOGIC TRIGGER": "Sanctions, port-state-control risk.",
+  "TYPE & RULE": "Text",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "FOC (flag of convenience) is normal in this segment — note it, don't block on it. (Old FOC category field was killed.)"
+ },
+ {
+  "FIELD": "GRT",
+  "PLAIN MEANING": "Gross tonnage: enclosed volume measure. NOT weight.",
+  "PURPOSE": "IDENTITY",
+  "FEEDS / LOGIC TRIGGER": "Port dues, canal tolls.",
+  "TYPE & RULE": "Number",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "GRT ≠ DWT. GRT is a volume/registration figure; never use it for cargo matching."
+ },
+ {
+  "FIELD": "LOA_M",
+  "PLAIN MEANING": "Length overall, metres.",
+  "PURPOSE": "SAFETY-GATE",
+  "FEEDS / LOGIC TRIGGER": "Berth length, lock fit.",
+  "TYPE & RULE": "Number m",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "A berth/port has a max LOA. Feeds future port-fit check."
+ },
+ {
+  "FIELD": "BEAM_M",
+  "PLAIN MEANING": "Width, metres.",
+  "PURPOSE": "SAFETY-GATE",
+  "FEEDS / LOGIC TRIGGER": "Beam-restricted berths, canal locks.",
+  "TYPE & RULE": "Number m",
+  "LIVES IN": "vessels",
+  "CTO NOTE": ""
+ },
+ {
+  "FIELD": "DRAFT_M",
+  "PLAIN MEANING": "How deep she sits loaded, metres.",
+  "PURPOSE": "SAFETY-GATE",
+  "FEEDS / LOGIC TRIGGER": "Port max-draft check.",
+  "TYPE & RULE": "Number m",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "If port max_draft < vessel draft, she can't enter fully laden — lightering needed. Feeds port-fit logic."
+ },
+ {
+  "FIELD": "CLASS_SOCIETY",
+  "PLAIN MEANING": "Classification society (e.g. ABS, DNV, BV).",
+  "PURPOSE": "VERIFICATION",
+  "FEEDS / LOGIC TRIGGER": "Proves seaworthiness oversight.",
+  "TYPE & RULE": "Text",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Merged old CLASS + CLASS_SOCIETY into one. No class = red flag."
+ },
+ {
+  "FIELD": "CHARTER_TYPE",
+  "PLAIN MEANING": "What contract the ship currently trades under.",
+  "PURPOSE": "COMMERCIAL",
+  "FEEDS / LOGIC TRIGGER": "Disponent-owner risk; who can fix her.",
+  "TYPE & RULE": "Enum: V/C / TCT / T/C short / T/C long / Bareboat",
+  "LIVES IN": "NEW",
+  "CTO NOTE": "If T/C or Bareboat, the lister is a disponent operator, not the registered owner. Quiet verification note: confirm the charter is valid before fixing. NOT a user-facing banner."
+ },
+ {
+  "FIELD": "STATUS",
+  "PLAIN MEANING": "Open / Fixed / On Subs / Ballast / Off-hire.",
+  "PURPOSE": "COMMERCIAL",
+  "FEEDS / LOGIC TRIGGER": "Is she available to offer right now.",
+  "TYPE & RULE": "Enum",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "'Fixed' not 'Closed'. Maritime word, not SaaS."
+ },
+ {
+  "FIELD": "TRADING_ZONE",
+  "PLAIN MEANING": "Regions she's allowed/willing to trade.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Geographic match to cargo lane.",
+  "TYPE & RULE": "Multi-zone text",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Red Sea N & S are SEPARATE zones. Port Said=East Med, Aden=Arabian Sea."
+ },
+ {
+  "FIELD": "OPEN_PORT",
+  "PLAIN MEANING": "Where she becomes free.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Ballast distance to load port.",
+  "TYPE & RULE": "Port name",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "Resolves to LOCODE. Never auto-create a port row from free text."
+ },
+ {
+  "FIELD": "OPEN_LOCODE",
+  "PLAIN MEANING": "5-char UN/LOCODE of open port.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Distance math, zone lookup.",
+  "TYPE & RULE": "5 chars no space",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "Format EGALY not 'EG ALY'."
+ },
+ {
+  "FIELD": "OPEN_ZONE",
+  "PLAIN MEANING": "Zone of the open port (derived).",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Zone-level match for free-tier users.",
+  "TYPE & RULE": "Enum zone",
+  "LIVES IN": "derived",
+  "CTO NOTE": "Derived from LOCODE — don't hand-type."
+ },
+ {
+  "FIELD": "OPEN_FROM",
+  "PLAIN MEANING": "Earliest open date.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Laycan/open-date urgency flag.",
+  "TYPE & RULE": "Date",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "Flags: red overdue / amber <=7d / green >7d. Mirrors cargo laycan."
+ },
+ {
+  "FIELD": "OPEN_TO",
+  "PLAIN MEANING": "Latest open date.",
+  "PURPOSE": "COMMERCIAL",
+  "FEEDS / LOGIC TRIGGER": "Window width.",
+  "TYPE & RULE": "Date",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": ""
+ },
+ {
+  "FIELD": "DIRECTION",
+  "PLAIN MEANING": "Where she wants to go next (prompt/ballast pref).",
+  "PURPOSE": "COMMERCIAL",
+  "FEEDS / LOGIC TRIGGER": "Lane preference match.",
+  "TYPE & RULE": "Text",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": ""
+ },
+ {
+  "FIELD": "NUM_HOLDS",
+  "PLAIN MEANING": "Number of cargo holds.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Parcel/break-bulk separation, stowage.",
+  "TYPE & RULE": "Integer",
+  "LIVES IN": "NEW (Q88 §5.1)",
+  "CTO NOTE": "One of the 5 fields a human must give if no Q88 pasted. Holds = hatches by default."
+ },
+ {
+  "FIELD": "NUM_HATCHES",
+  "PLAIN MEANING": "Number of hatch openings (override only).",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Loading access.",
+  "TYPE & RULE": "Integer",
+  "LIVES IN": "NEW",
+  "CTO NOTE": "Defaults equal to NUM_HOLDS. Only set when genuinely different (some MPP/coasters)."
+ },
+ {
+  "FIELD": "BOX_SHAPED",
+  "PLAIN MEANING": "Are holds box-shaped? Y/N.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Containers/steel/packaged stow cleanly in box holds.",
+  "TYPE & RULE": "Y/N",
+  "LIVES IN": "NEW (Q88)",
+  "CTO NOTE": "Box-shaped = easier break-bulk stow. One of the 5 human fields."
+ },
+ {
+  "FIELD": "HATCH_TYPE",
+  "PLAIN MEANING": "Side-rolling / folding / pontoon / lift-away.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Gear access, weather, project cargo.",
+  "TYPE & RULE": "Enum",
+  "LIVES IN": "NEW (Q88)",
+  "CTO NOTE": "One of the 5 human fields."
+ },
+ {
+  "FIELD": "STRENGTHENED_HEAVY",
+  "PLAIN MEANING": "Tank-top strengthened for heavy cargo? Y/N.",
+  "PURPOSE": "SAFETY-GATE",
+  "FEEDS / LOGIC TRIGGER": "Heavy density cargo (ore, steel) safety.",
+  "TYPE & RULE": "Y/N",
+  "LIVES IN": "NEW (Q88)",
+  "CTO NOTE": "If N, reject very dense cargo. One of the 5 human fields."
+ },
+ {
+  "FIELD": "HOLDS_MAY_BE_EMPTY",
+  "PLAIN MEANING": "May alternate holds be left empty? Y/N.",
+  "PURPOSE": "SAFETY-GATE",
+  "FEEDS / LOGIC TRIGGER": "Loading flexibility for heavy parcels.",
+  "TYPE & RULE": "Y/N",
+  "LIVES IN": "NEW",
+  "CTO NOTE": "Paired with STRENGTHENED_HEAVY."
+ },
+ {
+  "FIELD": "LOG_FITTED",
+  "PLAIN MEANING": "Fitted for log cargo (stanchions)? Y/N.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Log/timber trades.",
+  "TYPE & RULE": "Y/N",
+  "LIVES IN": "NEW (Q88)",
+  "CTO NOTE": "One of the 5 human fields."
+ },
+ {
+  "FIELD": "IS_GEARED",
+  "PLAIN MEANING": "Has own cranes? Y/N.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Can she self-load at a gearless port.",
+  "TYPE & RULE": "Y/N",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Already in DB — do not re-add. Geared reveals crane fields."
+ },
+ {
+  "FIELD": "CRANE_COUNT",
+  "PLAIN MEANING": "Number of cranes.",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "Discharge capability.",
+  "TYPE & RULE": "Integer",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Only meaningful if IS_GEARED=Y."
+ },
+ {
+  "FIELD": "CRANE_SWL_MT",
+  "PLAIN MEANING": "Safe working load per crane, tonnes.",
+  "PURPOSE": "SAFETY-GATE",
+  "FEEDS / LOGIC TRIGGER": "Heaviest piece the crane can lift.",
+  "TYPE & RULE": "Number MT",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Project cargo: crane SWL >= heaviest piece, else reject."
+ },
+ {
+  "FIELD": "NUM_GRABS",
+  "PLAIN MEANING": "Number of grabs.",
+  "PURPOSE": "COMMERCIAL",
+  "FEEDS / LOGIC TRIGGER": "Self-discharge bulk.",
+  "TYPE & RULE": "Integer",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "Already in DB."
+ },
+ {
+  "FIELD": "GRAB_CAPACITY_MT",
+  "PLAIN MEANING": "Grab capacity, tonnes.",
+  "PURPOSE": "COMMERCIAL",
+  "FEEDS / LOGIC TRIGGER": "Discharge rate.",
+  "TYPE & RULE": "Number",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": ""
+ },
+ {
+  "FIELD": "SERVICE_SPEED_KN",
+  "PLAIN MEANING": "Normal sea speed, knots.",
+  "PURPOSE": "VOYAGE-CALC",
+  "FEEDS / LOGIC TRIGGER": "Speed -> days at sea -> ETA & bunker burn.",
+  "TYPE & RULE": "Number kn",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "WAS MISSING from old master. Without speed the whole voyage estimate is blind. The broker lives on this number."
+ },
+ {
+  "FIELD": "ME_CONS_SEA_MT",
+  "PLAIN MEANING": "Main-engine fuel burn per day at sea.",
+  "PURPOSE": "VOYAGE-CALC",
+  "FEEDS / LOGIC TRIGGER": "tonnes/day x days = main bunker cost.",
+  "TYPE & RULE": "Number MT/day",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "WAS MISSING. This is the single biggest voyage cost. If you store a vessel without it, you cannot estimate a voyage — the platform's core promise breaks."
+ },
+ {
+  "FIELD": "ME_CONS_PORT_MT",
+  "PLAIN MEANING": "Main-engine burn in port.",
+  "PURPOSE": "VOYAGE-CALC",
+  "FEEDS / LOGIC TRIGGER": "Port-stay fuel.",
+  "TYPE & RULE": "Number MT/day",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "WAS MISSING."
+ },
+ {
+  "FIELD": "AUX_CONS_PORT_MT",
+  "PLAIN MEANING": "Auxiliary (generator) burn in port.",
+  "PURPOSE": "VOYAGE-CALC",
+  "FEEDS / LOGIC TRIGGER": "Port-stay fuel, cranes running.",
+  "TYPE & RULE": "Number MT/day",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "WAS MISSING. Geared ships burn more aux when self-discharging."
+ },
+ {
+  "FIELD": "FUEL_TYPE",
+  "PLAIN MEANING": "VLSFO / LSMGO / HFO 380 / MGO / Dual.",
+  "PURPOSE": "VOYAGE-CALC",
+  "FEEDS / LOGIC TRIGGER": "Bunker price applied; ECA compliance.",
+  "TYPE & RULE": "Enum",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "ECA zones require low-sulphur. Wrong fuel = wrong cost + compliance breach."
+ },
+ {
+  "FIELD": "BROB_MT",
+  "PLAIN MEANING": "Bunkers remaining on board.",
+  "PURPOSE": "VOYAGE-CALC",
+  "FEEDS / LOGIC TRIGGER": "Bunker stem need at open port.",
+  "TYPE & RULE": "Number MT",
+  "LIVES IN": "vessel_availability",
+  "CTO NOTE": "Already in DB."
+ },
+ {
+  "FIELD": "DWT_BALE",
+  "PLAIN MEANING": "Bale capacity, cubic.",
+  "PURPOSE": "VOLUME-CHECK",
+  "FEEDS / LOGIC TRIGGER": "Stow check for bagged/baled cargo.",
+  "TYPE & RULE": "Number",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "NEVER displayed/matched. Volume-check only."
+ },
+ {
+  "FIELD": "GRAIN_CBM",
+  "PLAIN MEANING": "Grain (loose) capacity, cubic metres.",
+  "PURPOSE": "VOLUME-CHECK",
+  "FEEDS / LOGIC TRIGGER": "Stow check for grain.",
+  "TYPE & RULE": "Number m3",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "NEVER displayed/matched. With stowage factor decides if a light cargo cubes-out before it weighs-out."
+ },
+ {
+  "FIELD": "DWCC",
+  "PLAIN MEANING": "Deadweight cargo capacity (cargo-only).",
+  "PURPOSE": "VOLUME-CHECK",
+  "FEEDS / LOGIC TRIGGER": "Stored, not shown.",
+  "TYPE & RULE": "Number MT",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Explicitly NOT the matching figure (overrides old decision). Volume-check only. Never on a card."
+ },
+ {
+  "FIELD": "REG_OWNER_COMPANY",
+  "PLAIN MEANING": "Legal registered owner.",
+  "PURPOSE": "IDENTITY",
+  "FEEDS / LOGIC TRIGGER": "Ownership chain, verification.",
+  "TYPE & RULE": "Company (->COMPANIES)",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Consolidated from legacy OWNER_COMPANY + new REG_OWNER_COMPANY. Links to COMPANIES tab by IMO."
+ },
+ {
+  "FIELD": "REG_OWNER_IMO",
+  "PLAIN MEANING": "Owner company's IMO number.",
+  "PURPOSE": "VERIFICATION",
+  "FEEDS / LOGIC TRIGGER": "Unique company link.",
+  "TYPE & RULE": "7 digits",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Company IMO, not vessel IMO."
+ },
+ {
+  "FIELD": "SHIP_COMM_MANAGER",
+  "PLAIN MEANING": "Ship/commercial manager = the contact that fixes the ship (the charterer).",
+  "PURPOSE": "MATCH-CRITICAL",
+  "FEEDS / LOGIC TRIGGER": "The party Arab ShipBroker actually deals with.",
+  "TYPE & RULE": "Company (->COMPANIES)",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Disponent owner folds into here. Owner != manager is NORMAL — show both, no banner."
+ },
+ {
+  "FIELD": "SHIP_COMM_MGR_IMO",
+  "PLAIN MEANING": "Manager company IMO.",
+  "PURPOSE": "VERIFICATION",
+  "FEEDS / LOGIC TRIGGER": "Company link.",
+  "TYPE & RULE": "7 digits",
+  "LIVES IN": "vessels",
+  "CTO NOTE": ""
+ },
+ {
+  "FIELD": "ISM_MANAGER",
+  "PLAIN MEANING": "ISM (safety) manager.",
+  "PURPOSE": "IDENTITY",
+  "FEEDS / LOGIC TRIGGER": "Info only.",
+  "TYPE & RULE": "Company",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "INFO ONLY — quiet/secondary. Never matches, never posts, never the contact."
+ },
+ {
+  "FIELD": "ISM_MANAGER_IMO",
+  "PLAIN MEANING": "ISM company IMO.",
+  "PURPOSE": "VERIFICATION",
+  "FEEDS / LOGIC TRIGGER": "Company link.",
+  "TYPE & RULE": "7 digits",
+  "LIVES IN": "vessels",
+  "CTO NOTE": ""
+ },
+ {
+  "FIELD": "CONTACT_ADDRESS",
+  "PLAIN MEANING": "Office address of the contact party.",
+  "PURPOSE": "CONTACT-PII",
+  "FEEDS / LOGIC TRIGGER": "Encrypted; never shown to users.",
+  "TYPE & RULE": "Text",
+  "LIVES IN": "vessel_contacts",
+  "CTO NOTE": "PII. Default attached to commercial manager. Arab ShipBroker sits in the middle — never surfaced."
+ },
+ {
+  "FIELD": "PHONE",
+  "PLAIN MEANING": "Landline.",
+  "PURPOSE": "CONTACT-PII",
+  "FEEDS / LOGIC TRIGGER": "Encrypted; broker-only.",
+  "TYPE & RULE": "Phone",
+  "LIVES IN": "vessel_contacts",
+  "CTO NOTE": "Never shown to other users, ever."
+ },
+ {
+  "FIELD": "EMAIL",
+  "PLAIN MEANING": "General email.",
+  "PURPOSE": "CONTACT-PII",
+  "FEEDS / LOGIC TRIGGER": "Encrypted; broker-only.",
+  "TYPE & RULE": "Email",
+  "LIVES IN": "vessel_contacts",
+  "CTO NOTE": ""
+ },
+ {
+  "FIELD": "CHARTERING_EMAIL",
+  "PLAIN MEANING": "Chartering-desk email (where you fix).",
+  "PURPOSE": "CONTACT-PII",
+  "FEEDS / LOGIC TRIGGER": "Encrypted; broker-only.",
+  "TYPE & RULE": "Email",
+  "LIVES IN": "vessel_contacts",
+  "CTO NOTE": "Separate field — this is the desk that actually does business."
+ },
+ {
+  "FIELD": "WEBSITE",
+  "PLAIN MEANING": "Company website.",
+  "PURPOSE": "IDENTITY",
+  "FEEDS / LOGIC TRIGGER": "Verification aid (public).",
+  "TYPE & RULE": "URL",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Public-ish; helps verify the company is real."
+ },
+ {
+  "FIELD": "IS_VERIFIED",
+  "PLAIN MEANING": "Has Arab ShipBroker confirmed this record?",
+  "PURPOSE": "VERIFICATION",
+  "FEEDS / LOGIC TRIGGER": "Verified vs Unverified badge.",
+  "TYPE & RULE": "Enum",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "New user-added record is usable immediately but flagged Unverified until ASB confirms. Maps to is_verified."
+ },
+ {
+  "FIELD": "SOURCE",
+  "PLAIN MEANING": "Where the record came from.",
+  "PURPOSE": "VERIFICATION",
+  "FEEDS / LOGIC TRIGGER": "Provenance/audit.",
+  "TYPE & RULE": "Text",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "e.g. Intelligence Register, Equasis, owner direct."
+ },
+ {
+  "FIELD": "RISK_NOTES",
+  "PLAIN MEANING": "Free-text broker notes/risk.",
+  "PURPOSE": "VERIFICATION",
+  "FEEDS / LOGIC TRIGGER": "Manual review aid.",
+  "TYPE & RULE": "Text",
+  "LIVES IN": "vessels",
+  "CTO NOTE": "Broker eyes only. Old Scope/Risk-level structured fields were killed — this stays as free notes."
+ }
+]

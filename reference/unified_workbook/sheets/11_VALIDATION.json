@@ -1,0 +1,674 @@
+[
+ {
+  "STATUS": "EXISTS — What is live in the platform today",
+  "SECTION": "",
+  "DB_TABLE": "",
+  "FIELD": "",
+  "VALIDATION_TYPE": ""
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "User profile",
+  "DB_TABLE": "profiles",
+  "FIELD": "Full name *",
+  "VALIDATION_TYPE": "Required"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "User profile",
+  "DB_TABLE": "profiles",
+  "FIELD": "Email *",
+  "VALIDATION_TYPE": "Required Format"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "User profile",
+  "DB_TABLE": "profiles",
+  "FIELD": "Phone number  *",
+  "VALIDATION_TYPE": "Format"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "User profile",
+  "DB_TABLE": "profiles",
+  "FIELD": "Company name",
+  "VALIDATION_TYPE": "Required"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "User profile",
+  "DB_TABLE": "profiles",
+  "FIELD": "Role declaration",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "User profile",
+  "DB_TABLE": "profiles",
+  "FIELD": "Country",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Commodity (trade name)  *",
+  "VALIDATION_TYPE": "Required Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "IMSBC group",
+  "VALIDATION_TYPE": "Auto-fill"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Quantity (VOLUME CbM or CbFT)  *",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Quantity (MT)  *",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Stowage factor",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Load port (POL)  *",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Discharge port (POD)  *",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Laycan from  *",
+  "VALIDATION_TYPE": "Date"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Laycan to  *",
+  "VALIDATION_TYPE": "Cross-field"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Is SPOT toggle",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Load rate (MT/day)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Discharge rate (MT/day)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Load terms",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "NOR clause",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Freight idea (USD/MT)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Vessel name  *",
+  "VALIDATION_TYPE": "Required"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "IMO number  *",
+  "VALIDATION_TYPE": "Required Format"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "DWT  *",
+  "VALIDATION_TYPE": "Required Range"
+ },
+ {
+  "STATUS": "FIELD IS NEW  & TO BE ADDED",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Cargo Hold Capacity - Volume   *",
+  "VALIDATION_TYPE": "Required Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "GRT",
+  "VALIDATION_TYPE": "Required Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "LOA (m)  *",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Vessel type  *",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Flag  *",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "P&I Club",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "SCHEMA ONLY",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Build year",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "SCHEMA ONLY",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Beam (m)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "SCHEMA ONLY",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Grain CBM",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Open port  *",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Open date  *",
+  "VALIDATION_TYPE": "Date"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Open date flexibility (days)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Gear type  *",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "SCHEMA ONLY",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Service speed (knots)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "SCHEMA ONLY",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "M/E consumption (MT/day)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "SCHEMA ONLY",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Last cargo",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Ports",
+  "DB_TABLE": "ports",
+  "FIELD": "Port name  *",
+  "VALIDATION_TYPE": "Required"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Ports",
+  "DB_TABLE": "ports",
+  "FIELD": "LOCODE  *",
+  "VALIDATION_TYPE": "Format"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Ports",
+  "DB_TABLE": "ports",
+  "FIELD": "Region",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Ports",
+  "DB_TABLE": "ports",
+  "FIELD": "Max draft (m)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Ports",
+  "DB_TABLE": "ports",
+  "FIELD": "Water density",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Ports",
+  "DB_TABLE": "ports",
+  "FIELD": "Air draft max (m)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Ports",
+  "DB_TABLE": "ports",
+  "FIELD": "Max displacement (MT)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Ports",
+  "DB_TABLE": "ports",
+  "FIELD": "Lightering required",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Safety declaration",
+  "DB_TABLE": "safety_questions",
+  "FIELD": "IMSBC group trigger",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Safety declaration",
+  "DB_TABLE": "safety_questions",
+  "FIELD": "Group A — TML/FMP/MC",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Safety declaration",
+  "DB_TABLE": "safety_questions",
+  "FIELD": "Group B — self-heating",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Safety declaration",
+  "DB_TABLE": "safety_questions",
+  "FIELD": "Grain Code — class cert",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Safety declaration",
+  "DB_TABLE": "safety_questions",
+  "FIELD": "Group C — declaration",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "EXISTS",
+  "SECTION": "Safety declaration",
+  "DB_TABLE": "safety_questions",
+  "FIELD": "Road vehicles (CSS Code)",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "PROPOSED — Not yet built",
+  "SECTION": "",
+  "DB_TABLE": "",
+  "FIELD": "",
+  "VALIDATION_TYPE": ""
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "User profile",
+  "DB_TABLE": "profiles",
+  "FIELD": "Dual-role email flag",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Commodity (IMSBC/BCSN)",
+  "VALIDATION_TYPE": "Auto-fill"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Quantity tolerance (MOLOO %)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Disport status",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Laycan 45-day window cap",
+  "VALIDATION_TYPE": "Cross-field"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Packaging / form",
+  "VALIDATION_TYPE": "Dependency"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Bag weight (kg)",
+  "VALIDATION_TYPE": "Dependency"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Stowage factor soft check",
+  "VALIDATION_TYPE": "Soft Warning"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "WOG amber banner",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "DWCC",
+  "VALIDATION_TYPE": "Cross-field"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "IMO check digit",
+  "VALIDATION_TYPE": "Format"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "IMO uniqueness",
+  "VALIDATION_TYPE": "Uniqueness"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Sanctions check",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Disponent owner TC upload",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Max draft (m)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Aux consumption (MT/day)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Crane SWL (t)",
+  "VALIDATION_TYPE": "Dependency"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Number of cranes",
+  "VALIDATION_TYPE": "Dependency"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "BROB (MT)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "PROPOSED",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Open date 90-day cap",
+  "VALIDATION_TYPE": "Date"
+ },
+ {
+  "STATUS": "ASB EDITORIAL — Broker Review: Corrections & New Fields  |  Arab ShipBroker, May 2026",
+  "SECTION": "",
+  "DB_TABLE": "",
+  "FIELD": "",
+  "VALIDATION_TYPE": ""
+ },
+ {
+  "STATUS": "CORRECTIONS — Amendments to existing rules",
+  "SECTION": "",
+  "DB_TABLE": "",
+  "FIELD": "",
+  "VALIDATION_TYPE": ""
+ },
+ {
+  "STATUS": "CORRECTION",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Load rate (MT/day) — MAX REVISION",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "CORRECTION",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Discharge rate (MT/day) — MAX REVISION",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "CORRECTION",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Stowage factor — UNIT SELECTION & RANGE CORRECTION",
+  "VALIDATION_TYPE": "Range  +  Unit Toggle"
+ },
+ {
+  "STATUS": "CORRECTION",
+  "SECTION": "Vessel master",
+  "DB_TABLE": "vessels",
+  "FIELD": "Cargo Intake Capacity — RENAME + UNIT SELECTION + PRIORITY ESCALATION (formerly: Grain CBM)",
+  "VALIDATION_TYPE": "Required  Range  +  Unit Toggle"
+ },
+ {
+  "STATUS": "CORRECTION",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Commodity (IMSBC/PSN) — RENAME to IMSBC/BCSN",
+  "VALIDATION_TYPE": "Auto-fill"
+ },
+ {
+  "STATUS": "CORRECTION",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Quantity tolerance (MOLOO %) — OPTION HOLDER DISTINCTION REQUIRED",
+  "VALIDATION_TYPE": "Enum + Range"
+ },
+ {
+  "STATUS": "CORRECTION",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Open date 90-day cap — ESCALATE from PROPOSED to FIELD IS NEW & TO BE ADDED",
+  "VALIDATION_TYPE": "Date"
+ },
+ {
+  "STATUS": "NEW FIELDS PROPOSED — Commercial & Operational gaps identified by broker review",
+  "SECTION": "",
+  "DB_TABLE": "",
+  "FIELD": "",
+  "VALIDATION_TYPE": ""
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Laytime basis",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Freight basis",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Despatch rate (USD/day)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Despatch basis",
+  "VALIDATION_TYPE": "Enum"
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "Total commission — TTL % (total broker commission)",
+  "VALIDATION_TYPE": "Range"
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Cargo listing",
+  "DB_TABLE": "cargo_listings",
+  "FIELD": "IAC flag (including address commission)",
+  "VALIDATION_TYPE": "Logic"
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Grab type *",
+  "VALIDATION_TYPE": "Dependency  Enum"
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Grab capacity (t) *",
+  "VALIDATION_TYPE": "Dependency  Range"
+ },
+ {
+  "STATUS": "ASB PROPOSED",
+  "SECTION": "Vessel availability",
+  "DB_TABLE": "vessel_availability",
+  "FIELD": "Number of grabs *",
+  "VALIDATION_TYPE": "Dependency  Range"
+ },
+ {
+  "STATUS": "TOTAL — ALL VALIDATIONS",
+  "SECTION": "",
+  "DB_TABLE": "",
+  "FIELD": "90",
+  "VALIDATION_TYPE": ""
+ }
+]

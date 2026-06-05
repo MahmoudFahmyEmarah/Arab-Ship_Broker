@@ -1,0 +1,1550 @@
+[
+ {
+  "bcsn_name": "ALFALFA",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINA",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINA HYDRATE",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINA SILICA",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINA, CALCINED",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINIUM FERROSILICON POWDER UN 1395",
+  "imsbc_group": "B",
+  "un_number": "1395",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINIUM FLUORIDE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINIUM NITRATE UN 1438",
+  "imsbc_group": "B",
+  "un_number": "1438",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINIUM REMELTING BY-PRODUCTS UN 3170",
+  "imsbc_group": "B",
+  "un_number": "3170",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINIUM SILICON POWDER, UNCOATED UN 1398",
+  "imsbc_group": "B",
+  "un_number": "1398",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINIUM SMELTING BY-PRODUCTS UN 3170",
+  "imsbc_group": "B",
+  "un_number": "3170",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINIUM SMELTING/REMELTING BY-PRODUCTS, PROCESSED",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ALUMINIUM SULPHATE GRANULAR",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "AMMONIUM NITRATE BASED FERTILIZER",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "AMMONIUM NITRATE BASED FERTILIZER MHB",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "AMMONIUM NITRATE BASED FERTILIZER UN 2067",
+  "imsbc_group": "B",
+  "un_number": "2067",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "AMMONIUM NITRATE BASED FERTILIZER UN 2071",
+  "imsbc_group": "B",
+  "un_number": "2071",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "AMMONIUM NITRATE UN 1942",
+  "imsbc_group": "B",
+  "un_number": "1942",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "AMMONIUM SULPHATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "AMORPHOUS SODIUM SILICATE LUMPS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ANTIMONY ORE AND RESIDUE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "APATITE CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ASPHALT GRANULATES",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BARIUM NITRATE UN 1446",
+  "imsbc_group": "B",
+  "un_number": "1446",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BARYTE, FLOTATION CHEMICAL GRADE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BARYTES",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BAUXITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BAUXITE FINES",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BIOSLUDGE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BORAX (PENTAHYDRATE CRUDE)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BORIC ACID",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BROWN COAL BRIQUETTES",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BROWN FUSED ALUMINA",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "BRUCITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CALCIUM FLUORIDE, CALCIUM SULPHATE, CALCIUM CARBONATE MIXTURE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CALCIUM NITRATE FERTILIZER",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CALCIUM NITRATE UN 1454",
+  "imsbc_group": "B",
+  "un_number": "1454",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CARBORUNDUM",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CELESTINE CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "CEMENT",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CEMENT CLINKERS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CEMENT COPPER",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "CHAMOTTE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CHARCOAL",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CHEMICAL GYPSUM",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CHLORITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CHOPPED RUBBER AND PLASTIC INSULATION",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CHROME PELLETS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CHROMITE ORE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CLAM SHELL",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CLAY",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CLINKER ASH",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COAL",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COAL SLURRY",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COAL TAR PITCH",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COARSE CHOPPED TYRES",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COARSE IRON AND STEEL SLAG AND ITS MIXTURE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COKE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COKE BREEZE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COLEMANITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COPPER CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "COPPER GRANULES",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COPPER MATTE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COPPER SLAG",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "COPRA (dry) UN 1363",
+  "imsbc_group": "B",
+  "un_number": "1363",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CRUSHED CARBON ANODES",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CRUSHED GRANODIORITE FINES",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CRUSHED GRANODIORITE, COARSE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "CRYOLITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "DIAMMONIUM PHOSPHATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "DIRECT REDUCED IRON (C) By-product fines",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "DIRECT REDUCED IRON (D) By-product fines, moisture content >= 2%",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "DISTILLERS DRIED GRAINS WITH SOLUBLES",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "DOLOMITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "DUNITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "DUNITE FINES",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ELECTRIC ARC FURNACE DUST, PELLETIZED",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FELSPAR LUMP",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERRIC SULPHATE GRANULAR",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROCHROME",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROMANGANESE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERRONICKEL",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERRONICKEL SLAG (granulated)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROPHOSPHORUS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROSILICON",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROSILICON UN 1408",
+  "imsbc_group": "B",
+  "un_number": "1408",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROUS METAL BORINGS UN 2793",
+  "imsbc_group": "B",
+  "un_number": "2793",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROUS METAL CUTTINGS UN 2793",
+  "imsbc_group": "B",
+  "un_number": "2793",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROUS METAL SHAVINGS UN 2793",
+  "imsbc_group": "B",
+  "un_number": "2793",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROUS METAL TURNINGS UN 2793",
+  "imsbc_group": "B",
+  "un_number": "2793",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERROUS SULPHATE HEPTAHYDRATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FERTILIZERS WITHOUT NITRATES",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FISH (IN BULK)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FISH MEAL, STABILIZED",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FISH SCRAP, STABILIZED",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FLUE DUST, CONTAINING LEAD AND ZINC",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FLUORSPAR",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FLY ASH, DRY",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FLY ASH, WET",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "FOAM GLASS GRAVEL",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "GLASS CULLET",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "GRAIN SCREENING PELLETS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "GRANULAR FERROUS SULPHATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "GRANULATED NICKEL MATTE",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": "(less than 2% moisture content)"
+ },
+ {
+  "bcsn_name": "GRANULATED SLAG",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "GRANULATED TYRE RUBBER",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "GROUND GRANULATED BLAST FURNACE SLAG POWDER",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "Ground nuts, meal BorCc see SEED CAKE or SEED CAKES AND OTHER RESIDUES OF PROCESSED OILY VEGETABLES"
+ },
+ {
+  "bcsn_name": "GYPSUM",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "GYPSUM GRANULATED",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ILMENITE (ROCK)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ILMENITE (UPGRADED)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ILMENITE CLAY",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ILMENITE SAND",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON AND STEEL SLAG AND ITS MIXTURE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "IRON CONCENTRATE (pellet feed)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "IRON CONCENTRATE (sinter feed)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "IRON ORE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON ORE BRIQUETTES",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON ORE FINES",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON ORE PELLETS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON OXIDE TECHNICAL",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON OXIDE, SPENT UN 1376",
+  "imsbc_group": "B",
+  "un_number": "1376",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON SINTER",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON SMELTING BY-PRODUCTS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "IRON SPONGE, SPENT UN 1376",
+  "imsbc_group": "B",
+  "un_number": "1376",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "LABRADORITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "LEACH RESIDUE CONTAINING LEAD",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "LEAD AND ZINC CALCINES (mixed)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "LEAD AND ZINC MIDDLINGS",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "LEAD CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "LEAD NITRATE UN 1469",
+  "imsbc_group": "B",
+  "un_number": "1469",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "LEAD ORE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "LEAD ORE RESIDUE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "LEAD SILVER CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "LIME (UNSLAKED)",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "LIMESTONE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "LINTED COTTON SEED",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "LOGS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": "see Wood Products — General schedule"
+ },
+ {
+  "bcsn_name": "M.A.P.",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": "see MONOAMMONIUM PHOSPHATE"
+ },
+ {
+  "bcsn_name": "MAGNESIA (DEADBURNED)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MAGNESIA (UNSLAKED)",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MAGNESITE FINES",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MAGNESIUM NITRATE UN 1474",
+  "imsbc_group": "B",
+  "un_number": "1474",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MAGNESIUM SULPHATE FERTILIZERS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MANGANESE COMPONENT FERROALLOY SLAG",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MANGANESE CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "MANGANESE ORE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MANGANESE ORE FINES",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MARBLE CHIPS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MATTE CONTAINING COPPER AND LEAD",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "METAL SULPHIDE CONCENTRATES",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "METAL SULPHIDE CONCENTRATES, CORROSIVE UN 1759",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "METAL SULPHIDE CONCENTRATES, SELF-HEATING UN 3190",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MONOAMMONIUM PHOSPHATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MONOAMMONIUM PHOSPHATE (M.A.P.), MINERAL ENRICHED COATING",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "MONOCALCIUMPHOSPHATE (MCP)",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "NEPHELINE SYENITE (mineral)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "NICKEL CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "NICKEL ORE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "OLIVINE GRANULAR AND GRAVEL AGGREGATE PRODUCTS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "OLIVINE SAND",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PEA PROTEIN CONCENTRATE PELLETS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PEANUTS (in shell)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PEAT MOSS",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PEBBLES (sea)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PELLETS (concentrates)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PENTAHYDRATE CRUDE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "PERLITE ROCK",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PETROLEUM COKE (calcined)",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PETROLEUM COKE (uncalcined)",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PHOSPHATE (defluorinated)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PHOSPHATE ROCK (calcined)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PHOSPHATE ROCK (uncalcined)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PHOSPHATE ROCK FINES (uncalcined)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PIG IRON",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PITCH PRILL",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "POTASH",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "POTASSIUM CHLORIDE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "POTASSIUM NITRATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "POTASSIUM NITRATE UN 1486",
+  "imsbc_group": "B",
+  "un_number": "1486",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "POTASSIUM SULPHATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PULP WOOD",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": "see Wood Products — General schedule"
+ },
+ {
+  "bcsn_name": "PUMICE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PYRITE (containing copper and iron)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PYRITES",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "PYRITES, CALCINED",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "PYRITIC ASHES (iron)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "PYRITIC CINDERS",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "PYROPHYLLITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "QUARTZ",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "QUARTZITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "RADIOACTIVE MATERIAL, LOW SPECIFIC ACTIVITY (LSA-I) UN 2912",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "RADIOACTIVE MATERIAL, SURFACE CONTAMINATED",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": "OBJECTS (SCO-l) UN 2913"
+ },
+ {
+  "bcsn_name": "RASORITE (ANHYDROUS)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ROUNDWOOD",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": "see Wood Products — General schedule"
+ },
+ {
+  "bcsn_name": "RUTILE SAND",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SALT",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SALT CAKE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SALT ROCK",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SAND",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SAND, HEAVY MINERAL",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SAND, MINERAL CONCENTRATE, RADIOACTIVE MATERIAL, LOW SPECIFIC ACTIVITY (LSA-I) UN 2912",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SAW LOGS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": "see Wood Products — General schedule"
+ },
+ {
+  "bcsn_name": "SAWDUST",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SCALE GENERATED FROM THE IRON AND STEEL MAKING PROCESS",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SCRAP METAL",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SEED CAKE UN 2217",
+  "imsbc_group": "B",
+  "un_number": "2217",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SEED CAKES AND OTHER RESIDUES OF PROCESSED OILY VEGETABLES",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SILICOMANGANESE (carbo-thermic)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SILICOMANGANESE (low carbon)",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SILICON SLAG",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SILVER LEAD CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "SLIG (iron ore)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "SODA ASH",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SODIUM NITRATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SODIUM NITRATE AND POTASSIUM NITRATE MIXTURE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SODIUM NITRATE AND POTASSIUM NITRATE MIXTURE UN 1499",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SODIUM NITRATE UN 1498",
+  "imsbc_group": "B",
+  "un_number": "1498",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SOLIDIFIED FUELS RECYCLED FROM PAPER AND PLASTICS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SPODUMENE (UPGRADED)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "STAINLESS STEEL GRINDING DUST",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "STONE CHIPPINGS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SUGAR",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SUGARCANE BIOMASS PELLETS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SULPHATE OF POTASH AND MAGNESIUM",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SULPHUR (formed, solid)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SULPHUR UN 1350 (crushed lump and coarse grained)",
+  "imsbc_group": "B",
+  "un_number": "1350",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SUPERPHOSPHATE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SUPERPHOSPHATE (triple, granular)",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SYNTHETIC CALCIUM FLUORIDE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "SYNTHETIC SILICON DIOXIDE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "TACONITE PELLETS",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "TALC",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "TANKAGE",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "TAPIOCA",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "TIMBER",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": "see Wood Products — General schedule"
+ },
+ {
+  "bcsn_name": "TITANOMAGNETITE SAND",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "TUFF, COARSE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "UREA",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "VANADIUM ORE",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "VERMICULITE",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "WHITE QUARTZ",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "WOOD PELLETS CONTAINING ADDITIVES AND/OR BINDERS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "WOOD PELLETS NOT CONTAINING ANY ADDITIVES AND/OR BINDERS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "WOOD TORREFIED",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "WOODCHIPS",
+  "imsbc_group": "B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ZINC AND LEAD CALCINES (mixed)",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "ZINC AND LEAD MIDDLINGS",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "ZINC ASHES UN 1435",
+  "imsbc_group": "B",
+  "un_number": "1435",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ZINC CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "ZINC OXIDE ENRICHED FLUE DUST",
+  "imsbc_group": "A and B",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ZINC SINTER",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "ZINC SLAG",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ZINC SLAG (coarse)",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ZINC SLUDGE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": "see Mineral concentrates schedule"
+ },
+ {
+  "bcsn_name": "ZIRCON KYANITE CONCENTRATE",
+  "imsbc_group": "A",
+  "un_number": "",
+  "notes": ""
+ },
+ {
+  "bcsn_name": "ZIRCONSAND",
+  "imsbc_group": "C",
+  "un_number": "",
+  "notes": ""
+ }
+]

@@ -1,0 +1,802 @@
+[
+ {
+  "COMPANY_NAME": "ORIENT SEAS LTD CO",
+  "COMPANY_IMO": "6285232",
+  "COUNTRY": "Saudi Arabia",
+  "OWNS": "5",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "5",
+  "ADDRESS": "6th Floor, Al Falih Building, 2491 Taweriq, Al-Saddad District, Jeddah, Saudi Arabia"
+ },
+ {
+  "COMPANY_NAME": "THALATTA SHIPPING MANAGEMENT",
+  "COMPANY_IMO": "0067951",
+  "COUNTRY": "",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "5",
+  "ISM_MANAGES": "5",
+  "FLEET_TOTAL": "5",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "KAREWOOD MANAGEMENT OU",
+  "COMPANY_IMO": "6362654",
+  "COUNTRY": "",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "4",
+  "ISM_MANAGES": "4",
+  "FLEET_TOTAL": "4",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "SUEZ SHIP MANAGEMENT",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Egypt",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "4",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "4",
+  "ADDRESS": "Shop 1, 359, 23rd July Street, Suez 35923, Egypt"
+ },
+ {
+  "COMPANY_NAME": "ADRIATIC FOR MANAGEMENT",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Egypt",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "2",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "2",
+  "ADDRESS": "20 Mahmoud Hamdy Street, Alexandria 21514, Egypt"
+ },
+ {
+  "COMPANY_NAME": "CAPITAL SEA FLEET INC",
+  "COMPANY_IMO": "6477421",
+  "COUNTRY": "",
+  "OWNS": "2",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "2",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "GENCO GEMI ISLETMECILIGI",
+  "COMPANY_IMO": "0352051",
+  "COUNTRY": "",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "2",
+  "ISM_MANAGES": "2",
+  "FLEET_TOTAL": "2",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "GMZ SHIP MANAGEMENT CO HELLAS",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Greece",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "2",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "2",
+  "ADDRESS": "1 Charilaou Trikoupi Street, 185 36, Piraeus, Greece"
+ },
+ {
+  "COMPANY_NAME": "OCEAN SOUL SHIP MANAGEMENT",
+  "COMPANY_IMO": "0419817",
+  "COUNTRY": "",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "2",
+  "ISM_MANAGES": "1",
+  "FLEET_TOTAL": "2",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "TRIMPEX UNION LTD",
+  "COMPANY_IMO": "1552211",
+  "COUNTRY": "",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "2",
+  "ISM_MANAGES": "2",
+  "FLEET_TOTAL": "2",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "ABK SHIPPING CO",
+  "COMPANY_IMO": "5901913",
+  "COUNTRY": "Lebanon",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Cedar Marine Services SAL, Apartment 3/A, 3rd Floor, Sofi Plaza, Achier el-Daya Street, Tripoli, Lebanon"
+ },
+ {
+  "COMPANY_NAME": "AISLING MARITIME AB LLC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Lebanon",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Safe Sea Services Sarl, 3rd Floor, Dina 11 Building, Mar Doumit Street, Sahel Aalma, Jounieh, Lebanon"
+ },
+ {
+  "COMPANY_NAME": "AL TAWFEEQ SHIPPING CO LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Lebanon",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Rabunion Maritime Agency Sarl, 1st Floor, Agha Building, Charles de Gaulle Avenue, Raouche, Beirut"
+ },
+ {
+  "COMPANY_NAME": "ALBANYASIA MARINE SERVICES",
+  "COMPANY_IMO": "6116687",
+  "COUNTRY": "Egypt",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Sena Ship Management SA, 4th Floor, 25 Reda Street, Ismailia, Egypt"
+ },
+ {
+  "COMPANY_NAME": "ALMARASI SHIPPING CO LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Saudi Arabia",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Issa al-Adawi, al-Baghdadiyah, Jeddah 22231, Saudi Arabia"
+ },
+ {
+  "COMPANY_NAME": "ALODAYNI BROTHERS",
+  "COMPANY_IMO": "6082809",
+  "COUNTRY": "Egypt",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Adriatic for Management & Services Marine Ltd, 20 Mahmoud Hamdy Street, Alexandria 21514, Egypt"
+ },
+ {
+  "COMPANY_NAME": "AQUAMAR SHIP MANAGEMENT SL",
+  "COMPANY_IMO": "0437637",
+  "COUNTRY": "",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "1",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "ARIAZ WORLD WIDE SHIPPING CORP",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Unit 801, Bays Tower, Business Bay, Bur Dubai, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "ARIS SHIPPING LTD-MAI",
+  "COMPANY_IMO": "6393373",
+  "COUNTRY": "",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "AWAD AEED AL-OADINI EST",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Saudi Arabia",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "PO Box 16818, Jeddah, Saudi Arabia"
+ },
+ {
+  "COMPANY_NAME": "AYATI SHIPPING CO LLC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Belize",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "3301 Chetumal Street, Belize City, Belize"
+ },
+ {
+  "COMPANY_NAME": "BOS SHIPPING SA-LIB",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Industrial Area 4, Sharjah, UAE"
+ },
+ {
+  "COMPANY_NAME": "CAESAR MARITIME CO SA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Room 9, 37G, Leased Offices Building, Hamriyah Free Zone, PO Box 49097, Sharjah, UAE"
+ },
+ {
+  "COMPANY_NAME": "CEDAR MARINE SERVICES SAL",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Lebanon",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Apartment 3/A, 3rd Floor, Sofi Plaza, Achier el-Daya Street, Tripoli, Lebanon"
+ },
+ {
+  "COMPANY_NAME": "CHINA UNITED LINES LTD (CU Lines)",
+  "COMPANY_IMO": "",
+  "COUNTRY": "China",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Building 12, 706 Wuxing Lu, Pudong Xinqu, Shanghai 201204, China"
+ },
+ {
+  "COMPANY_NAME": "CU LINES LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "China",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O China United Lines Ltd (CU Lines), Building 12, 706 Wuxing Lu, Pudong Xinqu, Shanghai 201204"
+ },
+ {
+  "COMPANY_NAME": "DENIZ ID MARITIME LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Turkey",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Overseas Marine Ltd, Vatan Caddesi, Merkez Mah, 12/13, Mezitli, Mersin, Turkey"
+ },
+ {
+  "COMPANY_NAME": "DJIBOUTI SHIPPING CO FZE",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Djibouti",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "LOB-027, rue de Venise, Djibouti Free Zone, Djibouti"
+ },
+ {
+  "COMPANY_NAME": "DOLPHIN SEAMARINE LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Liberia",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "80 Broad Street, Monrovia, Liberia"
+ },
+ {
+  "COMPANY_NAME": "EAST SHIPPING LINES LTD",
+  "COMPANY_IMO": "5974603",
+  "COUNTRY": "Jordan",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Office 1003, King Hussein Street 264, Amman, Jordan"
+ },
+ {
+  "COMPANY_NAME": "EL REEDY SHIPPING AGENCY",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Egypt",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Villa No 1, Street 39, Ras El Bar, Damietta, Egypt"
+ },
+ {
+  "COMPANY_NAME": "ELREEDY STARS FOR OWNING",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Egypt",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O El Reedy Shipping Agency, Villa No 1, Street 39, Ras El Bar, Damietta, Egypt"
+ },
+ {
+  "COMPANY_NAME": "ETHIOPIAN SHIPPING & LOGISTICS",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Ethiopia",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Kirkos District, Woreda 07, Addis Ababa, Ethiopia"
+ },
+ {
+  "COMPANY_NAME": "EURO WEST SHIPPING LTD-MAI",
+  "COMPANY_IMO": "0059876",
+  "COUNTRY": "",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "FADAK MARINE SHIPPING LLC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "al-Majaz, PO Box 38156, Sharjah, UAE"
+ },
+ {
+  "COMPANY_NAME": "FAIRNESS MARITIME COMPANY SA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Panama",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "3rd Floor, Omega Building, Avenida Samuel Lewis, Calle 53 Este, Panama City, Panama"
+ },
+ {
+  "COMPANY_NAME": "FRIENDS SHIPPING CO",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Unit 802, Makateb Building, Port Saeed, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "GHAZAL BA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "PO Box 11398, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "GUANGXI HONGXIANG SHIPPING CO",
+  "COMPANY_IMO": "4189663",
+  "COUNTRY": "China",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Shop 1, Building C1, Hongsheng Garden, 136 Qinzhougang Dadao, Qinnan Qu, Qinzhou, Guangxi, China"
+ },
+ {
+  "COMPANY_NAME": "HARBOR SHIPHOLDING LTD",
+  "COMPANY_IMO": "0045421",
+  "COUNTRY": "Marshall Islands",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Trust Company Complex, Ajeltake Road, Ajeltake, Majuro MH 96960, Marshall Islands"
+ },
+ {
+  "COMPANY_NAME": "HELLENIC GLAMOR SHIP MGMT LLC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Office 504, Ahli House 1, Amman Street, Al Nahda, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "INVICTUS TRADING FZE",
+  "COMPANY_IMO": "6416924",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Office LB01015, Building LB01, Jebel Ali Free Zone, Jebel Ali, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "JADROPLOV INTERNATIONAL MTME",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Croatia",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Obala Kneza Branimira 16, HR-21000 Split, Croatia"
+ },
+ {
+  "COMPANY_NAME": "JNS PEACE SHIPPING LTD",
+  "COMPANY_IMO": "0119671",
+  "COUNTRY": "British Virgin Islands",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Road Town, Tortola, British Virgin Islands"
+ },
+ {
+  "COMPANY_NAME": "KHARTOUM TRADING & SHIPPING CO",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Sudan",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Port Sudan, Sudan"
+ },
+ {
+  "COMPANY_NAME": "LABIRINTA HOLDING LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Seychelles",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Suite 1, 2nd Floor, Sound & Vision House, Francis Rachel Street, Victoria, Mahe Island, Seychelles"
+ },
+ {
+  "COMPANY_NAME": "LADOM SHIPPING LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Turkey",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Sehit Hikmet Alp Caddesi 31/12, Feyzullah Mah, Maltepe 34843, Istanbul, Turkey"
+ },
+ {
+  "COMPANY_NAME": "LEVANT SHIPPING LTD-MAI",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Marshall Islands",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Trust Company Complex, Ajeltake Road, Ajeltake, Majuro MH 96960, Marshall Islands"
+ },
+ {
+  "COMPANY_NAME": "LIANYUNGANG JIANHONG SHIPPING",
+  "COMPANY_IMO": "",
+  "COUNTRY": "China",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Room B2202, Sunshine International Center, 2 Haibin Dadao, Lianyun Qu, Lianyungang, Jiangsu, China"
+ },
+ {
+  "COMPANY_NAME": "MANTA DENIZCILIK NAKLIYAT",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Turkey",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Salacak Iskele Sokak, Uskudar 14, Istanbul, Turkey"
+ },
+ {
+  "COMPANY_NAME": "MARSA ZENITH INC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Petra Shipping Services LLC, Office 1807, 18th Floor, Churchill Office Tower, Business Bay, Bur Dubai, PO Box 50026, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "MERRY ENTERPRISES DENIZCILIK",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Turkey",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Aydinli Yolu Caddesi 10/45, Icmeler Mah, Tuzla 34957, Istanbul, Turkey"
+ },
+ {
+  "COMPANY_NAME": "NAN LIAN SHIP MANAGEMENT LLC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "The Atrium Centre, 307, Khalid Bin Waleed Road (Bank Street), PO Box 82289, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "NEW SPIRIT SHIPPING LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Greece",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O GMZ Ship Management Co (Hellas) SA, 1 Charilaou Trikoupi Street, 185 36, Piraeus, Greece"
+ },
+ {
+  "COMPANY_NAME": "NOATUM CSM FZCO",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Building 04, Bay Square, Al-Asayel Street, Business Bay, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "OCEAN FREIGHT ENTERPRISES SA",
+  "COMPANY_IMO": "6182556",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Ariaz World Wide Shipping Corp, Unit 801, Bays Tower, Business Bay, Bur Dubai, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "OMRC SHIPPING INC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Turkey",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Manta Denizcilik Nakliyat, Salacak Iskele Sokak, Uskudar 14, Istanbul, Turkey"
+ },
+ {
+  "COMPANY_NAME": "OVERSEAS MARINE LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Turkey",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Vatan Caddesi, Merkez Mah, 12/13, Mezitli, Mersin, Turkey"
+ },
+ {
+  "COMPANY_NAME": "PETRA SHIPPING SERVICES LLC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Office 1807, 18th Floor, Churchill Office Tower, Business Bay, Bur Dubai, PO Box 50026, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "PRIMAVERA SHIPPING LLC",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Greece",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Starbulk SA, 40 Agiou Konstantinou Street, Marousi, 151 24, Athens, Greece"
+ },
+ {
+  "COMPANY_NAME": "PRINCESS HIYAM SHIPPING SA",
+  "COMPANY_IMO": "6082809",
+  "COUNTRY": "Saudi Arabia",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Awad Aeed Al-Oadini Est, PO Box 16818, Jeddah, Saudi Arabia"
+ },
+ {
+  "COMPANY_NAME": "PROMAR-K LTD",
+  "COMPANY_IMO": "0049251",
+  "COUNTRY": "",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "1",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": ""
+ },
+ {
+  "COMPANY_NAME": "RABUNION MARITIME AGENCY SARL",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Lebanon",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "1st Floor, Agha Building, Charles de Gaulle Avenue, Raouche, Beirut, Lebanon"
+ },
+ {
+  "COMPANY_NAME": "ROXETTE SHIPPING ENTERPRISES",
+  "COMPANY_IMO": "5919742",
+  "COUNTRY": "Turkey",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Merry Enterprises Denizcilik, Aydinli Yolu Caddesi 10/45, Icmeler Mah, Tuzla, Istanbul"
+ },
+ {
+  "COMPANY_NAME": "RWS SHIPPING & TRADING SA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Friends Shipping Co, Unit 802, Makateb Building, Port Saeed, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "SAFE SEA SERVICES SARL",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Lebanon",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "3rd Floor, Dina 11 Building, Mar Doumit Street, Sahel Aalma, Jounieh, Lebanon"
+ },
+ {
+  "COMPANY_NAME": "SAFEEN FEEDERS 1 LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O GFS Ship Management FZE, Office FZJOB1015, Jafza One, Jebel Ali Free Zone, Jebel Ali, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "SEA EXPRESS LINE LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Nan Lian Ship Management LLC, The Atrium Centre, 307, Khalid Bin Waleed Road, PO Box 82289, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "SEA STAR MARE LTD",
+  "COMPANY_IMO": "5515962",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Caesar Maritime Co SA, Room 9, 37G, Leased Offices Building, Hamriyah Free Zone, PO Box 49097, Sharjah, UAE"
+ },
+ {
+  "COMPANY_NAME": "SENA SHIP MANAGEMENT SA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Egypt",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "4th Floor, 25 Reda Street, Ismailia, Egypt"
+ },
+ {
+  "COMPANY_NAME": "SHARP LANE SHIP CORP",
+  "COMPANY_IMO": "",
+  "COUNTRY": "China",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Room 101, Unit 1, Building 21, Mingzeyuan, Zhongshan Qu, Dalian, Liaoning, China"
+ },
+ {
+  "COMPANY_NAME": "SIERRA GOLD LTD",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Greece",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O GMZ Ship Management Co (Hellas) SA, 1 Charilaou Trikoupi Street, 185 36, Piraeus, Greece"
+ },
+ {
+  "COMPANY_NAME": "SLA MARITIME CO SA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Turkey",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Kat 3, Karli Plaza, Bogazici Caddesi 7, Cubuklu Mah, Beykoz 34805, Istanbul, Turkey"
+ },
+ {
+  "COMPANY_NAME": "SOUTH STAR CARGO & SHIPPING",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Office 505, 5th Floor, Al Nokhitha Building, Al Khaleej Road, Deira, PO Box 171712, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "STARBULK SA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Greece",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "40 Agiou Konstantinou Street, Marousi, 151 24, Athens, Greece"
+ },
+ {
+  "COMPANY_NAME": "SULTAN INTERNATIONAL CO",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Qatar",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "690 Al Canarri Street, Zone 53, Al Rayyan, Qatar"
+ },
+ {
+  "COMPANY_NAME": "TOWER SHIPPING CO SA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "0",
+  "MANAGES_SHIP_COMM": "1",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "Flat 202, Block A, Sheikha Latifa Building, Baniyas Road, Deira, Dubai, UAE"
+ },
+ {
+  "COMPANY_NAME": "TROGIR MARITIME INC-MAJURO",
+  "COMPANY_IMO": "",
+  "COUNTRY": "Croatia",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Jadroplov International Maritime Transport Ltd, Obala Kneza Branimira 16, HR-21000 Split, Croatia"
+ },
+ {
+  "COMPANY_NAME": "VALENTINA BULKERS SA",
+  "COMPANY_IMO": "",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O BOS Shipping SA, Industrial Area 4, Sharjah, UAE"
+ },
+ {
+  "COMPANY_NAME": "VALIANT OCEANWAY LTD",
+  "COMPANY_IMO": "6387613",
+  "COUNTRY": "UAE",
+  "OWNS": "1",
+  "MANAGES_SHIP_COMM": "0",
+  "ISM_MANAGES": "0",
+  "FLEET_TOTAL": "1",
+  "ADDRESS": "C/O Hellenic Glamor Ship Management LLC, Office 504, Ahli House 1, Amman Street, Al Nahda, Dubai, UAE"
+ }
+]

@@ -1,0 +1,80 @@
+[
+ {
+  "grain_name": "Wheat",
+  "family": "Cereal",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Maize/Corn",
+  "family": "Cereal",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Oats",
+  "family": "Cereal",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Rye",
+  "family": "Cereal",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Barley",
+  "family": "Cereal",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Rice",
+  "family": "Cereal",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Sorghum",
+  "family": "Cereal",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Pulses",
+  "family": "Pulse",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Soybeans (whole)",
+  "family": "Oilseed",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Sunflower Seeds (whole)",
+  "family": "Oilseed",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Rapeseed (whole)",
+  "family": "Oilseed",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "Linseed (whole)",
+  "family": "Oilseed",
+  "regime": "GRAIN",
+  "requirement": "Grain stability booklet + Doc of Authorization — HARD BLOCK if absent"
+ },
+ {
+  "grain_name": "NOTE:",
+  "family": "Meals/cakes/pellets/bran = IMSBC SEED CAKE (B), not grain. Bagged grain = CSS.",
+  "regime": "",
+  "requirement": ""
+ }
+]

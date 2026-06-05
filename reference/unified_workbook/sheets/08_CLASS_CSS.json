@@ -1,0 +1,98 @@
+[
+ {
+  "css_category_id": "CSS-01",
+  "css_category": "Containers on non-cellular ships",
+  "css_annex": "Annex 1",
+  "definition": "Containers carried on deck/hatches of ships not specially designed/fitted for containers.",
+  "securing_trigger": "Stow fore-and-aft; lashings (wire/chain); timber shoring <=2m; secure to prevent sliding/tipping.",
+  "market_aliases": "(deck containers — rare in sub-35k niche)"
+ },
+ {
+  "css_category_id": "CSS-02",
+  "css_category": "Portable tanks (tank-containers)",
+  "css_annex": "Annex 2",
+  "definition": "Tank not permanently secured, >450 L, external stabilizing members; ISO or non-ISO frame.",
+  "securing_trigger": "Lashing angle <=25 deg sliding, 45-60 deg tipping; CSC compliance; IMDG if DG.",
+  "market_aliases": "(tank-containers)"
+ },
+ {
+  "css_category_id": "CSS-03",
+  "css_category": "Portable receptacles",
+  "css_annex": "Annex 3",
+  "definition": "Receptacle (not a portable tank), capacity <= 1,000 L; cylinders, frames of cylinders.",
+  "securing_trigger": "Dunnage off steel deck; stow upright for liquefied gas; box/crib, brace, chock.",
+  "market_aliases": "(gas cylinders, receptacles)"
+ },
+ {
+  "css_category_id": "CSS-04",
+  "css_category": "Wheel-based (rolling) cargoes",
+  "css_annex": "Annex 4",
+  "definition": "Cargoes on wheels/tracks: buses, tractors, earth-movers, roll-trailers (excl. road trailers/trains).",
+  "securing_trigger": "Marked securing points; brakes set; chocks; lashings >= steel chain/wire; stow fore-and-aft.",
+  "market_aliases": "Shredded Tyres"
+ },
+ {
+  "css_category_id": "CSS-05",
+  "css_category": "Heavy cargo items",
+  "css_annex": "Annex 5",
+  "definition": "Heavy items such as locomotives, transformers, etc.",
+  "securing_trigger": "CoG + bedding info; timber spread load; lashing 25 deg slide / 45-60 deg tip; shoring if large angles.",
+  "market_aliases": "Project Cargo, Marble Blocks, Granite Blocks"
+ },
+ {
+  "css_category_id": "CSS-06",
+  "css_category": "Coiled sheet steel",
+  "css_annex": "Annex 6",
+  "definition": "Coiled sheet steel stowed on the round (typically >10 t per coil).",
+  "securing_trigger": "Bottom stow, axes fore-and-aft, dunnage athwartships, locking coils, wedges, top-tier lashing.",
+  "market_aliases": "Steel Coils, Hot Rolled Coils"
+ },
+ {
+  "css_category_id": "CSS-07",
+  "css_category": "Heavy metal products",
+  "css_annex": "Annex 7",
+  "definition": "Any heavy metal item: bars, pipes, rods, plates, billets, wire coils, etc.",
+  "securing_trigger": "Compact side-to-side, no voids; do not exceed deck/tank-top load; shore every frame >=1m; top-layer lashing.",
+  "market_aliases": "Steel Rebars, Steel Bars, Steel Billets, Wire Rod in Coils, Steel Plates, Steel Sheets, Steel Slabs, Steel Products, Steel Debars, DBIC"
+ },
+ {
+  "css_category_id": "CSS-08",
+  "css_category": "Anchor chains",
+  "css_annex": "Annex 8",
+  "definition": "Anchor chains in bundles or continuous lengths.",
+  "securing_trigger": "Never on bare metal — wooden ceiling/dunnage; tight stow; top layer lashed both sides.",
+  "market_aliases": "(anchor chains)"
+ },
+ {
+  "css_category_id": "CSS-09",
+  "css_category": "Metal scrap in bulk",
+  "css_annex": "Annex 9",
+  "definition": "Metal scrap difficult to stow compactly (excl. borings/shavings/turnings — those are IMSBC).",
+  "securing_trigger": "Protect side plating/pipes; heavy first; no voids; lash/overstow heavy pieces; watch tank-top load.",
+  "market_aliases": "(scrap metal)"
+ },
+ {
+  "css_category_id": "CSS-10",
+  "css_category": "Flexible intermediate bulk containers (FIBC)",
+  "css_annex": "Annex 10",
+  "definition": "Flexible portable packaging for solids, capacity <= 3 m3 (3,000 L); one-way or multi-trip.",
+  "securing_trigger": "Wide hatches; stow tight from sides to centre; chock voids in centre; gratings/plywood + wire lashings.",
+  "market_aliases": "Bagged Cargo (big bags)"
+ },
+ {
+  "css_category_id": "CSS-11",
+  "css_category": "Logs (under-deck stow)",
+  "css_annex": "Annex 11",
+  "definition": "Under-deck stowage of logs; bilge/stability/ballast precautions.",
+  "securing_trigger": "Pre-stow plan; heaviest first; compact fore-and-aft, fill athwartship voids; bilge & stability checks.",
+  "market_aliases": "Logs"
+ },
+ {
+  "css_category_id": "CSS-12",
+  "css_category": "Unit loads",
+  "css_annex": "Annex 12",
+  "definition": "Packages on a pallet/load board, in a pallet box, or permanently secured in a sling.",
+  "securing_trigger": "Clean flush deck; block stow no voids; gratings/plywood + wire lashings; check pallet strength if tiered.",
+  "market_aliases": "Bagged Cargo, Sugar (bags), MDF Boards, Chipboards, General Cargo, Mixed BB"
+ }
+]

@@ -1,0 +1,2210 @@
+[
+ {
+  "LOCODE": "UAODS",
+  "TRADE_NAME": "Odessa",
+  "COUNTRY": "Ukraine",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Ukrainian export grain port"
+ },
+ {
+  "LOCODE": "UAILK",
+  "TRADE_NAME": "Chornomorsk",
+  "COUNTRY": "Ukraine",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Former Ilichevsk, bulk terminal"
+ },
+ {
+  "LOCODE": "UAYUZ",
+  "TRADE_NAME": "Pivdennyi",
+  "COUNTRY": "Ukraine",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Former Yuzhne, large grain terminal"
+ },
+ {
+  "LOCODE": "UAIZM",
+  "TRADE_NAME": "Izmail",
+  "COUNTRY": "Ukraine",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Danube river port. Sulina canal access"
+ },
+ {
+  "LOCODE": "UAREN",
+  "TRADE_NAME": "Reni",
+  "COUNTRY": "Ukraine",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Danube river port"
+ },
+ {
+  "LOCODE": "UAKHE",
+  "TRADE_NAME": "Kherson",
+  "COUNTRY": "Ukraine",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea/River",
+  "NOTES": "War risk zone — monitor"
+ },
+ {
+  "LOCODE": "ROCND",
+  "TRADE_NAME": "Constanta",
+  "COUNTRY": "Romania",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Largest Black Sea port. Main grain hub"
+ },
+ {
+  "LOCODE": "ROBRA",
+  "TRADE_NAME": "Braila",
+  "COUNTRY": "Romania",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Danube river port, grain"
+ },
+ {
+  "LOCODE": "ROGAL",
+  "TRADE_NAME": "Galati",
+  "COUNTRY": "Romania",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Danube river port, steel/grain"
+ },
+ {
+  "LOCODE": "ROMID",
+  "TRADE_NAME": "Midia",
+  "COUNTRY": "Romania",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Near Constanta. Oil/bulk terminal"
+ },
+ {
+  "LOCODE": "MDGIU",
+  "TRADE_NAME": "Giurgiulesti",
+  "COUNTRY": "Moldova",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Only Moldovan port. Danube."
+ },
+ {
+  "LOCODE": "BGVAR",
+  "TRADE_NAME": "Varna",
+  "COUNTRY": "Bulgaria",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Bulgarian Black Sea port"
+ },
+ {
+  "LOCODE": "BGVAZ",
+  "TRADE_NAME": "Varna West",
+  "COUNTRY": "Bulgaria",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Industrial extension of Varna"
+ },
+ {
+  "LOCODE": "BGBAL",
+  "TRADE_NAME": "Balchik",
+  "COUNTRY": "Bulgaria",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Small port, grain exports"
+ },
+ {
+  "LOCODE": "BGBOJ",
+  "TRADE_NAME": "Bourgas",
+  "COUNTRY": "Bulgaria",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Bulgaria, oil/bulk"
+ },
+ {
+  "LOCODE": "RUNOI",
+  "TRADE_NAME": "Novorossiysk",
+  "COUNTRY": "Russia",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Largest Russian Black Sea port"
+ },
+ {
+  "LOCODE": "RUTUA",
+  "TRADE_NAME": "Tuapse",
+  "COUNTRY": "Russia",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Russian coal/bulk port"
+ },
+ {
+  "LOCODE": "GEBUS",
+  "TRADE_NAME": "Batumi",
+  "COUNTRY": "Georgia",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Georgian Black Sea port"
+ },
+ {
+  "LOCODE": "GEPTI",
+  "TRADE_NAME": "Poti",
+  "COUNTRY": "Georgia",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Georgian port, grain"
+ },
+ {
+  "LOCODE": "TRISK",
+  "TRADE_NAME": "Iskenderun",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Mediterranean, steel hub"
+ },
+ {
+  "LOCODE": "TRDRC",
+  "TRADE_NAME": "Derince",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Izmit Bay, industrial"
+ },
+ {
+  "LOCODE": "TRMRM",
+  "TRADE_NAME": "Marmara Adasi",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Marmara Sea island port"
+ },
+ {
+  "LOCODE": "TRMAR",
+  "TRADE_NAME": "Marmara Ereglisi",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW Turkey, Marmara Sea"
+ },
+ {
+  "LOCODE": "TRSRL",
+  "TRADE_NAME": "Saraylar",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Marmara Island, marble/minerals"
+ },
+ {
+  "LOCODE": "TRGUL",
+  "TRADE_NAME": "Gulluk",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SW Turkey, mineral exports"
+ },
+ {
+  "LOCODE": "TRALI",
+  "TRADE_NAME": "Aliaga",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Near Izmir, industrial/steel"
+ },
+ {
+  "LOCODE": "TRMER",
+  "TRADE_NAME": "Mersin",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Turkey, major port"
+ },
+ {
+  "LOCODE": "TRNEM",
+  "TRADE_NAME": "Nemrut Bay",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Industrial port near Aliaga/Izmir"
+ },
+ {
+  "LOCODE": "TRSSX",
+  "TRADE_NAME": "Samsun",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Turkish Black Sea port, NE"
+ },
+ {
+  "LOCODE": "TRDIL",
+  "TRADE_NAME": "Diliskelesi",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Izmit Bay area, Marmara"
+ },
+ {
+  "LOCODE": "TRGEM",
+  "TRADE_NAME": "Gemlik",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Marmara Sea"
+ },
+ {
+  "LOCODE": "TRTUZ",
+  "TRADE_NAME": "Tuzla",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Marmara Sea, Istanbul area"
+ },
+ {
+  "LOCODE": "TRKOC",
+  "TRADE_NAME": "Kocaeli",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Izmit Bay area"
+ },
+ {
+  "LOCODE": "TRIZT",
+  "TRADE_NAME": "Izmit",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Izmit Bay, Marmara Sea"
+ },
+ {
+  "LOCODE": "TRUNY",
+  "TRADE_NAME": "Unye",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Turkish Black Sea coast"
+ },
+ {
+  "LOCODE": "EGALY",
+  "TRADE_NAME": "Alexandria",
+  "COUNTRY": "Egypt",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Largest Egyptian port"
+ },
+ {
+  "LOCODE": "EGDAM",
+  "TRADE_NAME": "Damietta",
+  "COUNTRY": "Egypt",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Nile Delta, grain/container"
+ },
+ {
+  "LOCODE": "EGPSD",
+  "TRADE_NAME": "Port Said",
+  "COUNTRY": "Egypt",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Suez Canal entrance"
+ },
+ {
+  "LOCODE": "EGAAC",
+  "TRADE_NAME": "El Arish",
+  "COUNTRY": "Egypt",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "North Sinai port"
+ },
+ {
+  "LOCODE": "EGABQ",
+  "TRADE_NAME": "Abu Qir",
+  "COUNTRY": "Egypt",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Near Alexandria, bulk"
+ },
+ {
+  "LOCODE": "EGSGA",
+  "TRADE_NAME": "Safaga",
+  "COUNTRY": "Egypt",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Red Sea, phosphate exports"
+ },
+ {
+  "LOCODE": "SYLTK",
+  "TRADE_NAME": "Lattakia",
+  "COUNTRY": "Syria",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Syrian port"
+ },
+ {
+  "LOCODE": "SYTAR",
+  "TRADE_NAME": "Tartous",
+  "COUNTRY": "Syria",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Syrian port, oil/bulk"
+ },
+ {
+  "LOCODE": "SYBAN",
+  "TRADE_NAME": "Baniyas",
+  "COUNTRY": "Syria",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Syrian oil terminal"
+ },
+ {
+  "LOCODE": "CYLCA",
+  "TRADE_NAME": "Larnaca",
+  "COUNTRY": "Cyprus",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Cyprus commercial port"
+ },
+ {
+  "LOCODE": "GRKLM",
+  "TRADE_NAME": "Kalamaki",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Near Piraeus, bulk terminal"
+ },
+ {
+  "LOCODE": "GRAPL",
+  "TRADE_NAME": "Amaliapolis",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Central Greece, East coast"
+ },
+ {
+  "LOCODE": "GRKRS",
+  "TRADE_NAME": "Keratsini",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Near Piraeus"
+ },
+ {
+  "LOCODE": "GRGPA",
+  "TRADE_NAME": "Patras",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW Greece, Adriatic gateway"
+ },
+ {
+  "LOCODE": "GRPIR",
+  "TRADE_NAME": "Piraeus",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Athens main port"
+ },
+ {
+  "LOCODE": "GRSKG",
+  "TRADE_NAME": "Thessaloniki",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Northern Greece, major bulk"
+ },
+ {
+  "LOCODE": "GRFLS",
+  "TRADE_NAME": "Eleusis",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Near Athens, steel/scrap hub"
+ },
+ {
+  "LOCODE": "GRLRY",
+  "TRADE_NAME": "Larymna",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Central Greece, minerals"
+ },
+ {
+  "LOCODE": "GRKVA",
+  "TRADE_NAME": "Kavala",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Greece, Aegean"
+ },
+ {
+  "LOCODE": "CYFAM",
+  "TRADE_NAME": "Famagusta",
+  "COUNTRY": "Cyprus",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "East Cyprus"
+ },
+ {
+  "LOCODE": "GRAXD",
+  "TRADE_NAME": "Alexandroupolis",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Greece, Thrace"
+ },
+ {
+  "LOCODE": "GRTSI",
+  "TRADE_NAME": "Tsingeli",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Small Greek Aegean port"
+ },
+ {
+  "LOCODE": "GRLAV",
+  "TRADE_NAME": "Lavrion",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SE Attica, near Athens"
+ },
+ {
+  "LOCODE": "LBBEY",
+  "TRADE_NAME": "Beirut",
+  "COUNTRY": "Lebanon",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Lebanon main port"
+ },
+ {
+  "LOCODE": "LBKYE",
+  "TRADE_NAME": "Tripoli LB",
+  "COUNTRY": "Lebanon",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "North Lebanon"
+ },
+ {
+  "LOCODE": "TNBIZ",
+  "TRADE_NAME": "Bizerte",
+  "COUNTRY": "Tunisia",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Northern Tunisia"
+ },
+ {
+  "LOCODE": "TNSFA",
+  "TRADE_NAME": "Sfax",
+  "COUNTRY": "Tunisia",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Central Tunisia, industrial"
+ },
+ {
+  "LOCODE": "TNGAE",
+  "TRADE_NAME": "Gabes",
+  "COUNTRY": "Tunisia",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Southern Tunisia"
+ },
+ {
+  "LOCODE": "TNTUN",
+  "TRADE_NAME": "Tunis",
+  "COUNTRY": "Tunisia",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Capital port"
+ },
+ {
+  "LOCODE": "TNSUS",
+  "TRADE_NAME": "Sousse",
+  "COUNTRY": "Tunisia",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Central Tunisia coast"
+ },
+ {
+  "LOCODE": "ALDRZ",
+  "TRADE_NAME": "Durres",
+  "COUNTRY": "Albania",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Albanian port, Adriatic"
+ },
+ {
+  "LOCODE": "JOAQJ",
+  "TRADE_NAME": "Aqaba",
+  "COUNTRY": "Jordan",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Jordan's only sea port"
+ },
+ {
+  "LOCODE": "SAJED",
+  "TRADE_NAME": "Jeddah",
+  "COUNTRY": "Saudi Arabia",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Saudi main port, Red Sea"
+ },
+ {
+  "LOCODE": "SAKAC",
+  "TRADE_NAME": "King Abdullah Port",
+  "COUNTRY": "Saudi Arabia",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Red Sea port, near Jeddah"
+ },
+ {
+  "LOCODE": "AEDXB",
+  "TRADE_NAME": "Jebel Ali",
+  "COUNTRY": "UAE",
+  "ZONE": "AG",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Largest port in Middle East"
+ },
+ {
+  "LOCODE": "AERWP",
+  "TRADE_NAME": "Ruwais",
+  "COUNTRY": "UAE",
+  "ZONE": "AG",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Abu Dhabi industrial port"
+ },
+ {
+  "LOCODE": "SAJUB",
+  "TRADE_NAME": "Jubail",
+  "COUNTRY": "Saudi Arabia",
+  "ZONE": "AG",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Saudi industrial port"
+ },
+ {
+  "LOCODE": "KWSWK",
+  "TRADE_NAME": "Shuwaikh",
+  "COUNTRY": "Kuwait",
+  "ZONE": "AG",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Kuwait main port"
+ },
+ {
+  "LOCODE": "OMSLL",
+  "TRADE_NAME": "Salalah",
+  "COUNTRY": "Oman",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Oman transhipment hub"
+ },
+ {
+  "LOCODE": "OMMCT",
+  "TRADE_NAME": "Muscat",
+  "COUNTRY": "Oman",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Oman capital port"
+ },
+ {
+  "LOCODE": "PKKHI",
+  "TRADE_NAME": "Karachi",
+  "COUNTRY": "Pakistan",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Pakistan main port"
+ },
+ {
+  "LOCODE": "ITRAN",
+  "TRADE_NAME": "Ravenna",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Italy, Adriatic"
+ },
+ {
+  "LOCODE": "ITBLT",
+  "TRADE_NAME": "Barletta",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Italy Adriatic"
+ },
+ {
+  "LOCODE": "ITBDS",
+  "TRADE_NAME": "Brindisi",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Italy Adriatic"
+ },
+ {
+  "LOCODE": "ITOTN",
+  "TRADE_NAME": "Ortona",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Central Italy Adriatic"
+ },
+ {
+  "LOCODE": "ITPNG",
+  "TRADE_NAME": "Porto Nogaro",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "River Port",
+  "NOTES": "NE Italy, Friuli"
+ },
+ {
+  "LOCODE": "ITSAL",
+  "TRADE_NAME": "Salerno",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Italy Tyrrhenian"
+ },
+ {
+  "LOCODE": "ITCTA",
+  "TRADE_NAME": "Catania/Sicily",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Sicily, south Italy"
+ },
+ {
+  "LOCODE": "ITBRI",
+  "TRADE_NAME": "Bari",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Italy Adriatic"
+ },
+ {
+  "LOCODE": "ITMFR",
+  "TRADE_NAME": "Manfredonia",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Italy Adriatic"
+ },
+ {
+  "LOCODE": "ITSVN",
+  "TRADE_NAME": "Savona",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW Italy Ligurian"
+ },
+ {
+  "LOCODE": "ITMOL",
+  "TRADE_NAME": "Molfetta",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Italy Adriatic, near Bari"
+ },
+ {
+  "LOCODE": "ITQOS",
+  "TRADE_NAME": "Oristano",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Sardinia, West Med"
+ },
+ {
+  "LOCODE": "FRSET",
+  "TRADE_NAME": "Sete",
+  "COUNTRY": "France",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "S France Mediterranean"
+ },
+ {
+  "LOCODE": "FRBAY",
+  "TRADE_NAME": "Bayonne",
+  "COUNTRY": "France",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SW France Atlantic"
+ },
+ {
+  "LOCODE": "ESFRO",
+  "TRADE_NAME": "Ferrol",
+  "COUNTRY": "Spain",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW Spain Galicia"
+ },
+ {
+  "LOCODE": "ESROT",
+  "TRADE_NAME": "Rota",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SW Spain Cadiz Bay"
+ },
+ {
+  "LOCODE": "ESSAN",
+  "TRADE_NAME": "Santander",
+  "COUNTRY": "Spain",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "N Spain Atlantic"
+ },
+ {
+  "LOCODE": "ESGIJ",
+  "TRADE_NAME": "Gijon",
+  "COUNTRY": "Spain",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "N Spain Asturias"
+ },
+ {
+  "LOCODE": "ESLCG",
+  "TRADE_NAME": "La Coruna",
+  "COUNTRY": "Spain",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW Spain Galicia"
+ },
+ {
+  "LOCODE": "ESBCN",
+  "TRADE_NAME": "Barcelona",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Spanish Mediterranean port TBN"
+ },
+ {
+  "LOCODE": "MACAS",
+  "TRADE_NAME": "Casablanca",
+  "COUNTRY": "Morocco",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Morocco main port"
+ },
+ {
+  "LOCODE": "MANDR",
+  "TRADE_NAME": "Nador",
+  "COUNTRY": "Morocco",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Morocco"
+ },
+ {
+  "LOCODE": "MAAGA",
+  "TRADE_NAME": "Agadir",
+  "COUNTRY": "Morocco",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Morocco"
+ },
+ {
+  "LOCODE": "DZORN",
+  "TRADE_NAME": "Oran",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "West Algeria"
+ },
+ {
+  "LOCODE": "DZTEN",
+  "TRADE_NAME": "Tenes",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "N Algeria"
+ },
+ {
+  "LOCODE": "DZBJA",
+  "TRADE_NAME": "Bejaia",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "N Algeria Kabylie"
+ },
+ {
+  "LOCODE": "DZMOS",
+  "TRADE_NAME": "Mostaganem",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW Algeria"
+ },
+ {
+  "LOCODE": "LYBGN",
+  "TRADE_NAME": "Benghazi",
+  "COUNTRY": "Libya",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "East Libya"
+ },
+ {
+  "LOCODE": "LYTOB",
+  "TRADE_NAME": "Tobruk",
+  "COUNTRY": "Libya",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Far east Libya"
+ },
+ {
+  "LOCODE": "LYTIP",
+  "TRADE_NAME": "Tripoli LY",
+  "COUNTRY": "Libya",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Libya capital port"
+ },
+ {
+  "LOCODE": "LYMHR",
+  "TRADE_NAME": "Marsa El Hariga",
+  "COUNTRY": "Libya",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "East Libya oil/bulk terminal"
+ },
+ {
+  "LOCODE": "GHTEM",
+  "TRADE_NAME": "Tema",
+  "COUNTRY": "Ghana",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "West Africa main port"
+ },
+ {
+  "LOCODE": "CMDLA",
+  "TRADE_NAME": "Douala",
+  "COUNTRY": "Cameroon",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Central/West Africa"
+ },
+ {
+  "LOCODE": "AOLAD",
+  "TRADE_NAME": "Luanda",
+  "COUNTRY": "Angola",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Southern Africa Atlantic"
+ },
+ {
+  "LOCODE": "MEBAR",
+  "TRADE_NAME": "Bar",
+  "COUNTRY": "Montenegro",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Adriatic, borderline East Med"
+ },
+ {
+  "LOCODE": "VEJOT",
+  "TRADE_NAME": "Jose Terminal",
+  "COUNTRY": "Venezuela",
+  "ZONE": "CARIB",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Venezuela bulk terminal"
+ },
+ {
+  "LOCODE": "VEGUT",
+  "TRADE_NAME": "Guanta",
+  "COUNTRY": "Venezuela",
+  "ZONE": "CARIB",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Venezuela, NE coast"
+ },
+ {
+  "LOCODE": "INMAA",
+  "TRADE_NAME": "Chennai",
+  "COUNTRY": "India",
+  "ZONE": "ECI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "India, ex-Madras"
+ },
+ {
+  "LOCODE": "BDCGP",
+  "TRADE_NAME": "Chattogram",
+  "COUNTRY": "Bangladesh",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Bangladesh, ex-Chittagong"
+ },
+ {
+  "LOCODE": "TRERE",
+  "TRADE_NAME": "Eregli (Kdz)",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Kdz. Ereğli, Black Sea coast Turkey. Steel production hub."
+ },
+ {
+  "LOCODE": "MTMLA",
+  "TRADE_NAME": "Valletta",
+  "COUNTRY": "Malta",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Malta main port. Mediterranean outside ASB zone."
+ },
+ {
+  "LOCODE": "MZBEW",
+  "TRADE_NAME": "Beira",
+  "COUNTRY": "Mozambique",
+  "ZONE": "ECAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Mozambique main port, East Africa — outside ASB zone"
+ },
+ {
+  "LOCODE": "ITPZL",
+  "TRADE_NAME": "Pozzallo",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Sicily, Italy — outside ASB zone"
+ },
+ {
+  "LOCODE": "TRHER",
+  "TRADE_NAME": "Hereke",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Marmara Sea, Kocaeli area, Turkey"
+ },
+ {
+  "LOCODE": "TRKRS",
+  "TRADE_NAME": "Karasu",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Turkish Black Sea coast. Bulk terminal."
+ },
+ {
+  "LOCODE": "GNCKY",
+  "TRADE_NAME": "Conakry",
+  "COUNTRY": "Guinea",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Guinea, West Africa — outside ASB zone"
+ },
+ {
+  "LOCODE": "ITPMA",
+  "TRADE_NAME": "Marghera",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Venice/Marghera, NE Italy Adriatic"
+ },
+ {
+  "LOCODE": "ITGHE",
+  "TRADE_NAME": "Porto Marghera",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Venice industrial port, NE Italy"
+ },
+ {
+  "LOCODE": "ITMNF",
+  "TRADE_NAME": "Monfalcone",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Italy Adriatic, near Trieste"
+ },
+ {
+  "LOCODE": "VNSGN",
+  "TRADE_NAME": "Ho Chi Minh City",
+  "COUNTRY": "Vietnam",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Vietnam — outside all ASB zones"
+ },
+ {
+  "LOCODE": "YEHOD",
+  "TRADE_NAME": "Hodeidah",
+  "COUNTRY": "Yemen",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Yemen Red Sea port — war risk zone"
+ },
+ {
+  "LOCODE": "TRBDM",
+  "TRADE_NAME": "Bandirma",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Marmara Sea, NW Turkey. Boron export terminal."
+ },
+ {
+  "LOCODE": "TRAYT",
+  "TRADE_NAME": "Antalya",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Turkey, Eastern Mediterranean coast."
+ },
+ {
+  "LOCODE": "EGPSE",
+  "TRADE_NAME": "Port Said East",
+  "COUNTRY": "Egypt",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Suez Canal entrance, East side. Container/bulk."
+ },
+ {
+  "LOCODE": "GRNKV",
+  "TRADE_NAME": "Nea Karvali",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Greece near Kavala. Fertiliser export terminal."
+ },
+ {
+  "LOCODE": "ESSAG",
+  "TRADE_NAME": "Sagunto",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "East Spain Mediterranean coast. W.MED adjacent zone."
+ },
+ {
+  "LOCODE": "INCCU",
+  "TRADE_NAME": "Kolkata",
+  "COUNTRY": "India",
+  "ZONE": "ECI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE India, Bay of Bengal. Outside ASB zones. Haldia also workable."
+ },
+ {
+  "LOCODE": "LYLMQ",
+  "TRADE_NAME": "Marsa El Brega",
+  "COUNTRY": "Libya",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Libya oil/bulk terminal. C.MED adjacent zone."
+ },
+ {
+  "LOCODE": "INIXY",
+  "TRADE_NAME": "Kandla",
+  "COUNTRY": "India",
+  "ZONE": "WCI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Gujarat, India. West Coast India — outside ASB zones."
+ },
+ {
+  "LOCODE": "TRDIK",
+  "TRADE_NAME": "Dikili",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Aegean Turkey, Izmir region. Kaolin export terminal."
+ },
+ {
+  "LOCODE": "GRRET",
+  "TRADE_NAME": "Rethymno",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Crete island, Greece. East Med."
+ },
+ {
+  "LOCODE": "ESCAD",
+  "TRADE_NAME": "Cadiz",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SW Spain. W.MED adjacent zone. Near Strait of Gibraltar."
+ },
+ {
+  "LOCODE": "ESSVQ",
+  "TRADE_NAME": "Seville",
+  "COUNTRY": "Spain",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Guadalquivir river port, SW Spain. Atlantic — NCONT."
+ },
+ {
+  "LOCODE": "ESCAS",
+  "TRADE_NAME": "Castellon",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "E Spain Mediterranean. W.MED adjacent zone."
+ },
+ {
+  "LOCODE": "INBOM",
+  "TRADE_NAME": "Mumbai",
+  "COUNTRY": "India",
+  "ZONE": "ECI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "India west coast major port. Outside ASB zones."
+ },
+ {
+  "LOCODE": "USEWR",
+  "TRADE_NAME": "Newark",
+  "COUNTRY": "USA",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Port Newark/Elizabeth, NJ, USA. Outside ASB zones."
+ },
+ {
+  "LOCODE": "ALDUR",
+  "TRADE_NAME": "Durres",
+  "COUNTRY": "Albania",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Albanian port"
+ },
+ {
+  "LOCODE": "ARSLO",
+  "TRADE_NAME": "San Lorenzo",
+  "COUNTRY": "Argentina",
+  "ZONE": "ECSA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Parana river grain export hub"
+ },
+ {
+  "LOCODE": "BHBAH",
+  "TRADE_NAME": "Bahrain",
+  "COUNTRY": "Bahrain",
+  "ZONE": "AG",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Khalifa Bin Salman Port area"
+ },
+ {
+  "LOCODE": "CIABJ",
+  "TRADE_NAME": "Abidjan",
+  "COUNTRY": "Côte d'Ivoire",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "CNFCG",
+  "TRADE_NAME": "Fangcheng",
+  "COUNTRY": "China",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "CNTGS",
+  "TRADE_NAME": "Jingtang",
+  "COUNTRY": "China",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "DJJIB",
+  "TRADE_NAME": "Djibouti",
+  "COUNTRY": "Djibouti",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Major transhipment hub — Horn of Africa / Red Sea gateway"
+ },
+ {
+  "LOCODE": "DJTAD",
+  "TRADE_NAME": "Tadjurah",
+  "COUNTRY": "Djibouti",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "DZAAE",
+  "TRADE_NAME": "Annaba",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "DZALG",
+  "TRADE_NAME": "Algiers",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "DZDJN",
+  "TRADE_NAME": "Djen Djen",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Jijel new port, deep water"
+ },
+ {
+  "LOCODE": "DZSKI",
+  "TRADE_NAME": "Skikda",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Largest Algerian industrial port"
+ },
+ {
+  "LOCODE": "EGADB",
+  "TRADE_NAME": "Adabiya",
+  "COUNTRY": "Egypt",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Suez Canal entrance Red Sea side"
+ },
+ {
+  "LOCODE": "EGDKH",
+  "TRADE_NAME": "El Dekheila",
+  "COUNTRY": "Egypt",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Container/bulk west of Alexandria"
+ },
+ {
+  "LOCODE": "EGSFW",
+  "TRADE_NAME": "Safaga",
+  "COUNTRY": "Egypt",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Phosphate export port"
+ },
+ {
+  "LOCODE": "EGSOK",
+  "TRADE_NAME": "Ain Sokhna",
+  "COUNTRY": "Egypt",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Red Sea bulk port near Suez"
+ },
+ {
+  "LOCODE": "ESAGP",
+  "TRADE_NAME": "Malaga",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "ESMAL",
+  "TRADE_NAME": "Malaga",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "ESSGN",
+  "TRADE_NAME": "Sagunto",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "ESVGO",
+  "TRADE_NAME": "Vigo",
+  "COUNTRY": "Spain",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW Spain Atlantic"
+ },
+ {
+  "LOCODE": "GNKAM",
+  "TRADE_NAME": "Kamsar",
+  "COUNTRY": "Guinea",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Bauxite export port"
+ },
+ {
+  "LOCODE": "GRATH",
+  "TRADE_NAME": "Athens / Piraeus",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Generic E.MED Greece reference"
+ },
+ {
+  "LOCODE": "GRPIG",
+  "TRADE_NAME": "Aigion / WC Greece",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "West Coast Greece generic"
+ },
+ {
+  "LOCODE": "GRSKH",
+  "TRADE_NAME": "Thessaloniki",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main N.Greece port"
+ },
+ {
+  "LOCODE": "GRSNC",
+  "TRADE_NAME": "Nea Karvali / Kavala",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "GRTGI",
+  "TRADE_NAME": "Tsingeli",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Small bulk port near Chalcis"
+ },
+ {
+  "LOCODE": "GWOXB",
+  "TRADE_NAME": "Bissau",
+  "COUNTRY": "Guinea-Bissau",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Cashew export"
+ },
+ {
+  "LOCODE": "HRPLO",
+  "TRADE_NAME": "Ploce",
+  "COUNTRY": "Croatia",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Bulk/container, Bosnia gateway"
+ },
+ {
+  "LOCODE": "HRPUL",
+  "TRADE_NAME": "Pula",
+  "COUNTRY": "Croatia",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "IDDUM",
+  "TRADE_NAME": "Dumai",
+  "COUNTRY": "Indonesia",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Palm oil / CPO export"
+ },
+ {
+  "LOCODE": "INIXE",
+  "TRADE_NAME": "New Mangalore",
+  "COUNTRY": "India",
+  "ZONE": "WCI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "INTUT",
+  "TRADE_NAME": "Tuticorin",
+  "COUNTRY": "India",
+  "ZONE": "WCI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South India, fly ash / salt"
+ },
+ {
+  "LOCODE": "IRBIK",
+  "TRADE_NAME": "Bandar Imam Khomeini",
+  "COUNTRY": "Iran",
+  "ZONE": "AG",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "⚠️ SANCTIONS — OFAC/EU/UK restricted"
+ },
+ {
+  "LOCODE": "ITANX",
+  "TRADE_NAME": "Ancona",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "EC Italy reference"
+ },
+ {
+  "LOCODE": "ITBAR",
+  "TRADE_NAME": "Barletta",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Apulia bulk port"
+ },
+ {
+  "LOCODE": "ITCAA",
+  "TRADE_NAME": "Marina Di Carrara",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Marble/stone export"
+ },
+ {
+  "LOCODE": "ITCAR",
+  "TRADE_NAME": "Marina Di Carrara",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Same as ITCAA (alt code)"
+ },
+ {
+  "LOCODE": "ITCHI",
+  "TRADE_NAME": "Chioggia",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Near Venice"
+ },
+ {
+  "LOCODE": "ITCIV",
+  "TRADE_NAME": "Civitavecchia",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Rome port"
+ },
+ {
+  "LOCODE": "ITMON",
+  "TRADE_NAME": "Monopoli",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Apulia south"
+ },
+ {
+  "LOCODE": "ITNAP",
+  "TRADE_NAME": "Naples",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "W.Italy reference"
+ },
+ {
+  "LOCODE": "ITORI",
+  "TRADE_NAME": "Oristano (Sardinia)",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Sardinia west coast"
+ },
+ {
+  "LOCODE": "ITORT",
+  "TRADE_NAME": "Ortona",
+  "COUNTRY": "Italy",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "ITTER",
+  "TRADE_NAME": "Termini Imerese",
+  "COUNTRY": "Italy",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Sicily north coast"
+ },
+ {
+  "LOCODE": "LBJIE",
+  "TRADE_NAME": "Jieh",
+  "COUNTRY": "Lebanon",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "South Lebanon, cement disch"
+ },
+ {
+  "LOCODE": "LBSAI",
+  "TRADE_NAME": "Saida",
+  "COUNTRY": "Lebanon",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Sidon"
+ },
+ {
+  "LOCODE": "LYMIS",
+  "TRADE_NAME": "Misurata",
+  "COUNTRY": "Libya",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Steel plant port"
+ },
+ {
+  "LOCODE": "LYTRP",
+  "TRADE_NAME": "Tripoli LY",
+  "COUNTRY": "Libya",
+  "ZONE": "C.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Capital, west Libya"
+ },
+ {
+  "LOCODE": "MAJLF",
+  "TRADE_NAME": "Jorf Lasfar",
+  "COUNTRY": "Morocco",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Phosphate / fertiliser hub"
+ },
+ {
+  "LOCODE": "NLRTM",
+  "TRADE_NAME": "Rotterdam",
+  "COUNTRY": "Netherlands",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Largest European port"
+ },
+ {
+  "LOCODE": "NLTNZ",
+  "TRADE_NAME": "Terneuzen",
+  "COUNTRY": "Netherlands",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Zeeland canal, bulk/chemicals"
+ },
+ {
+  "LOCODE": "OMSOH",
+  "TRADE_NAME": "Sohar",
+  "COUNTRY": "Oman",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Industrial port, aluminium smelter"
+ },
+ {
+  "LOCODE": "PLGDN",
+  "TRADE_NAME": "Gdansk",
+  "COUNTRY": "Poland",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Baltic grain / cement import"
+ },
+ {
+  "LOCODE": "PLGDY",
+  "TRADE_NAME": "Gdynia",
+  "COUNTRY": "Poland",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "PLSZZ",
+  "TRADE_NAME": "Szczecin",
+  "COUNTRY": "Poland",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SW Baltic"
+ },
+ {
+  "LOCODE": "PTLIS",
+  "TRADE_NAME": "Lisbon",
+  "COUNTRY": "Portugal",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "RUKVZ",
+  "TRADE_NAME": "Kavkaz",
+  "COUNTRY": "Russia",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Kerch strait ferry + bulk"
+ },
+ {
+  "LOCODE": "RUROV",
+  "TRADE_NAME": "Rostov-on-Don",
+  "COUNTRY": "Russia",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Don river, Azov Sea access"
+ },
+ {
+  "LOCODE": "RUTAG",
+  "TRADE_NAME": "Taganrog",
+  "COUNTRY": "Russia",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Azov Sea, small bulkers"
+ },
+ {
+  "LOCODE": "RUTMK",
+  "TRADE_NAME": "Temryuk",
+  "COUNTRY": "Russia",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Azov Sea. Max draft ~4.5m"
+ },
+ {
+  "LOCODE": "SAJIZ",
+  "TRADE_NAME": "Jizan",
+  "COUNTRY": "Saudi Arabia",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SW Saudi, cement import"
+ },
+ {
+  "LOCODE": "SAYAN",
+  "TRADE_NAME": "Yanbu",
+  "COUNTRY": "Saudi Arabia",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Industry + petrochemicals"
+ },
+ {
+  "LOCODE": "SDPZU",
+  "TRADE_NAME": "Port Sudan",
+  "COUNTRY": "Sudan",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Sudan port, wheat bran export"
+ },
+ {
+  "LOCODE": "SIKOP",
+  "TRADE_NAME": "Koper",
+  "COUNTRY": "Slovenia",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Slovenian port"
+ },
+ {
+  "LOCODE": "SLFNA",
+  "TRADE_NAME": "Freetown",
+  "COUNTRY": "Sierra Leone",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Deep water, cement import"
+ },
+ {
+  "LOCODE": "SNDKR",
+  "TRADE_NAME": "Dakar",
+  "COUNTRY": "Senegal",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Olive products / agri import"
+ },
+ {
+  "LOCODE": "SOBER",
+  "TRADE_NAME": "Berbera",
+  "COUNTRY": "Somalia",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Strategic Horn of Africa port"
+ },
+ {
+  "LOCODE": "TRANT",
+  "TRADE_NAME": "Antalya",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Tourism + bulk south Turkey"
+ },
+ {
+  "LOCODE": "TRBAR",
+  "TRADE_NAME": "Bartin",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Small B.SEA port, mixed cargo"
+ },
+ {
+  "LOCODE": "TREGS",
+  "TRADE_NAME": "Eregli / Zonguldak",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Black Sea south coast"
+ },
+ {
+  "LOCODE": "TRFAT",
+  "TRADE_NAME": "Fatsa",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Black Sea small port"
+ },
+ {
+  "LOCODE": "TRGEB",
+  "TRADE_NAME": "Izmit / Igsas",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Fertiliser terminal, Marmara"
+ },
+ {
+  "LOCODE": "TRIST",
+  "TRADE_NAME": "Istanbul",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Bosphorus, small coaster hub"
+ },
+ {
+  "LOCODE": "TRIZM",
+  "TRADE_NAME": "Izmir",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Alsancak terminal, main Aegean"
+ },
+ {
+  "LOCODE": "TRTEK",
+  "TRADE_NAME": "Tekirdag",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Marmara coast, grain export"
+ },
+ {
+  "LOCODE": "TRTZX",
+  "TRADE_NAME": "Trabzon",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Black Sea Turkish port"
+ },
+ {
+  "LOCODE": "UAKER",
+  "TRADE_NAME": "Kerch",
+  "COUNTRY": "Ukraine (Crimea)",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "⚠️ SANCTIONS — Crimea (Russian-occupied)"
+ },
+ {
+  "LOCODE": "UAPOC",
+  "TRADE_NAME": "Port of Call Ukraine",
+  "COUNTRY": "Ukraine",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Generic POC Ukraine reference"
+ },
+ {
+  "LOCODE": "UASEV",
+  "TRADE_NAME": "Sevastopol",
+  "COUNTRY": "Ukraine (Crimea)",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "⚠️ SANCTIONS — Crimea (Russian-occupied)"
+ },
+ {
+  "LOCODE": "USNOR",
+  "TRADE_NAME": "New Orleans",
+  "COUNTRY": "USA",
+  "ZONE": "CARIB",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Mississippi bulk terminal"
+ },
+ {
+  "LOCODE": "USTPA",
+  "TRADE_NAME": "Tampa",
+  "COUNTRY": "USA",
+  "ZONE": "CARIB",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "USWIL",
+  "TRADE_NAME": "Wilmington DE",
+  "COUNTRY": "USA",
+  "ZONE": "CARIB",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": ""
+ },
+ {
+  "LOCODE": "VEPJO",
+  "TRADE_NAME": "Jose",
+  "COUNTRY": "Venezuela",
+  "ZONE": "CARIB",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Petcoke / iron ore export"
+ },
+ {
+  "LOCODE": "YEADE",
+  "TRADE_NAME": "Aden",
+  "COUNTRY": "Yemen",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Strategic port, war risk zone"
+ },
+ {
+  "LOCODE": "YEMKX",
+  "TRADE_NAME": "Mukalla",
+  "COUNTRY": "Yemen",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "East Yemen, war risk zone"
+ },
+ {
+  "LOCODE": "SYTTS",
+  "TRADE_NAME": "Tartous (old code)",
+  "COUNTRY": "Syria",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Alias → use SYTAR"
+ },
+ {
+  "LOCODE": "TRMRA",
+  "TRADE_NAME": "Marmara Adasi (old code)",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Alias → use TRMRM"
+ },
+ {
+  "LOCODE": "GALIB",
+  "TRADE_NAME": "Libreville",
+  "COUNTRY": "Gabon",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Capital port of Gabon"
+ },
+ {
+  "LOCODE": "HNSLO",
+  "TRADE_NAME": "Puerto Cortes",
+  "COUNTRY": "Honduras",
+  "ZONE": "CARIB",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Honduran port"
+ },
+ {
+  "LOCODE": "MASFI",
+  "TRADE_NAME": "Safi",
+  "COUNTRY": "Morocco",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Gypsum / phosphate export port"
+ },
+ {
+  "LOCODE": "AEKFK",
+  "TRADE_NAME": "Khor Fakkan",
+  "COUNTRY": "UAE",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "UAE east coast, Fujairah emirate. A.SEA port."
+ },
+ {
+  "LOCODE": "LBBCH",
+  "TRADE_NAME": "Buchanan",
+  "COUNTRY": "Liberia",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Liberia, rubber/ore export port. WCAF."
+ },
+ {
+  "LOCODE": "NGLOS",
+  "TRADE_NAME": "Lagos",
+  "COUNTRY": "Nigeria",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Nigerian port. Tincan + Apapa terminals."
+ },
+ {
+  "LOCODE": "ESALI",
+  "TRADE_NAME": "Alicante",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SE Spain Mediterranean coast"
+ },
+ {
+  "LOCODE": "CNRIZ",
+  "TRADE_NAME": "Rizhao",
+  "COUNTRY": "China",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Shandong province steel export port"
+ },
+ {
+  "LOCODE": "ESAVI",
+  "TRADE_NAME": "Aviles",
+  "COUNTRY": "Spain",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "North Spain Atlantic. Steel/bulk."
+ },
+ {
+  "LOCODE": "IDBEL",
+  "TRADE_NAME": "Belawan",
+  "COUNTRY": "Indonesia",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "North Sumatra, palm oil export hub"
+ },
+ {
+  "LOCODE": "IDGRK",
+  "TRADE_NAME": "Gresik",
+  "COUNTRY": "Indonesia",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "East Java, cement/fertiliser"
+ },
+ {
+  "LOCODE": "IDJKT",
+  "TRADE_NAME": "Jakarta",
+  "COUNTRY": "Indonesia",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Indonesian port. Tanjung Priok."
+ },
+ {
+  "LOCODE": "INVTZ",
+  "TRADE_NAME": "Visakhapatnam",
+  "COUNTRY": "India",
+  "ZONE": "WCI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "East coast India. Steel/ore export."
+ },
+ {
+  "LOCODE": "GRTHI",
+  "TRADE_NAME": "Thisvi",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Industrial port in Boeotia/Central Greece. Minerals export."
+ },
+ {
+  "LOCODE": "TZDAR",
+  "TRADE_NAME": "Dar Es Salaam",
+  "COUNTRY": "Tanzania",
+  "ZONE": "ECAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Tanzanian port. ECAF zone."
+ },
+ {
+  "LOCODE": "EGHAM",
+  "TRADE_NAME": "Hamrawein",
+  "COUNTRY": "Egypt",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Red Sea Egyptian port — phosphate/mineral export"
+ },
+ {
+  "LOCODE": "GBGRI",
+  "TRADE_NAME": "Grimsby",
+  "COUNTRY": "UK",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Humberside UK. Bulk/steel import."
+ },
+ {
+  "LOCODE": "BJCOO",
+  "TRADE_NAME": "Cotonou",
+  "COUNTRY": "Benin",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Benin port. WCAF."
+ },
+ {
+  "LOCODE": "EHLAY",
+  "TRADE_NAME": "Laayoune",
+  "COUNTRY": "Western Sahara",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Atlantic Morocco/W.Sahara. Phosphate area."
+ },
+ {
+  "LOCODE": "GBGAR",
+  "TRADE_NAME": "Garston",
+  "COUNTRY": "UK",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Merseyside NW England, near Liverpool."
+ },
+ {
+  "LOCODE": "GBSOU",
+  "TRADE_NAME": "Southampton",
+  "COUNTRY": "UK",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Major UK south coast bulk port."
+ },
+ {
+  "LOCODE": "ESCRB",
+  "TRADE_NAME": "Carboneras",
+  "COUNTRY": "Spain",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Almeria province, SE Spain. Mineral/bulk export."
+ },
+ {
+  "LOCODE": "HRZAD",
+  "TRADE_NAME": "Zadar",
+  "COUNTRY": "Croatia",
+  "ZONE": "ADRIATIC",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Dalmatian coast Croatia. Bulk/general cargo."
+ },
+ {
+  "LOCODE": "INMED",
+  "TRADE_NAME": "Mundra",
+  "COUNTRY": "India",
+  "ZONE": "WCI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Gujarat India mega-port. WCI zone."
+ },
+ {
+  "LOCODE": "NGPHC",
+  "TRADE_NAME": "Port Harcourt",
+  "COUNTRY": "Nigeria",
+  "ZONE": "WCAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Major Nigerian oil/general port. WCAF zone."
+ },
+ {
+  "LOCODE": "ROTLN",
+  "TRADE_NAME": "Tulcea",
+  "COUNTRY": "Romania",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "River Port",
+  "NOTES": "Danube river delta port. Max draft ~7m. Via Sulina Canal to Black Sea."
+ },
+ {
+  "LOCODE": "ERMSA",
+  "TRADE_NAME": "Massawa",
+  "COUNTRY": "Eritrea",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Main Eritrea Red Sea gateway."
+ },
+ {
+  "LOCODE": "FRLRH",
+  "TRADE_NAME": "La Rochelle",
+  "COUNTRY": "France",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Atlantic France bulk/agri port."
+ },
+ {
+  "LOCODE": "FRURO",
+  "TRADE_NAME": "Rouen",
+  "COUNTRY": "France",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Seine river — major grain import."
+ },
+ {
+  "LOCODE": "GBLIVP",
+  "TRADE_NAME": "Liverpool",
+  "COUNTRY": "UK",
+  "ZONE": "NCONT",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW England major port."
+ },
+ {
+  "LOCODE": "INKAN",
+  "TRADE_NAME": "Kandla",
+  "COUNTRY": "India",
+  "ZONE": "WCI",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Gujarat India. Bulk port."
+ },
+ {
+  "LOCODE": "ROSUL",
+  "TRADE_NAME": "Sulina",
+  "COUNTRY": "Romania",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Danube canal entrance to Black Sea."
+ },
+ {
+  "LOCODE": "TRROT",
+  "TRADE_NAME": "Rota",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Black Sea Turkish port. Zonguldak area."
+ },
+ {
+  "LOCODE": "TZTAN",
+  "TRADE_NAME": "Tanga",
+  "COUNTRY": "Tanzania",
+  "ZONE": "ECAF",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Tanzania NE coast. Bulk/general."
+ },
+ {
+  "LOCODE": "ITOLB",
+  "TRADE_NAME": "Olbia",
+  "COUNTRY": "Italy",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Sardinia. Marble/bulk export port."
+ },
+ {
+  "LOCODE": "TRZMT",
+  "TRADE_NAME": "Izmit (Kocaeli)",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Izmit Bay, Turkey. Industrial/bulk port."
+ },
+ {
+  "LOCODE": "AEFUJ",
+  "TRADE_NAME": "Fujairah",
+  "COUNTRY": "UAE",
+  "ZONE": "A.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "UAE east coast — A.SEA zone."
+ },
+ {
+  "LOCODE": "DZTNS",
+  "TRADE_NAME": "Tenes",
+  "COUNTRY": "Algeria",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NW Algeria. Bulk/mineral export."
+ },
+ {
+  "LOCODE": "GRTHS",
+  "TRADE_NAME": "Thessaloniki",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "N.Greece port. Grain/bulk."
+ },
+ {
+  "LOCODE": "SAJAZ",
+  "TRADE_NAME": "Jazan",
+  "COUNTRY": "Saudi Arabia",
+  "ZONE": "R.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "SW Saudi Arabia Red Sea industrial port."
+ },
+ {
+  "LOCODE": "TRTRC",
+  "TRADE_NAME": "Trabzon",
+  "COUNTRY": "Turkey",
+  "ZONE": "B.SEA",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Turkey Black Sea port."
+ },
+ {
+  "LOCODE": "VNQNH",
+  "TRADE_NAME": "Quang Ninh",
+  "COUNTRY": "Vietnam",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "NE Vietnam coal/mineral export."
+ },
+ {
+  "LOCODE": "CNZJG",
+  "TRADE_NAME": "Zhangjiagang",
+  "COUNTRY": "China",
+  "ZONE": "F.EAST",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Yangtze River estuary. Major steel port."
+ },
+ {
+  "LOCODE": "TRGLE",
+  "TRADE_NAME": "Gemlik",
+  "COUNTRY": "Turkey",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Marmara Sea Turkey. Industrial/steel port."
+ },
+ {
+  "LOCODE": "ITTMI",
+  "TRADE_NAME": "Termini Imerese",
+  "COUNTRY": "Italy",
+  "ZONE": "W.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "N.Sicily. Bulk/industrial port."
+ },
+ {
+  "LOCODE": "GRNMD",
+  "TRADE_NAME": "Nea Moudhania",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Halkidiki, N.Greece. Small bulk port."
+ },
+ {
+  "LOCODE": "GRVOL",
+  "TRADE_NAME": "Volos",
+  "COUNTRY": "Greece",
+  "ZONE": "E.MED",
+  "PORT_TYPE": "Sea Port",
+  "NOTES": "Central Greece. Steel/bulk port."
+ }
+]
