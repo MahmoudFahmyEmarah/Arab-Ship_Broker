@@ -1,0 +1,58 @@
+/* Propeller page-transition overlay — ported from asb/loader-overlay.js.
+   Fixed blurred overlay with an animated 3-blade propeller + two hydro rings.
+   Respects reduced-motion and dark mode. Controlled by PropellerLoader. */
+.asb-loading-overlay {
+  --asb-paper: #f5f7fa;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #15223a;
+  background: rgba(245, 247, 250, 0.8);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.35s ease, visibility 0s linear 0.35s;
+}
+@media (prefers-color-scheme: dark) {
+  .asb-loading-overlay {
+    --asb-paper: #0c1623;
+    color: #fff;
+    background: rgba(8, 16, 28, 0.82);
+  }
+}
+.asb-loading-overlay.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.35s ease, visibility 0s;
+}
+.asb-loading-overlay .prop {
+  display: block;
+  width: min(40vmin, 280px);
+  height: min(40vmin, 280px);
+}
+.asb-loading-overlay .blades {
+  transform-origin: 160px 160px;
+  animation: asb-prop-blades 0.75s linear infinite;
+}
+@keyframes asb-prop-blades {
+  from { transform: rotate(0deg) scale(1.2); }
+  to { transform: rotate(360deg) scale(1.2); }
+}
+.asb-loading-overlay .hydro-out,
+.asb-loading-overlay .hydro-in {
+  transform-origin: 160px 160px;
+}
+.asb-loading-overlay .hydro-out { animation: asb-prop-spin 2.6s linear infinite; }
+.asb-loading-overlay .hydro-in { animation: asb-prop-spin 3.8s linear infinite; }
+@keyframes asb-prop-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .asb-loading-overlay .blades { animation-duration: 1.5s; }
+  .asb-loading-overlay .hydro-out { animation-duration: 5.2s; }
+  .asb-loading-overlay .hydro-in { animation-duration: 7.6s; }
+}

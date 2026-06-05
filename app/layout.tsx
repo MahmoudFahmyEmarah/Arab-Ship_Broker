@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Toaster } from "sonner";
-import NextTopLoader from "nextjs-toploader";
 
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
+import { PropellerLoader } from "@/components/portal/PropellerLoader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,17 +38,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} antialiased flex flex-col min-h-screen`}
       >
-        <NextTopLoader
-          color="#3370a9"
-          initialPosition={0.15}
-          crawlSpeed={120}
-          height={3}
-          crawl
-          easing="ease"
-          speed={200}
-          showSpinner={false}
-          shadow="0 0 10px rgba(51, 112, 169, 0.35), 0 0 5px rgba(51, 112, 169, 0.3)"
-        />
+        <Suspense fallback={null}>
+          <PropellerLoader />
+        </Suspense>
         <main className="flex-1">{children}</main>
         <Toaster position="top-right" />
       </body>
