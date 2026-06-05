@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Arab ShipBroker, Portal</title>
+<link rel="stylesheet" href="asb/tokens.css?v=9" />
+<link rel="stylesheet" href="asb/post-cargo.css?v=6" />
+<link rel="stylesheet" href="asb/voyage-estimator.css?v=4" />
+<link rel="stylesheet" href="asb/bunker-ticker.css" />
+<link rel="stylesheet" href="asb/subscription.css?v=4" />
+<link rel="stylesheet" href="asb/billing.css?v=3" />
+<link rel="stylesheet" href="asb/market-partner.css" />
+<link rel="stylesheet" href="asb/port-filter.css" />
+<link rel="stylesheet" href="asb/laycan-picker.css" />
+<link rel="stylesheet" href="asb/announcements.css" />
+<link rel="stylesheet" href="asb/map.css?v=3" />
+<link rel="stylesheet" href="asb/alerts.css" />
+<link rel="stylesheet" href="asb/my-vessels-board.css?v=8" />
+
+<!-- Leaflet + MarkerCluster + Tabler icons (map system) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<!-- Admin styles, loaded after broker tokens so .adm-* rules win for admin pages. -->
+<link rel="stylesheet" href="admin/admin.css" />
+<link rel="stylesheet" href="admin/admin-eta.css" />
+<style>
+  /* Page chrome */
+  body { background: var(--asb-gray-50); margin: 0; }
+  #root > .shell { display: flex; height: 100%; }
+  html, body, #root { height: 100%; }
+
+  /* Persistent amber warning banner, only rendered when on an admin page. */
+  .asb-admin-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #FAEEDA;
+    border-bottom: 1px solid #EF9F27;
+    color: #854F0B;
+    font-size: 11px;
+    padding: 8px 16px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .asb-admin-banner__icon {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  /* Admin role switcher (top bar) */
+  .asb-adminrole {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: #854F0B;
+  }
+  .asb-adminrole__viewing { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }
+  .asb-adminrole__name { font-weight: 600; }
+  .asb-adminrole__select {
+    appearance: none; -webkit-appearance: none;
+    font-family: inherit; font-size: 11px; font-weight: 500;
+    color: #5C2E0B; background: #fff;
+    border: 0.5px solid #EF9F27; border-radius: 4px;
+    padding: 4px 22px 4px 9px; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 3.5L5 6.5L8 3.5' stroke='%23854F0B' stroke-width='1.3' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 7px center;
+  }
+  .asb-adminrole__select:focus { outline: none; border-color: #854F0B; }
+  .asb-adminrole__tag {
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 2px 6px; border-radius: 3px;
+  }
+  .asb-adminrole__tag.is-super { background: #FAEEDA; color: #854F0B; border: 0.5px solid #EF9F27; }
+  .asb-adminrole__tag.is-sub   { background: #fff; color: #8B95A3; border: 0.5px solid #DDE2EA; }
+
+  /* Admin level selector inside the demo block */
+  .asb-demo-block__roles { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .asb-demo-block__roles-label {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--asb-gray-500); font-weight: 600;
+  }
+  .asb-demo-block__roles-select {
+    appearance: none; -webkit-appearance: none;
+    width: 100%; font-family: inherit; font-size: 11px; font-weight: 500;
+    color: var(--asb-ink); background: #fff;
+    border: 0.5px solid var(--asb-gray-200); border-radius: 4px;
+    padding: 6px 24px 6px 9px; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 3.5L5 6.5L8 3.5' stroke='%238B95A3' stroke-width='1.3' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  .asb-demo-block__roles-select:focus { outline: none; border-color: var(--asb-blue); }
+
+  /* Scroll container for admin page content rendered inside Portal's <main>. */
+  .asb-admin-main {
+    flex: 1;
+    overflow-y: auto;
+    background: #F5F7FA;
+    min-height: 0;
+    min-width: 0;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- Data (plain JS, no JSX) -->
+<script src="asb/data.js?v=3"></script>
+<script src="asb/ports-data.js?v=1"></script>
+<script src="asb/companies-data.js?v=1"></script>
+<script src="admin/admin-data.js"></script>
+<script src="admin/admin-roles.js"></script>
+<!-- Propeller loading overlay. auto-nav off: this SPA changes views via React state, not links — we drive it from the route change below. -->
+<script src="asb/loader-overlay.js" data-auto-nav="false"></script>
+
+<!-- Broker component files (load order matters, deps first) -->
+<script type="text/babel" src="asb/icons.jsx?v=2"></script>
+<script type="text/babel" src="asb/tooltips.jsx?v=2"></script>
+<script type="text/babel" src="asb/cards.jsx?v=5"></script>
+<script type="text/babel" src="asb/detail-panel.jsx"></script>
+<script type="text/babel" src="asb/map-shared.jsx"></script>
+<script type="text/babel" src="asb/map-overlays.jsx"></script>
+<script type="text/babel" src="asb/map.jsx?v=3"></script>
+<script type="text/babel" src="asb/sidebar.jsx?v=5"></script>
+<script type="text/babel" src="asb/bunker-ticker.jsx"></script>
+<script type="text/babel" src="asb/market-partner.jsx"></script>
+<script type="text/babel" src="asb/port-filter.jsx"></script>
+<script type="text/babel" src="asb/laycan-picker.jsx"></script>
+<script type="text/babel" src="asb/announcements.jsx"></script>
+<script type="text/babel" src="asb/pages.jsx?v=6"></script>
+<script type="text/babel" src="asb/subscription-checkout.jsx"></script>
+<script type="text/babel" src="asb/einvoice.jsx"></script>
+<script type="text/babel" src="asb/billing-panel.jsx"></script>
+<script type="text/babel" src="asb/my-vessels-board.jsx?v=5"></script>
+<script type="text/babel" src="asb/post-cargo.jsx?v=6"></script>
+<script type="text/babel" src="asb/post-position.jsx"></script>
+<script type="text/babel" src="asb/voyage-estimator.jsx?v=2"></script>
+<script type="text/babel" src="asb/unsaved-changes.jsx"></script>
+<script type="text/babel" src="asb/alerts.jsx"></script>
+
+<!-- Admin pages, exposes window.AdminPages -->
+<script type="text/babel" src="admin/admin-pages.jsx"></script>
+<script type="text/babel" src="admin/admin-eta.jsx"></script>
+
+<!-- App shell -->
+<script type="text/babel">
+  function App() {
+    const TierProvider = window.ASBTierContext.Provider;
+    const [page, setPage] = React.useState(() => {
+      // Deep-link support: Portal.html#post-cargo opens that page directly.
+      const h = decodeURIComponent((window.location.hash || "").replace(/^#/, "")).trim();
+      return h || "dashboard";
+    });
+    const [collapsed, setCollapsed] = React.useState(false);
+    const [navGuard, setNavGuard] = React.useState({ open: false, dest: null });
+    const [tier, setTier] = React.useState("T3");
+    const [isAdmin, setIsAdmin] = React.useState(false); // demo toggle in sidebar Demo block
+    const [checkout, setCheckout] = React.useState({ open: false, planId: null, billing: "monthly" });
+
+    // Expose a global helper so cards can deep-link with prefill.
+    React.useEffect(() => {
+      window.openVoyageEstimator = (vesselId, cargoId) => {
+        window.__voyagePrefill = { vesselId: vesselId || null, cargoId: cargoId || null };
+        tryNavigate("voyage-estimator");
+      };
+      // Locked-card "Upgrade to unlock" → the subscription/plans surface.
+      window.openUpgrade = () => { tryNavigate("settings"); };
+      // Subscription comparison "Choose plan" → open the checkout journey.
+      window.openCheckout = (planId, billing) => setCheckout({ open: true, planId, billing: billing || "monthly" });
+      return () => { delete window.openVoyageEstimator; delete window.openUpgrade; delete window.openCheckout; };
+    }, []);
+
+    // Wrap setPage with unsaved-changes guard.
+    const tryNavigate = (id) => {
+      if (window.__asbDirty && id !== page) {
+        setNavGuard({ open: true, dest: id });
+      } else {
+        if (id !== page) window.ASBLoader?.show();
+        setPage(id);
+      }
+    };
+
+    // Show the propeller overlay on every view change, then fade it out once
+    // the new page has mounted. Covers all navigation paths (sidebar, guard
+    // dialog, deep-links) since they all funnel through `page`.
+    const firstPaint = React.useRef(true);
+    React.useEffect(() => {
+      if (firstPaint.current) { firstPaint.current = false; return; }
+      window.ASBLoader?.show();
+      const t = setTimeout(() => window.ASBLoader?.hide(), 600);
+      return () => clearTimeout(t);
+    }, [page]);
+
+    // Keep the URL hash in sync so any view is directly linkable / refresh-safe.
+    React.useEffect(() => {
+      const target = "#" + page;
+      if (window.location.hash !== target) {
+        window.history.replaceState(null, "", target);
+      }
+    }, [page]);
+    const onSave = () => {
+      try { window.__asbSaveDraft?.(); } catch (e) { console.error(e); }
+      window.__asbDirty = false;
+      setPage(navGuard.dest);
+      setNavGuard({ open: false, dest: null });
+    };
+    const onKeep = () => setNavGuard({ open: false, dest: null });
+    const onDiscard = () => {
+      try { window.__asbDiscardDraft?.(); } catch (e) { console.error(e); }
+      window.__asbDirty = false;
+      setPage(navGuard.dest);
+      setNavGuard({ open: false, dest: null });
+    };
+
+    // If the user toggles admin OFF while on an admin page, bounce them home.
+    React.useEffect(() => {
+      if (!isAdmin && window.AdminNavIds?.has(page)) {
+        setPage("dashboard");
+      }
+    }, [isAdmin]);
+
+    // Broker pages
+    const BrokerPages = {
+      dashboard:        PageDashboard,
+      "my-cargo":       PageMyCargo,
+      "my-vessels":     PageMyVessels,
+      "cargo-market":   PageCargoMarket,
+      "tonnage-market": PageTonnageMarket,
+      settings:         PageSettings,
+      "post-cargo":     PagePostCargo,
+      "post-position":  PagePostPosition,
+      "voyage-estimator": PageVoyageEstimator,
+      "ports-da":         PagePortsDA,
+      "suez-toll":        PageSuezToll,
+      alerts:           PageAlerts,
+    };
+
+    // Admin pages, sidebar IDs are prefixed "admin-"; window.AdminPages keys
+    // are the bare names. Map them here.
+    const ADMIN_MAP = {
+      "admin-review":    "review",
+      "admin-listings":  "listings",
+      "admin-users":     "users",
+      "admin-partners":  "partners",
+      "admin-bunker":    "bunker",
+      "admin-commod":    "commod",
+      "admin-ports":     "ports",
+      "admin-dist":      "dist",
+      "admin-voyage":    "voyage",
+      "admin-match":     "match",
+      "admin-rules":     "rules",
+      "admin-settings":  "settings",
+      "admin-announ":    "announ",
+      "admin-analytics": "analytics",
+      "admin-eta":       "eta",
+      "admin-admins":    "admins",
+    };
+
+    const isAdminPage = page in ADMIN_MAP;
+    const BrokerPage  = BrokerPages[page] || PageDashboard;
+    const AdminPage   = isAdminPage ? (window.AdminPages?.[ADMIN_MAP[page]] || null) : null;
+
+    // Admin role profiles (Superior / Sales / Broker / Accountant / IT).
+    // adminCtx is the authorization context consumed by the sidebar + pages.
+    const adminProfiles = window.ADMIN_PROFILES || { super: { name: "Hassan Al-Mansouri", label: "Superior Admin", role: "super", perms: null } };
+    const [adminProfileKey, setAdminProfileKey] = React.useState("super");
+    const adminProfile = adminProfiles[adminProfileKey] || adminProfiles.super;
+    const adminCtx = {
+      name: adminProfile.name,
+      role: adminProfile.role,
+      perms: adminProfile.perms || {},
+      label: adminProfile.label,
+      profileKey: adminProfileKey,
+    };
+    // Access level for the current admin page (edit | view | none).
+    const adminAccess = isAdminPage && window.admCanAccess
+      ? window.admCanAccess(ADMIN_MAP[page], adminCtx)
+      : "edit";
+
+    // If the active role can't reach the current admin page, bounce home.
+    React.useEffect(() => {
+      if (!isAdmin) return;
+      if (isAdminPage && window.admCanAccess && window.admCanAccess(ADMIN_MAP[page], adminCtx) === "none") {
+        setPage("dashboard");
+      }
+    }, [adminProfileKey, isAdmin, page]);
+
+    return (
+      <TierProvider value={tier}>
+        <div className="shell">
+          <Sidebar
+            page={page}
+            setPage={tryNavigate}
+            role={isAdmin ? "ADMIN" : "BROKER"}
+            collapsed={collapsed}
+            setCollapsed={setCollapsed}
+            tier={tier}
+            setTier={setTier}
+            isAdmin={isAdmin}
+            setIsAdmin={setIsAdmin}
+            adminRole={adminCtx.role}
+            adminCtx={adminCtx}
+            adminProfileKey={adminProfileKey}
+            setAdminProfile={setAdminProfileKey}
+          />
+          <main style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+            overflow: "hidden",
+            background: isAdminPage ? "#F5F7FA" : "var(--asb-gray-50)",
+          }}>
+            {isAdminPage && (
+              <div className="asb-admin-banner" role="status">
+                <span className="asb-admin-banner__icon" aria-hidden="true">⚠</span>
+                <span>Admin panel, changes here affect the live platform immediately.</span>
+                <div className="asb-adminrole">
+                  <span className="asb-adminrole__viewing">Viewing as</span>
+                  <span className="asb-adminrole__name">{adminProfile.name}</span>
+                  <select
+                    className="asb-adminrole__select"
+                    value={adminProfileKey}
+                    onChange={(e) => setAdminProfileKey(e.target.value)}
+                    aria-label="Admin role"
+                  >
+                    {(window.ADMIN_PROFILE_ORDER || Object.keys(adminProfiles)).map((k) => (
+                      <option key={k} value={k}>{adminProfiles[k].label}</option>
+                    ))}
+                  </select>
+                  <span className={`asb-adminrole__tag ${adminCtx.role === "super" ? "is-super" : "is-sub"}`}>
+                    {adminCtx.role === "super" ? "Full access" : "Scoped"}
+                  </span>
+                </div>
+              </div>
+            )}
+            {isAdminPage
+              ? (
+                <div className="asb-admin-main">
+                  {adminAccess === "view" && (
+                    <div className="adm-readonly">
+                      <span aria-hidden="true">👁</span>
+                      <span>You have <strong>view-only</strong> access to this section as <strong>{adminProfile.label}</strong>. Editing is disabled for your role.</span>
+                    </div>
+                  )}
+                  {adminAccess === "none"
+                    ? (
+                      <div className="adm-page">
+                        <div className="adm-page__head"><div><h1 className="adm-page__title"><span className="adm-page__crumb">Admin</span><span className="adm-page__crumb-sep">/</span>Restricted</h1></div></div>
+                        <div className="adm-card eta-denied">
+                          <div className="eta-denied__icon" aria-hidden="true">🔒</div>
+                          <div>
+                            <strong>This section isn't available to your admin role.</strong>
+                            <p>You are signed in as <strong>{adminProfile.label}</strong>. This area is restricted to roles with the right permission. Switch role from the top bar, or contact the Superior Admin.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                    : AdminPage
+                      ? <AdminPage
+                          setPage={(id) => tryNavigate(ADMIN_MAP[`admin-${id}`] ? `admin-${id}` : id)}
+                          ctx={adminCtx}
+                          access={adminAccess}
+                        />
+                      : <div className="adm-page"><div className="adm-card">Page not found.</div></div>}
+                </div>
+              )
+              : <BrokerPage setPage={tryNavigate} />
+            }
+          </main>
+          {navGuard.open && <UnsavedDialog onSave={onSave} onKeep={onKeep} onDiscard={onDiscard} />}
+          {!isAdmin && <WelcomeBackModal setPage={tryNavigate} />}
+          <MarketPartnerPanelHost />
+          {checkout.open && (
+            <SubscriptionCheckout
+              planId={checkout.planId}
+              currentTier={tier}
+              initialBilling={checkout.billing}
+              onConfirm={(id) => setTier(id)}
+              onNavigate={(pageId) => tryNavigate(pageId)}
+              onClose={() => setCheckout({ open: false, planId: null, billing: "monthly" })}
+            />
+          )}
+        </div>
+      </TierProvider>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+</body>
+</html>

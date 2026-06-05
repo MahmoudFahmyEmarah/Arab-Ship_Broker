@@ -38,16 +38,16 @@ import { SafetyQuestionsStep } from "./SafetyQuestionsStep";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
-  { id: "commodity", label: "Commodity", icon: Package },
-  { id: "ports", label: "Ports & Qty", icon: MapPin },
+  { id: "commodity", label: "Cargo & Quantity", icon: Package },
+  { id: "ports", label: "Ports", icon: MapPin },
   { id: "laycan", label: "Laycan & Terms", icon: Calendar },
   { id: "safety", label: "Safety", icon: ShieldCheck },
   { id: "review", label: "Review", icon: CheckCircle },
 ] as const;
 
 const STEP_FIELDS: Record<number, (keyof CargoFormValues)[]> = {
-  0: ["commodity_id"],
-  1: ["qty_min_mt", "qty_max_mt", "load_port_locode", "disch_port_locode"],
+  0: ["commodity_id", "qty_min_mt", "qty_max_mt"],
+  1: ["load_port_locode", "disch_port_locode"],
   2: ["laycan_from", "laycan_to"],
   3: [],
   4: [],
@@ -357,18 +357,18 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           onKeyDown={preventEnterSubmit}
           className="space-y-5"
         >
-          {/* ── Step 0: Commodity ── */}
+          {/* ── Step 0: Cargo & Quantity ── */}
           {step === 0 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
               <div className="flex items-center gap-3 mb-2">
                 <Package className="w-7 h-7 text-asb-blue" />
                 <div>
                   <h2 className="text-xl font-bold text-asb-navy">
-                    Select Commodity
+                    Cargo &amp; Quantity
                   </h2>
                   <p className="text-sm text-asb-gray-500">
-                    Cargo type, IMSBC category, and safety requirements are set
-                    automatically.
+                    Commodity, quantity and stowage. Cargo type, IMSBC category
+                    and safety requirements are set automatically.
                   </p>
                 </div>
               </div>
@@ -413,23 +413,6 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   />
                 </div>
               )}
-            </div>
-          )}
-
-          {/* ── Step 1: Ports & Quantity ── */}
-          {step === 1 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
-              <div className="flex items-center gap-3 mb-2">
-                <MapPin className="w-7 h-7 text-asb-blue" />
-                <div>
-                  <h2 className="text-xl font-bold text-asb-navy">
-                    Ports & Quantity
-                  </h2>
-                  <p className="text-sm text-asb-gray-500">
-                    Zone is auto-filled from the port — never type it manually.
-                  </p>
-                </div>
-              </div>
 
               <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
                 <div className="space-y-1.5">
@@ -593,6 +576,25 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {/* ── Step 1: Ports ── */}
+          {step === 1 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3">
+              <div className="flex items-center gap-3 mb-2">
+                <MapPin className="w-7 h-7 text-asb-blue" />
+                <div>
+                  <h2 className="text-xl font-bold text-asb-navy">
+                    Ports
+                  </h2>
+                  <p className="text-sm text-asb-gray-500">
+                    POL / POD. Zone is auto-filled from the port — never type it
+                    manually.
+                  </p>
+                </div>
+              </div>
+
 
               <Controller
                 control={form.control}
