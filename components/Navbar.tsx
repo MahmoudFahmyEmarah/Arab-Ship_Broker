@@ -102,7 +102,7 @@ export function Navbar() {
             : "bg-white/96 backdrop-blur-2xl border-b border-slate-200/60 shadow-[0_1px_0_0_rgba(0,0,0,0.04)]",
         )}
       >
-        <nav className="container">
+        <nav className="w-full px-8 max-lg:px-6 max-md:px-4">
           <div className="flex items-center justify-between h-17.5 max-lg:h-15.5">
             <Link
               href="/"
