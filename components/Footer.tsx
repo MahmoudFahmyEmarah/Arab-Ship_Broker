@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Mail, Phone, MapPin } from "lucide-react";
+import { FooterPortalLink } from "@/components/footer-portal-link";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -58,6 +59,13 @@ export function Footer() {
               >
                 Our Services
               </Link>
+              <Link
+                href="/market-insights"
+                className="text-ocean-200/80 hover:text-foam-300 transition-colors text-sm w-fit focus:outline-none focus-visible:ring-2 focus-visible:ring-foam-400 rounded-sm"
+              >
+                Market Insights
+              </Link>
+              <FooterPortalLink />
               <Link
                 href="/contact"
                 className="text-ocean-200/80 hover:text-foam-300 transition-colors text-sm w-fit focus:outline-none focus-visible:ring-2 focus-visible:ring-foam-400 rounded-sm"
