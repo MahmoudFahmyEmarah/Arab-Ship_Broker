@@ -155,7 +155,7 @@ export function Navbar() {
                   lang="ar"
                   style={{ fontFamily: "var(--font-arabic)" }}
                   className={cn(
-                    "text-[13px] font-semibold leading-tight mt-1 truncate transition-colors duration-300",
+                    "text-[13px] font-semibold leading-tight mt-1 truncate text-center transition-colors duration-300",
                     showTransparent ? "text-white" : "text-ocean-950",
                   )}
                 >
@@ -166,11 +166,11 @@ export function Navbar() {
                   lang="ar"
                   style={{ fontFamily: "var(--font-arabic)" }}
                   className={cn(
-                    "text-[10px] italic leading-tight truncate transition-colors duration-300 max-sm:hidden",
+                    "text-[10px] italic leading-tight truncate text-center transition-colors duration-300 max-sm:hidden",
                     showTransparent ? "text-white/75" : "text-ocean-700",
                   )}
                 >
-                  محمد داود وشركاه
+                  ربان محمد داود وشركاه
                 </span>
               </div>
             </Link>
