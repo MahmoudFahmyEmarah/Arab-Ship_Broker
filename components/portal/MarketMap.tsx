@@ -505,6 +505,7 @@ export default function MarketMap({
       const mid = line[Math.floor(line.length / 2)];
       L.marker(mid, {
         interactive: false,
+        zIndexOffset: 100000, // sit flat on top of cargo/vessel + cluster-count markers
         icon: L.divIcon({
           className: "route-tag-wrap",
           html: `<span class="route-tag${geo.exact ? " is-exact" : ""}">${geo.nm.toLocaleString()} NM<i>${geo.exact ? "ECDIS" : "est."}</i></span>`,
