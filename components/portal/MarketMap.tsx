@@ -13,6 +13,8 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "@/lib/portal/map.css";
 import { CargoView, VesselView } from "@/lib/portal/types";
 import { FALLBACK_PORTS } from "@/lib/portal/port-coords";
+import { MapFilterPanel } from "./MapFilterPanel";
+import { CARGO_FACETS, VESSEL_FACETS, passesFacets, type Selections } from "@/lib/portal/map-filters";
 
 const ZONE_COLOR: Record<string, string> = {
   AG: "#534AB7",
@@ -146,6 +148,7 @@ const G = {
   minus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14" /></svg>,
   maximize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>,
   minimize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M16 21v-3a2 2 0 0 1 2-2h3M8 21v-3a2 2 0 0 0-2-2H3" /></svg>,
+  filter: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>,
 };
 
 type Popup =
@@ -178,6 +181,7 @@ export default function MarketMap({
     },
     [portCoords],
   );
+
   const hostRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<L.Map | null>(null);
   const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
@@ -189,11 +193,31 @@ export default function MarketMap({
 
   const [ready, setReady] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [selections, setSelections] = React.useState<Selections>({});
   const [cargoOn, setCargoOn] = React.useState(true);
   const [vesselsOn, setVesselsOn] = React.useState(true);
   const [zonesOn, setZonesOn] = React.useState(true);
   const [base, setBase] = useMapBase();
   const [popup, setPopup] = React.useState<Popup | null>(null);
+
+  // Filter facets drive real marker visibility (§2b shared facet model).
+  const visCargos = React.useMemo(
+    () => cargos.filter((c) => passesFacets(c, CARGO_FACETS, selections)),
+    [cargos, selections],
+  );
+  const visVessels = React.useMemo(
+    () => vessels.filter((v) => passesFacets(v, VESSEL_FACETS, selections)),
+    [vessels, selections],
+  );
+  const toggleOption = React.useCallback((facetId: string, value: string) => {
+    setSelections((prev) => {
+      const set = new Set(prev[facetId] ?? []);
+      if (set.has(value)) set.delete(value);
+      else set.add(value);
+      return { ...prev, [facetId]: set };
+    });
+  }, []);
   const [, force] = React.useReducer((x) => x + 1, 0);
 
   // Init once
@@ -331,7 +355,7 @@ export default function MarketMap({
 
     if (cargoOn) {
       const state = cargoStateForZoom(map.getZoom());
-      cargos.forEach((c) => {
+      visCargos.forEach((c) => {
         const ll = coordFor(c.route?.polCode);
         if (!ll) return;
         const jx = ((c.id || "").charCodeAt(0) % 7) * 0.04 - 0.12;
@@ -353,7 +377,7 @@ export default function MarketMap({
     }
 
     if (vesselsOn) {
-      vessels.forEach((v) => {
+      visVessels.forEach((v) => {
         const ll = coordFor(v.openPortLocode);
         if (!ll) return;
         const jx = ((v.id || "").charCodeAt(0) % 7) * 0.05 - 0.15;
@@ -373,7 +397,7 @@ export default function MarketMap({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cargos, vessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready]);
+  }, [visCargos, visVessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready]);
 
   // Focused cargo → route + fit
   React.useEffect(() => {
@@ -473,6 +497,11 @@ export default function MarketMap({
           {G.zones}
           {zonesOn && <span className="bar-badge bar-badge--zone" />}
         </BarIcon>
+        <div className="bar-divider" />
+        <BarIcon on={filtersOpen} onClick={() => setFiltersOpen((o) => !o)} title="Filters">
+          {G.filter}
+          {Object.values(selections).some((s) => s.size > 0) && <span className="bar-badge bar-badge--cargo" />}
+        </BarIcon>
         <div className="bar-spacer" />
         <div className="bar-divider" />
         <BarIcon onClick={() => setBase(base === "light" ? "dark" : "light")} title={base === "light" ? "Light base · switch to dark" : "Dark base · switch to light"}>
@@ -485,6 +514,20 @@ export default function MarketMap({
           {fullscreen ? G.minimize : G.maximize}
         </BarIcon>
       </div>
+
+      <MapFilterPanel
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        cargos={cargos}
+        vessels={vessels}
+        cargoLayer={cargoOn}
+        vesselLayer={vesselsOn}
+        onToggleCargoLayer={() => setCargoOn((v) => !v)}
+        onToggleVesselLayer={() => setVesselsOn((v) => !v)}
+        selections={selections}
+        onToggleOption={toggleOption}
+        onReset={() => setSelections({})}
+      />
     </div>
   );
 }
