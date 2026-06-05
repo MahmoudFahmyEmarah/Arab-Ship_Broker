@@ -935,19 +935,43 @@ body { font-family: var(--asb-font); }
 /* ============================================================
    BUNKER TICKER — sponsored price marquee (reads fuel_prices)
    ============================================================ */
-.bunker-ticker { display: flex; align-items: stretch; height: 30px; background: #0D2545; color: #fff; font: 11px/1 var(--asb-font); overflow: hidden; }
-.bt-label { flex-shrink: 0; display: flex; align-items: center; padding: 0 12px; font-size: 9px; font-weight: 600; letter-spacing: .1em; color: #7BB8F0; border-right: 1px solid rgba(255,255,255,0.1); }
-.bt-track-wrap { flex: 1; overflow: hidden; position: relative; display: flex; align-items: center; }
-.bt-track { display: inline-flex; align-items: center; white-space: nowrap; animation: bt-scroll 60s linear infinite; will-change: transform; }
+/* Bunker ticker — full port of asb/bunker-ticker.css (32px navy marquee). */
+.bunker-ticker { position: relative; height: 32px; background: #243F60; overflow: hidden; flex-shrink: 0; font-family: var(--font-inter), "Inter", system-ui, sans-serif; font-size: 12px; line-height: 32px; color: #fff; user-select: none; }
+.bunker-ticker::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 28px; pointer-events: none; z-index: 2; background: linear-gradient(to right, #243F60 0%, rgba(36,63,96,0) 100%); }
+.bt-track-wrap { position: absolute; top: 0; bottom: 0; left: 0; right: 0; overflow: hidden; }
+.bt-track { display: inline-flex; align-items: center; white-space: nowrap; height: 100%; animation: bt-scroll var(--bt-duration, 60s) linear infinite; will-change: transform; }
 .bunker-ticker:hover .bt-track { animation-play-state: paused; }
-@keyframes bt-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.bt-seg { display: inline-flex; align-items: center; gap: 7px; padding: 0 2px; }
-.bt-sponsor { font-weight: 600; color: #fff; }
-.bt-port { color: rgba(255,255,255,0.55); }
-.bt-mid-dot { color: rgba(255,255,255,0.3); }
-.bt-price-grp { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
-.bt-fuel { color: rgba(255,255,255,0.5); font-size: 9px; letter-spacing: .04em; }
-.bt-price { color: #fff; font-variant-numeric: tabular-nums; }
-.bt-dir.up { color: #4ED88A; } .bt-dir.down { color: #FF6B6B; } .bt-dir.flat { color: rgba(255,255,255,0.4); }
-.bt-seg__sep { display: inline-block; width: 1px; height: 12px; background: rgba(255,255,255,0.15); margin: 0 14px; }
-.bt-empty { padding: 0 14px; color: rgba(255,255,255,0.5); font-size: 10px; }
+@keyframes bt-scroll { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+.bt-seg { display: inline-flex; align-items: center; gap: 8px; padding: 0 4px 0 0; flex-shrink: 0; }
+.bt-seg.is-current { opacity: 1; } .bt-seg.is-stale { opacity: 0.75; } .bt-seg.is-expired { opacity: 0.50; }
+.bt-seg__sep { display: inline-block; width: 1px; height: 14px; background: rgba(255,255,255,0.15); margin: 0 12px; flex-shrink: 0; }
+.bt-sponsor { color: #7BB8F0; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 3px; cursor: pointer; pointer-events: auto; }
+.bt-sponsor:hover { text-decoration: underline; }
+.bt-sponsor__ext { opacity: 0; font-size: 9px; transition: opacity .12s ease; margin-left: 1px; }
+.bt-sponsor:hover .bt-sponsor__ext { opacity: 1; }
+.bt-seg.is-stale .bt-sponsor { color: rgba(255,255,255,0.4); } .bt-seg.is-expired .bt-sponsor { color: rgba(255,255,255,0.25); }
+.bt-age { color: rgba(255,255,255,0.3); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.bt-outdated { display: inline-block; font-size: 10.5px; font-weight: 500; color: #EF9F27; letter-spacing: 0.04em; text-transform: uppercase; border: 0.5px solid rgba(239,159,39,0.45); border-radius: 2px; padding: 1px 5px; line-height: 1; }
+.bt-mid-dot { color: rgba(255,255,255,0.3); margin: 0 -2px; }
+.bt-port { color: rgba(255,255,255,0.55); font-weight: 400; }
+.bt-fuel { color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.04em; margin-left: 4px; }
+.bt-price { color: #fff; font-weight: 500; font-variant-numeric: tabular-nums; margin-left: -3px; }
+.bt-seg.is-stale .bt-price { color: rgba(255,255,255,0.5); font-weight: 400; }
+.bt-seg.is-expired .bt-price { color: rgba(255,255,255,0.3); font-weight: 400; }
+.bt-seg.is-expired .bt-fuel { color: rgba(255,255,255,0.28); } .bt-seg.is-expired .bt-port { color: rgba(255,255,255,0.32); }
+.bt-dir { font-size: 9px; margin-left: -3px; line-height: 1; }
+.bt-dir.is-up { color: #97C459; } .bt-dir.is-down { color: #E24B4A; } .bt-dir.is-flat { color: rgba(255,255,255,0.4); }
+.bt-updated { position: absolute; right: 0; top: 0; bottom: 0; padding: 0 14px 0 22px; color: rgba(255,255,255,0.35); font-size: 10.5px; display: flex; align-items: center; z-index: 3; letter-spacing: 0.02em; background: linear-gradient(to right, rgba(36,63,96,0) 0%, #243F60 35%, #243F60 100%); pointer-events: none; }
+.bt-updated::before { content: ""; position: absolute; left: 16px; top: 7px; bottom: 7px; width: 1px; background: rgba(255,255,255,0.12); }
+.bt-updated__pulse { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #97C459; margin-right: 6px; box-shadow: 0 0 0 0 rgba(151,196,89,0.6); animation: bt-pulse 2.2s ease-out infinite; flex-shrink: 0; }
+@keyframes bt-pulse { 0% { box-shadow: 0 0 0 0 rgba(151,196,89,0.55); } 70% { box-shadow: 0 0 0 6px rgba(151,196,89,0); } 100% { box-shadow: 0 0 0 0 rgba(151,196,89,0); } }
+.bt-demo { position: absolute; left: 0; top: 0; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 0 22px 0 12px; pointer-events: none; background: linear-gradient(to right, #243F60 0%, #243F60 62%, rgba(36,63,96,0) 100%); }
+.bt-demo__tag { font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; color: #EF9F27; border: 0.5px solid rgba(239,159,39,0.5); border-radius: 2px; padding: 2px 5px; line-height: 1; }
+.bt-demo__txt { font-size: 10px; color: rgba(255,255,255,0.42); letter-spacing: 0.02em; white-space: nowrap; }
+.bt-seg--cta { gap: 9px; }
+.bt-cta__badge { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; color: #0D2545; background: #97C459; border-radius: 2px; padding: 2px 6px; line-height: 1; }
+.bt-cta__txt { color: rgba(255,255,255,0.7); white-space: nowrap; }
+.bt-cta__link { color: #7BB8F0; font-weight: 600; text-decoration: none; pointer-events: auto; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.bt-cta__link:hover { text-decoration: underline; }
+.bt-cta__arrow { font-size: 11px; }
+@media (max-width: 640px) { .bunker-ticker { font-size: 10.5px; } .bt-updated { display: none; } .bt-demo__txt { display: none; } .bt-cta__txt { display: none; } }
