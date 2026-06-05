@@ -301,3 +301,22 @@ export async function getMatchesForCargo(
   if (error) throw error;
   return (data ?? []) as CargoMatchResult[];
 }
+
+/**
+ * Persist the owner's circulation choice (In circulation vs Private to ASB)
+ * via the ownership-checked set_listing_circulation RPC (migration …000500).
+ * Never affects contact visibility — that stays admin/owner-only.
+ */
+export async function setListingCirculation(
+  supabase: SupabaseClient,
+  type: "cargo" | "vessel_availability",
+  id: string,
+  value: boolean,
+): Promise<void> {
+  const { error } = await supabase.rpc("set_listing_circulation", {
+    p_type: type,
+    p_id: id,
+    p_value: value,
+  });
+  if (error) throw error;
+}
