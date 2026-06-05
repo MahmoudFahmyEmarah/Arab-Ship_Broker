@@ -97,6 +97,19 @@ CREATE POLICY "Browse approved availability"
 -- but it still grants member-gated contact. Re-point contact columns to
 -- ADMIN-ONLY (or the row's own owner). Listing particulars keep their
 -- existing member/guest gating; only CONTACT changes.
+--
+-- Guarded: an earlier migration (20240401000007) renames public.cargos to
+-- cargos_deprecated, so on a clean migration replay this table is absent and
+-- the view cannot be built. Production diverged and still has cargos, where
+-- this ran once already. Skip silently where the base table is gone — there
+-- is nothing to tighten and nothing reads cargos_access_view there.
+DO $firewall$
+BEGIN
+IF to_regclass('public.cargos') IS NULL THEN
+  RAISE NOTICE 'public.cargos absent (renamed); skipping cargos_access_view firewall.';
+  RETURN;
+END IF;
+EXECUTE $ddl$
 CREATE OR REPLACE VIEW public.cargos_access_view AS
  SELECT
     c.id,
@@ -137,8 +150,10 @@ CREATE OR REPLACE VIEW public.cargos_access_view AS
         then 'member'::text else 'guest'::text end as access_tier
    from public.cargos c
   where c.status = 'IN';
-
-GRANT SELECT ON TABLE public.cargos_access_view TO anon, authenticated;
+$ddl$;
+EXECUTE 'GRANT SELECT ON TABLE public.cargos_access_view TO anon, authenticated';
+END
+$firewall$;
 
 -- ── Note ─────────────────────────────────────────────────────
 -- Part 2 (separate migration, pending scope sign-off) locks down the
