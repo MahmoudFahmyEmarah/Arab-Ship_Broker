@@ -9,8 +9,9 @@ import { HomeClient } from "./home-client";
 export const revalidate = 300;
 
 export default async function HomePage() {
-  // Fallbacks — never render 0/NaN if the RPC is unavailable (e.g. not yet
-  // applied to the DB). Better a sensible number than a zero.
+  // Fallbacks apply ONLY when the RPC is unreachable (preview / not yet applied).
+  // When the RPC returns, its integers are used verbatim — including a genuine 0,
+  // shown honestly (the old "show a static number instead of 0" masking is gone).
   let cargoCount = 167;
   let vesselCount = 62;
   let zoneCount = 14;
@@ -20,17 +21,19 @@ export default async function HomePage() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
-    const { data } = await supabase.rpc("get_public_stats");
-    const s = (data ?? {}) as {
+    const { data, error } = await supabase.rpc("get_public_stats");
+    const s = (data ?? null) as {
       cargo_count?: number;
       vessel_count?: number;
       zone_count?: number;
-    };
-    if (typeof s.cargo_count === "number" && s.cargo_count > 0) cargoCount = s.cargo_count;
-    if (typeof s.vessel_count === "number" && s.vessel_count > 0) vesselCount = s.vessel_count;
-    if (typeof s.zone_count === "number" && s.zone_count > 0) zoneCount = s.zone_count;
+    } | null;
+    if (!error && s && typeof s.cargo_count === "number") {
+      cargoCount = s.cargo_count;
+      vesselCount = typeof s.vessel_count === "number" ? s.vessel_count : 0;
+      zoneCount = typeof s.zone_count === "number" ? s.zone_count : 0;
+    }
   } catch {
-    // keep fallbacks
+    // RPC unavailable — keep the sensible fallbacks (never render NaN).
   }
 
   return (

@@ -106,10 +106,12 @@ function AnimatedStat({
   value,
   label,
   suffix,
+  hint,
 }: {
   value: string;
   label: string;
   suffix: string;
+  hint?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true, margin: "-50px" });
@@ -159,6 +161,11 @@ function AnimatedStat({
       <div className="text-[11px] text-ocean-300/70 font-bold tracking-widest uppercase">
         {label}
       </div>
+      {hint && (
+        <div className="text-[10px] text-ocean-400/70 font-medium normal-case tracking-normal">
+          {hint}
+        </div>
+      )}
     </div>
   );
 }
@@ -260,7 +267,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
   // Live hero stats (counts come from the server wrapper). The "+" on Cargo
   // Records is decorative; the animation lands on the exact DB number.
   const stats = [
-    { value: String(cargoCount), label: "Cargo Records", suffix: "+" },
+    { value: String(cargoCount), label: "Cargo Records", suffix: "+", hint: "laycan within ±1 week" },
     { value: String(vesselCount), label: "Vessels Tracked", suffix: "" },
     { value: String(zoneCount), label: "Trade Zones", suffix: "" },
   ];
