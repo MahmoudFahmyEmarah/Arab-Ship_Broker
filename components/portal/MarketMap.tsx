@@ -171,7 +171,8 @@ export default function MarketMap({
   const coordFor = React.useCallback(
     (locode?: string | null): [number, number] | null => {
       if (!locode) return null;
-      return portCoords?.[locode] ?? FALLBACK_PORTS[locode] ?? null;
+      const key = locode.trim().toUpperCase().replace(/\s+/g, "");
+      return portCoords?.[locode] ?? portCoords?.[key] ?? FALLBACK_PORTS[key] ?? null;
     },
     [portCoords],
   );
