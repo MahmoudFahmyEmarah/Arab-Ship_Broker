@@ -47,7 +47,7 @@ export default async function AccountSettingsPage() {
   const { data: appUser } = await supabase
     .from("users")
     .select("id, full_name, email, is_active, created_at")
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   if (!appUser) redirect("/auth/login");

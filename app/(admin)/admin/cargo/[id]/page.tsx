@@ -90,10 +90,7 @@ export default async function AdminCargoDetailPage({
     const { data: u } = await supabase
       .from("users")
       .select("id, full_name, email, trust_tier")
-      .eq(
-        "supabase_user_id",
-        (ownership as Record<string, unknown>).owner_user_id as string,
-      )
+      .eq("id", (ownership as Record<string, unknown>).owner_user_id as string,)
       .maybeSingle();
     owner = u;
   }

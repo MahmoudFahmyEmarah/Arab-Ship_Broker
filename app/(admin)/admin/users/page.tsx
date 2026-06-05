@@ -69,7 +69,7 @@ export default async function AdminUsersPage({
   let q = supabase
     .from("users")
     .select(
-      "id, supabase_user_id, name, full_name, email, role, trust_tier, is_active, clean_posts, strike_count, company, phone, notes, created_at, updated_at",
+      "id, name, full_name, email, role, trust_tier, is_active, clean_posts, strike_count, company, phone, notes, created_at, updated_at",
     )
     .neq("role", "admin")
     .order(sortCol, { ascending: sortCol === "full_name" });

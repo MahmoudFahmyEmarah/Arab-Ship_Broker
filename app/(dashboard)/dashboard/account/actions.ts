@@ -36,7 +36,7 @@ export async function updateBasicInfo(
   const { error } = await supabase
     .from("users")
     .update({ full_name: full_name.trim() })
-    .eq("supabase_user_id", user.id);
+    .eq("id", user.id);
 
   if (error) return { success: false, error: error.message };
 
@@ -63,7 +63,7 @@ export async function updateProfileInfo(
   const { data: appUser } = await supabase
     .from("users")
     .select("id")
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   if (!appUser) return { success: false, error: "User record not found." };

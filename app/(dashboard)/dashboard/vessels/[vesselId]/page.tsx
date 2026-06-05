@@ -97,8 +97,8 @@ export default async function VesselDetailPage({
   // Commercial/contact card is for the vessel's own owner or admin only.
   const { data: appUser } = await supabase
     .from("users")
-    .select("role, subscription_tier, is_market_partner")
-    .eq("supabase_user_id", user.id)
+    .select("role, subscription_tier")
+    .eq("id", user.id)
     .maybeSingle();
   const canSeeCommercial = isClaimed || appUser?.role === "admin";
   // Non-owner view: subscribers (T3/T4/partner) get the "brokered by ASB"

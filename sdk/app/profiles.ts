@@ -12,7 +12,7 @@ export async function getMyProfiles(
   const { data: account, error: accountError } = await supabase
     .from("users")
     .select("id")
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   if (accountError || !account) return [];
@@ -42,7 +42,7 @@ export async function addProfileToAccount(
   const { data: account, error: accountError } = await supabase
     .from("users")
     .select("id, full_name")
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   if (accountError || !account) throw new Error("Account not found.");

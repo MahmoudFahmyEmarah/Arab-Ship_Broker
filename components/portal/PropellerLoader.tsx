@@ -8,7 +8,8 @@ import * as React from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import "@/lib/portal/loader.css";
 
-const MIN_VISIBLE = 600;
+const MIN_VISIBLE = 500; // once shown, stay up at least this long (no flicker)
+const SHOW_DELAY = 180; // don't show at all for navigations faster than this
 
 export function PropellerLoader() {
   const pathname = usePathname();
@@ -16,11 +17,18 @@ export function PropellerLoader() {
   const [visible, setVisible] = React.useState(false);
   const shownAt = React.useRef(0);
   const hideTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Arm a delayed show. Fast route changes (the common case) complete before the
+  // delay fires and cancel it, so the overlay never flashes on quick hops — it
+  // only appears when a transition is genuinely slow.
   const show = React.useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    shownAt.current = Date.now();
-    setVisible(true);
+    if (showTimer.current) clearTimeout(showTimer.current);
+    showTimer.current = setTimeout(() => {
+      shownAt.current = Date.now();
+      setVisible(true);
+    }, SHOW_DELAY);
   }, []);
 
   // Intercept same-origin internal link clicks → show overlay before navigation.
@@ -44,8 +52,10 @@ export function PropellerLoader() {
     return () => document.removeEventListener("click", onClick, true);
   }, [show]);
 
-  // New route has rendered → fade out after the minimum-visible window.
+  // New route has rendered → cancel any pending (not-yet-shown) overlay, and if
+  // it did show, fade it out after the minimum-visible window.
   React.useEffect(() => {
+    if (showTimer.current) clearTimeout(showTimer.current); // fast nav: never show
     if (!visible) return;
     const wait = Math.max(0, MIN_VISIBLE - (Date.now() - shownAt.current));
     hideTimer.current = setTimeout(() => setVisible(false), wait);

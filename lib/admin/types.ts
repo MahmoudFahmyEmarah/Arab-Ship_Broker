@@ -3,7 +3,6 @@ export type TrustTier = "NEW" | "VERIFIED" | "FLAGGED";
 
 export type AdminUserRow = {
   id: string;
-  supabase_user_id: string;
   name: string;
   full_name: string;
   email: string;

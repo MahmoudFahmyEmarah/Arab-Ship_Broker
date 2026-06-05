@@ -34,7 +34,7 @@ export default async function NewAvailabilityPage({ params }: PageProps) {
   const { data: appUser } = await supabase
     .from("users")
     .select("role")
-    .eq("supabase_user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   const canAccessVesselPages =
