@@ -42,6 +42,7 @@ const NAV: AdmNav[] = [
   { id: "ports", href: "/admin/ports", label: "Ports", icon: I.port },
   { id: "rules", href: "/admin/safety-questions", label: "Safety questions", icon: I.shield },
   { id: "announ", href: "/admin/messages", label: "Messages", icon: I.msg },
+  { id: "bunker", href: "/admin/bunker", label: "Bunker prices", icon: I.box },
   { id: "eta", href: "/admin/eta", label: "ETA e-invoicing", icon: I.doc },
 ];
 
