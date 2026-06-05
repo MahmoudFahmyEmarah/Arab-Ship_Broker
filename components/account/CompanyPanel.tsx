@@ -10,8 +10,11 @@ import {
   searchOrganizations,
   getMyMembership,
   requestOrgMembership,
+  getMyOrgPendingRequests,
+  decideMyOrgRequest,
   type OrgSearchResult,
   type MyMembership,
+  type OrgPendingRequest,
 } from "@/app/(dashboard)/dashboard/account/company-actions";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -41,10 +44,24 @@ export function CompanyPanel() {
   const [submitting, setSubmitting] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  const [requests, setRequests] = React.useState<OrgPendingRequest[]>([]);
+  const [deciding, setDeciding] = React.useState<string | null>(null);
+
   const refresh = React.useCallback(() => {
     getMyMembership().then(setMembership).catch(() => setMembership(null));
+    getMyOrgPendingRequests().then(setRequests).catch(() => setRequests([]));
   }, []);
   React.useEffect(() => { refresh(); }, [refresh]);
+
+  const isOrgAdmin = !!membership && membership.status === "active" && membership.member_role === "admin";
+
+  async function decide(r: OrgPendingRequest, approve: boolean, makeAdmin: boolean) {
+    const key = `${r.org_id}:${r.user_id}`;
+    setDeciding(key);
+    const res = await decideMyOrgRequest(r.org_id, r.user_id, approve, makeAdmin);
+    setDeciding(null);
+    if (res.ok) setRequests((prev) => prev.filter((x) => `${x.org_id}:${x.user_id}` !== key));
+  }
 
   // Debounced registry search.
   React.useEffect(() => {
@@ -108,6 +125,61 @@ export function CompanyPanel() {
       ) : (
         <div className="bg-asb-gray-50 border border-dashed border-asb-gray-200 rounded p-5 text-sm text-asb-gray-500">
           You&apos;re not connected to a company yet. Search for your firm below.
+        </div>
+      )}
+
+      {/* Company-admin: review join requests for your firm */}
+      {isOrgAdmin && requests.length > 0 && (
+        <div className="bg-white border border-asb-gray-200 rounded p-5 space-y-3">
+          <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider">
+            Join requests for {membership?.org_name}
+          </p>
+          <p className="text-xs text-asb-gray-500">
+            Approving grants access to your company&apos;s desk and fleet — confirm the person works here.
+          </p>
+          {requests.map((r) => {
+            const key = `${r.org_id}:${r.user_id}`;
+            return (
+              <div key={key} className="flex items-center gap-3 py-2.5 border-t border-asb-gray-100">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-asb-navy flex items-center gap-2">
+                    {r.full_name ?? "—"}
+                    {r.requested_email_domain && (
+                      <span
+                        className={`inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
+                          r.domain_match
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
+                        }`}
+                        title={r.domain_match ? `@${r.requested_email_domain} matches your company` : `@${r.requested_email_domain} — verify`}
+                      >
+                        {r.domain_match ? "✓ domain" : "⚠ domain"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-asb-gray-500 truncate">{r.email ?? "—"}</div>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => decide(r, true, false)}
+                    disabled={deciding === key}
+                    className="text-xs font-semibold px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => decide(r, false, false)}
+                    disabled={deciding === key}
+                    className="text-xs font-semibold px-3 py-1.5 rounded border border-asb-gray-200 text-asb-gray-500 hover:bg-asb-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -70,3 +70,43 @@ export async function requestOrgMembership(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+// Company-admin surface: a member with member_role 'admin' can review requests
+// for their OWN org (the RPC returns rows only when fn_is_org_admin is true).
+export type OrgPendingRequest = {
+  org_id: string;
+  org_name: string;
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  requested_email_domain: string | null;
+  domain_match: boolean;
+  requested_at: string;
+};
+
+export async function getMyOrgPendingRequests(): Promise<OrgPendingRequest[]> {
+  const supabase = await client();
+  const { data, error } = await supabase.rpc("fn_pending_membership_requests");
+  if (error) {
+    console.error("[account] org pending requests failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as OrgPendingRequest[];
+}
+
+export async function decideMyOrgRequest(
+  orgId: string,
+  userId: string,
+  approve: boolean,
+  makeAdmin = false,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await client();
+  const { error } = await supabase.rpc("fn_decide_org_membership", {
+    p_org_id: orgId,
+    p_user_id: userId,
+    p_approve: approve,
+    p_make_admin: makeAdmin,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}

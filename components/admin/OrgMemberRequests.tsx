@@ -43,7 +43,23 @@ export function OrgMemberRequests({ initial }: { initial: PendingRequest[] }) {
             <Building2 className="w-4.5 h-4.5 text-asb-blue" />
           </div>
           <div className="min-w-0">
-            <div className="font-semibold text-asb-navy">{r.full_name ?? "—"}</div>
+            <div className="font-semibold text-asb-navy flex items-center gap-2">
+              {r.full_name ?? "—"}
+              {r.requested_email_domain && (
+                <span
+                  className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
+                    r.domain_match
+                      ? "bg-green-50 text-green-700 border-green-200"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                  }`}
+                  title={r.domain_match
+                    ? `Email domain @${r.requested_email_domain} matches this company`
+                    : `Email domain @${r.requested_email_domain} does not match a known company domain — verify`}
+                >
+                  {r.domain_match ? "✓ domain match" : "⚠ domain"}
+                </span>
+              )}
+            </div>
             <div className="text-xs text-asb-gray-500 truncate">{r.email ?? "—"}</div>
           </div>
           <div className="min-w-0 sm:border-l sm:border-asb-gray-100 sm:pl-4">
