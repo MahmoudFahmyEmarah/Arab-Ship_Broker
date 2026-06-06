@@ -66,6 +66,7 @@ export type VesselRow = {
   bale_cbm: number | null;
   gross_tonnage: number | null;
   net_tonnage: number | null;
+  scnrt: number | null;
   beam_m: number | null;
   dwcc: number | null;
   build_year: number | null;
@@ -358,10 +359,16 @@ export const vesselCreateSchema = z
     gross_tonnage: z.coerce
       .number()
       .int()
-      .min(200, "Gross tonnage must be 200–15,000")
-      .max(15000, "Gross tonnage must be 200–15,000")
+      .min(200, "Gross tonnage must be 200–80,000")
+      .max(80000, "Gross tonnage must be 200–80,000")
       .optional(),
     net_tonnage: z.coerce.number().int().positive().optional(),
+    scnrt: z.coerce
+      .number()
+      .int()
+      .min(100, "Suez Canal NRT must be 100–80,000")
+      .max(80000, "Suez Canal NRT must be 100–80,000")
+      .optional(),
 
     beam_m: z.coerce
       .number()

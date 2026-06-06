@@ -159,6 +159,7 @@ const extendedVesselSchema = z.object({
   preferred_zones: z.array(z.enum(ZONE_CODES)).optional(),
   gross_tonnage: z.coerce.number().int().positive().optional(),
   net_tonnage: z.coerce.number().int().positive().optional(),
+  scnrt: z.coerce.number().int().positive().optional(),
 });
 
 type ExtendedVesselValues = z.infer<typeof extendedVesselSchema>;
@@ -549,6 +550,8 @@ export function VesselCreateForm() {
         dg_certified: data.dg_certified,
         max_loa_m: data.max_loa_m,
         max_draft_m: data.max_draft_m,
+        gross_tonnage: data.gross_tonnage,
+        scnrt: data.scnrt,
         pi_club: data.pi_club,
         owner_company: data.owner_company,
         owner_country: data.owner_country,
@@ -937,17 +940,43 @@ export function VesselCreateForm() {
                     </div>
                   </FormSection>
 
-                  <FormSection title="Tonnage (optional)">
+                  <FormSection title="Tonnage">
                     <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
                       <div>
-                        <FieldLabel>Gross Tonnage (GT)</FieldLabel>
+                        <FieldLabel>
+                          Gross Tonnage (GT)
+                          <span className="ml-2 align-middle text-[10px] font-bold uppercase tracking-wider text-ocean-700 bg-ocean-50 border border-ocean-200 rounded px-1.5 py-0.5">
+                            Strongly recommended
+                          </span>
+                        </FieldLabel>
                         <FieldInput
                           type="number"
                           {...form.register("gross_tonnage", {
                             setValueAs: parseOptionalNumber,
                           })}
-                          placeholder="e.g. 16800"
+                          placeholder="e.g. 32100"
                         />
+                        <p className="mt-1 text-xs text-asb-gray-400">
+                          From the vessel&apos;s tonnage certificate / Q88.
+                        </p>
+                      </div>
+                      <div>
+                        <FieldLabel>
+                          Suez Canal NRT (SCNRT)
+                          <span className="ml-2 align-middle text-[10px] font-bold uppercase tracking-wider text-ocean-700 bg-ocean-50 border border-ocean-200 rounded px-1.5 py-0.5">
+                            Strongly recommended
+                          </span>
+                        </FieldLabel>
+                        <FieldInput
+                          type="number"
+                          {...form.register("scnrt", {
+                            setValueAs: parseOptionalNumber,
+                          })}
+                          placeholder="e.g. 14200"
+                        />
+                        <p className="mt-1 text-xs text-asb-gray-400">
+                          From the Suez Canal Special Tonnage Certificate — used for Suez dues.
+                        </p>
                       </div>
                       <div>
                         <FieldLabel>Net Tonnage (NT)</FieldLabel>

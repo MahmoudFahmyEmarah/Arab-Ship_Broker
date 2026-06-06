@@ -185,11 +185,12 @@ function statusFromAvailability(
 }
 
 export function vesselFromMyVessel(row: MyVesselRow): VesselView {
-  const rr = row as unknown as { gt?: number | null; scnrt?: number | null };
+  // Estimator/Suez toll prefer the real certificate figures when on file.
+  const rr = row as unknown as { gross_tonnage?: number | null; scnrt?: number | null };
   return {
     id: row.id,
     vesselId: row.id,
-    gt: rr.gt ?? null,
+    gt: rr.gross_tonnage ?? null,
     scnrt: rr.scnrt ?? null,
     loaM: row.max_loa_m ?? null,
     name: row.vessel_name,

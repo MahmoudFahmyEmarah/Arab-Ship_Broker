@@ -91,6 +91,8 @@ For VESSEL, extract:
   "vessel_type": "General Cargo" | "Bulk Carrier" | "Other",
   "dwt_grain": 8200,
   "dwcc": 7500,
+  "gross_tonnage": 32100,
+  "scnrt": 14200,
   "build_year": 2006,
   "flag": "Panama",
   "max_loa_m": 110,
@@ -126,8 +128,10 @@ their fields are:
 - Builder: Builder (where built) / Yard number, Date delivered (built) → build_year.
 - Classification: Classification society, Class notation, enhanced survey program,
   IACS unified requirements (No.1 hold / double-bottom).
-- Tonnages: Gross Tonnage (GT) / Net Registered Tonnage (NRT),
-  Suez Canal Tonnage Gross (SCGT) / Net (SCNT), Panama Canal Net Tonnage (PCNT).
+- Tonnages: Gross Tonnage (GT) → gross_tonnage, Suez Canal Net (SCNT) → scnrt
+  (both strongly recommended — always extract when present). Net Registered
+  Tonnage (NRT), Suez Canal Gross (SCGT), Panama Canal Net Tonnage (PCNT) →
+  notes.
 - Dimensions: Length Over All (LOA) → max_loa_m, Extreme breadth (Beam),
   keel-to-hatch-coaming distances.
 - Loadline Information: summer Draft → max_draft_m, FWA, Loadline Certificate.
@@ -142,11 +146,12 @@ their fields are:
 - Engine Room, Speed and Consumption: service speed → service_speed_kn,
   VLSFO/LSMGO consumption → vlsfo_sea_mt_day / lsmgo_sea_mt_day, freshwater.
 
-Map every field that has a matching VESSEL key above. For useful Q88 facts with
-NO dedicated key — GT, NRT, SCGT/SCNT, PCNT, number of holds/hatches, bale
-capacity, classification society, P&I club, TPC — append them concisely to
-"notes" (e.g. "GT 12,345 / NRT 6,789 / SCNT 6,500 / 5 holds 5 hatches / class
-ABS / P&I Gard"). Extract only what the document states; never invent a value.
+Map every field that has a matching VESSEL key above — including GT →
+gross_tonnage and SCNT → scnrt (strongly recommended). For useful Q88 facts with
+NO dedicated key — NRT, SCGT, PCNT, number of holds/hatches, bale capacity,
+classification society, P&I club, TPC — append them concisely to "notes"
+(e.g. "NRT 6,789 / 5 holds 5 hatches / class ABS / P&I Gard"). Extract only what
+the document states; never invent a value.
 Set vessel_type to "Bulk Carrier" for a dry-bulk Q88 unless stated otherwise.
 
 Warnings should flag:

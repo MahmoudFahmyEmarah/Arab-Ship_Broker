@@ -302,6 +302,8 @@ export async function createVessel(
     dwt_bale: values.dwt_bale ?? "",
     grain_cbm: values.grain_cbm ?? "",
     bale_cbm: values.bale_cbm ?? "",
+    gross_tonnage: values.gross_tonnage ?? "",
+    scnrt: values.scnrt ?? "",
     build_year: values.build_year ?? "",
     flag: values.flag ?? "",
     flag_category: values.flag_category ?? "",

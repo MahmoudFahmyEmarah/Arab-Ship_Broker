@@ -37,6 +37,8 @@ export interface ParsedVessel {
   vessel_type?: "General Cargo" | "Bulk Carrier" | "Other";
   dwt_grain?: number;
   dwcc?: number;
+  gross_tonnage?: number; // GT — strongly recommended (Q88 / tonnage certificate)
+  scnrt?: number; // Suez Canal Net Registered Tonnage — strongly recommended
   build_year?: number;
   flag?: string;
   max_loa_m?: number;
