@@ -268,7 +268,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
   // Live hero stats (counts come from the server wrapper). The "+" on Cargo
   // Records is decorative; the animation lands on the exact DB number.
   const stats = [
-    { value: String(cargoCount), label: "Cargo Records", suffix: "+", hint: "laycan within ±1 week" },
+    { value: String(cargoCount), label: "Cargo Records", suffix: "+", hint: "across 16 trade zones" },
     { value: String(vesselCount), label: "Vessels Tracked", suffix: "" },
     { value: String(zoneCount), label: "Trade Zones", suffix: "" },
   ];

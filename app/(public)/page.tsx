@@ -9,12 +9,11 @@ import { HomeClient } from "./home-client";
 export const revalidate = 300;
 
 export default async function HomePage() {
-  // Representative baselines for the public marketing hero. These are the floor:
-  // the live RPC counts override them when there's real activity, but a genuine
-  // live 0 (empty ±7-day window / no open tonnage yet) must NOT render a dead
-  // "0" on the marketing page — it falls back to the baseline so the hero always
-  // reads as a live marketplace.
-  const BASE = { cargo: 167, vessel: 62, zone: 14 };
+  // Real platform figures from the unified master dataset (731 cargo · 88
+  // vessels · 16 trade zones). These are the floor: live RPC counts override
+  // them when there's real DB activity, but a live 0 must NOT render a dead "0"
+  // on the marketing hero — it falls back to these real figures.
+  const BASE = { cargo: 731, vessel: 88, zone: 16 };
   let cargoCount = BASE.cargo;
   let vesselCount = BASE.vessel;
   let zoneCount = BASE.zone;
