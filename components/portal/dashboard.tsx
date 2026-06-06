@@ -124,6 +124,7 @@ export function DashboardPanel<T extends { id: string }>({
   focusedId,
   onSelect,
   defaultOpen = true,
+  headerAccessory,
   children,
 }: {
   kind: "cargo" | "vessel" | "matches";
@@ -133,6 +134,7 @@ export function DashboardPanel<T extends { id: string }>({
   focusedId?: string | null;
   onSelect?: (item: T) => void;
   defaultOpen?: boolean;
+  headerAccessory?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
@@ -160,6 +162,7 @@ export function DashboardPanel<T extends { id: string }>({
       <div className="panel-head">
         <span className="grip">⠿</span>
         <span className="title">{title}</span>
+        {headerAccessory && <div className="panel-head__acc">{headerAccessory}</div>}
         {isDataPanel && (
           <span className="asb-match" style={{ padding: "1px 7px", fontSize: 12 }}>
             {filtered.length}

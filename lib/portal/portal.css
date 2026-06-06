@@ -827,18 +827,34 @@ button { font: inherit; cursor: pointer; }
   min-height: 48px;
   flex-wrap: wrap;
   position: relative;
-  z-index: 60;
+  /* No z-index here: a stacking context would trap the filter dropdowns below
+     the Leaflet map. The dropdown panels carry their own z-index (1200). */
   font-size: 13px;           /* Body · 13px (all filter bars) */
 }
 .filter-bar .eyebrow { font-size: 13px; }
-.filter-bar .asb-chip { font-size: 13px; }
-.filter-bar .match-toggle button { font-size: 13px; }
 .filter-bar .divider { width: 1px; height: 20px; background: var(--asb-gray-200); }
+/* Rounded, classy chips — hover lift + blue active ring (scoped to .filter-bar).
+   transition omits `background` so the active fill snaps to the right chip. */
+.filter-bar .asb-chip {
+  font-size: 13px;
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgba(13,37,69,.04);
+  transition: color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.filter-bar .asb-chip:hover { border-color: #C4D1E6; box-shadow: 0 4px 12px -3px rgba(13,37,69,.14); transform: translateY(-1px); background: var(--asb-white); }
+.filter-bar .asb-chip.is-active { background: var(--asb-blue-light); border-color: #9EC4E6; color: var(--asb-blue); box-shadow: 0 0 0 1px rgba(24,95,165,.10), 0 4px 12px -3px rgba(24,95,165,.16); }
+.filter-bar .asb-chip .caret { transition: transform .15s ease; }
+.filter-bar .asb-chip:hover .caret { transform: translateY(1px); }
+.filter-bar .asb-chip .fm-badge { box-shadow: 0 1px 3px rgba(24,95,165,.32); }
 .filter-bar .count {
   margin-left: auto;
-  font-size: 13px;
+  background: var(--asb-blue-light);
   color: var(--asb-blue);
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 5px 13px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 0.5px rgba(24,95,165,.18);
 }
 
 /* ── Filter dropdown menu (functional filter chips) ────────── */
@@ -849,9 +865,9 @@ button { font: inherit; cursor: pointer; }
   z-index: 1200;
   background: var(--asb-white);
   border: var(--bd);
-  border-radius: 8px;
-  box-shadow: 0 10px 28px rgba(13, 37, 69, 0.16);
-  padding: 5px;
+  border-radius: 12px;
+  box-shadow: 0 16px 38px -10px rgba(13,37,69,.22), 0 0 0 0.5px rgba(13,37,69,.04);
+  padding: 6px;
 }
 .fm-list { display: flex; flex-direction: column; gap: 1px; max-height: 300px; overflow: auto; }
 .fm-opt {
@@ -1473,7 +1489,7 @@ button { font: inherit; cursor: pointer; }
   letter-spacing: 0.02em;
 }
 
-/* ── Top-matches mini card (light/rounded, matches vessel-card style) ── */
+/* ── Top-matches card — self-identifying, symmetric (anchor ↔ matched) ── */
 .dash-match {
   background: #fff;
   border: 0.5px solid #DDE5F0;
@@ -1486,9 +1502,32 @@ button { font: inherit; cursor: pointer; }
 }
 .dash-match:last-child { margin-bottom: 2px; }
 .dash-match:hover { box-shadow: 0 4px 12px rgba(13,37,69,.08); border-color: #C4D1E6; transform: translateY(-1px); }
-.dash-match__r1 { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
-.dash-match__pair { font-size: 12px; font-weight: 600; color: #0D2545; letter-spacing: -.01em; }
-.dash-match__line { font-size: 10px; color: #6B7A99; line-height: 1.4; }
+.dash-match__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.dm-main { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.dm-main .dm-name { font-size: 13px; font-weight: 600; color: #0D2545; letter-spacing: -.01em; }
+.dm-main .dm-fig { font-size: 12px; color: #46566F; font-variant-numeric: tabular-nums; }
+.dm-sep { color: #B6BFCC; }
+.dm-sub { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 11px; color: #6B7A99; }
+.dm-sub .dm-route, .dm-sub .dm-class { font-weight: 500; color: #1B3A5C; }
+.dm-sub .dm-zone { color: #8B95A3; }
+.dm-link { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.dm-link::before, .dm-link::after { content: ""; height: 0.5px; background: #E3E9F2; flex: 1; }
+.dm-link__lbl { font-size: 8.5px; letter-spacing: .09em; text-transform: uppercase; color: #9AA7BD; font-weight: 600; }
+.dm-main--match { margin-bottom: 0; }
+.dm-main--match .dm-name { color: #1B3A5C; }
+.dash-match__econ { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 11px; color: #6B7A99; }
+.dash-match__econ .dm-tce { color: #2A9962; font-weight: 600; }
+
+/* ── Match-mode pill switch (lives in the Top-matches panel header) ── */
+.panel-head__acc { display: inline-flex; align-items: center; margin-left: auto; }
+.mm-switch { display: inline-flex; align-items: center; gap: 8px; }
+.mm-switch__lbl { font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--asb-gray-500); }
+.mm-switch__seg { display: inline-flex; align-items: center; background: var(--asb-gray-50); border: 0.5px solid var(--asb-gray-200); border-radius: 999px; padding: 2px; }
+.mm-switch__seg button { appearance: none; border: 0; background: transparent; cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 500; color: var(--asb-gray-500); padding: 4px 12px; border-radius: 999px; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; transition: color .16s ease, box-shadow .16s ease; }
+.mm-switch__seg button:hover { color: var(--asb-navy); }
+.mm-switch__seg button.is-on { background: var(--asb-blue); color: #fff; box-shadow: 0 1px 3px rgba(24,95,165,.35), inset 0 0 0 0.5px rgba(255,255,255,.12); }
+.mm-switch .mm-arr { opacity: .65; font-size: 10px; }
+.mm-switch__seg button.is-on .mm-arr { opacity: .92; }
 
 /* ── Dashboard right-rail (Cargo positions · Open tonnage · Top matches) —
    one step larger type across header, stats and rows. Scoped to .dash-right
@@ -1513,8 +1552,10 @@ button { font: inherit; cursor: pointer; }
 .dash-right .dash-row .asb-badge.tiny { font-size: 9.5px; }
 .dash-right .dash-row .cc-spot { font-size: 11px; }
 
-.dash-right .dash-match__pair { font-size: 14px; }
-.dash-right .dash-match__line { font-size: 12px; }
+.dash-right .dash-match .dm-main .dm-name { font-size: 14px; }
+.dash-right .dash-match .dm-main .dm-fig { font-size: 13px; }
+.dash-right .dash-match .dm-sub { font-size: 12px; }
+.dash-right .dash-match__econ { font-size: 12px; }
 .dash-right .dash-match .asb-badge { font-size: 10px; }
 
 /* ── Dashboard card view — normalise the two card types to one middle

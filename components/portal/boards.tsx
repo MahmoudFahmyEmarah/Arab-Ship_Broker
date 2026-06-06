@@ -25,7 +25,106 @@ import {
   CLASS_OPTS,
   type SizeRange,
 } from "./filters";
+import { calcVoyage } from "@/lib/portal/econ";
 import { IconPlus, IconBell, IconMap } from "./icons";
+
+// ── Top matches — symmetric cargo ↔ vessel pairing for the dashboard panel ──
+type DashMatch = {
+  commodity: string; qtyMt: string;
+  pol: string; pod: string; polZone: string; podZone: string;
+  vessel: string; vClass: string; dwt: string; vOpen: string;
+  laycan: number | null; tce: number; quality: "Strong" | "Good" | "Possible";
+};
+
+function buildTopMatches(cargos: CargoView[], vessels: VesselView[]): DashMatch[] {
+  const used = new Set<string>();
+  const out: DashMatch[] = [];
+  for (const c of cargos) {
+    if (out.length >= 3) break;
+    const q = toMt(c.qtyMt);
+    let best: VesselView | null = null;
+    let bestScore = -1;
+    for (const v of vessels) {
+      if (used.has(v.id)) continue;
+      const d = toMt(v.dwt);
+      const zoneOk = !!v.openPortZone && (v.openPortZone === c.route?.polZone || v.openPortZone === c.route?.podZone);
+      let s = 0;
+      if (zoneOk) s += 2;
+      if (q > 0 && d >= q * 0.9 && d <= q * 1.3) s += 2;
+      else if (q > 0 && d >= q) s += 1;
+      if (s > bestScore) { bestScore = s; best = v; }
+    }
+    if (!best) continue;
+    used.add(best.id);
+    let tce = 0;
+    try { tce = Math.round(calcVoyage(best, c).costs.tce); } catch { tce = 0; }
+    out.push({
+      commodity: c.commodity || c.cargo,
+      qtyMt: c.qtyMt,
+      pol: c.route?.polName || c.route?.polCode || "—",
+      pod: c.route?.podName || c.route?.podCode || "—",
+      polZone: c.route?.polZone || "",
+      podZone: c.route?.podZone || "",
+      vessel: best.name,
+      vClass: vesselClassTags(best)[0] || best.type,
+      dwt: best.dwt,
+      vOpen: best.openPortZone || "—",
+      laycan: c.laycanDays ?? null,
+      tce,
+      quality: bestScore >= 4 ? "Strong" : bestScore >= 2 ? "Good" : "Possible",
+    });
+  }
+  return out;
+}
+
+function fmtTce(tce: number): string {
+  if (!tce) return "—";
+  const k = tce / 1000;
+  return Math.abs(k) >= 1 ? `$${k.toFixed(1)}k/d` : `$${Math.round(tce)}/d`;
+}
+
+function MatchModeSwitch({ mode, setMode }: { mode: "cargo" | "vessel"; setMode: (m: "cargo" | "vessel") => void }) {
+  return (
+    <div className="mm-switch" role="group" aria-label="Match mode">
+      <span className="mm-switch__lbl">Matching</span>
+      <div className="mm-switch__seg">
+        <button className={mode === "cargo" ? "is-on" : ""} onClick={() => setMode("cargo")}>Cargo <span className="mm-arr">→</span> vessels</button>
+        <button className={mode === "vessel" ? "is-on" : ""} onClick={() => setMode("vessel")}>Vessels <span className="mm-arr">→</span> cargo</button>
+      </div>
+    </div>
+  );
+}
+
+function DashMatchCard({ m, mode }: { m: DashMatch; mode: "cargo" | "vessel" }) {
+  const cargo = {
+    main: <><span className="dm-name">{m.commodity}</span><span className="dm-sep">·</span><span className="dm-fig">{m.qtyMt} MT</span></>,
+    sub: <><span className="dm-route">{m.pol} → {m.pod}</span><span className="dm-zone">{m.polZone}→{m.podZone}</span></>,
+  };
+  const vessel = {
+    main: <><span className="dm-name">{m.vessel}</span><span className="dm-sep">·</span><span className="dm-fig">{m.dwt} DWT</span></>,
+    sub: <><span className="dm-class">{m.vClass}</span><span className="dm-zone">{m.vOpen}</span></>,
+  };
+  const anchor = mode === "cargo" ? cargo : vessel;
+  const matched = mode === "cargo" ? vessel : cargo;
+  const badge = m.quality === "Strong" ? "in" : m.quality === "Good" ? "blue" : "review";
+  return (
+    <div className="dash-match">
+      <div className="dash-match__top">
+        <div className="dm-main">{anchor.main}</div>
+        <span className={`asb-badge ${badge}`}>{m.quality}</span>
+      </div>
+      <div className="dm-sub">{anchor.sub}</div>
+      <div className="dm-link"><span className="dm-link__lbl">matched with</span></div>
+      <div className="dm-main dm-main--match">{matched.main}</div>
+      <div className="dm-sub">{matched.sub}</div>
+      <div className="dash-match__econ">
+        <span>Laycan {m.laycan != null ? `${m.laycan}d` : "—"}</span>
+        <span className="dm-sep">·</span>
+        <span>TCE <span className="dm-tce">{fmtTce(m.tce)}</span></span>
+      </div>
+    </div>
+  );
+}
 
 // Leaflet is browser-only → load the map client-side, never on the server.
 const MarketMap = dynamic(() => import("./MarketMap"), {
@@ -170,6 +269,11 @@ export function DashboardBoard({
     [vessels, fVesselType, fZones, fClass, fSize, fTime, fGear],
   );
 
+  const topMatches = React.useMemo(
+    () => buildTopMatches(filteredCargos, filteredVessels),
+    [filteredCargos, filteredVessels],
+  );
+
   const focus = {
     cargo: (c: CargoView) => {
       setFocusedCargo((id) => (id === c.id ? null : c.id));
@@ -204,12 +308,6 @@ export function DashboardBoard({
       </div>
 
       <div className="filter-bar">
-        <span className="eyebrow" style={{ marginRight: 4 }}>Match mode</span>
-        <div className="match-toggle">
-          <button className={mode === "cargo" ? "is-on" : ""} onClick={() => setMode("cargo")}>My Cargo → All Vessels</button>
-          <button className={mode === "vessel" ? "is-on" : ""} onClick={() => setMode("vessel")}>My Vessels → All Cargo</button>
-        </div>
-        <span className="divider" />
         <FilterMenu label="Zones" badge={fZones.length || null} active={fZones.length > 0} width={150}>
           <CheckList options={ZONE_OPTS} value={fZones} onChange={setFZones} onClear={() => setFZones([])} />
         </FilterMenu>
@@ -228,9 +326,15 @@ export function DashboardBoard({
         <FilterMenu label="Classification" badge={fClass.length || null} active={fClass.length > 0} width={170}>
           <CheckList options={CLASS_OPTS} value={fClass} onChange={setFClass} onClear={() => setFClass([])} />
         </FilterMenu>
-        <span className="divider" />
-        <span className="eyebrow" style={{ marginRight: 2 }}>Gear</span>
-        <GearSeg value={fGear} onChange={setFGear} />
+        <FilterMenu label="Gear" summary={fGear !== "any" ? (fGear === "geared" ? "Geared" : "Gearless") : null} active={fGear !== "any"} width={150}>
+          <div className="fm-list">
+            {(([["any", "Any gear"], ["geared", "Geared"], ["gearless", "Gearless"]]) as [string, string][]).map(([v, l]) => (
+              <button key={v} className={`fm-opt ${fGear === v ? "is-on" : ""}`} onClick={() => setFGear(v)}>
+                <span className="fm-check">{fGear === v ? "✓" : ""}</span><span className="fm-opt__lbl">{l}</span>
+              </button>
+            ))}
+          </div>
+        </FilterMenu>
         <span className="count">↗ {filteredCargos.length} cargo · {filteredVessels.length} tonnage</span>
       </div>
 
@@ -259,22 +363,16 @@ export function DashboardBoard({
             focusedId={focusedVessel}
             onSelect={focus.vessel}
           />
-          <DashboardPanel kind="matches" title="Top matches" defaultOpen={false}>
-            {(
-              [
-                ["CK-001 → MV TRADE WINDS", "E.MED → R.SEA · 3k MT · 5 days laycan · TCE $8.4k/d", "Strong"],
-                ["CK-003 → MV SEA NAVIGATOR", "R.SEA → A.SEA · 9k MT · 9 days · TCE $7.1k/d", "Good"],
-                ["CK-006 → MV BALTIC STAR", "E.MED → R.SEA · 1.75k MT · 2 days · TCE $5.9k/d", "Possible"],
-              ] as [string, string, string][]
-            ).map(([pair, line, q]) => (
-              <div key={pair} className="dash-match">
-                <div className="dash-match__r1">
-                  <span className="dash-match__pair">{pair}</span>
-                  <span className={`asb-badge ${q === "Strong" ? "in" : q === "Good" ? "blue" : "review"}`}>{q}</span>
-                </div>
-                <div className="dash-match__line">{line}</div>
-              </div>
-            ))}
+          <DashboardPanel
+            kind="matches"
+            title="Top matches"
+            headerAccessory={<MatchModeSwitch mode={mode} setMode={setMode} />}
+          >
+            {topMatches.length === 0 ? (
+              <div className="dash-empty">No matches in the current filter.</div>
+            ) : (
+              topMatches.map((m, i) => <DashMatchCard key={i} m={m} mode={mode} />)
+            )}
           </DashboardPanel>
         </div>
         <div style={{ minHeight: 0, borderRadius: 4, overflow: "hidden", border: "var(--bd)" }}>
