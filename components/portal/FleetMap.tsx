@@ -118,6 +118,9 @@ export default function FleetMap({
   const [fullscreen, setFullscreen] = React.useState(false);
   const [show, setShow] = React.useState<Record<LayerKey, boolean>>({ vessels: true, cargo: true, zones: true });
   const [activeZone, setActiveZone] = React.useState<string | null>(null);
+  // Compact map control: collapsed by default (a single Layers button) so the
+  // map reads clean — the full Base/Layers/Zone panel opens on demand.
+  const [ctrlOpen, setCtrlOpen] = React.useState(false);
 
   // Fullscreen: reflow Leaflet after the size change; Esc exits.
   React.useEffect(() => {
@@ -296,35 +299,51 @@ export default function FleetMap({
       <div className="mvb-fmap__canvas mvb-fmap__canvas--leaflet">
         <div ref={hostRef} className="mvb-fmap__leaflet" />
 
-        <div className="mvb-fmap__ctrl" ref={ctrlRef}>
-          <div className="mvb-fmap__cgrp">
-            <div className="mvb-fmap__ch">Base</div>
-            <div className="mvb-fmap__lyrs">
-              <button type="button" className={"mvb-lyr" + (base === "light" ? " on" : "")} onClick={() => setBase("light")}>Light</button>
-              <button type="button" className={"mvb-lyr" + (base === "dark" ? " on" : "")} onClick={() => setBase("dark")}>Dark</button>
+        <div className={"mvb-fmap__ctrl" + (ctrlOpen ? " is-open" : "")} ref={ctrlRef}>
+          <button
+            type="button"
+            className={"mvb-fmap__ctoggle" + (ctrlOpen ? " is-open" : "")}
+            aria-expanded={ctrlOpen}
+            onClick={() => setCtrlOpen((o) => !o)}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 2 2 7l10 5 10-5-10-5Z" /><path d="m2 17 10 5 10-5" /><path d="m2 12 10 5 10-5" />
+            </svg>
+            Layers{activeZone ? ` · ${activeZone}` : ""}
+            <span className="mvb-fmap__caret">{ctrlOpen ? "▾" : "▸"}</span>
+          </button>
+          {ctrlOpen && (
+            <div className="mvb-fmap__panel">
+              <div className="mvb-fmap__cgrp">
+                <div className="mvb-fmap__ch">Base</div>
+                <div className="mvb-fmap__lyrs">
+                  <button type="button" className={"mvb-lyr" + (base === "light" ? " on" : "")} onClick={() => setBase("light")}>Light</button>
+                  <button type="button" className={"mvb-lyr" + (base === "dark" ? " on" : "")} onClick={() => setBase("dark")}>Dark</button>
+                </div>
+              </div>
+              <div className="mvb-fmap__cgrp">
+                <div className="mvb-fmap__ch">Layers</div>
+                <div className="mvb-fmap__lyrs">
+                  {LAYERS.map(([k, lbl]) => (
+                    <button key={k} type="button" className={"mvb-lyr" + (show[k] ? " on" : "")} onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))}>
+                      <span className={"dot dot--" + k} />{lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mvb-fmap__cgrp">
+                <div className="mvb-fmap__ch">Zone filter</div>
+                <div className="mvb-fmap__zones">
+                  {FLEET_ZONES.map((z) => (
+                    <button key={z.code} type="button" className={"mvb-zchip" + (activeZone === z.label ? " on" : "")}
+                      onClick={() => { setActiveZone((a) => (a === z.label ? null : z.label)); setShow((s) => ({ ...s, zones: true })); }}>
+                      <span className="sw" style={{ background: z.color }} />{z.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="mvb-fmap__cgrp">
-            <div className="mvb-fmap__ch">Layers</div>
-            <div className="mvb-fmap__lyrs">
-              {LAYERS.map(([k, lbl]) => (
-                <button key={k} type="button" className={"mvb-lyr" + (show[k] ? " on" : "")} onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))}>
-                  <span className={"dot dot--" + k} />{lbl}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mvb-fmap__cgrp">
-            <div className="mvb-fmap__ch">Zone filter</div>
-            <div className="mvb-fmap__zones">
-              {FLEET_ZONES.map((z) => (
-                <button key={z.code} type="button" className={"mvb-zchip" + (activeZone === z.label ? " on" : "")}
-                  onClick={() => { setActiveZone((a) => (a === z.label ? null : z.label)); setShow((s) => ({ ...s, zones: true })); }}>
-                  <span className="sw" style={{ background: z.color }} />{z.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="mvb-fmap__legend">

@@ -64,6 +64,29 @@ function Spec({ k, v }: { k: string; v: string | null }) {
   );
 }
 
+// Tier gating (T1/T2 = common subscribers → limited view). A small padlock +
+// a wrapper that veils content a Tier 1–2 viewer may not see.
+function LockMark({ size = 12 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <rect x="3" y="7" width="10" height="6.5" rx="1" />
+      <path d="M5 7V5a3 3 0 016 0v2" />
+    </svg>
+  );
+}
+function Locked({ children, note }: { children: React.ReactNode; note?: string }) {
+  return (
+    <div className="mvb-locked" title="Available from Tier 3">
+      <div className="mvb-locked__veiled" aria-hidden="true">{children}</div>
+      <div className="mvb-locked__chip"><LockMark size={11} /> {note || "Tier 3"}</div>
+    </div>
+  );
+}
+// Veils its children only when `locked` (Tier 1/2); otherwise transparent.
+function Gate({ locked, note, children }: { locked?: boolean; note?: string; children: React.ReactNode }) {
+  return locked ? <Locked note={note}>{children}</Locked> : <>{children}</>;
+}
+
 const YEAR = new Date().getFullYear();
 
 export function FleetVesselCard({
@@ -95,13 +118,15 @@ export function FleetVesselCard({
         <span className={"mvb-chip-st " + v.status.toLowerCase()}>{v.status}</span>
       </div>
 
-      <div className="mvb-vc__id">
-        <span className="mono">IMO {v.imo}</span>
-        <span className="sep">·</span>
-        <span>{v.flag}</span>
-        <span className="sep">·</span>
-        <span>{v.type}</span>
-      </div>
+      <Gate locked={masked} note="IMO · flag · type · Tier 3">
+        <div className="mvb-vc__id">
+          <span className="mono">IMO {v.imo}</span>
+          <span className="sep">·</span>
+          <span>{v.flag}</span>
+          <span className="sep">·</span>
+          <span>{v.type}</span>
+        </div>
+      </Gate>
 
       <div className="mvb-vc__figs">
         <div className="mvb-fig mvb-fig--dwt">
@@ -114,35 +139,41 @@ export function FleetVesselCard({
         </div>
       </div>
 
-      <div className="mvb-vc__specs">
-        <Spec k="Built" v={age} />
-        <Spec k="LOA (m)" v={v.loa} />
-        <Spec k="Draft (m)" v={v.draft} />
-        <Spec k="Gear" v={v.gear} />
-      </div>
+      <Gate locked={masked} note="Built · LOA · draft · gear · Tier 3">
+        <div className="mvb-vc__specs">
+          <Spec k="Built" v={age} />
+          <Spec k="LOA (m)" v={v.loa} />
+          <Spec k="Draft (m)" v={v.draft} />
+          <Spec k="Gear" v={v.gear} />
+        </div>
+      </Gate>
 
       {v.fuel && (
-        <div className="mvb-vc__fuel">
-          <div className="fh">Fuel consumption · MT/day</div>
-          <div className="mvb-fuelgrid">
-            <div className="mvb-fcell"><div className="fk"><Tip text={TIP.vs}>VLSFO sea</Tip></div><div className="fv">{v.fuel.vs}</div></div>
-            <div className="mvb-fcell"><div className="fk"><Tip text={TIP.vp}>VLSFO port</Tip></div><div className="fv">{v.fuel.vp}</div></div>
-            <div className="mvb-fcell"><div className="fk"><Tip text={TIP.ls}>LSMGO sea</Tip></div><div className="fv">{v.fuel.ls}</div></div>
-            <div className="mvb-fcell"><div className="fk"><Tip text={TIP.lp}>LSMGO port</Tip></div><div className="fv">{v.fuel.lp}</div></div>
+        <Gate locked={masked} note="Fuel consumption · Tier 3">
+          <div className="mvb-vc__fuel">
+            <div className="fh">Fuel consumption · MT/day</div>
+            <div className="mvb-fuelgrid">
+              <div className="mvb-fcell"><div className="fk"><Tip text={TIP.vs}>VLSFO sea</Tip></div><div className="fv">{v.fuel.vs}</div></div>
+              <div className="mvb-fcell"><div className="fk"><Tip text={TIP.vp}>VLSFO port</Tip></div><div className="fv">{v.fuel.vp}</div></div>
+              <div className="mvb-fcell"><div className="fk"><Tip text={TIP.ls}>LSMGO sea</Tip></div><div className="fv">{v.fuel.ls}</div></div>
+              <div className="mvb-fcell"><div className="fk"><Tip text={TIP.lp}>LSMGO port</Tip></div><div className="fv">{v.fuel.lp}</div></div>
+            </div>
           </div>
-        </div>
+        </Gate>
       )}
 
-      <div className="mvb-vc__ft">
-        <span className="imo">IMO {v.imo}</span>
-        {v.matches != null ? (
-          <span className="mvb-matches">{v.matches} matches</span>
-        ) : (
-          <span className="mvb-matches none">No position yet</span>
-        )}
-        <span className="sp" />
-        <button className="mvb-vlink" onClick={(e) => { e.stopPropagation(); onEstimate?.(v.id); }}>Estimate voyage</button>
-      </div>
+      <Gate locked={masked} note="Matches · voyage tools · Tier 3">
+        <div className="mvb-vc__ft">
+          <span className="imo">IMO {v.imo}</span>
+          {v.matches != null ? (
+            <span className="mvb-matches">{v.matches} matches</span>
+          ) : (
+            <span className="mvb-matches none">No position yet</span>
+          )}
+          <span className="sp" />
+          <button className="mvb-vlink" onClick={(e) => { e.stopPropagation(); onEstimate?.(v.id); }}>Estimate voyage</button>
+        </div>
+      </Gate>
 
       <div className="mvb-vc__pos">
         <div className="posbar-eyebrow">Position</div>
@@ -150,13 +181,19 @@ export function FleetVesselCard({
           <>
             <div className="row1">
               <span className="port">{v.port}</span>
-              {v.zone && <span className="zone">{v.zone}</span>}
-              <span className="date">
-                {v.lyc && <Tip plain text={TIP.dot}><span className={"mvb-lyc " + v.lyc} /></Tip>}
-                {v.date}
-              </span>
+              {masked ? (
+                <span className="mvb-pos-lock" style={{ marginLeft: "auto" }}><LockMark size={10} /> Date &amp; zone · Tier 3</span>
+              ) : (
+                <>
+                  {v.zone && <span className="zone">{v.zone}</span>}
+                  <span className="date">
+                    {v.lyc && <Tip plain text={TIP.dot}><span className={"mvb-lyc " + v.lyc} /></Tip>}
+                    {v.date}
+                  </span>
+                </>
+              )}
             </div>
-            {v.dir && <div className="dir">Preferred direction: <b>{v.dir}</b></div>}
+            {!masked && v.dir && <div className="dir">Preferred direction: <b>{v.dir}</b></div>}
           </>
         ) : (
           <div className="row1 undeclared">

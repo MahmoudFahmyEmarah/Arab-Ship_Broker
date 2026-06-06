@@ -85,6 +85,8 @@ export function MyVesselsFleetBoard({
   const router = useRouter();
   const [mapOpen, setMapOpen] = React.useState(true);
   const [selected, setSelected] = React.useState<string | null>(null);
+  const [tierVis, setTierVis] = React.useState<"full" | "t12">("full");
+  const masked = tierVis === "t12";
 
   const [fZones, setFZones] = React.useState<string[]>([]);
   const [fType, setFType] = React.useState<string[]>([]);
@@ -143,6 +145,11 @@ export function MyVesselsFleetBoard({
           Geared only
         </button>
 
+        <span className="mvb__tier-lbl" style={{ marginLeft: "auto" }}>Identity view</span>
+        <div className="mvb__tier" role="group" aria-label="Identity view">
+          <button className={!masked ? "is-on" : ""} onClick={() => setTierVis("full")}>Admin / Partner · T3</button>
+          <button className={masked ? "is-on" : ""} onClick={() => setTierVis("t12")}>T1–2</button>
+        </div>
         <Link className="mvb__matchlink" href="/dashboard/cargo">View cargo matches →</Link>
 
         <span className="mvb__fdiv" />
@@ -178,6 +185,7 @@ export function MyVesselsFleetBoard({
                 <FleetVesselCard
                   key={v.id}
                   v={v}
+                  masked={masked}
                   selected={selected === v.id}
                   onSelect={(id) => setSelected((s) => (s === id ? null : id))}
                   onEstimate={() => router.push("/dashboard/voyage-estimator")}
@@ -188,7 +196,26 @@ export function MyVesselsFleetBoard({
         </div>
         {mapOpen && (
           <div className="mvb__mappane" onClick={(e) => e.stopPropagation()}>
-            <FleetMap posted={posted} undeclaredCount={undeclaredCount} selected={selected} />
+            {masked ? (
+              <div className="mvb-maplock">
+                <div className="mvb-maplock__panel">
+                  <span className="mvb-maplock__icon">
+                    <svg viewBox="0 0 16 16" width={20} height={20} fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+                      <rect x="3" y="7" width="10" height="6.5" rx="1" />
+                      <path d="M5 7V5a3 3 0 016 0v2" />
+                    </svg>
+                  </span>
+                  <div className="mvb-maplock__ttl">Live map locked</div>
+                  <div className="mvb-maplock__sub">
+                    Vessel &amp; cargo positions on the chart are a <b>Tier 3</b> feature.
+                    Tier 1–2 subscribers see listing essentials only.
+                  </div>
+                  <span className="mvb-maplock__cta">Upgrade to Tier 3</span>
+                </div>
+              </div>
+            ) : (
+              <FleetMap posted={posted} undeclaredCount={undeclaredCount} selected={selected} />
+            )}
           </div>
         )}
       </div>

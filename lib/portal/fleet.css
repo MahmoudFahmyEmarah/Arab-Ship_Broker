@@ -37,8 +37,15 @@
 .mvb__chip:hover{border-color:#C4D1E6;}
 .mvb__chip .car{color:var(--mvb-faint);font-size:9px;}
 .mvb__chip.mvb__chip--toggle.is-on{background:#E6F1FB;border-color:#9EC4E6;color:var(--mvb-blue);}
-.mvb__matchlink{margin-left:auto;font-size:11.5px;color:var(--mvb-blue);cursor:pointer;text-decoration:none;white-space:nowrap;}
+.mvb__matchlink{font-size:11.5px;color:var(--mvb-blue);cursor:pointer;text-decoration:none;white-space:nowrap;}
 .mvb__matchlink:hover{text-decoration:underline;}
+
+/* Identity-view tier toggle (drives card identity masking) */
+.mvb__tier-lbl{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--mvb-faint);font-weight:600;margin-right:2px;}
+.mvb__tier{display:inline-flex;align-items:center;gap:0;border:0.5px solid var(--mvb-line);border-radius:8px;overflow:hidden;background:#fff;}
+.mvb__tier button{appearance:none;background:#fff;border:0;border-left:0.5px solid var(--mvb-line);color:var(--mvb-slate);font-family:inherit;font-size:11.5px;font-weight:500;padding:6px 11px;cursor:pointer;white-space:nowrap;}
+.mvb__tier button:first-child{border-left:0;}
+.mvb__tier button.is-on{background:var(--mvb-blue);color:#fff;}
 
 /* ── Board body (cards | optional map) ────────────────────── */
 .mvb__body{flex:1;display:flex;min-height:0;}
@@ -120,6 +127,23 @@
 .mvb-vc__via.masked{color:var(--mvb-slate);display:flex;align-items:center;gap:6px;}
 .mvb-vc__via.masked svg{width:11px;height:11px;flex-shrink:0;opacity:.8;}
 
+/* ── Tier 1/2 identity locks (common subscribers — limited view) ──────── */
+.mvb-locked{position:relative;border-radius:8px;overflow:hidden;}
+.mvb-locked__veiled{filter:blur(4px);opacity:.4;pointer-events:none;user-select:none;}
+.mvb-locked__chip{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:5px;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mvb-slate);}
+.mvb-locked__chip svg{flex-shrink:0;}
+.mvb-pos-lock{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mvb-faint);}
+.mvb-pos-lock svg{flex-shrink:0;}
+
+/* Locked map panel (Tier 1/2 can't see live positions) */
+.mvb-maplock{height:100%;border-radius:12px;border:0.5px solid var(--mvb-line);background:repeating-linear-gradient(45deg, rgba(255,255,255,.5) 0 12px, rgba(220,231,242,.5) 12px 24px),#DCE7F2;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.mvb-maplock__panel{text-align:center;max-width:300px;margin:20px;padding:24px 22px;background:rgba(255,255,255,.94);border:0.5px solid var(--mvb-line);border-radius:12px;box-shadow:0 6px 22px rgba(13,37,69,.14);}
+.mvb-maplock__icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:#EEF3FA;color:var(--mvb-blue);margin-bottom:10px;}
+.mvb-maplock__ttl{font-size:14px;font-weight:700;color:var(--mvb-navy);margin-bottom:5px;}
+.mvb-maplock__sub{font-size:11px;line-height:1.5;color:var(--mvb-slate);}
+.mvb-maplock__sub b{color:var(--mvb-navy);font-weight:700;}
+.mvb-maplock__cta{display:inline-block;margin-top:12px;padding:6px 14px;border-radius:6px;background:var(--mvb-navy);color:#fff;font-size:11px;font-weight:600;}
+
 /* ── Footer privacy line ──────────────────────────────────── */
 .mvb__foot{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:9px 22px;border-top:0.5px solid var(--mvb-line);background:#fff;font-size:10px;color:var(--mvb-slate);}
 .mvb__foot svg{width:13px;height:13px;flex-shrink:0;opacity:.85;}
@@ -173,8 +197,15 @@
 .mvb-zone-lbl.is-active{opacity:1;font-size:10px;}
 
 /* In-map control panel (top-left, below zoom buttons) */
-.mvb-fmap__ctrl{position:absolute;left:10px;top:84px;z-index:1000;display:flex;flex-direction:column;gap:8px;width:152px;}
-.mvb-fmap__cgrp{background:rgba(255,255,255,.95);border:0.5px solid var(--mvb-line);border-radius:9px;box-shadow:0 2px 8px rgba(13,37,69,.12);padding:8px 9px;}
+.mvb-fmap__ctrl{position:absolute;left:10px;top:84px;z-index:1000;display:flex;flex-direction:column;gap:8px;width:auto;}
+/* Compact collapsed control — a single Layers button (default state) */
+.mvb-fmap__ctoggle{appearance:none;display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.96);border:0.5px solid var(--mvb-line);border-radius:9px;box-shadow:0 2px 8px rgba(13,37,69,.12);padding:7px 11px;font-family:inherit;font-size:11.5px;font-weight:600;color:var(--mvb-navy);cursor:pointer;white-space:nowrap;transition:border-color .12s ease,box-shadow .12s ease;}
+.mvb-fmap__ctoggle:hover{border-color:#C4D1E6;box-shadow:0 4px 14px rgba(13,37,69,.16);}
+.mvb-fmap__ctoggle.is-open{border-color:#9EC4E6;color:var(--mvb-blue);}
+.mvb-fmap__ctoggle svg{flex-shrink:0;opacity:.8;}
+.mvb-fmap__caret{color:var(--mvb-faint);font-size:9px;margin-left:1px;}
+.mvb-fmap__panel{display:flex;flex-direction:column;gap:8px;width:152px;}
+.mvb-fmap__cgrp{background:rgba(255,255,255,.96);border:0.5px solid var(--mvb-line);border-radius:9px;box-shadow:0 2px 8px rgba(13,37,69,.12);padding:8px 9px;}
 .mvb-fmap__ch{font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--mvb-faint);font-weight:700;margin-bottom:6px;}
 .mvb-fmap__lyrs{display:flex;flex-direction:column;gap:4px;}
 .mvb-lyr{appearance:none;display:flex;align-items:center;gap:7px;background:#fff;border:0.5px solid var(--mvb-line);border-radius:6px;padding:5px 8px;font-family:inherit;font-size:11px;font-weight:600;color:var(--mvb-slate);cursor:pointer;transition:.12s;}
