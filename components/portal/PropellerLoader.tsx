@@ -8,20 +8,21 @@ import * as React from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import "@/lib/portal/loader.css";
 
-const MIN_VISIBLE = 500; // once shown, stay up at least this long (no flicker)
-const SHOW_DELAY = 180; // don't show at all for navigations faster than this
+const MIN_VISIBLE = 600; // once shown, stay up at least this long (no flicker)
+const SHOW_DELAY = 0; // show on every internal navigation (brand loader, not hidden)
 
 export function PropellerLoader() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [visible, setVisible] = React.useState(false);
-  const shownAt = React.useRef(0);
+  // Start visible: a brief propeller boot-splash on first load / hard refresh,
+  // faded out once the route is ready (the effect below schedules the hide).
+  const [visible, setVisible] = React.useState(true);
+  const shownAt = React.useRef(Date.now());
   const hideTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const showTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Arm a delayed show. Fast route changes (the common case) complete before the
-  // delay fires and cancel it, so the overlay never flashes on quick hops — it
-  // only appears when a transition is genuinely slow.
+  // Arm the overlay. SHOW_DELAY 0 → it appears on each navigation; MIN_VISIBLE
+  // keeps it up long enough to read as a deliberate transition, not a flash.
   const show = React.useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
     if (showTimer.current) clearTimeout(showTimer.current);
