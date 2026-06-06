@@ -483,104 +483,6 @@ button { font: inherit; cursor: pointer; }
   border-color: #185FA5;
 }
 
-/* ════════════════════════════════════════════════════════════
-   CARGO CARD — light / rounded variant, matched to the
-   My Vessels board card (.mvb-vcard). Self-contained tokens so it
-   renders correctly on My Cargo, Cargo Market and the Dashboard
-   (which sit outside the .mvb scope).
-   ════════════════════════════════════════════════════════════ */
-.ccx {
-  --ccx-card:#FFFFFF; --ccx-line:#DDE5F0; --ccx-line2:#EDF1F8; --ccx-soft:#F2F6FB;
-  --ccx-navy:#0D2545; --ccx-ink:#1A2330; --ccx-slate:#6B7A99; --ccx-faint:#9AA7BD;
-  --ccx-blue:#185FA5; --ccx-green:#2A9962; --ccx-amber:#B17311; --ccx-red:#C84A4A;
-  background:var(--ccx-card);
-  border-radius:16px;
-  overflow:visible;
-  display:flex; flex-direction:column;
-  box-shadow:0 0 0 1px rgba(13,37,69,.05), 0 2px 4px rgba(13,37,69,.04), 0 12px 28px -12px rgba(13,37,69,.14);
-  transition:box-shadow .14s ease, transform .14s ease;
-  cursor:pointer;
-  font-family:var(--asb-font,"Inter",system-ui,sans-serif);
-}
-.ccx:hover { transform:translateY(-2px); box-shadow:0 0 0 1px rgba(13,37,69,.07), 0 4px 10px rgba(13,37,69,.06), 0 22px 44px -14px rgba(13,37,69,.20); }
-.ccx.is-selected { box-shadow:0 0 0 1.5px #0D2545, 0 14px 32px -12px rgba(13,37,69,.18); }
-
-/* Header — name + scope chip */
-.ccx__hd { padding:13px 15px 0; display:flex; align-items:flex-start; gap:10px; }
-.ccx__name { font-size:15.5px; font-weight:700; color:var(--ccx-navy); letter-spacing:-.01em; line-height:1.2; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.ccx-chip-sc { font-size:8.5px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; padding:3px 9px; border-radius:99px; white-space:nowrap; flex-shrink:0; }
-.ccx-chip-sc.in      { background:#DEF1E2; color:var(--ccx-green); }
-.ccx-chip-sc.partial { background:#FBF2DF; color:var(--ccx-amber); }
-.ccx-chip-sc.out     { background:#FAE5E5; color:var(--ccx-red); }
-
-/* ID / route line */
-.ccx__id { padding:5px 15px 0; font-size:10.5px; color:var(--ccx-slate); display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
-.ccx__id .mono { color:var(--ccx-ink); font-family:var(--asb-font-mono,monospace); font-weight:600; letter-spacing:.01em; }
-.ccx__id .sep  { color:var(--ccx-faint); }
-.ccx__id .arr  { color:var(--ccx-faint); }
-.ccx__id .type { font-size:9px; letter-spacing:.05em; text-transform:uppercase; color:var(--ccx-slate); border:0.5px solid var(--ccx-line); background:#fff; padding:1px 7px; border-radius:99px; }
-.ccx__id .wog  { font-size:8.5px; font-weight:600; letter-spacing:.05em; color:var(--ccx-amber); background:#FBF2DF; padding:2px 7px; border-radius:99px; }
-
-/* Hero figures — Quantity dominant + Volume secondary */
-.ccx__figs { margin:11px 15px 0; display:grid; grid-template-columns:1.55fr 1fr; gap:1px; background:var(--ccx-line2); border-radius:11px; overflow:hidden; }
-.ccx-fig { background:var(--ccx-soft); padding:9px 13px; min-width:0; }
-.ccx-fig .fglbl { font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--ccx-slate); font-weight:600; }
-.ccx-fig .fgval { font-variant-numeric:tabular-nums; color:var(--ccx-navy); line-height:1.05; margin-top:5px; }
-.ccx-fig--qty .fgval { font-size:21px; font-weight:700; }
-.ccx-fig--vol .fgval { font-size:15px; font-weight:600; color:#46566F; }
-.ccx-fig--vol .fgval.dim { color:var(--ccx-faint); font-weight:500; }
-
-/* Spec grid — 4 cells */
-.ccx__specs { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; margin:11px 15px 0; background:var(--ccx-line2); border-radius:11px; overflow:hidden; }
-.ccx-spec { background:var(--ccx-soft); padding:7px 9px; min-width:0; }
-.ccx-spec .sk { font-size:8px; letter-spacing:.07em; text-transform:uppercase; color:var(--ccx-slate); font-weight:600; }
-.ccx-spec .sv { font-size:12px; font-weight:600; color:var(--ccx-ink); margin-top:2px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; line-height:1.2; }
-.ccx-spec .sv.dim    { color:var(--ccx-faint); font-weight:400; font-style:italic; }
-.ccx-spec .sv.warn   { color:var(--ccx-amber); }
-.ccx-spec .sv.danger { color:var(--ccx-red); }
-.ccx-spec .ssub { font-size:9px; font-weight:500; color:var(--ccx-slate); margin-top:1px; }
-
-/* Footer — freight + circ + matches + link */
-.ccx__ft { margin-top:11px; padding:10px 15px; border-top:0.5px solid var(--ccx-line2); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.ccx__ft .freight { font-size:12.5px; font-weight:700; color:var(--ccx-navy); font-variant-numeric:tabular-nums; white-space:nowrap; }
-.ccx__ft .comm { font-size:9.5px; font-weight:500; color:var(--ccx-slate); margin-left:5px; }
-.ccx__ft .sp { flex:1; }
-.ccx-circ { display:inline-flex; align-items:center; gap:5px; font-size:8px; letter-spacing:.06em; text-transform:uppercase; color:var(--ccx-slate); font-weight:600; }
-.ccx-circ .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-.ccx-circ .dot.on  { background:var(--ccx-green); }
-.ccx-circ .dot.off { background:#D4DBE6; }
-.ccx-matches { font-size:9.5px; font-weight:600; color:var(--ccx-blue); background:#E6F1FB; padding:2px 8px; border-radius:99px; white-space:nowrap; flex-shrink:0; }
-.ccx-matches.zero { color:var(--ccx-faint); background:var(--ccx-soft); font-weight:500; }
-.ccx-link { font-size:11px; color:var(--ccx-blue); cursor:pointer; text-decoration:none; font-weight:500; white-space:nowrap; flex-shrink:0; }
-.ccx-link:hover { text-decoration:underline; }
-
-/* ── Tier 1/2 locked card — veil GATED values in place, keep full card ─── */
-/* Redaction bar: sharp placeholder where a gated value would sit. */
-.ccx-redact{
-  display:inline-block; vertical-align:middle; width:56px; height:0.72em;
-  border-radius:2px; background:#E2E8F1;
-  background-image:repeating-linear-gradient(135deg,#E2E8F1 0 5px,#D7DEEA 5px 10px);
-  border:0.5px solid #D2DAE6;
-}
-.ccx-redact--lg{ height:0.62em; border-radius:3px; }
-.ccx-fig--qty .ccx-redact--lg{ height:18px; }
-/* The single upgrade affordance, sitting over the gated figures region. */
-.ccx__figs--locked{ position:relative; }
-.ccx-unlock{
-  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
-  padding:5px 11px; border-radius:6px; cursor:pointer;
-  background:var(--ccx-navy); color:#fff; border:0.5px solid var(--ccx-navy);
-  font-family:inherit; font-size:10.5px; font-weight:600; letter-spacing:.02em;
-  box-shadow:0 2px 8px rgba(13,37,69,.28);
-  transition:background .14s ease, transform .14s ease;
-}
-.ccx-unlock:hover{ background:var(--ccx-blue); transform:translate(-50%,-50%) translateY(-1px); }
-.ccx-unlock svg{ stroke:#fff; }
-
-/* Market-partner tag sits flush at the very bottom */
-.ccx > .mp-tag, .ccx .cc-partner-foot { margin:0 15px 11px; }
-
 /* ── Pill / chip (filter chip) ───────────────────────────── */
 .asb-chip {
   display: inline-flex; align-items: center; gap: 5px;
@@ -1557,29 +1459,6 @@ button { font: inherit; cursor: pointer; }
 .dash-right .dash-match .dm-sub { font-size: 12px; }
 .dash-right .dash-match__econ { font-size: 12px; }
 .dash-right .dash-match .asb-badge { font-size: 10px; }
-
-/* ── Dashboard card view — normalise the two card types to one middle
-   scale so both fit the narrow right-rail panel. The Cargo card (ccx) is a
-   full market card (too large here) → scaled DOWN; the compact vessel card
-   (dash-card) → nudged UP a touch, meeting in the middle. ── */
-.dash-right .dash-card-grid .ccx__hd { padding: 11px 12px 0; }
-.dash-right .dash-card-grid .ccx__name { font-size: 13px; }
-.dash-right .dash-card-grid .ccx__id { margin: 5px 12px 0; font-size: 9.5px; }
-.dash-right .dash-card-grid .ccx__figs { margin: 8px 12px 0; }
-.dash-right .dash-card-grid .ccx-fig { padding: 7px 11px; }
-.dash-right .dash-card-grid .ccx-fig--qty .fgval { font-size: 16px; }
-.dash-right .dash-card-grid .ccx-fig--vol .fgval { font-size: 12.5px; }
-.dash-right .dash-card-grid .ccx-fig .fglbl { font-size: 8px; }
-.dash-right .dash-card-grid .ccx__specs { margin: 8px 12px 0; }
-.dash-right .dash-card-grid .ccx-spec { padding: 6px 8px; }
-.dash-right .dash-card-grid .ccx-spec .sk { font-size: 7.5px; }
-.dash-right .dash-card-grid .ccx-spec .sv { font-size: 11px; }
-.dash-right .dash-card-grid .ccx-spec .ssub { font-size: 8.5px; }
-.dash-right .dash-card-grid .ccx__ft { padding: 8px 12px; gap: 7px; }
-.dash-right .dash-card-grid .ccx__ft .freight { font-size: 11.5px; }
-.dash-right .dash-card-grid .ccx-matches { font-size: 9px; }
-.dash-right .dash-card-grid .ccx-link { font-size: 10px; }
-.dash-right .dash-card-grid .ccx-circ { font-size: 7.5px; }
 
 .dash-right .dash-card__name { font-size: 13px; }
 .dash-right .dash-card__sub { font-size: 10.5px; }
