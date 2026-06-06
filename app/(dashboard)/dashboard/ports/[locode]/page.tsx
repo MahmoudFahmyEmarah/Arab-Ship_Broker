@@ -44,7 +44,7 @@ function CargoRow({
     : "bg-foam-50 text-foam-700 border-foam-200";
 
   return (
-    <div className="flex items-center gap-4 bg-white border border-asb-gray-200 rounded px-5 py-4 hover:border-asb-blue hover:shadow-sm transition-all group">
+    <div className="flex items-center gap-4 dp-card dp-clickable px-5 py-4 group">
       <div className="w-8 h-8 rounded bg-asb-blue-light border border-asb-gray-200 flex items-center justify-center shrink-0">
         <Package className="w-4 h-4 text-asb-blue" />
       </div>
@@ -118,7 +118,7 @@ function CargoRow({
 
 function VesselRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
   return (
-    <div className="flex items-center gap-4 bg-white border border-asb-gray-200 rounded px-5 py-4 hover:border-asb-blue hover:shadow-sm transition-all group">
+    <div className="flex items-center gap-4 dp-card dp-clickable px-5 py-4 group">
       <div className="w-8 h-8 rounded bg-foam-50 border border-foam-100 flex items-center justify-center shrink-0">
         <Ship className="w-4 h-4 text-foam-600" />
       </div>
@@ -182,7 +182,7 @@ function Section({
         </span>
       </div>
       {count === 0 ? (
-        <div className="text-center py-12 bg-white rounded border border-dashed border-asb-gray-200">
+        <div className="dp-zone text-center py-12">
           <p className="text-asb-gray-400 text-sm">{empty}</p>
         </div>
       ) : (
@@ -228,7 +228,7 @@ export default async function PortActivityPage({
         Back to marketplace
       </Link>
 
-      <div className="bg-white border border-asb-gray-200 rounded p-6 shadow-sm">
+      <div className="dp-card p-6">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded bg-asb-blue-light border border-asb-gray-200 flex items-center justify-center shrink-0">
             <Anchor className="w-6 h-6 text-asb-blue" />

@@ -23,12 +23,15 @@ export default async function CircularsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-6 md:px-8">
       <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-asb-blue-light p-2">
-          <Sparkles className="h-5 w-5 text-asb-blue" />
-        </div>
+        <span
+          className="inline-flex shrink-0 items-center justify-center"
+          style={{ width: 28, height: 28, borderRadius: 6, background: "var(--asb-blue-light)", color: "var(--asb-blue)" }}
+        >
+          <Sparkles className="h-4 w-4" />
+        </span>
         <div>
-          <h1 className="text-xl font-semibold text-asb-navy">Circular Parser</h1>
-          <p className="mt-1 text-sm text-asb-gray-500">
+          <h1 className="page-title">Circular Parser</h1>
+          <p style={{ marginTop: 2, fontSize: 12, color: "var(--asb-gray-500)", maxWidth: 640, lineHeight: 1.5 }}>
             Paste a cargo or vessel circular from email or WhatsApp. The parser
             reads maritime shorthand and extracts structured data for posting —
             it never reads or reveals any counterparty&apos;s contact details.

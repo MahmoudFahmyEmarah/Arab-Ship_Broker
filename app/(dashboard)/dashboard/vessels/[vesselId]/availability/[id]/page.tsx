@@ -101,7 +101,7 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-3 max-[1024px]:grid-cols-1 gap-6">
         {/* Left: Posting details */}
         <div className="col-span-1 space-y-4">
-          <div className="bg-white border border-asb-gray-200 rounded p-5 space-y-4">
+          <div className="dp-card p-5 space-y-4">
             <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider">
               Availability details
             </h2>
@@ -225,7 +225,7 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
             )}
           </div>
 
-          <div className="bg-white border border-asb-gray-200 rounded p-5 space-y-4">
+          <div className="dp-card p-5 space-y-4">
             <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider">
               Vessel
             </h2>
@@ -321,7 +321,7 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
 
 function MatchCard({ match }: { match: VesselMatchResult }) {
   return (
-    <div className="bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-sm transition-all">
+    <div className="dp-card dp-clickable p-5">
       <div className="flex items-start justify-between gap-4 mb-3">
         <div>
           <div className="flex items-center gap-2">
