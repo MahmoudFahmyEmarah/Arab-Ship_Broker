@@ -30,6 +30,10 @@ export function EtaConsole() {
         <div style={{ fontSize: 12, color: "var(--asb-gray-500)", marginTop: 2 }}>
           Egyptian Tax Authority submission status, signing credentials and the invoice queue. Owner-only.
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--asb-amber-bg)", border: "0.5px solid var(--asb-amber)", color: "var(--asb-amber)", borderRadius: 8, padding: "8px 12px", fontSize: 11.5, marginTop: 10 }}>
+          <span className="asb-badge neutral" style={{ fontSize: 8.5, letterSpacing: ".04em" }}>PREVIEW</span>
+          <span>Not connected to the ETA yet — the status, queue and credentials below are illustrative until e-invoicing is wired.</span>
+        </div>
       </div>
 
       <div className="econ-grid" style={{ marginBottom: 12 }}>

@@ -399,7 +399,7 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                   <button className="asb-btn" onClick={changePassword} disabled={pwBusy} style={{ width: "100%", justifyContent: "center" }}>{pwBusy ? "Updating…" : "Update password"}</button>
                 </div>
                 <div className="eyebrow" style={{ marginTop: 12, marginBottom: 4 }}>Two-factor auth</div>
-                <SettingsRow k="2-factor auth" v={<span style={{ color: "var(--asb-gray-500)" }}>Coming soon</span>} />
+                <SettingsRow k="2-factor auth" v={<span className="asb-badge neutral" style={{ fontSize: 8.5, letterSpacing: ".04em" }}>COMING SOON</span>} />
               </div>
               <div className="settings-card danger">
                 <div className="head">
