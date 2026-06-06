@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
 import {
   useForm,
   Controller,
@@ -28,6 +28,8 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createVessel } from "@/sdk/app/vessels";
+import { SmartParser } from "@/components/portal/SmartParser";
+import type { CircularParseResult } from "@/lib/circulars/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import { ZONE_LABELS, ZONE_CODES, ZoneCode } from "@/lib/schemas/cargo";
@@ -494,6 +496,39 @@ export function VesselCreateForm() {
     },
     mode: "onChange",
   });
+
+  // AI Bosun → fill vessel particulars from a parsed circular or Q88. Sets
+  // fields for the user to review/correct before registering. Returns the count.
+  const applyParsed = useCallback(
+    (result: CircularParseResult | null): number => {
+      if (!result) return 0;
+      const e = result.extracted;
+      let n = 0;
+      const put = (k: keyof ExtendedVesselValues, v: unknown) => {
+        if (v !== undefined && v !== null && v !== "") {
+          form.setValue(k, v as never, { shouldValidate: true, shouldDirty: true });
+          n++;
+        }
+      };
+      put("vessel_name", e.vessel_name);
+      put("imo_number", e.imo_number);
+      put("vessel_type", e.vessel_type);
+      put("dwt_grain", e.dwt_grain);
+      put("grain_cbm", e.grain_cbm);
+      put("gross_tonnage", e.gross_tonnage);
+      put("scnrt", e.scnrt);
+      put("build_year", e.build_year);
+      put("flag", e.flag);
+      put("max_loa_m", e.max_loa_m);
+      put("max_draft_m", e.max_draft_m);
+      put("crane_count", e.crane_count);
+      put("crane_swl_mt", e.crane_swl_mt);
+      if (e.is_geared != null) { form.setValue("is_geared", e.is_geared); n++; }
+      put("notes", e.notes);
+      return n;
+    },
+    [form],
+  );
 
   const {
     fields: picFields,
@@ -2085,6 +2120,8 @@ export function VesselCreateForm() {
           </div>
         </form>
       </div>
+
+      <SmartParser onApply={applyParsed} mode="vessel" />
     </div>
   );
 }

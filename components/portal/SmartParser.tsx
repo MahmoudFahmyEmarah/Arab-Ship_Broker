@@ -107,15 +107,16 @@ export function SmartParser({
       setWarnings(Array.isArray(result.warnings) ? result.warnings : []);
       return;
     }
-    setApplied(onApply(null));
+    // Failure — apply nothing to the live form; just explain.
+    setApplied(null);
     setNote(
       res.status === 503
-        ? "Assistant not configured — applied a sample instead."
+        ? "Assistant isn't configured yet — please fill the form manually."
         : res.status === 401
-          ? "Sign in to use the assistant — applied a sample instead."
+          ? "Please sign in to use the assistant."
           : res.status === 415 || res.status === 413
             ? "That file can't be read — please paste the text instead."
-            : `Assistant unavailable (${res.status}) — applied a sample instead.`,
+            : `Assistant unavailable (${res.status}) — please try again.`,
     );
   }
 
@@ -136,8 +137,8 @@ export function SmartParser({
       }
       handleResult(res, (await res.json()) as CircularParseResult);
     } catch {
-      setApplied(onApply(null));
-      setNote("Assistant unreachable — applied a sample instead.");
+      setApplied(null);
+      setNote("Assistant unreachable — please try again.");
     } finally {
       setBusy(false);
     }

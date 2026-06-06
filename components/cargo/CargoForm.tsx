@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -40,6 +40,8 @@ import { PortAutocomplete } from "./PortAutocomplete";
 import { SafetyQuestionsStep } from "./SafetyQuestionsStep";
 import { cn } from "@/lib/utils";
 import { activeOrg, currentMember, ORG_TYPE_LABEL } from "@/lib/portal/org";
+import { SmartParser } from "@/components/portal/SmartParser";
+import type { CircularParseResult } from "@/lib/circulars/types";
 import { needsSuez } from "@/lib/portal/econ";
 
 const STEPS = [
@@ -275,6 +277,42 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
   };
 
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
+
+  // AI Bosun → fill the cargo form from a parsed circular. Sets fields for the
+  // user to review/correct (commodity itself is still picked from the selector,
+  // which resolves the id). Returns how many fields were applied.
+  const applyParsed = useCallback(
+    (result: CircularParseResult | null): number => {
+      if (!result) return 0;
+      const e = result.extracted;
+      let n = 0;
+      const put = (k: keyof CargoFormValues, v: unknown) => {
+        if (v !== undefined && v !== null && v !== "") {
+          form.setValue(k, v as never, { shouldValidate: true, shouldDirty: true });
+          n++;
+        }
+      };
+      put("qty_min_mt", e.qty_min_mt);
+      put("qty_max_mt", e.qty_max_mt);
+      put("load_port_locode", e.load_port_locode);
+      put("disch_port_locode", e.disch_port_locode);
+      put("laycan_from", e.laycan_from ?? undefined);
+      put("laycan_to", e.laycan_to ?? undefined);
+      put("load_rate", e.load_rate);
+      put("disch_rate", e.disch_rate);
+      put("load_terms", e.load_terms);
+      put("freight_idea_usd_mt", e.freight_idea_usd_mt);
+      put("commission_pct", e.commission_pct);
+      put("stowage_factor", e.stowage_factor);
+      put("cargo_type", e.cargo_type);
+      put("commodity_name", e.commodity_name);
+      if (e.is_grain_cargo != null) { form.setValue("is_grain_cargo", e.is_grain_cargo); n++; }
+      if (e.is_dg_cargo != null) { form.setValue("is_dg_cargo", e.is_dg_cargo); n++; }
+      put("notes", e.notes);
+      return n;
+    },
+    [form],
+  );
 
   const onSubmit = async (data: CargoFormValues) => {
     setIsSubmitting(true);
@@ -1290,6 +1328,8 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
           </div>
         </form>
       </div>
+
+      <SmartParser onApply={applyParsed} mode="cargo" />
     </div>
   );
 }
