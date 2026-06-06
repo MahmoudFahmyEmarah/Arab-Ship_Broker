@@ -54,6 +54,8 @@
 .mvb__scroll{flex:1 1 100%;overflow-y:auto;padding:16px 22px 22px;min-width:0;transition:flex-basis var(--t-base,.2s);}
 .mvb__scroll.has-map{flex:0 0 50%;}
 .mvb__mappane{flex:0 0 50%;min-width:0;padding:16px 22px 22px 8px;}
+/* The unified map (asb-map) sits in the board pane as a rounded card. */
+.mvb__mappane .asb-map{border-radius:12px;}
 .mvb__grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
 .mvb__grid.cols-2{grid-template-columns:repeat(2,1fr);}
 @media (max-width:1180px){.mvb__grid{grid-template-columns:repeat(2,1fr);}}

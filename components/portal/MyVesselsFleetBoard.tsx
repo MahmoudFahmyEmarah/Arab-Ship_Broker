@@ -26,9 +26,12 @@ import {
   type SizeRange,
 } from "./filters";
 
-const FleetMap = dynamic(() => import("./FleetMap"), {
+// The unified MapPane (asb-map) — the SAME map the Tonnage/Cargo markets and
+// dashboard use. My Vessels shows its fleet here with preferred-direction
+// vectors, replacing the old dedicated fleet map + expanded layer panel.
+const MarketMap = dynamic(() => import("./MarketMap"), {
   ssr: false,
-  loading: () => <div style={{ height: "100%", borderRadius: 12, background: "#DCE7F2" }} />,
+  loading: () => <div style={{ height: "100%", borderRadius: 12, background: "#0c1929" }} />,
 });
 
 const uniq = (xs: (string | null | undefined)[]) =>
@@ -109,8 +112,12 @@ export function MyVesselsFleetBoard({
     });
   }, [fleet, fZones, fType, fSize, gearOnly]);
 
-  const posted = React.useMemo(() => filtered.filter((v) => v.status === "OPEN" && v.port && v.lat != null), [filtered]);
-  const undeclaredCount = filtered.length - posted.length;
+  // The unified map takes raw VesselViews — filter them to the same set the
+  // cards show (the board's filter bar drives both).
+  const filteredViews = React.useMemo(() => {
+    const ids = new Set(filtered.map((f) => f.id));
+    return views.filter((v) => ids.has(v.id));
+  }, [filtered, views]);
 
   return (
     <div className="mvb" onClick={() => setSelected(null)}>
@@ -214,7 +221,14 @@ export function MyVesselsFleetBoard({
                 </div>
               </div>
             ) : (
-              <FleetMap posted={posted} undeclaredCount={undeclaredCount} selected={selected} />
+              <MarketMap
+                cargos={[]}
+                vessels={filteredViews}
+                portCoords={portCoords}
+                focusedVesselId={selected}
+                onSelectVessel={(v) => setSelected((s) => (s === v.id ? null : v.id))}
+                vesselVectors
+              />
             )}
           </div>
         )}

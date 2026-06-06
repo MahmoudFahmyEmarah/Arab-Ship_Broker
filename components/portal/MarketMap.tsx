@@ -18,6 +18,27 @@ import { CARGO_FACETS, VESSEL_FACETS, passesFacets, type Selections } from "@/li
 import { VoyOpexPanel } from "./VoyOpexPanel";
 import { useViewerTier } from "@/lib/portal/tier";
 import { routeGeometry } from "@/lib/portal/routeGeometry";
+import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
+
+// Geographic bearing a→b (deg clockwise from north) — for the vector arrowhead.
+function bearing(a: [number, number], b: [number, number]): number {
+  const toR = Math.PI / 180, toD = 180 / Math.PI;
+  const f1 = a[0] * toR, f2 = b[0] * toR, dl = (b[1] - a[1]) * toR;
+  const y = Math.sin(dl) * Math.cos(f2);
+  const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+  return (Math.atan2(y, x) * toD + 360) % 360;
+}
+// Gently curved sample points a→b (preferred-direction vector, never a chord).
+function curvePts(a: [number, number], b: [number, number], bend = 0.18): [number, number][] {
+  const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const ctrl: [number, number] = [mid[0] + (b[1] - a[1]) * bend, mid[1] - (b[0] - a[0]) * bend];
+  const out: [number, number][] = [];
+  for (let t = 0; t <= 1.0001; t += 0.05) {
+    const u = 1 - t;
+    out.push([u * u * a[0] + 2 * u * t * ctrl[0] + t * t * b[0], u * u * a[1] + 2 * u * t * ctrl[1] + t * t * b[1]]);
+  }
+  return out;
+}
 
 const ZONE_COLOR: Record<string, string> = {
   AG: "#534AB7",
@@ -233,6 +254,7 @@ export default function MarketMap({
   onSelectCargo,
   onSelectVessel,
   portCoords,
+  vesselVectors = false,
 }: {
   cargos: CargoView[];
   vessels: VesselView[];
@@ -242,6 +264,9 @@ export default function MarketMap({
   onSelectVessel?: (v: VesselView) => void;
   // Live locode → [lat, lon] from the ports table; falls back to FALLBACK_PORTS.
   portCoords?: Record<string, [number, number]>;
+  // My Vessels: draw a dashed vector from each vessel's open port toward its
+  // first preferred-trade zone (off elsewhere so other map surfaces are clean).
+  vesselVectors?: boolean;
 }) {
   const coordFor = React.useCallback(
     (locode?: string | null): [number, number] | null => {
@@ -258,6 +283,7 @@ export default function MarketMap({
   const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
   const zonesRef = React.useRef<L.LayerGroup | null>(null);
   const routeRef = React.useRef<L.LayerGroup | null>(null);
+  const vecRef = React.useRef<L.LayerGroup | null>(null);
   const baseRef = React.useRef<L.TileLayer | null>(null);
   const cargoMk = React.useRef<Record<string, L.Marker>>({});
   const roRef = React.useRef<ResizeObserver | null>(null);
@@ -320,6 +346,7 @@ export default function MarketMap({
     });
     map.attributionControl.setPrefix(false);
     routeRef.current = L.layerGroup().addTo(map);
+    vecRef.current = L.layerGroup().addTo(map);
     zonesRef.current = L.layerGroup();
     const cluster = L.markerClusterGroup({
       maxClusterRadius: 38,
@@ -441,6 +468,7 @@ export default function MarketMap({
     if (!cluster || !map || !ready) return;
     cluster.clearLayers();
     cargoMk.current = {};
+    vecRef.current?.clearLayers();
 
     if (cargoOn) {
       const state = cargoStateForZoom(map.getZoom());
@@ -478,6 +506,29 @@ export default function MarketMap({
         const jy = ((v.id || "").charCodeAt(1) % 7) * 0.05 - 0.15;
         const sel = focusedVesselId === v.id;
         const dim = !!pairCargo && !pairEligible(pairCargo, v);
+
+        // Preferred-direction vector (My Vessels): dashed curve open port →
+        // first preferred-zone centroid, with an arrowhead at the far end.
+        if (vesselVectors && vecRef.current) {
+          const z = v.preferredZones?.[0] ? zoneByCode(v.preferredZones[0]) : null;
+          const dest = z ? zoneCentroid(z) : null;
+          const a: [number, number] = [ll[0] + jy, ll[1] + jx];
+          if (dest && (dest[0] !== a[0] || dest[1] !== a[1])) {
+            const pts = curvePts(a, dest);
+            const line = sel ? "#2A6FDB" : "#8C9BB5";
+            L.polyline(pts, { color: line, weight: sel ? 3 : 2, dashArray: "7 7", opacity: dim ? 0.25 : 0.8, interactive: false }).addTo(vecRef.current);
+            const endBrg = bearing(pts[pts.length - 2], pts[pts.length - 1]);
+            L.marker(dest, {
+              interactive: false,
+              icon: L.divIcon({
+                className: "vessel-vec-arrow",
+                html: `<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid ${line};transform:rotate(${endBrg}deg);opacity:${dim ? 0.25 : 0.85}"></div>`,
+                iconSize: [10, 10],
+                iconAnchor: [5, 5],
+              }),
+            }).addTo(vecRef.current);
+          }
+        }
         const box = Math.max(vesselSize(v).w, vesselSize(v).h, 28);
         const mk = L.marker([ll[0] + jy, ll[1] + jx], {
           icon: L.divIcon({ html: vesselTriangleHTML(v, sel, dim), className: "vessel-marker", iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
@@ -498,7 +549,7 @@ export default function MarketMap({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visCargos, visVessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready, pairCargo, isDashboard]);
+  }, [visCargos, visVessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready, pairCargo, isDashboard, vesselVectors]);
 
   // Focused cargo → route + fit
   React.useEffect(() => {
