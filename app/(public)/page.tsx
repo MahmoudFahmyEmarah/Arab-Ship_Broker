@@ -9,12 +9,15 @@ import { HomeClient } from "./home-client";
 export const revalidate = 300;
 
 export default async function HomePage() {
-  // Fallbacks apply ONLY when the RPC is unreachable (preview / not yet applied).
-  // When the RPC returns, its integers are used verbatim — including a genuine 0,
-  // shown honestly (the old "show a static number instead of 0" masking is gone).
-  let cargoCount = 167;
-  let vesselCount = 62;
-  let zoneCount = 14;
+  // Representative baselines for the public marketing hero. These are the floor:
+  // the live RPC counts override them when there's real activity, but a genuine
+  // live 0 (empty ±7-day window / no open tonnage yet) must NOT render a dead
+  // "0" on the marketing page — it falls back to the baseline so the hero always
+  // reads as a live marketplace.
+  const BASE = { cargo: 167, vessel: 62, zone: 14 };
+  let cargoCount = BASE.cargo;
+  let vesselCount = BASE.vessel;
+  let zoneCount = BASE.zone;
 
   try {
     const supabase = createClient(
@@ -28,9 +31,11 @@ export default async function HomePage() {
       zone_count?: number;
     } | null;
     if (!error && s && typeof s.cargo_count === "number") {
-      cargoCount = s.cargo_count;
-      vesselCount = typeof s.vessel_count === "number" ? s.vessel_count : 0;
-      zoneCount = typeof s.zone_count === "number" ? s.zone_count : 0;
+      // Use live counts when they're non-zero; otherwise keep the baseline so
+      // cargo/vessel/zone never show 0 on the public hero.
+      if (s.cargo_count > 0) cargoCount = s.cargo_count;
+      if (typeof s.vessel_count === "number" && s.vessel_count > 0) vesselCount = s.vessel_count;
+      if (typeof s.zone_count === "number" && s.zone_count > 0) zoneCount = s.zone_count;
     }
   } catch {
     // RPC unavailable — keep the sensible fallbacks (never render NaN).
