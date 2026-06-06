@@ -115,6 +115,40 @@ For VESSEL, extract:
   "notes": "DNR / restrictions / etc"
 }
 
+Q88 (vessel questionnaire) — when the input is a Q88 Dry long-form (a PDF or
+pasted questionnaire), it is the market-standard vessel particulars form. Read
+its sections and map them to the VESSEL fields above. The standard sections and
+their fields are:
+
+- Ownership and Operation: Registered owner (full style), Parent company/group,
+  Disponent owner, time-charter/bareboat status.
+- Vessel identity: Vessel name, IMO number, Flag, Port of Registry, Call sign.
+- Builder: Builder (where built) / Yard number, Date delivered (built) → build_year.
+- Classification: Classification society, Class notation, enhanced survey program,
+  IACS unified requirements (No.1 hold / double-bottom).
+- Tonnages: Gross Tonnage (GT) / Net Registered Tonnage (NRT),
+  Suez Canal Tonnage Gross (SCGT) / Net (SCNT), Panama Canal Net Tonnage (PCNT).
+- Dimensions: Length Over All (LOA) → max_loa_m, Extreme breadth (Beam),
+  keel-to-hatch-coaming distances.
+- Loadline Information: summer Draft → max_draft_m, FWA, Loadline Certificate.
+- Cargo Arrangements / Holds: Number of holds, Grain capacity → grain_cbm,
+  Bale capacity, strengthened for heavy cargoes, which holds may be left empty,
+  tanktop suitable for grab discharge, CO2 / smoke detection, holds ladders,
+  loadicator, hoppered holds, grain SOLAS ch.VI compliance.
+- Deck and Hatches: Number of hatches.
+- Ballast: ballast tank capacity (100%), ballast-hold capacity, ballast condition.
+- Cargo Gear (if applicable): geared make/type → is_geared + crane_count, SWL →
+  crane_swl_mt, outreach, grabs and grab power.
+- Engine Room, Speed and Consumption: service speed → service_speed_kn,
+  VLSFO/LSMGO consumption → vlsfo_sea_mt_day / lsmgo_sea_mt_day, freshwater.
+
+Map every field that has a matching VESSEL key above. For useful Q88 facts with
+NO dedicated key — GT, NRT, SCGT/SCNT, PCNT, number of holds/hatches, bale
+capacity, classification society, P&I club, TPC — append them concisely to
+"notes" (e.g. "GT 12,345 / NRT 6,789 / SCNT 6,500 / 5 holds 5 hatches / class
+ABS / P&I Gard"). Extract only what the document states; never invent a value.
+Set vessel_type to "Bulk Carrier" for a dry-bulk Q88 unless stated otherwise.
+
 Warnings should flag:
 - WOG offered
 - Cargo outside ASB niche (>20K DWT or non-core zone)
