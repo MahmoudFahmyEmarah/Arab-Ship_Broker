@@ -90,7 +90,9 @@ function SelectField({ label, value, onChange, options }: {
 // ── Local-persisted preferences (real, survive reload) ──────────────────
 type Prefs = Record<string, string>;
 const PREF_OPTS: { key: string; label: string; options: string[] }[] = [
-  { key: "theme", label: "Theme", options: ["Light", "Dark", "System"] },
+  // Only Light is shipped — dark mode is a dedicated, QA'd effort (the portal
+  // has ~221 hardcoded colours + overloaded tokens). No fake "Dark" option.
+  { key: "theme", label: "Theme", options: ["Light"] },
   { key: "boardView", label: "Default board view", options: ["Cards + Map", "Cards", "List"] },
   { key: "mapDefault", label: "Map default state", options: ["Shown", "Hidden"] },
   { key: "density", label: "Card density", options: ["Compact", "Comfortable"] },
