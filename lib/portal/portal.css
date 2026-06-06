@@ -326,13 +326,18 @@ button { font: inherit; cursor: pointer; }
 }
 
 /* DATA GRID — 2 col × 3 row */
+/* Tinted data module — soft #F2F6FB cells over a 1px #EDF1F8 divider grid,
+   no border, 11px radius (matches the vessel card's spec block). */
 .cc-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
-  margin-bottom: 8px;
+  gap: 1px;
+  margin: 2px 0 8px;
+  background: #EDF1F8;
+  border-radius: 11px;
+  overflow: hidden;
 }
-.cc-field { min-width: 0; }
+.cc-field { min-width: 0; background: #F2F6FB; padding: 7px 10px; }
 .cc-field__k {
   font-size: 8px;
   color: #8B95A3;

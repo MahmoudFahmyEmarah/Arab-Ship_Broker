@@ -765,8 +765,9 @@ body { font-family: var(--asb-font); }
 .cc-mid { color: #B7BEC9; font-weight: 400; font-size: 9px; }
 .cc-arrow { color: #8B95A3; font-weight: 400; }
 .cc-wog { flex-shrink: 0; background: #FAEEDA; color: #854F0B; font-size: 8px; font-weight: 600; letter-spacing: 0.06em; padding: 2px 5px; border-radius: 3px; }
-.cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-bottom: 8px; }
-.cc-field { min-width: 0; }
+/* Tinted data module — soft cells over a 1px divider grid, no border, 11px radius. */
+.cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 2px 0 8px; background: #EDF1F8; border-radius: 11px; overflow: hidden; }
+.cc-field { min-width: 0; background: #F2F6FB; padding: 7px 10px; }
 .cc-field__k { font-size: 8px; color: #8B95A3; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; margin-bottom: 2px; }
 .cc-field__v { font-size: 11px; font-weight: 500; color: #1B3A5C; font-variant-numeric: tabular-nums; line-height: 1.3; display: inline-flex; align-items: center; flex-wrap: wrap; }
 .cc-qty { display: inline-flex; flex-direction: column; line-height: 1.25; }

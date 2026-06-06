@@ -111,7 +111,6 @@ export function PortalSidebar({
     { section: "Discover" },
     ...(isCargo ? [{ href: `${basePath}/cargo`, label: "Cargo Market", glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} /> }] : []),
     ...(isVessel ? [{ href: `${basePath}/vessels/browse`, label: "Tonnage Market", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> }] : []),
-    { href: `${basePath}/alerts`, label: "My Alerts", glyph: (a: boolean) => <IconBell className="nav-icon" size={16} color={c(a)} /> },
     { section: "Economic Calculators" },
     { href: `${basePath}/voyage-estimator`, label: "Voyage Cost Estimator", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
     { href: `${basePath}/ports-da`, label: "Ports DA Calculator", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
@@ -190,6 +189,7 @@ export function PortalSidebar({
 
       <div style={{ borderTop: "var(--bd)" }}>
         {!collapsed && <div className="nav-section">Account</div>}
+        <NavItem href={`${basePath}/alerts`} label="My Alerts" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconBell className="nav-icon" size={16} color={c(a)} />} />
         {/* Billing is a tab inside Settings (not a separate page). */}
         <NavItem href={`${basePath}/account`} label="Settings" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconSettings className="nav-icon" size={16} color={c(a)} />} />
 
