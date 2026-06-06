@@ -337,7 +337,7 @@ export function PostCargoFlow({ commodities }: { commodities: CargoOpt[] }) {
           )}
         </div>
       </div>
-      <SmartParser onApply={applyParsed} />
+      <SmartParser onApply={applyParsed} mode="cargo" />
     </div>
   );
 }

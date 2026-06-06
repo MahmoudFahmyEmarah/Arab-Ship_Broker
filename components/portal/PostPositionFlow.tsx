@@ -279,7 +279,7 @@ export function PostPositionFlow({ vessels }: { vessels: VesselOpt[] }) {
           )}
         </div>
       </div>
-      <SmartParser onApply={applyParsed} />
+      <SmartParser onApply={applyParsed} mode="vessel" />
     </div>
   );
 }

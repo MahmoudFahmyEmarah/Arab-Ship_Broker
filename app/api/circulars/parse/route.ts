@@ -40,19 +40,55 @@ export async function POST(req: Request) {
     );
   }
 
-  let text: string;
+  let text: string | undefined;
+  let fileBase64: string | undefined;
+  let fileMediaType: string | undefined;
   try {
     const body = await req.json();
-    text = body?.text;
+    text = typeof body?.text === "string" ? body.text : undefined;
+    fileBase64 = typeof body?.fileBase64 === "string" ? body.fileBase64 : undefined;
+    fileMediaType = typeof body?.fileMediaType === "string" ? body.fileMediaType : undefined;
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  if (!text || typeof text !== "string" || text.trim().length === 0) {
-    return NextResponse.json({ error: "Missing 'text' field" }, { status: 400 });
+
+  const hasText = !!text && text.trim().length > 0;
+  const hasFile = !!fileBase64;
+  if (!hasText && !hasFile) {
+    return NextResponse.json({ error: "Provide circular text or a document to parse." }, { status: 400 });
+  }
+  // Q88 / circular document path: PDF only, ~6MB cap (base64 is ~33% larger).
+  if (hasFile) {
+    if (fileMediaType !== "application/pdf") {
+      return NextResponse.json({ error: "Only PDF documents are supported (e.g. a Q88)." }, { status: 415 });
+    }
+    if (fileBase64!.length > 8_500_000) {
+      return NextResponse.json({ error: "Document is too large (max ~6MB)." }, { status: 413 });
+    }
   }
 
   const today = new Date().toISOString().split("T")[0];
   const client = new Anthropic();
+
+  // Build the user turn: a document block for an uploaded Q88/PDF, plus the
+  // instruction; or the pasted text. Both run through the same system prompt.
+  const userContent: Anthropic.MessageParam["content"] = hasFile
+    ? [
+        {
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: fileBase64! },
+        },
+        {
+          type: "text",
+          text:
+            `Today's date for laycan parsing: ${today}.\n\n` +
+            `The attached PDF is a vessel Q88 (or a market circular). Extract the vessel/cargo ` +
+            `fields and return JSON only.` +
+            (hasText ? `\n\nAdditional context:\n${text}` : ""),
+        },
+      ]
+    : `Today's date for laycan parsing: ${today}.\n\n` +
+      `Parse the following circular and return JSON only:\n\n${text}`;
 
   try {
     const message = await client.messages.create({
@@ -67,14 +103,7 @@ export async function POST(req: Request) {
           cache_control: { type: "ephemeral" },
         },
       ],
-      messages: [
-        {
-          role: "user",
-          content:
-            `Today's date for laycan parsing: ${today}.\n\n` +
-            `Parse the following circular and return JSON only:\n\n${text}`,
-        },
-      ],
+      messages: [{ role: "user", content: userContent }],
     });
 
     const raw = message.content

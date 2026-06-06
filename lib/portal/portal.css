@@ -2762,13 +2762,73 @@ button { font: inherit; cursor: pointer; }
 .mp-panel__blurb { font-size: 12px; color: var(--asb-ink); line-height: 1.6; margin: 0 0 14px; }
 .mp-panel__note { margin-top: 16px; padding: 10px 12px; background: var(--asb-gray-50); border-radius: 3px; font-size: 10px; color: var(--asb-gray-500); line-height: 1.5; }
 
-/* ── Smart Parser panel ── */
-.sp-panel { width: 320px; flex-shrink: 0; border-left: var(--bd); background: var(--asb-white); display: flex; flex-direction: column; }
-.sp-panel__head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: var(--bd); }
-.sp-panel__title { font-size: 12px; font-weight: 600; color: var(--asb-navy); flex: 1; }
-.sp-panel__close { background: none; border: none; color: var(--asb-gray-500); cursor: pointer; font-size: 14px; }
-.sp-panel__body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-.sp-panel__hint { font-size: 11px; color: var(--asb-gray-500); line-height: 1.5; margin: 0; }
-.sp-panel__ta { min-height: 200px; resize: vertical; border: var(--bd); border-radius: var(--r-input); padding: 8px 10px; font-family: var(--asb-font-mono); font-size: 11px; color: var(--asb-ink); }
-.sp-panel__ta:focus { outline: none; border-color: var(--asb-blue); box-shadow: 0 0 0 2px rgba(24,95,165,0.12); }
-.sp-tab { position: absolute; right: 0; top: 120px; writing-mode: vertical-rl; background: var(--asb-blue); color: #fff; border: none; padding: 12px 6px; border-radius: 6px 0 0 6px; cursor: pointer; font-size: 11px; font-weight: 600; }
+/* ── Smart Assistant — floating "AI Bosun" ── */
+/* Collapsed launcher: a classy rounded-square chip, bottom-right. */
+.bosun-fab {
+  position: fixed; right: 20px; bottom: 20px; z-index: 1000;
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 9px 14px 9px 10px; border: none; cursor: pointer;
+  border-radius: 14px; color: #fff;
+  background: linear-gradient(135deg, var(--asb-navy, #0B1F3A), #14375f);
+  box-shadow: 0 6px 22px rgba(8, 20, 38, 0.32);
+  font-family: var(--asb-font); font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.bosun-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(8, 20, 38, 0.4); }
+.bosun-fab__label { white-space: nowrap; }
+
+/* Expanded card: floats over content, draggable by its header. */
+.bosun-card {
+  position: fixed; right: 20px; bottom: 20px; z-index: 1001;
+  width: 360px; max-width: calc(100vw - 32px); max-height: min(78vh, 640px);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--asb-white); border: 0.5px solid var(--asb-gray-200);
+  border-radius: 16px; box-shadow: 0 18px 50px rgba(8, 20, 38, 0.34);
+  font-family: var(--asb-font);
+}
+.bosun-card__head {
+  display: flex; align-items: center; gap: 11px; padding: 12px 12px 12px 14px;
+  color: #fff; cursor: grab; touch-action: none; user-select: none;
+  background: linear-gradient(135deg, var(--asb-navy, #0B1F3A), #14375f);
+}
+.bosun-card__head:active { cursor: grabbing; }
+.bosun-card__titles { flex: 1; min-width: 0; }
+.bosun-card__title { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
+.bosun-card__sub { font-size: 10.5px; color: rgba(255, 255, 255, 0.72); margin-top: 1px; }
+.bosun-card__x {
+  width: 26px; height: 26px; flex-shrink: 0; border: none; cursor: pointer;
+  border-radius: 7px; background: rgba(255, 255, 255, 0.12); color: #fff;
+  font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+.bosun-card__x:hover { background: rgba(255, 255, 255, 0.22); }
+.bosun-card__body { padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.bosun-card__hint { font-size: 11.5px; color: var(--asb-gray-500); line-height: 1.55; margin: 0; }
+.bosun-card__ta {
+  min-height: 150px; resize: vertical; border: var(--bd); border-radius: var(--r-input);
+  padding: 9px 11px; font-family: var(--asb-font-mono); font-size: 11px; color: var(--asb-ink);
+  background: var(--asb-gray-50);
+}
+.bosun-card__ta:focus { outline: none; border-color: var(--asb-blue); background: var(--asb-white); box-shadow: 0 0 0 2px rgba(24, 95, 165, 0.12); }
+.bosun-card__or { display: flex; align-items: center; gap: 8px; color: var(--asb-gray-400); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+.bosun-card__or::before, .bosun-card__or::after { content: ""; flex: 1; height: 1px; background: var(--asb-gray-200); }
+.bosun-drop {
+  display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer;
+  padding: 12px; border: 1px dashed var(--asb-gray-300, #cdd5e0); border-radius: 10px;
+  background: var(--asb-gray-50); transition: border-color 0.15s ease, background 0.15s ease;
+}
+.bosun-drop:hover { border-color: var(--asb-blue); background: var(--asb-blue-light, #eaf1fd); }
+.bosun-drop:disabled { opacity: 0.6; cursor: default; }
+.bosun-drop__title { font-size: 12.5px; font-weight: 600; color: var(--asb-navy); }
+.bosun-drop__sub { font-size: 10.5px; color: var(--asb-gray-500); }
+.bosun-card__note { margin-top: 2px; font-size: 11px; color: var(--asb-gray-500); line-height: 1.5; }
+.bosun-card__warn { margin: 4px 0 0; padding-left: 16px; font-size: 11px; color: var(--asb-amber, #854F0B); }
+
+/* Mobile: dock to a bottom sheet, full width, no drag (inline pos overridden). */
+@media (max-width: 639px) {
+  .bosun-card {
+    left: 8px !important; right: 8px !important; bottom: 8px !important; top: auto !important;
+    width: auto !important; max-width: none; max-height: 82vh;
+  }
+  .bosun-card__head { cursor: default; }
+  .bosun-fab { right: 14px; bottom: 14px; }
+}
