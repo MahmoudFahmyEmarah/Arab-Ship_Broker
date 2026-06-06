@@ -20,6 +20,7 @@ import {
 } from "@/app/(dashboard)/dashboard/account/actions";
 import { IconUser, IconDoc, IconDashboard, IconBell, IconShield, IconShieldLock } from "./icons";
 import { BillingPanel } from "./BillingPanel";
+import { TwoFactorSetup } from "./TwoFactorSetup";
 
 function SettingsRow({ k, v, blue }: { k: string; v: React.ReactNode; blue?: boolean }) {
   return (
@@ -399,7 +400,7 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                   <button className="asb-btn" onClick={changePassword} disabled={pwBusy} style={{ width: "100%", justifyContent: "center" }}>{pwBusy ? "Updating…" : "Update password"}</button>
                 </div>
                 <div className="eyebrow" style={{ marginTop: 12, marginBottom: 4 }}>Two-factor auth</div>
-                <SettingsRow k="2-factor auth" v={<span className="asb-badge neutral" style={{ fontSize: 8.5, letterSpacing: ".04em" }}>COMING SOON</span>} />
+                <TwoFactorSetup />
               </div>
               <div className="settings-card danger">
                 <div className="head">

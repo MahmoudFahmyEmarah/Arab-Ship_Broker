@@ -67,6 +67,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const hasShownSuspendedToast = useRef(false);
+  // 2FA (TOTP) challenge — shown after the password when the account has a
+  // verified authenticator factor (Supabase AAL aal1 -> aal2).
+  const [mfa, setMfa] = useState<{ factorId: string; role: string | null } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaBusy, setMfaBusy] = useState(false);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -106,6 +111,19 @@ export default function LoginPage() {
         role = normalizeRole(dbUser?.role);
       }
 
+      // If the account has a verified authenticator, require the TOTP code.
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const totp = factors?.totp?.find((f) => f.status === "verified") ?? factors?.totp?.[0];
+        if (totp) {
+          setMfa({ factorId: totp.id, role });
+          setMfaCode("");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       toast.success("Welcome back! Dropping anchor in your dashboard...");
       router.push(role === "admin" ? "/admin/dashboard" : "/dashboard");
     } catch (error) {
@@ -133,6 +151,36 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const verifyMfa = async () => {
+    if (!mfa || mfaCode.trim().length < 6) {
+      toast.error("Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+    setMfaBusy(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error } = await supabase.auth.mfa.challengeAndVerify({
+        factorId: mfa.factorId,
+        code: mfaCode.trim(),
+      });
+      if (error) throw error;
+      toast.success("Welcome back! Dropping anchor in your dashboard...");
+      router.push(mfa.role === "admin" ? "/admin/dashboard" : "/dashboard");
+    } catch {
+      toast.error("That code didn't match. Try again.");
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  const cancelMfa = async () => {
+    try {
+      await getSupabaseBrowserClient().auth.signOut({ scope: "local" });
+    } catch {}
+    setMfa(null);
+    setMfaCode("");
   };
 
   return (
@@ -169,6 +217,33 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {mfa ? (
+            <div className="space-y-5">
+              <p className="text-slate-700 text-sm text-center -mt-4 mb-1">
+                Two-factor authentication — enter the 6-digit code from your authenticator app.
+              </p>
+              <Input
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                placeholder="123456"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") void verifyMfa(); }}
+                className="bg-slate-50 border-slate-200 focus:bg-white focus:border-ocean-600 focus:ring-ocean-600/20 h-12 text-center tracking-[0.4em] text-lg rounded"
+              />
+              <Button
+                type="button"
+                onClick={verifyMfa}
+                disabled={mfaBusy}
+                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold text-base shadow-md flex items-center justify-center"
+              >
+                {mfaBusy ? (<><Loader2 className="animate-spin mr-2 w-5 h-5" />Verifying...</>) : "Verify"}
+              </Button>
+              <button type="button" onClick={cancelMfa} className="w-full text-center text-xs text-slate-500 hover:text-slate-700">
+                Cancel and sign out
+              </button>
+            </div>
+          ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <motion.div
@@ -274,6 +349,7 @@ export default function LoginPage() {
               </motion.div>
             </form>
           </Form>
+          )}
 
           {/* Footer Navigation */}
           <div className="text-center mt-8 pt-6 border-t border-slate-100">
