@@ -75,12 +75,12 @@ export default function NewPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 selection:bg-asb-blue/30">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 selection:bg-ocean-600/30">
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-1000 scale-105"
         style={{ backgroundImage: "url('/4.jpeg')" }}
       />
-      <div className="absolute inset-0 bg-asb-navy-deep/40 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-ocean-950/40 backdrop-blur-[2px]" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -88,20 +88,20 @@ export default function NewPasswordPage() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative z-10 w-full max-w-md"
       >
-        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-[768px]:p-8 border border-white/20 ring-1 ring-asb-navy-deep/5">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-[768px]:p-8 border border-white/20 ring-1 ring-ocean-950/5">
           <div className="text-center mb-8">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="mx-auto w-12 h-12 bg-asb-blue-light text-asb-blue rounded flex items-center justify-center mb-4 shadow-sm border border-asb-gray-200"
+              className="mx-auto w-12 h-12 bg-ocean-50 text-ocean-600 rounded flex items-center justify-center mb-4 shadow-sm border border-slate-200"
             >
               <CheckCircle2 className="w-6 h-6" />
             </motion.div>
-            <h1 className="text-3xl font-bold text-asb-navy tracking-tight mb-2">
+            <h1 className="text-3xl font-bold text-ocean-900 tracking-tight mb-2">
               Secure Account
             </h1>
-            <p className="text-asb-gray-500 text-sm">
+            <p className="text-slate-500 text-sm">
               Please enter your new password below.
             </p>
           </div>
@@ -121,22 +121,22 @@ export default function NewPasswordPage() {
                     name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-asb-ink-soft font-semibold text-xs uppercase tracking-wider">
+                        <FormLabel className="text-slate-700 font-semibold text-xs uppercase tracking-wider">
                           New Password
                         </FormLabel>
                         <FormControl>
                           <div className="relative group">
-                            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-asb-gray-400 w-4 h-4 group-focus-within:text-asb-blue transition-colors" />
+                            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-ocean-600 transition-colors" />
                             <Input
                               {...field}
                               type={showPassword ? "text" : "password"}
                               placeholder="••••••••"
-                              className="bg-asb-gray-50 border-asb-gray-200 focus:bg-white focus:border-asb-blue  focus:ring-asb-blue/20 pl-10 pr-10 h-11 transition-all rounded"
+                              className="bg-slate-50 border-slate-200 focus:bg-white focus:border-ocean-600  focus:ring-ocean-600/20 pl-10 pr-10 h-11 transition-all rounded"
                             />
                             <button
                               type="button"
                               onClick={() => setShowPassword(!showPassword)}
-                              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-asb-gray-400 hover:text-asb-gray-700 focus:outline-none"
+                              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 focus:outline-none"
                             >
                               {showPassword ? (
                                 <EyeOff className="w-4 h-4" />
@@ -159,24 +159,24 @@ export default function NewPasswordPage() {
                     name="confirmPassword"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-asb-ink-soft font-semibold text-xs uppercase tracking-wider">
+                        <FormLabel className="text-slate-700 font-semibold text-xs uppercase tracking-wider">
                           Confirm Password
                         </FormLabel>
                         <FormControl>
                           <div className="relative group">
-                            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-asb-gray-400 w-4 h-4 group-focus-within:text-asb-blue transition-colors" />
+                            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-ocean-600 transition-colors" />
                             <Input
                               {...field}
                               type={showConfirmPassword ? "text" : "password"}
                               placeholder="••••••••"
-                              className="bg-asb-gray-50 border-asb-gray-200 focus:bg-white focus:border-asb-blue  focus:ring-asb-blue/20 pl-10 pr-10 h-11 transition-all rounded"
+                              className="bg-slate-50 border-slate-200 focus:bg-white focus:border-ocean-600  focus:ring-ocean-600/20 pl-10 pr-10 h-11 transition-all rounded"
                             />
                             <button
                               type="button"
                               onClick={() =>
                                 setShowConfirmPassword(!showConfirmPassword)
                               }
-                              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-asb-gray-400 hover:text-asb-gray-700 focus:outline-none"
+                              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 focus:outline-none"
                             >
                               {showConfirmPassword ? (
                                 <EyeOff className="w-4 h-4" />

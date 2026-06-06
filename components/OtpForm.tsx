@@ -102,22 +102,22 @@ export function OtpForm({
   };
 
   return (
-    <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-[768px]:p-8 border border-white/20 ring-1 ring-asb-navy-deep/5">
+    <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-[768px]:p-8 border border-white/20 ring-1 ring-ocean-950/5">
       <div className="text-center mb-8">
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-          className="mx-auto w-12 h-12 bg-asb-blue-light text-asb-blue rounded flex items-center justify-center mb-4 shadow-sm border border-asb-gray-200"
+          className="mx-auto w-12 h-12 bg-ocean-50 text-ocean-600 rounded flex items-center justify-center mb-4 shadow-sm border border-slate-200"
         >
           <ShieldCheck className="w-6 h-6" />
         </motion.div>
-        <h1 className="text-3xl font-bold text-asb-navy tracking-tight mb-2">
+        <h1 className="text-3xl font-bold text-ocean-900 tracking-tight mb-2">
           {title}
         </h1>
-        <p className="text-asb-gray-500 text-sm">
+        <p className="text-slate-500 text-sm">
           {description} <br />{" "}
-          <span className="font-semibold text-asb-ink-soft">{email}</span>
+          <span className="font-semibold text-slate-700">{email}</span>
         </p>
       </div>
 
@@ -147,7 +147,7 @@ export function OtpForm({
                 onKeyDown={(e) => handleKeyDown(index, e)}
                 onPaste={index === 0 ? handlePaste : undefined}
                 aria-label={`Digit ${index + 1}`}
-                className="w-14 h-16 max-[768px]:w-12 max-[768px]:h-14 text-center text-xl font-bold bg-asb-gray-50 border-asb-gray-200 focus:bg-white focus:border-asb-blue  focus:ring-asb-blue/20 rounded transition-all"
+                className="w-14 h-16 max-[768px]:w-12 max-[768px]:h-14 text-center text-xl font-bold bg-slate-50 border-slate-200 focus:bg-white focus:border-ocean-600  focus:ring-ocean-600/20 rounded transition-all"
               />
             ))}
           </motion.div>
@@ -157,7 +157,7 @@ export function OtpForm({
               type="button"
               onClick={handleResendClick}
               disabled={isResending}
-              className="text-sm text-asb-blue hover:text-asb-blue font-semibold disabled:opacity-50 transition-colors"
+              className="text-sm text-ocean-600 hover:text-ocean-600 font-semibold disabled:opacity-50 transition-colors"
             >
               {isResending
                 ? "Dispatching new code..."
@@ -184,10 +184,10 @@ export function OtpForm({
         </motion.div>
       </form>
 
-      <div className="text-center mt-8 pt-6 border-t border-asb-gray-100">
+      <div className="text-center mt-8 pt-6 border-t border-slate-100">
         <Link
           href={cancelHref}
-          className="text-asb-gray-500 hover:text-asb-blue text-sm font-medium transition-colors"
+          className="text-slate-500 hover:text-ocean-600 text-sm font-medium transition-colors"
         >
           Cancel and return
         </Link>
