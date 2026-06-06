@@ -20,7 +20,6 @@ import {
   vesselGT,
   vesselSCNRT,
   scnrtIsEstimated,
-  num,
   type FuelPrices,
 } from "@/lib/portal/econ";
 import "@/lib/portal/voyage-estimator.css";

@@ -48,7 +48,6 @@ function MarketEmpty({ title, sub }: { title: string; sub: string }) {
 // ── Cargo Market ───────────────────────────────────────────────────────────
 export function CargoMarketBoard({
   views,
-  source,
   portCoords,
   archiveLabel,
 }: {
@@ -186,7 +185,6 @@ export function CargoMarketBoard({
 // ── Tonnage Market ───────────────────────────────────────────────────────────
 export function TonnageMarketBoard({
   views,
-  source,
   portCoords,
 }: {
   views: VesselView[];

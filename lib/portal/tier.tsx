@@ -22,14 +22,6 @@ export function useViewerTier(): Tier {
   return React.useContext(TierCtx);
 }
 
-// Single seam mapping the account → subscription tier. Today the schema only
-// has trust_tier (account standing, not a plan), so paid brokers default to
-// Subscriber (T3). When a real `subscription_tier` column exists, map it here.
-export function accountTier(_account: { trustTier?: string } | null | undefined): Tier {
-  // TODO: return account?.subscription_tier mapped to T1–T4 once the column exists.
-  return "T3";
-}
-
 // Calculators (Voyage Estimator, Ports DA, Suez Toll) are locked for T1/T2.
 export function isCalculatorLocked(tier: Tier): boolean {
   return tier === "T1" || tier === "T2";

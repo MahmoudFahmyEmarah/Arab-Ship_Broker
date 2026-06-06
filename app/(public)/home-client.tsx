@@ -122,12 +122,13 @@ function AnimatedStat({
     if (!isInView || !isNumeric) return;
     const target = parseInt(value, 10);
     // Reduced-motion: render the final count immediately, no animation.
+    // (Deferred a frame so it isn't a synchronous setState inside the effect.)
     if (
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
     ) {
-      setCount(target);
-      return;
+      const raf0 = requestAnimationFrame(() => setCount(target));
+      return () => cancelAnimationFrame(raf0);
     }
     // Overshoot-and-settle: races up, peaks a few % past target around ~75%,
     // then eases back down and lands exactly on the real count.
