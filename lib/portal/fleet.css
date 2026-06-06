@@ -49,6 +49,10 @@
 .mvb__grid.cols-2{grid-template-columns:repeat(2,1fr);}
 @media (max-width:1180px){.mvb__grid{grid-template-columns:repeat(2,1fr);}}
 .mvb__empty{padding:40px 22px;text-align:center;color:var(--mvb-slate);font-size:12.5px;}
+.mvb__empty--first{display:flex;flex-direction:column;align-items:center;gap:8px;padding:56px 22px;}
+.mvb__empty-ttl{font-size:15px;font-weight:600;color:var(--mvb-navy);}
+.mvb__empty-sub{max-width:380px;line-height:1.5;color:var(--mvb-slate);}
+.mvb__empty-cta{display:flex;gap:10px;margin-top:10px;}
 
 /* ── Vessel card ──────────────────────────────────────────── */
 .mvb-vcard{background:var(--mvb-card);border-radius:16px;overflow:visible;display:flex;flex-direction:column;box-shadow:0 0 0 1px rgba(13,37,69,.05),0 2px 4px rgba(13,37,69,.04),0 12px 28px -12px rgba(13,37,69,.14);transition:box-shadow .14s ease, transform .14s ease;cursor:pointer;}

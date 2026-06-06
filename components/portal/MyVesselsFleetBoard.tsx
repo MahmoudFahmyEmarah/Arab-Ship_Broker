@@ -21,7 +21,6 @@ import {
   CheckList,
   RangeMenu,
   TimeMenu,
-  GearSeg,
   rangeSummary,
   toMt,
   type SizeRange,
@@ -91,7 +90,7 @@ export function MyVesselsFleetBoard({
   const [fType, setFType] = React.useState<string[]>([]);
   const [fSize, setFSize] = React.useState<SizeRange>(null);
   const [fTime, setFTime] = React.useState<number | null>(null);
-  const [fGear, setFGear] = React.useState("any");
+  const [gearOnly, setGearOnly] = React.useState(false);
 
   const fleet = React.useMemo(() => views.map((v) => toFleetVM(v, portCoords)), [views, portCoords]);
 
@@ -103,11 +102,10 @@ export function MyVesselsFleetBoard({
       if (fZones.length && !(v.zone && fZones.includes(v.zone))) return false;
       if (fType.length && !fType.includes(v.type)) return false;
       if (fSize && v.dwt) { const d = toMt(v.dwt); if (fSize.min != null && d < fSize.min) return false; if (fSize.max != null && d > fSize.max) return false; }
-      if (fGear === "geared" && v.gear !== "Geared") return false;
-      if (fGear === "gearless" && v.gear !== "Gearless") return false;
+      if (gearOnly && v.gear !== "Geared") return false;
       return true;
     });
-  }, [fleet, fZones, fType, fSize, fGear]);
+  }, [fleet, fZones, fType, fSize, gearOnly]);
 
   const posted = React.useMemo(() => filtered.filter((v) => v.status === "OPEN" && v.port && v.lat != null), [filtered]);
   const undeclaredCount = filtered.length - posted.length;
@@ -138,8 +136,12 @@ export function MyVesselsFleetBoard({
         <FilterMenu label="Open date" summary={fTime ? `${fTime}d` : null} active={fTime != null} width={210}>
           <TimeMenu value={fTime} onChange={setFTime} />
         </FilterMenu>
-        <span className="eyebrow" style={{ marginLeft: 2, color: "var(--mvb-faint)" }}>Gear</span>
-        <GearSeg value={fGear} onChange={setFGear} />
+        <button
+          className={"mvb__chip mvb__chip--toggle" + (gearOnly ? " is-on" : "")}
+          onClick={() => setGearOnly((g) => !g)}
+        >
+          Geared only
+        </button>
 
         <Link className="mvb__matchlink" href="/dashboard/cargo">View cargo matches →</Link>
 
@@ -153,7 +155,23 @@ export function MyVesselsFleetBoard({
       <div className="mvb__body">
         <div className={"mvb__scroll" + (mapOpen ? " has-map" : "")}>
           {filtered.length === 0 ? (
-            <div className="mvb__empty">No vessels match these filters.</div>
+            fleet.length === 0 ? (
+              <div className="mvb__empty mvb__empty--first">
+                <div className="mvb__empty-ttl">No vessels in your fleet yet</div>
+                <div className="mvb__empty-sub">
+                  Add a vessel to the registry, then post its open position — your fleet
+                  and its preferred-trade map will appear here.
+                </div>
+                <div className="mvb__empty-cta">
+                  <Link className="mvb__btn" href={addHref}><IconPlus size={13} /> Add vessel</Link>
+                  <button className="mvb__btn mvb__btn--primary" onClick={(e) => { e.stopPropagation(); router.push(postHref); }}>
+                    <IconPlus size={13} color="#fff" /> Post Position
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mvb__empty">No vessels match these filters.</div>
+            )
           ) : (
             <div className={"mvb__grid " + (mapOpen ? "cols-2" : "")}>
               {filtered.map((v) => (
