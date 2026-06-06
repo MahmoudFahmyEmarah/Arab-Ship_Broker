@@ -76,10 +76,6 @@ function vesselCourse(v: VesselView): number {
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
   return ((h % 360) + 360) % 360;
 }
-function cargoThumbIcon(): string {
-  // small inline "stack" glyph (replaces the tabler webfont in the design)
-  return `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>`;
-}
 function hoverTip(c: CargoView): string {
   const route = c.route ? `${c.route.polCode} → ${c.route.podCode}` : "";
   return `<div class="cargo-hover-tip">${shortCargoName(c)} · ${c.qtyMt} MT · ${route}</div>`;
