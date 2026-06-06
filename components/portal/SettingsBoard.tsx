@@ -5,6 +5,7 @@
 // two-column settings-card grid. Uses the real signed-in account (no demo
 // identity) and the existing server actions so editing is fully wired.
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboard } from "@/contexts/DashboardContext";
@@ -57,14 +58,59 @@ function EditField({
   );
 }
 
-function ToggleRow({ label, on }: { label: string; on?: boolean }) {
-  const [val, setVal] = React.useState(!!on);
+function ToggleRow({ label, on, onToggle }: { label: string; on?: boolean; onToggle?: () => void }) {
   return (
-    <div className="settings-row" onClick={() => setVal((v) => !v)} style={{ cursor: "pointer" }}>
+    <div className="settings-row" onClick={onToggle} style={{ cursor: "pointer" }}>
       <span className="k">{label}</span>
-      <span className={`toggle ${val ? "is-on" : ""}`} />
+      <span className={`toggle ${on ? "is-on" : ""}`} />
     </div>
   );
+}
+
+// Styled <select> matching EditField, for the editable preferences.
+function SelectField({ label, value, onChange, options }: {
+  label: string; value: string; onChange: (v: string) => void; options: string[];
+}) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <span style={{ fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--asb-gray-500)" }}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ height: 32, background: "var(--asb-white)", borderRadius: 6, padding: "4px 9px", fontSize: 12, color: "var(--asb-ink)", width: "100%", border: "1px solid var(--asb-gray-200, #DDE5F0)" }}
+      >
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </label>
+  );
+}
+
+// ── Local-persisted preferences (real, survive reload) ──────────────────
+type Prefs = Record<string, string>;
+const PREF_OPTS: { key: string; label: string; options: string[] }[] = [
+  { key: "theme", label: "Theme", options: ["Light", "Dark", "System"] },
+  { key: "boardView", label: "Default board view", options: ["Cards + Map", "Cards", "List"] },
+  { key: "mapDefault", label: "Map default state", options: ["Shown", "Hidden"] },
+  { key: "density", label: "Card density", options: ["Compact", "Comfortable"] },
+  { key: "sort", label: "Default sort", options: ["By urgency", "Newest", "By size"] },
+  { key: "dateFormat", label: "Date format", options: ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"] },
+  { key: "currency", label: "Currency", options: ["USD", "EUR", "GBP"] },
+  { key: "timezone", label: "Timezone", options: ["UTC+3 · AST", "UTC", "Local"] },
+  { key: "language", label: "Language", options: ["English"] },
+];
+const DEFAULT_PREFS: Prefs = Object.fromEntries(PREF_OPTS.map((p) => [p.key, p.options[0]]));
+const NOTIF_KEYS = [
+  ["listingApproved", "Listing approved", true],
+  ["newMatch", "New match found", true],
+  ["laycanClosing", "Laycan closing < 72 hrs", true],
+  ["openOverdue", "Open date overdue", true],
+  ["asbCorrection", "ASB correction", false],
+] as const;
+const DEFAULT_NOTIFS: Record<string, boolean> = Object.fromEntries(NOTIF_KEYS.map(([k, , d]) => [k, d as boolean]));
+
+function loadJSON<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try { const v = localStorage.getItem(key); return v ? { ...fallback, ...JSON.parse(v) } : fallback; } catch { return fallback; }
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -179,6 +225,37 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
     }
   };
 
+  // ── Preferences + notifications (persisted to localStorage) ──────────
+  const [prefs, setPrefs] = React.useState<Prefs>(DEFAULT_PREFS);
+  const [prefDraft, setPrefDraft] = React.useState<Prefs>(DEFAULT_PREFS);
+  const [editPrefs, setEditPrefs] = React.useState(false);
+  const [notifs, setNotifs] = React.useState<Record<string, boolean>>(DEFAULT_NOTIFS);
+  React.useEffect(() => {
+    const p = loadJSON("asb:prefs", DEFAULT_PREFS); setPrefs(p); setPrefDraft(p);
+    setNotifs(loadJSON("asb:notifs", DEFAULT_NOTIFS));
+  }, []);
+  // Apply theme + density to the document root so the choice takes real effect.
+  React.useEffect(() => {
+    const root = document.documentElement;
+    const dark = prefs.theme === "Dark" ||
+      (prefs.theme === "System" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+    root.setAttribute("data-theme", dark ? "dark" : "light");
+    root.setAttribute("data-density", (prefs.density || "Compact").toLowerCase());
+  }, [prefs.theme, prefs.density]);
+  const savePrefs = () => {
+    setPrefs(prefDraft);
+    try { localStorage.setItem("asb:prefs", JSON.stringify(prefDraft)); } catch {}
+    setEditPrefs(false);
+    toast.success("Preferences saved");
+  };
+  const toggleNotif = (k: string) => {
+    setNotifs((n) => {
+      const next = { ...n, [k]: !n[k] };
+      try { localStorage.setItem("asb:notifs", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const workspace = account?.hasCargoProfile && account?.hasVesselProfile
     ? "Cargo + Vessels" : account?.hasVesselProfile ? "Vessels" : "Cargo";
 
@@ -265,29 +342,36 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                 <div className="head">
                   <span className="icon-box" style={{ background: "#F3E5F5", color: "#4B0082" }}><IconDashboard size={16} /></span>
                   <span className="title">Display &amp; Preferences</span>
-                  <button className="action">Edit</button>
+                  {!editPrefs ? (
+                    <button className="action" onClick={() => { setPrefDraft(prefs); setEditPrefs(true); }}>Edit</button>
+                  ) : (
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                      <button className="action" onClick={() => setEditPrefs(false)}>Cancel</button>
+                      <button className="action" style={{ color: "var(--asb-blue)", fontWeight: 600 }} onClick={savePrefs}>Save</button>
+                    </div>
+                  )}
                 </div>
-                <SettingsRow k="Theme" v="Light" />
-                <SettingsRow k="Default board view" v="Cards + Map" />
-                <SettingsRow k="Map default state" v="Hidden" />
-                <SettingsRow k="Card density" v="Compact" />
-                <SettingsRow k="Default sort" v="By urgency" />
-                <SettingsRow k="Date format" v="DD/MM/YYYY" />
-                <SettingsRow k="Currency" v="USD" />
-                <SettingsRow k="Language" v="English" />
+                {!editPrefs ? (
+                  PREF_OPTS.map((p) => <SettingsRow key={p.key} k={p.label} v={prefs[p.key]} />)
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
+                    {PREF_OPTS.map((p) => (
+                      <SelectField key={p.key} label={p.label} value={prefDraft[p.key]} options={p.options}
+                        onChange={(v) => setPrefDraft((d) => ({ ...d, [p.key]: v }))} />
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="settings-card">
                 <div className="head">
                   <span className="icon-box" style={{ background: "var(--asb-amber-bg)", color: "var(--asb-amber)" }}><IconBell size={16} /></span>
                   <span className="title">Notifications &amp; Alerts</span>
-                  <button className="action">Configure</button>
+                  <Link className="action" href="/dashboard/alerts">Configure</Link>
                 </div>
                 <div className="eyebrow" style={{ marginBottom: 2 }}>Email alerts</div>
-                <ToggleRow label="Listing approved" on />
-                <ToggleRow label="New match found" on />
-                <ToggleRow label="Laycan closing < 72 hrs" on />
-                <ToggleRow label="Open date overdue" on />
-                <ToggleRow label="ASB correction" />
+                {NOTIF_KEYS.map(([k, label]) => (
+                  <ToggleRow key={k} label={label} on={notifs[k]} onToggle={() => toggleNotif(k)} />
+                ))}
               </div>
             </>
           )}
@@ -315,7 +399,7 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                   <button className="asb-btn" onClick={changePassword} disabled={pwBusy} style={{ width: "100%", justifyContent: "center" }}>{pwBusy ? "Updating…" : "Update password"}</button>
                 </div>
                 <div className="eyebrow" style={{ marginTop: 12, marginBottom: 4 }}>Two-factor auth</div>
-                <SettingsRow k="2-factor auth" v={<span style={{ color: "var(--asb-red)" }}>Disabled</span>} />
+                <SettingsRow k="2-factor auth" v={<span style={{ color: "var(--asb-gray-500)" }}>Coming soon</span>} />
               </div>
               <div className="settings-card danger">
                 <div className="head">
@@ -326,7 +410,13 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                 <SettingsRow k="3rd-party sharing" v={<span style={{ color: "var(--asb-green)" }}>Never</span>} />
                 <SettingsRow k="Retention" v="7 years per maritime regs" />
                 <SettingsRow k="Visibility" v="Arab ShipBroker only until your listing is approved" />
-                <button className="asb-btn danger" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}>Delete my account →</button>
+                <button
+                  className="asb-btn danger"
+                  style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
+                  onClick={() => toast("Account deletion is handled by support", {
+                    description: "Email support@arabshipbroker.com from your registered address and we'll close your account within 48h.",
+                  })}
+                >Delete my account →</button>
               </div>
             </>
           )}
