@@ -238,7 +238,7 @@ export default async function PortActivityPage({
               <h1 className="text-2xl font-bold text-asb-navy">
                 {port.trade_name}
               </h1>
-              <span className="text-xs font-mono font-bold text-asb-gray-400 bg-asb-gray-100 px-2 py-0.5 rounded">
+              <span className="text-xs tabular-nums font-bold text-asb-gray-400 bg-asb-gray-100 px-2 py-0.5 rounded">
                 {port.locode}
               </span>
             </div>

@@ -126,7 +126,7 @@ export default async function CargoDetailPage({
             {listing.commodity_name}
           </h1>
           {listing.ref && (
-            <p className="text-xs text-asb-gray-400 font-mono mt-1">
+            <p className="text-xs text-asb-gray-400 tabular-nums mt-1">
               {listing.ref}
             </p>
           )}

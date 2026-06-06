@@ -2,17 +2,12 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 
-import { Geist, Geist_Mono, Inter, Noto_Sans_Arabic } from "next/font/google";
+import { Geist, Inter, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { PropellerLoader } from "@/components/portal/PropellerLoader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
@@ -44,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${notoArabic.variable} antialiased flex flex-col min-h-screen`}
+        className={`${geistSans.variable} ${inter.variable} ${notoArabic.variable} antialiased flex flex-col min-h-screen`}
       >
         <Suspense fallback={null}>
           <PropellerLoader />

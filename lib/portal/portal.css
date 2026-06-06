@@ -68,7 +68,8 @@
 
   /* ── Type ──────────────────────────────────────────────────── */
   --asb-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  --asb-font-mono: "Courier New", "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Unified onto Inter — coded/numeric data uses tabular figures, no mono face. */
+  --asb-font-mono: var(--asb-font);
 
   --fs-title:       17px;
   --fs-title-lg:    21px;
@@ -2183,7 +2184,8 @@ button { font: inherit; cursor: pointer; }
   line-height: 1.2;
 }
 .mp-listing__ref {
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-family: var(--asb-font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 10px;
   color: #8B95A3;
   flex-shrink: 0;

@@ -452,7 +452,7 @@ export default async function VesselDetailPage({
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <Link
                           href={`/dashboard/vessels/${vesselId}/availability/${a.id}`}
-                          className="text-xs font-mono text-asb-gray-400 hover:text-asb-blue"
+                          className="text-xs tabular-nums text-asb-gray-400 hover:text-asb-blue"
                         >
                           {a.ref ?? "—"}
                         </Link>
