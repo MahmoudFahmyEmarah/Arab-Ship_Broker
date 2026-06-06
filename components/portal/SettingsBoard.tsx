@@ -1,15 +1,23 @@
 "use client";
 
 // Account Settings — ported from the design (asb/pages.jsx PageSettings):
-// tabbed (Account & Profile / Preferences / Security & Privacy / Subscription).
-// Uses the real signed-in account where available (no demo identity).
+// tabbed (Account & Profile / Preferences / Security & Privacy / Subscription),
+// two-column settings-card grid. Uses the real signed-in account (no demo
+// identity) and the existing server actions so editing is fully wired.
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useViewerTier } from "@/lib/portal/tier";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getMyProfiles, updateProfile } from "@/sdk/app/profiles";
 import type { Profile } from "@/lib/schemas/account";
 import * as V from "@/lib/portal/validation";
+import {
+  updateBasicInfo,
+  requestEmailChange,
+  updatePassword,
+} from "@/app/(dashboard)/dashboard/account/actions";
 import { IconUser, IconDoc, IconDashboard, IconBell, IconShield, IconShieldLock, IconStar } from "./icons";
 
 function SettingsRow({ k, v, blue }: { k: string; v: React.ReactNode; blue?: boolean }) {
@@ -21,18 +29,20 @@ function SettingsRow({ k, v, blue }: { k: string; v: React.ReactNode; blue?: boo
   );
 }
 function EditField({
-  label, value, onChange, placeholder, error,
+  label, value, onChange, placeholder, error, type = "text",
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   error?: string;
+  type?: string;
 }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <span style={{ fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--asb-gray-500)" }}>{label}</span>
       <input
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -58,66 +68,121 @@ function ToggleRow({ label, on }: { label: string; on?: boolean }) {
 }
 
 const TIER_LABEL: Record<string, string> = { T1: "Free", T2: "Standard", T3: "Subscriber", T4: "Partner" };
+const ROLE_LABEL: Record<string, string> = {
+  admin: "ADMIN", broker: "BROKER", cargo_owner: "CARGO OWNER", vessel_owner: "VESSEL OWNER",
+};
 
-export function SettingsBoard() {
+export function SettingsBoard({ role, memberSince }: { role?: string | null; memberSince?: string | null }) {
   const [tab, setTab] = React.useState("account");
+  const router = useRouter();
   const { account } = useDashboard();
   const tier = useViewerTier();
-  const fullName = account?.fullName ?? "Account";
   const email = account?.email ?? "—";
+  const roleLabel = role ? ROLE_LABEL[role] ?? role.toUpperCase() : "—";
 
-  // ── Editable market profile (company + phone), validated per the matrix ──
+  // ── Profiles (display name / company / phone live on the profile rows) ──
   const [profiles, setProfiles] = React.useState<Profile[] | null>(null);
-  const [editing, setEditing] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const [pForm, setPForm] = React.useState({ company: "", phone: "", displayName: "" });
-  const [touched, setTouched] = React.useState(false);
-
   const loadProfiles = React.useCallback(async () => {
     try {
-      const list = await getMyProfiles(getSupabaseBrowserClient());
-      setProfiles(list);
-      const p = list[0];
-      setPForm({ company: p?.company ?? "", phone: p?.phone ?? "", displayName: p?.display_name ?? "" });
+      setProfiles(await getMyProfiles(getSupabaseBrowserClient()));
     } catch {
       setProfiles([]);
     }
   }, []);
   React.useEffect(() => { void loadProfiles(); }, [loadProfiles]);
 
-  const profileErrors = V.collect<"company" | "phone" | "displayName">([
-    ["company", V.required(pForm.company, "Company name is required") || V.inRange(pForm.company.length, { min: 2, max: 120, msg: "Company name must be 2–120 characters" })],
-    ["phone", V.phone(pForm.phone)],
-    ["displayName", pForm.displayName.trim() ? V.inRange(pForm.displayName.length, { min: 2, max: 80, msg: "Display name must be 2–80 characters" }) : null],
-  ]);
+  const displayName = profiles?.[0]?.display_name ?? "—";
   const company = profiles?.[0]?.company ?? "—";
   const phoneDisp = profiles?.[0]?.phone ?? "—";
 
-  const saveProfile = async () => {
+  // ── Account & Identity edit (full name + display name + company + phone) ──
+  const [editing, setEditing] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [touched, setTouched] = React.useState(false);
+  const [form, setForm] = React.useState({ fullName: "", displayName: "", company: "", phone: "" });
+  const beginEdit = () => {
+    setForm({
+      fullName: account?.fullName ?? "",
+      displayName: profiles?.[0]?.display_name ?? "",
+      company: profiles?.[0]?.company ?? "",
+      phone: profiles?.[0]?.phone ?? "",
+    });
+    setTouched(false);
+    setEditing(true);
+  };
+  const errors = V.collect<"fullName" | "company" | "phone" | "displayName">([
+    ["fullName", V.required(form.fullName, "Full name is required") || V.inRange(form.fullName.length, { min: 2, max: 120, msg: "Full name must be 2–120 characters" })],
+    ["company", form.company.trim() ? V.inRange(form.company.length, { min: 2, max: 120, msg: "Company must be 2–120 characters" }) : null],
+    ["phone", V.phone(form.phone)],
+    ["displayName", form.displayName.trim() ? V.inRange(form.displayName.length, { min: 2, max: 80, msg: "Display name must be 2–80 characters" }) : null],
+  ]);
+  const saveIdentity = async () => {
     setTouched(true);
-    if (V.hasIssues(profileErrors)) return;
+    if (V.hasIssues(errors)) return;
     setSaving(true);
     try {
+      const res = await updateBasicInfo(form.fullName);
+      if (!res.success) throw new Error(res.error);
       const supabase = getSupabaseBrowserClient();
-      // Keep company/phone consistent across the account's active profiles.
       await Promise.all(
         (profiles ?? []).map((p) =>
           updateProfile(supabase, p.id, {
-            company: pForm.company.trim() || null,
-            phone: pForm.phone.trim() || null,
-            display_name: pForm.displayName.trim() || null,
+            display_name: form.displayName.trim() || null,
+            company: form.company.trim() || null,
+            phone: form.phone.trim() || null,
           }),
         ),
       );
       await loadProfiles();
       setEditing(false);
       setTouched(false);
-    } catch {
-      /* best-effort; RLS/network errors leave edit mode open */
+      router.refresh();
+      toast.success("Account updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save changes");
     } finally {
       setSaving(false);
     }
   };
+
+  // ── Email change + password (Security tab) ──
+  const [newEmail, setNewEmail] = React.useState("");
+  const [emailBusy, setEmailBusy] = React.useState(false);
+  const sendEmailChange = async () => {
+    const err = V.email(newEmail);
+    if (err) { toast.error(err); return; }
+    setEmailBusy(true);
+    try {
+      const res = await requestEmailChange(newEmail);
+      if (!res.success) throw new Error(res.error);
+      setNewEmail("");
+      toast.success("Confirmation sent to both your old and new email.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start email change");
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+  const [pw, setPw] = React.useState({ cur: "", next: "", confirm: "" });
+  const [pwBusy, setPwBusy] = React.useState(false);
+  const changePassword = async () => {
+    if (pw.next.length < 8) { toast.error("New password must be at least 8 characters."); return; }
+    if (pw.next !== pw.confirm) { toast.error("Passwords do not match."); return; }
+    setPwBusy(true);
+    try {
+      const res = await updatePassword(pw.cur, pw.next);
+      if (!res.success) throw new Error(res.error);
+      setPw({ cur: "", next: "", confirm: "" });
+      toast.success("Password updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update password");
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
+  const workspace = account?.hasCargoProfile && account?.hasVesselProfile
+    ? "Cargo + Vessels" : account?.hasVesselProfile ? "Vessels" : "Cargo";
 
   const TABS = [
     { id: "account", label: "Account & Profile" },
@@ -125,6 +190,7 @@ export function SettingsBoard() {
     { id: "security", label: "Security & Privacy" },
     { id: "billing", label: "Subscription & Billing" },
   ];
+  const muted = { color: "var(--asb-gray-500)", fontStyle: "italic" as const };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -148,13 +214,36 @@ export function SettingsBoard() {
                 <div className="head">
                   <span className="icon-box" style={{ background: "var(--asb-blue-light)", color: "var(--asb-blue)" }}><IconUser size={16} /></span>
                   <span className="title">Account &amp; Identity</span>
-                  <button className="action">Edit</button>
+                  {!editing ? (
+                    <button className="action" onClick={beginEdit}>Edit</button>
+                  ) : (
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                      <button className="action" onClick={() => { setEditing(false); setTouched(false); }}>Cancel</button>
+                      <button className="action" style={{ color: "var(--asb-blue)", fontWeight: 600 }} onClick={saveIdentity} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+                    </div>
+                  )}
                 </div>
-                <SettingsRow k="Full name" v={fullName} />
-                <SettingsRow k="Email" v={email} blue />
-                <SettingsRow k="Account status" v={account?.isActive === false ? <span style={{ color: "var(--asb-red)" }}>Suspended</span> : <><span className="asb-dot green" /> Active</>} />
-                <SettingsRow k="Trust tier" v={<span className="asb-badge blue">{account?.trustTier ?? "—"}</span>} />
+                {!editing ? (
+                  <>
+                    <SettingsRow k="Full name" v={account?.fullName ?? "—"} />
+                    <SettingsRow k="Display name" v={displayName} />
+                    <SettingsRow k="Company" v={company} />
+                    <SettingsRow k="Email" v={email} blue />
+                    <SettingsRow k="Phone" v={phoneDisp} />
+                    <SettingsRow k="Role" v={<span className="asb-badge blue">{roleLabel}</span>} />
+                    <SettingsRow k="Member since" v={memberSince ?? "—"} />
+                  </>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
+                    <EditField label="Full name *" value={form.fullName} onChange={(v) => setForm((f) => ({ ...f, fullName: v }))} error={touched ? errors.fullName : undefined} />
+                    <EditField label="Display name" value={form.displayName} onChange={(v) => setForm((f) => ({ ...f, displayName: v }))} placeholder="Shown to counterparties" error={touched ? errors.displayName : undefined} />
+                    <EditField label="Company" value={form.company} onChange={(v) => setForm((f) => ({ ...f, company: v }))} placeholder="e.g. Gulf Maritime LLC" error={touched ? errors.company : undefined} />
+                    <EditField label="Phone" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} placeholder="e.g. +971 4 000 0000" error={touched ? errors.phone : undefined} />
+                    <div style={{ fontSize: 10.5, color: "var(--asb-gray-500)" }}>To change your email or password, use the Security &amp; Privacy tab.</div>
+                  </div>
+                )}
               </div>
+
               <div className="settings-card">
                 <div className="head">
                   <span className="icon-box" style={{ background: "var(--asb-blue-light)", color: "var(--asb-blue)" }}><IconDoc size={16} /></span>
@@ -162,30 +251,12 @@ export function SettingsBoard() {
                     <div className="title">Market Profile</div>
                     <div className="sub">Visible to Arab ShipBroker only</div>
                   </div>
-                  {!editing ? (
-                    <button className="action" style={{ marginLeft: "auto" }} onClick={() => setEditing(true)} disabled={!profiles?.length}>Edit</button>
-                  ) : (
-                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                      <button className="action" onClick={() => { setEditing(false); setTouched(false); void loadProfiles(); }}>Cancel</button>
-                      <button className="action" style={{ color: "var(--asb-blue)", fontWeight: 600 }} onClick={saveProfile} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-                    </div>
-                  )}
                 </div>
-                <SettingsRow k="Workspace" v={account?.hasCargoProfile && account?.hasVesselProfile ? "Cargo + Vessels" : account?.hasVesselProfile ? "Vessels" : "Cargo"} />
-                {!editing ? (
-                  <>
-                    <SettingsRow k="Company" v={company} />
-                    <SettingsRow k="Phone" v={phoneDisp} />
-                    <SettingsRow k="Cargo profile" v={account?.hasCargoProfile ? "Active" : "—"} />
-                    <SettingsRow k="Vessel profile" v={account?.hasVesselProfile ? "Active" : "—"} />
-                  </>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
-                    <EditField label="Company *" value={pForm.company} onChange={(v) => setPForm((f) => ({ ...f, company: v }))} placeholder="e.g. Gulf Maritime LLC" error={touched ? profileErrors.company : undefined} />
-                    <EditField label="Phone" value={pForm.phone} onChange={(v) => setPForm((f) => ({ ...f, phone: v }))} placeholder="e.g. +971 4 000 0000" error={touched ? profileErrors.phone : undefined} />
-                    <EditField label="Display name" value={pForm.displayName} onChange={(v) => setPForm((f) => ({ ...f, displayName: v }))} placeholder="Shown to counterparties" error={touched ? profileErrors.displayName : undefined} />
-                  </div>
-                )}
+                <SettingsRow k="Workspace" v={workspace} />
+                <SettingsRow k="Operating zones" v={<span style={muted}>Not set</span>} />
+                <SettingsRow k="Preferred cargo" v={<span style={muted}>Not set</span>} />
+                <SettingsRow k="DWT range focus" v={<span style={muted}>Not set</span>} />
+                <SettingsRow k="Account status" v={account?.isActive === false ? <span style={{ color: "var(--asb-red)" }}>Suspended</span> : <><span className="asb-dot green" /> Active</>} />
               </div>
             </>
           )}
@@ -200,6 +271,7 @@ export function SettingsBoard() {
                 </div>
                 <SettingsRow k="Theme" v="Light" />
                 <SettingsRow k="Default board view" v="Cards + Map" />
+                <SettingsRow k="Map default state" v="Hidden" />
                 <SettingsRow k="Card density" v="Compact" />
                 <SettingsRow k="Default sort" v="By urgency" />
                 <SettingsRow k="Date format" v="DD/MM/YYYY" />
@@ -227,22 +299,35 @@ export function SettingsBoard() {
               <div className="settings-card">
                 <div className="head">
                   <span className="icon-box" style={{ background: "var(--asb-blue-light)", color: "var(--asb-blue)" }}><IconShield size={16} /></span>
-                  <span className="title">Security</span>
-                  <button className="action">Manage</button>
+                  <span className="title">Sign-in &amp; Email</span>
                 </div>
+                <div className="eyebrow" style={{ marginBottom: 4 }}>Change email</div>
+                <div style={{ fontSize: 11, color: "var(--asb-gray-500)", marginBottom: 6 }}>Requires confirmation from both your old and new address.</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}>
+                    <EditField label="New email" value={newEmail} onChange={setNewEmail} placeholder="new@example.com" type="email" />
+                  </div>
+                  <button className="asb-btn primary" onClick={sendEmailChange} disabled={emailBusy} style={{ height: 32 }}>{emailBusy ? "Sending…" : "Send"}</button>
+                </div>
+                <div className="eyebrow" style={{ marginTop: 12, marginBottom: 4 }}>Change password</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <EditField label="Current password" value={pw.cur} onChange={(v) => setPw((p) => ({ ...p, cur: v }))} type="password" />
+                  <EditField label="New password" value={pw.next} onChange={(v) => setPw((p) => ({ ...p, next: v }))} type="password" />
+                  <EditField label="Confirm new password" value={pw.confirm} onChange={(v) => setPw((p) => ({ ...p, confirm: v }))} type="password" />
+                  <button className="asb-btn" onClick={changePassword} disabled={pwBusy} style={{ width: "100%", justifyContent: "center" }}>{pwBusy ? "Updating…" : "Update password"}</button>
+                </div>
+                <div className="eyebrow" style={{ marginTop: 12, marginBottom: 4 }}>Two-factor auth</div>
                 <SettingsRow k="2-factor auth" v={<span style={{ color: "var(--asb-red)" }}>Disabled</span>} />
-                <button className="asb-btn" style={{ width: "100%", justifyContent: "center", marginTop: 4 }}>Enable 2FA</button>
-                <div className="eyebrow" style={{ marginTop: 8, marginBottom: 4 }}>Active sessions</div>
-                <div style={{ fontSize: 10 }}>This device · <span style={{ color: "var(--asb-green)" }}>● Active now</span></div>
               </div>
               <div className="settings-card danger">
                 <div className="head">
                   <span className="icon-box" style={{ background: "var(--asb-red-bg)", color: "var(--asb-red)" }}><IconShieldLock size={16} /></span>
                   <span className="title">Privacy &amp; Data</span>
                 </div>
-                <SettingsRow k="Encryption" v={<span style={{ color: "var(--asb-green)" }}>AES-256</span>} />
+                <SettingsRow k="Encryption" v={<span style={{ color: "var(--asb-green)" }}>AES-256 at rest + in transit</span>} />
                 <SettingsRow k="3rd-party sharing" v={<span style={{ color: "var(--asb-green)" }}>Never</span>} />
-                <SettingsRow k="Retention" v="7 years (maritime regs)" />
+                <SettingsRow k="Retention" v="7 years per maritime regs" />
+                <SettingsRow k="Visibility" v="Arab ShipBroker only until your listing is approved" />
                 <button className="asb-btn danger" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}>Delete my account →</button>
               </div>
             </>
