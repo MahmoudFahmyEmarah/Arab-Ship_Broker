@@ -45,3 +45,14 @@ them, so you can also just `supabase db push` once the PRs are merged.
 
 ## Also confirm (Vercel)
 Supabase env vars (`NEXT_PUBLIC_SUPABASE_URL`, anon key) are set for the **Production** scope — else the live site builds but can't read the DB.
+
+## Bosun AI Smart Assistant (commercial switch)
+The assistant is fully built but ships in a **"Coming soon"** marketing state by
+default. It's a paid capability (server-side Claude calls), so turning it on is a
+commercial decision — flip two env vars, no code change:
+- `NEXT_PUBLIC_ASSISTANT_ENABLED=true` — switches the widget from the
+  "coming soon" teaser to the live paste/Q88 composer (build-time public flag).
+- `ANTHROPIC_API_KEY=…` — server key the `/api/circulars/parse` route needs to
+  actually read circulars / Q88 PDFs.
+Leave both unset to keep the polished teaser only. The GT/SCNRT and all form
+fields work regardless — the assistant just fills them when enabled.
