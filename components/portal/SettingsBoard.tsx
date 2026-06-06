@@ -17,6 +17,7 @@ import {
   updateBasicInfo,
   requestEmailChange,
   updatePassword,
+  deleteMyAccount,
 } from "@/app/(dashboard)/dashboard/account/actions";
 import { IconUser, IconDoc, IconDashboard, IconBell, IconShield, IconShieldLock } from "./icons";
 import { BillingPanel } from "./BillingPanel";
@@ -257,6 +258,23 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
     });
   };
 
+  const [deleting, setDeleting] = React.useState(false);
+  const deleteAccount = async () => {
+    if (!window.confirm("Permanently delete your account? This removes your login and profile and cannot be undone.")) return;
+    if (!window.confirm("Are you absolutely sure? This is irreversible.")) return;
+    setDeleting(true);
+    try {
+      const res = await deleteMyAccount();
+      if (!res.success) throw new Error(res.error);
+      try { await getSupabaseBrowserClient().auth.signOut({ scope: "local" }); } catch {}
+      toast.success("Your account has been deleted.");
+      router.push("/");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not delete account");
+      setDeleting(false);
+    }
+  };
+
   const workspace = account?.hasCargoProfile && account?.hasVesselProfile
     ? "Cargo + Vessels" : account?.hasVesselProfile ? "Vessels" : "Cargo";
 
@@ -414,10 +432,9 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                 <button
                   className="asb-btn danger"
                   style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
-                  onClick={() => toast("Account deletion is handled by support", {
-                    description: "Email support@arabshipbroker.com from your registered address and we'll close your account within 48h.",
-                  })}
-                >Delete my account →</button>
+                  onClick={deleteAccount}
+                  disabled={deleting}
+                >{deleting ? "Deleting…" : "Delete my account →"}</button>
               </div>
             </>
           )}

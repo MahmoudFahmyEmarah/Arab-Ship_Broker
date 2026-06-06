@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 async function buildServerClient() {
   const cookieStore = await cookies();
@@ -120,6 +121,35 @@ export async function updatePassword(
     return { success: false, error: "Current password is incorrect." };
 
   const { error } = await supabase.auth.updateUser({ password: new_password });
+  if (error) return { success: false, error: error.message };
+
+  return { success: true };
+}
+
+// Real self-serve account deletion. Removes the app account row (cascades to
+// profiles) and the Supabase auth user via the service-role admin client, so
+// the login is permanently gone. Irreversible.
+export async function deleteMyAccount(): Promise<ActionResult> {
+  const supabase = await buildServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Not authenticated." };
+
+  let admin;
+  try {
+    admin = getSupabaseAdminClient();
+  } catch {
+    return { success: false, error: "Account deletion isn't available right now." };
+  }
+
+  // Remove the app account row (profiles cascade via account_id ON DELETE
+  // CASCADE). Match on either key shape to be safe.
+  await admin.from("users").delete().eq("supabase_user_id", user.id);
+  await admin.from("users").delete().eq("id", user.id);
+
+  // Remove the auth login itself.
+  const { error } = await admin.auth.admin.deleteUser(user.id);
   if (error) return { success: false, error: error.message };
 
   return { success: true };
