@@ -51,19 +51,13 @@ function Checkout({ plan, onClose }: { plan: (typeof PLANS)[number]; onClose: ()
   );
 }
 
-export function BillingPanel() {
+export function BillingPanel({ embedded = false }: { embedded?: boolean }) {
   const tier = useViewerTier();
   const [checkout, setCheckout] = React.useState<(typeof PLANS)[number] | null>(null);
   const current = PLANS.find((p) => p.id === tier);
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ padding: "10px 20px", borderBottom: "var(--bd)", background: "var(--asb-white)" }}>
-        <h1 className="page-title">Subscription &amp; Billing</h1>
-        <div className="eyebrow" style={{ marginTop: 2 }}>Plan, payment method, invoices &amp; e-invoicing</div>
-      </div>
-
-      <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
+  const body = (
+    <>
         <div className="econ-grid" style={{ marginBottom: 12 }}>
           <div className="econ-card">
             <div className="econ-card__head">Current plan</div>
@@ -133,9 +127,21 @@ export function BillingPanel() {
             </table>
           </div>
         </div>
-      </div>
-
       {checkout && <Checkout plan={checkout} onClose={() => setCheckout(null)} />}
+    </>
+  );
+
+  // Embedded: rendered inside the Settings "Subscription & Billing" tab, which
+  // already provides the page header — so emit just the body.
+  if (embedded) return body;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ padding: "10px 20px", borderBottom: "var(--bd)", background: "var(--asb-white)" }}>
+        <h1 className="page-title">Subscription &amp; Billing</h1>
+        <div className="eyebrow" style={{ marginTop: 2 }}>Plan, payment method, invoices &amp; e-invoicing</div>
+      </div>
+      <div style={{ flex: 1, overflow: "auto", padding: 16 }}>{body}</div>
     </div>
   );
 }

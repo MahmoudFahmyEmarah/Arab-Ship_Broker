@@ -8,7 +8,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { useViewerTier } from "@/lib/portal/tier";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getMyProfiles, updateProfile } from "@/sdk/app/profiles";
 import type { Profile } from "@/lib/schemas/account";
@@ -18,7 +17,8 @@ import {
   requestEmailChange,
   updatePassword,
 } from "@/app/(dashboard)/dashboard/account/actions";
-import { IconUser, IconDoc, IconDashboard, IconBell, IconShield, IconShieldLock, IconStar } from "./icons";
+import { IconUser, IconDoc, IconDashboard, IconBell, IconShield, IconShieldLock } from "./icons";
+import { BillingPanel } from "./BillingPanel";
 
 function SettingsRow({ k, v, blue }: { k: string; v: React.ReactNode; blue?: boolean }) {
   return (
@@ -67,7 +67,6 @@ function ToggleRow({ label, on }: { label: string; on?: boolean }) {
   );
 }
 
-const TIER_LABEL: Record<string, string> = { T1: "Free", T2: "Standard", T3: "Subscriber", T4: "Partner" };
 const ROLE_LABEL: Record<string, string> = {
   admin: "ADMIN", broker: "BROKER", cargo_owner: "CARGO OWNER", vessel_owner: "VESSEL OWNER",
 };
@@ -76,7 +75,6 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
   const [tab, setTab] = React.useState("account");
   const router = useRouter();
   const { account } = useDashboard();
-  const tier = useViewerTier();
   const email = account?.email ?? "—";
   const roleLabel = role ? ROLE_LABEL[role] ?? role.toUpperCase() : "—";
 
@@ -334,22 +332,8 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
           )}
 
           {tab === "billing" && (
-            <div className="settings-card" style={{ gridColumn: "1 / -1" }}>
-              <div className="head">
-                <span className="icon-box" style={{ background: "var(--asb-green-bg)", color: "var(--asb-green)" }}><IconStar size={16} /></span>
-                <div>
-                  <div className="title">Subscription &amp; Access</div>
-                  <div className="sub">Your current plan and billing</div>
-                </div>
-                <button className="action" style={{ marginLeft: "auto" }}>Manage billing</button>
-              </div>
-              <SettingsRow k="Current plan" v={<span className="asb-badge blue">{TIER_LABEL[tier]} ({tier})</span>} />
-              <SettingsRow k="Match intelligence" v={tier === "T1" || tier === "T2" ? "Limited" : "Full"} />
-              <SettingsRow k="Voyage calculators" v={tier === "T1" || tier === "T2" ? <span style={{ color: "var(--asb-amber)" }}>Locked</span> : "Unlocked"} />
-              <SettingsRow k="Listings archive" v={tier === "T4" ? "12 months" : tier === "T3" ? "6 months" : tier === "T2" ? "30 days" : "7 days"} />
-              {(tier === "T1" || tier === "T2") && (
-                <button className="asb-btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}>Upgrade to Subscriber →</button>
-              )}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <BillingPanel embedded />
             </div>
           )}
         </div>
