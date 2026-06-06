@@ -110,6 +110,20 @@ const NOTIF_KEYS = [
 ] as const;
 const DEFAULT_NOTIFS: Record<string, boolean> = Object.fromEntries(NOTIF_KEYS.map(([k, , d]) => [k, d as boolean]));
 
+const ZONE_CHIPS = ["AG", "R.SEA", "E.MED", "B.SEA", "W.MED", "C.MED", "A.SEA", "ADRIATIC", "NCONT", "F.EAST", "WCAF", "ECAF", "ECI", "WCI", "CARIB", "ECSA"];
+const CARGO_CHIPS = ["Dry Bulk", "Break Bulk", "Grain"];
+
+function ChipToggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={"asb-chip" + (on ? " is-active" : "")}
+      style={{ fontSize: 10.5, padding: "3px 8px" }}
+    >{label}</button>
+  );
+}
+
 function loadJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try { const v = localStorage.getItem(key); return v ? { ...fallback, ...JSON.parse(v) } : fallback; } catch { return fallback; }
@@ -258,6 +272,47 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
     });
   };
 
+  // ── Market profile (operating zones / preferred cargo / DWT focus) ────
+  const mkt = profiles?.[0];
+  const [editMkt, setEditMkt] = React.useState(false);
+  const [savingMkt, setSavingMkt] = React.useState(false);
+  const [mktForm, setMktForm] = React.useState<{ zones: string[]; cargo: string[]; dwtMin: string; dwtMax: string }>({ zones: [], cargo: [], dwtMin: "", dwtMax: "" });
+  const beginMkt = () => {
+    setMktForm({
+      zones: mkt?.operating_zones ?? [],
+      cargo: mkt?.preferred_cargo ?? [],
+      dwtMin: mkt?.dwt_min != null ? String(mkt.dwt_min) : "",
+      dwtMax: mkt?.dwt_max != null ? String(mkt.dwt_max) : "",
+    });
+    setEditMkt(true);
+  };
+  const toggleArr = (key: "zones" | "cargo", v: string) =>
+    setMktForm((f) => ({ ...f, [key]: f[key].includes(v) ? f[key].filter((x) => x !== v) : [...f[key], v] }));
+  const saveMkt = async () => {
+    setSavingMkt(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const payload = {
+        operating_zones: mktForm.zones.length ? mktForm.zones : null,
+        preferred_cargo: mktForm.cargo.length ? mktForm.cargo : null,
+        dwt_min: mktForm.dwtMin ? parseInt(mktForm.dwtMin, 10) : null,
+        dwt_max: mktForm.dwtMax ? parseInt(mktForm.dwtMax, 10) : null,
+      };
+      await Promise.all((profiles ?? []).map((p) => updateProfile(supabase, p.id, payload)));
+      await loadProfiles();
+      setEditMkt(false);
+      toast.success("Market profile saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save market profile");
+    } finally {
+      setSavingMkt(false);
+    }
+  };
+  const zonesDisp = mkt?.operating_zones?.length ? mkt.operating_zones.join(" · ") : null;
+  const cargoDisp = mkt?.preferred_cargo?.length ? mkt.preferred_cargo.join(" · ") : null;
+  const dwtDisp = mkt?.dwt_min != null || mkt?.dwt_max != null
+    ? `${mkt?.dwt_min?.toLocaleString() ?? "0"}–${mkt?.dwt_max?.toLocaleString() ?? "∞"} MT` : null;
+
   const [deleting, setDeleting] = React.useState(false);
   const deleteAccount = async () => {
     if (!window.confirm("Permanently delete your account? This removes your login and profile and cannot be undone.")) return;
@@ -345,11 +400,45 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                     <div className="title">Market Profile</div>
                     <div className="sub">Visible to Arab ShipBroker only</div>
                   </div>
+                  {!editMkt ? (
+                    <button className="action" style={{ marginLeft: "auto" }} onClick={beginMkt} disabled={!profiles?.length}>Edit</button>
+                  ) : (
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                      <button className="action" onClick={() => setEditMkt(false)}>Cancel</button>
+                      <button className="action" style={{ color: "var(--asb-blue)", fontWeight: 600 }} onClick={saveMkt} disabled={savingMkt}>{savingMkt ? "Saving…" : "Save"}</button>
+                    </div>
+                  )}
                 </div>
                 <SettingsRow k="Workspace" v={workspace} />
-                <SettingsRow k="Operating zones" v={<span style={muted}>Not set</span>} />
-                <SettingsRow k="Preferred cargo" v={<span style={muted}>Not set</span>} />
-                <SettingsRow k="DWT range focus" v={<span style={muted}>Not set</span>} />
+                {!editMkt ? (
+                  <>
+                    <SettingsRow k="Operating zones" v={zonesDisp ?? <span style={muted}>Not set</span>} />
+                    <SettingsRow k="Preferred cargo" v={cargoDisp ?? <span style={muted}>Not set</span>} />
+                    <SettingsRow k="DWT range focus" v={dwtDisp ?? <span style={muted}>Not set</span>} />
+                  </>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+                    <div>
+                      <div className="eyebrow" style={{ marginBottom: 4 }}>Operating zones</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                        {ZONE_CHIPS.map((z) => <ChipToggle key={z} label={z} on={mktForm.zones.includes(z)} onClick={() => toggleArr("zones", z)} />)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="eyebrow" style={{ marginBottom: 4 }}>Preferred cargo</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                        {CARGO_CHIPS.map((c) => <ChipToggle key={c} label={c} on={mktForm.cargo.includes(c)} onClick={() => toggleArr("cargo", c)} />)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="eyebrow" style={{ marginBottom: 4 }}>DWT range focus (MT)</div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <EditField label="Min" value={mktForm.dwtMin} onChange={(v) => setMktForm((f) => ({ ...f, dwtMin: v.replace(/\D/g, "") }))} placeholder="1000" />
+                        <EditField label="Max" value={mktForm.dwtMax} onChange={(v) => setMktForm((f) => ({ ...f, dwtMax: v.replace(/\D/g, "") }))} placeholder="15000" />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <SettingsRow k="Account status" v={account?.isActive === false ? <span style={{ color: "var(--asb-red)" }}>Suspended</span> : <><span className="asb-dot green" /> Active</>} />
               </div>
             </>

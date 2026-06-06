@@ -9,6 +9,10 @@ export type Profile = {
   company: string | null;
   phone: string | null;
   notes: string | null;
+  operating_zones: string[] | null;
+  preferred_cargo: string[] | null;
+  dwt_min: number | null;
+  dwt_max: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

@@ -97,7 +97,17 @@ export async function updateProfile(
   supabase: SupabaseClient,
   profileId: string,
   updates: Partial<
-    Pick<Profile, "display_name" | "company" | "phone" | "notes">
+    Pick<
+      Profile,
+      | "display_name"
+      | "company"
+      | "phone"
+      | "notes"
+      | "operating_zones"
+      | "preferred_cargo"
+      | "dwt_min"
+      | "dwt_max"
+    >
   >,
 ): Promise<Profile> {
   const { data, error } = await supabase
