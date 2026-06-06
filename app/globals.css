@@ -665,6 +665,17 @@ body { font-family: var(--asb-font); }
   width: 3px; border-radius: 4px 0 0 4px;
   background: var(--strip, var(--asb-green));
 }
+
+/* Detail-page panels — portal card language (shadow-defined frame + tinted
+   zones), used by the vessel/cargo detail pages so they match the dashboard. */
+.dp-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px rgba(13,37,69,.05), 0 2px 4px rgba(13,37,69,.04), 0 12px 28px -12px rgba(13,37,69,.14);
+}
+.dp-zone { background: #F2F6FB; border-radius: 11px; }
+.dp-clickable { transition: box-shadow .14s ease, transform .14s ease; }
+.dp-clickable:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(13,37,69,.07), 0 4px 10px rgba(13,37,69,.06), 0 22px 44px -14px rgba(13,37,69,.20); }
 .strip-in { --strip: #97C459; }
 .strip-partial { --strip: #EF9F27; }
 .strip-out { --strip: #E24B4A; }

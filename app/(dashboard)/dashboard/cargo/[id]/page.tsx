@@ -310,7 +310,7 @@ export default async function CargoDetailPage({
                 </p>
               </div>
             ) : matches.length === 0 ? (
-              <div className="bg-asb-gray-50 border border-asb-gray-200 rounded p-10 text-center">
+              <div className="dp-zone p-10 text-center">
                 <Ship className="w-7 h-7 text-asb-gray-400 mx-auto mb-2" />
                 <p className="text-xs font-semibold text-asb-gray-500">
                   No matching vessels found
@@ -336,7 +336,7 @@ export default async function CargoDetailPage({
 
 function VesselMatchCard({ match }: { match: CargoMatchResult }) {
   return (
-    <div className="bg-asb-white border border-asb-gray-200 rounded p-4 hover:border-asb-blue transition-colors">
+    <div className="dp-card dp-clickable p-4">
       <div className="flex items-start justify-between gap-4 mb-3 max-[768px]:flex-col">
         <div>
           <div className="flex items-center gap-2">
@@ -451,7 +451,7 @@ function DetailCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-asb-white border border-asb-gray-200 rounded p-4">
+    <div className="dp-card p-5">
       <h3 className="text-[10px] font-medium uppercase tracking-[0.09em] text-asb-gray-500 mb-3 pb-2.5 border-b border-asb-gray-100">
         {title}
       </h3>

@@ -393,7 +393,7 @@ export default async function VesselDetailPage({
                 {vesselContacts.map((contact) => (
                   <div
                     key={contact.id}
-                    className="rounded border border-asb-gray-100 bg-asb-gray-50 px-3 py-2.5"
+                    className="dp-zone px-3 py-2.5"
                   >
                     <p className="text-sm font-semibold text-asb-ink">
                       {contact.name}
@@ -447,7 +447,7 @@ export default async function VesselDetailPage({
                   return (
                     <div
                       key={a.id}
-                      className="block p-3.5 rounded border border-asb-gray-200 hover:border-asb-blue hover:bg-asb-blue-light/40 transition-all"
+                      className="block p-3.5 dp-card dp-clickable"
                     >
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <Link
@@ -574,7 +574,7 @@ function IntelCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-asb-white rounded border border-asb-gray-200 p-4">
+    <div className="dp-card p-5">
       <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-asb-gray-100">
         <Icon className="w-3.5 h-3.5 text-asb-gray-400" />
         <h3 className="text-[10px] font-medium text-asb-gray-500 uppercase tracking-[0.09em]">
@@ -614,7 +614,7 @@ function MaskedCommercialCard() {
 
 function StatBox({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="bg-asb-gray-50 rounded-[3px] px-3 py-2.5 border border-asb-gray-100">
+    <div className="dp-zone px-3 py-2.5">
       <p className="text-[8px] text-asb-gray-500 font-medium uppercase tracking-[0.06em] mb-0.5">
         {label}
       </p>
