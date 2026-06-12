@@ -2810,3 +2810,52 @@ button { font: inherit; cursor: pointer; }
   .bosun-card__head { cursor: default; }
   .bosun-fab { right: 16px; bottom: 16px; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   Mobile portal shell (MarineTraffic-style) · phones ≤ 900px
+   Desktop is untouched: the bottom nav is display:none above the breakpoint,
+   and the desktop sidebar only hides below it.
+   ════════════════════════════════════════════════════════════════════ */
+.portal-mobilenav { display: none; }
+
+@media (max-width: 900px) {
+  /* Full-bleed content: drop the left sidebar, let the surface fill the phone */
+  .asb-portal .asb-sidebar { display: none !important; }
+  .asb-portal .shell { height: 100dvh; }
+  /* Room for the fixed bottom tab bar (+ iOS safe area) */
+  .asb-portal .shell > main {
+    padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .portal-mobilenav {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 50;
+    display: flex;
+    justify-content: space-around;
+    align-items: stretch;
+    background: var(--asb-white);
+    border-top: var(--bd);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -1px 12px rgba(8, 20, 38, 0.06);
+  }
+  .pmn-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 56px;
+    text-decoration: none;
+    color: var(--asb-gray-500);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: color var(--t-fast);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pmn-tab .pmn-ico { display: flex; }
+  .pmn-tab.is-active { color: var(--asb-blue); }
+  .pmn-tab.is-active .pmn-lab { color: var(--asb-blue); }
+}

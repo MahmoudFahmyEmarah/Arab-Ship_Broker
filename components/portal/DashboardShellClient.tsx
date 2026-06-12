@@ -11,6 +11,7 @@
 import "@/lib/portal/portal.css";
 import { DashboardProvider, useDashboard } from "@/contexts/DashboardContext";
 import { PortalSidebar, PortalRole } from "@/components/portal/PortalSidebar";
+import { PortalMobileNav } from "@/components/portal/PortalMobileNav";
 import { TierProvider, type Tier } from "@/lib/portal/tier";
 import { MarketPartnerHost } from "@/components/portal/MarketPartnerPanel";
 import type { AppRole } from "@/lib/role";
@@ -51,6 +52,7 @@ function DashboardShell({
           {children}
         </main>
       </div>
+      <PortalMobileNav role={role} basePath="/dashboard" />
       <MarketPartnerHost />
     </div>
   );
