@@ -292,8 +292,8 @@ export function DashboardBoard({
       </div>
 
       {/* Body: panels left + map right (new design order) */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 12, padding: 12, minHeight: 0, overflow: "hidden" }}>
-        <div className="dash-right" style={{ overflow: "auto", paddingRight: 4 }}>
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(330px, 0.7fr) 1.3fr", gap: 12, padding: 12, minHeight: 0, overflow: "hidden" }}>
+        <div className="dash-right" style={{ overflow: "auto", overflowX: "hidden", paddingRight: 4, minWidth: 0 }}>
           <DashboardPanel<CargoView>
             kind="cargo"
             title="Cargo positions"

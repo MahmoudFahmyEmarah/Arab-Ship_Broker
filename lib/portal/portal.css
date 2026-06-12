@@ -1206,6 +1206,19 @@ button { font: inherit; cursor: pointer; }
   gap: 6px;
   padding-right: 28px;
 }
+/* Inline variant (Open Tonnage): status + match count left-aligned after the
+   name, not pushed to the right edge (09_pre_final_polish §2). */
+.dash-row__r1.is-left { justify-content: flex-start; padding-right: 0; }
+.dash-row__r1.is-left .dash-row__name { min-width: 0; flex-shrink: 1; }
+.dash-row__r1.is-left .asb-badge { flex-shrink: 0; }
+.dash-row__badge.is-inline { position: static; transform: none; flex-shrink: 0; }
+.dash-row--inline .dash-row__r2,
+.dash-row--inline .dash-row__r3 { padding-right: 0; }
+
+/* Sidebar type scale (09 §3) — scoped to .asb-sidebar so tokens stay global. */
+.asb-sidebar .nav-item { font-size: 13px; }
+.asb-sidebar .nav-item.action { font-size: 11px; }
+.asb-sidebar .nav-section { font-size: 9px; }
 .dash-row__name {
   font-size: 12.5px;
   font-weight: 600;

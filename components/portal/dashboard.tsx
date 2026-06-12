@@ -85,13 +85,18 @@ export function DashVesselRow({
 }) {
   const urg = v.openDateUrgency || "green";
   return (
-    <div className={`dash-row${focused ? " is-focused" : ""}`} onClick={onClick}>
-      {v.matches > 0 && <span className="dash-row__badge">{v.matches}</span>}
-      <div className="dash-row__r1">
+    <div className={`dash-row dash-row--inline${focused ? " is-focused" : ""}`} onClick={onClick}>
+      {/* Status + match count sit LEFT-aligned right after the name (09 §2). */}
+      <div className="dash-row__r1 is-left">
         <span className="dash-row__name">{v.name}</span>
         <span className={`asb-badge ${v.status === "open" ? "open" : v.status === "review" ? "review" : "fixed"}`}>
           {v.status.toUpperCase()}
         </span>
+        {v.matches > 0 && (
+          <span className="dash-row__badge is-inline" title={`${v.matches} cargo ${v.matches === 1 ? "match" : "matches"} for this vessel`}>
+            {v.matches}
+          </span>
+        )}
       </div>
       <div className="dash-row__r2">
         {v.type} · <strong>{v.dwt} DWT</strong> · {v.geared ? "Geared" : "Gearless"}
@@ -199,6 +204,9 @@ export function DashboardPanel<T extends { id: string }>({
           {!isDataPanel && children}
           {isDataPanel && (
           <>
+          {/* Stat-tile band suppressed for cargo/vessel panels (09 §2) — counts
+              live in the header badge and on the rows instead. */}
+          {kind !== "cargo" && kind !== "vessel" && (
           <div className="mini-stats dash-stats">
             {(statDefs ?? []).map((s) => (
               <button
@@ -212,6 +220,7 @@ export function DashboardPanel<T extends { id: string }>({
               </button>
             ))}
           </div>
+          )}
 
           {activeStat && (
             <div className="dash-filter-banner">

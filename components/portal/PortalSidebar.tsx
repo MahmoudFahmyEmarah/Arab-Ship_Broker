@@ -132,6 +132,7 @@ export function PortalSidebar({
 
   return (
     <aside
+      className="asb-sidebar"
       style={{
         width: collapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w)",
         flexShrink: 0,
