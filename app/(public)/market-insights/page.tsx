@@ -3,7 +3,7 @@ import {
   Activity, Ship, Boxes, Route, Lock, ArrowRight, ShieldCheck, CalendarDays,
 } from "lucide-react";
 import {
-  getLatestEdition, getEdition, getArchive, formatRange,
+  getLatestEdition, getEdition, getArchive, formatRange, currentIsoWeek,
   SIZE_BAND_ORDER, type InsightBucket, type InsightEdition,
 } from "@/lib/market-insights";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -25,13 +25,14 @@ function weekLabel(weekId: string) {
   return m ? `Week ${parseInt(m[1], 10)}` : weekId;
 }
 
-// Public-facing regime labels. DISPLAY ONLY — the underlying regime value stays
-// "Dry bulk (IMSBC)" / "Break-bulk (CSS)" in the data, DB and member views; the
-// public page just shows friendlier terms (no "IMSBC" jargon).
-function publicRegimeLabel(label: string): string {
-  if (/IMSBC/i.test(label)) return "Bulk Cargos";
+// Regime display labels (Pre_Final §11 polish, exact copy). DISPLAY ONLY — the
+// underlying regime value stays "Dry bulk (IMSBC)" / "Break-bulk (CSS)" /
+// "Grain" in the data, DB and member views.
+function regimeDisplayLabel(label: string): string {
+  if (/IMSBC/i.test(label)) return "Solid bulk cargo except grain";
   if (/Break-?bulk/i.test(label)) return "Break-bulk";
-  return label; // Grain · Other
+  if (/^Grain/i.test(label)) return "Grain & agri";
+  return label; // Other
 }
 
 // ── Small presentational pieces (server-rendered) ──
@@ -115,53 +116,72 @@ export default async function MarketInsightsPage({
   const sizeBands = [...p.size_bands].sort(
     (a, b) => SIZE_BAND_ORDER.indexOf(a.label as never) - SIZE_BAND_ORDER.indexOf(b.label as never),
   );
-  // Friendly public labels for the cargo-mix regimes (display only).
-  const regimeMix = p.regime_mix.map((b) => ({ ...b, label: publicRegimeLabel(b.label) }));
+  // Display labels for the cargo-mix regimes (display only).
+  const regimeMix = p.regime_mix.map((b) => ({ ...b, label: regimeDisplayLabel(b.label) }));
+
+  // Editions strip (Pre_Final §11): the current in-progress ISO week shows as a
+  // disabled chip so nobody wonders where this week's report is; published
+  // editions (latest first) are the clickable chips.
+  const cur = currentIsoWeek();
+  const inProgress = !archive.some((a) => a.week_id === cur.weekId)
+    ? { week_id: cur.weekId, range_from: cur.range_from, range_to: cur.range_to }
+    : null;
 
   return (
     <div className="bg-slate-50 min-h-screen">
-      <div className="container pt-28 max-lg:pt-24 pb-20">
+      <div className="container pt-24 max-lg:pt-20 pb-12">
         {/* ── Header ── */}
-        <div className="flex items-start justify-between gap-6 flex-wrap mb-8">
-          <div>
-            <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-ocean-600 mb-3">
-              <Activity className="w-3.5 h-3.5" /> Market Insights
-              {ed.sample && <span className="ml-1 text-[9px] text-slate-400 normal-case tracking-normal font-medium">(sample)</span>}
-            </div>
-            <h1 className="text-3xl max-sm:text-2xl font-bold text-ocean-950 tracking-tight">
-              {weekLabel(ed.week_id)} · {formatRange(ed.range_from, ed.range_to)}
-            </h1>
-            <p className="text-sm text-slate-500 mt-2 max-w-2xl">
-              Regional dry bulk &amp; break-bulk activity: AG / R.Sea / E.Med / B.Sea / A.Sea,
-              sub-66K focus. <span className="font-semibold text-slate-700">Activity intelligence, not freight-rate data.</span>
-            </p>
+        <div className="mb-4">
+          <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-ocean-600 mb-2">
+            <Activity className="w-3.5 h-3.5" /> Market Insights
+            {ed.sample && <span className="ml-1 text-[9px] text-slate-400 normal-case tracking-normal font-medium">(sample)</span>}
           </div>
+          <h1 className="text-[22px] max-sm:text-xl font-bold text-ocean-950 tracking-tight">
+            {weekLabel(ed.week_id)} · {formatRange(ed.range_from, ed.range_to)}
+          </h1>
+          <p className="text-[13px] text-slate-500 mt-1.5 max-w-2xl">
+            Regional dry bulk &amp; break-bulk activity: AG / R.Sea / E.Med / B.Sea / A.Sea,
+            sub-66K focus. <span className="font-semibold text-slate-700">Activity intelligence, not freight-rate data.</span>
+          </p>
+        </div>
 
-          {/* Archive picker */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 min-w-[200px]">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400 px-1 pb-1.5">
-              <CalendarDays className="w-3.5 h-3.5" /> Archive
+        {/* ── Editions strip (top) — in-progress week + published editions ── */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-5">
+          <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          {inProgress && (
+            <div
+              aria-disabled
+              title="This week's report is published next Monday"
+              className="flex flex-col items-start gap-0.5 px-2.5 py-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400 cursor-not-allowed shrink-0"
+            >
+              <span className="flex items-center gap-1.5 text-xs font-semibold leading-none">
+                {weekLabel(inProgress.week_id)}
+                <span className="text-[8.5px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-300/70 rounded px-1 py-0.5">In progress</span>
+              </span>
+              <span className="text-[10px] leading-none">{formatRange(inProgress.range_from, inProgress.range_to).replace(/ \d{4}$/, "")}</span>
             </div>
-            <div className="flex flex-col">
-              {archive.slice(0, 6).map((a) => {
-                const active = a.week_id === ed.week_id;
-                return (
-                  <Link
-                    key={a.week_id}
-                    href={`/market-insights?week=${a.week_id}`}
-                    className={`flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg text-sm transition-colors ${active ? "bg-ocean-50 text-ocean-700 font-semibold" : "text-slate-600 hover:bg-slate-50"}`}
-                  >
-                    <span>{weekLabel(a.week_id)}</span>
-                    <span className="text-[11px] text-slate-400">{formatRange(a.range_from, a.range_to).replace(/ \d{4}$/, "")}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
+          )}
+          {archive.slice(0, 8).map((a) => {
+            const active = a.week_id === ed.week_id;
+            const latest = a.week_id === archive[0]?.week_id;
+            return (
+              <Link
+                key={a.week_id}
+                href={`/market-insights?week=${a.week_id}`}
+                className={`flex flex-col items-start gap-0.5 px-2.5 py-1.5 rounded-lg border text-left transition-colors shrink-0 ${active ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-semibold leading-none">
+                  {weekLabel(a.week_id)}
+                  {latest && <span className="text-[8.5px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-300/70 rounded px-1 py-0.5">Latest</span>}
+                </span>
+                <span className="text-[10px] leading-none text-slate-400">{formatRange(a.range_from, a.range_to).replace(/ \d{4}$/, "")}</span>
+              </Link>
+            );
+          })}
         </div>
 
         {/* ── Snapshot cards ── */}
-        <div className="grid grid-cols-4 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-4 mb-6">
+        <div className="grid grid-cols-4 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-3 mb-5">
           <SnapshotCard icon={Activity} label="Cargoes live" value={nf.format(p.snapshot.cargoes_live)} sub="approved & circulating" />
           <SnapshotCard icon={Ship} label="Open tonnage" value={nf.format(p.snapshot.open_tonnage)} sub="positions in region" />
           <SnapshotCard icon={Boxes} label="Avg cargo size" value={p.snapshot.avg_cargo_size_mt != null ? `~${nf.format(p.snapshot.avg_cargo_size_mt)}` : "—"} sub="MT (rounded)" />

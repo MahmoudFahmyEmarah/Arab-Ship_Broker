@@ -200,3 +200,32 @@ export const FUEL_COST = {
   ] as FuelTier[],
   port: { cons: "3 t/day", normal: 3000, stress: 4200 },
 } as const;
+
+// ── ISO-8601 week helpers (Pre_Final §11 polish · correctness requirement) ──
+// Week ids/ranges are computed from the international ISO calendar, never
+// hand-typed. Used to show the current in-progress week as a disabled chip.
+function isoWeekParts(d: Date): { year: number; week: number } {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = t.getUTCDay() || 7; // 1=Mon..7=Sun
+  t.setUTCDate(t.getUTCDate() + 4 - day); // nearest Thursday
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return { year: t.getUTCFullYear(), week };
+}
+
+export function currentIsoWeek(now: Date = new Date()): {
+  weekId: string; range_from: string; range_to: string;
+} {
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const dow = today.getUTCDay() || 7;
+  const monday = new Date(today);
+  monday.setUTCDate(today.getUTCDate() - (dow - 1));
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  const { year, week } = isoWeekParts(monday);
+  return {
+    weekId: `${year}-W${String(week).padStart(2, "0")}`,
+    range_from: monday.toISOString().slice(0, 10),
+    range_to: sunday.toISOString().slice(0, 10),
+  };
+}
