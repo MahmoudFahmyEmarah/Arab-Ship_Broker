@@ -105,7 +105,9 @@ export function PortalSidebar({
       setSigningOut(false);
     }
   };
-  const econLocked = isCalculatorLocked(useViewerTier());
+  const tier = useViewerTier();
+  const econLocked = isCalculatorLocked(tier);
+  const limitedTier = tier === "T1" || tier === "T2";
 
   const isCargo = role === "broker" || role === "cargo_owner" || role === "admin";
   const isVessel = role === "broker" || role === "vessel_owner" || role === "admin";
@@ -252,6 +254,24 @@ export function PortalSidebar({
             </div>
           )}
         </div>
+
+        {/* Slim upgrade pill — replaces the old full-width dashboard banner
+            (which ate ~10% of the screen). Contextual lock CTAs elsewhere
+            still market the tiers; this is the persistent, unobtrusive entry. */}
+        {limitedTier && !collapsed && (
+          <Link
+            href="/dashboard/account?tab=billing"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              margin: "6px 10px 2px", padding: "6px 10px",
+              background: "var(--asb-blue-light)", border: "0.5px solid var(--asb-blue)",
+              borderRadius: 6, color: "var(--asb-blue)",
+              fontSize: 11, fontWeight: 600, textDecoration: "none",
+            }}
+          >
+            {tier} plan · Upgrade →
+          </Link>
+        )}
 
         <button
           type="button"

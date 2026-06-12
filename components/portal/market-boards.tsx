@@ -15,7 +15,7 @@ import { DashCargoRow } from "./dashboard";
 import { useViewerTier, isLimitedTier } from "@/lib/portal/tier";
 import { fetchMyMatchedCargoIds, fetchMyMatchedAvailabilityIds } from "@/lib/portal/actions";
 import { IconMap } from "./icons";
-import { SheetHandle } from "./SheetHandle";
+import { SheetHandle, useSheetPeek } from "./SheetHandle";
 import {
   FilterMenu,
   CheckList,
@@ -81,7 +81,7 @@ export function CargoMarketBoard({
     if (!mineOnly || myMatchIds !== null) return;
     fetchMyMatchedCargoIds().then((ids) => setMyMatchIds(new Set(ids))).catch(() => setMyMatchIds(new Set()));
   }, [mineOnly, myMatchIds]);
-  const [sheetPeek, setSheetPeek] = React.useState(false);
+  const [sheetPeek, toggleSheetPeek] = useSheetPeek();
 
   const ZONE_OPTS = React.useMemo(() => uniq(views.flatMap((c) => [c.route?.polZone, c.route?.podZone])), [views]);
   const TYPE_OPTS = React.useMemo(() => uniq(views.map((c) => c.type)), [views]);
@@ -170,7 +170,7 @@ export function CargoMarketBoard({
 
       <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
         <div className={`mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ flex: 1, overflow: "auto", padding: view === "list" ? 0 : "10px 12px" }} onClick={() => setSelectedId(null)}>
-          {mapOpen && <SheetHandle peek={sheetPeek} onToggle={() => setSheetPeek((p) => !p)} label={`${filtered.length} listings`} />}
+          {mapOpen && <SheetHandle peek={sheetPeek} onToggle={toggleSheetPeek} label={`${filtered.length} listings`} />}
           {filtered.length === 0 ? (
             <MarketEmpty
               title={views.length === 0 ? "No cargo on the market yet" : "No cargo matches these filters"}
@@ -231,7 +231,7 @@ export function TonnageMarketBoard({
     if (!mineOnly || myMatchIds !== null) return;
     fetchMyMatchedAvailabilityIds().then((ids) => setMyMatchIds(new Set(ids))).catch(() => setMyMatchIds(new Set()));
   }, [mineOnly, myMatchIds]);
-  const [sheetPeek, setSheetPeek] = React.useState(false);
+  const [sheetPeek, toggleSheetPeek] = useSheetPeek();
 
   const ZONE_OPTS = React.useMemo(() => uniq(views.map((v) => v.openPortZone)), [views]);
   const TYPE_OPTS = React.useMemo(() => uniq(views.map((v) => v.type)), [views]);
@@ -312,7 +312,7 @@ export function TonnageMarketBoard({
 
       <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
         <div className={`mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ flex: 1, overflow: "auto", padding: "14px 16px" }} onClick={() => setSelectedId(null)}>
-          {mapOpen && <SheetHandle peek={sheetPeek} onToggle={() => setSheetPeek((p) => !p)} label={`${filtered.length} vessels`} />}
+          {mapOpen && <SheetHandle peek={sheetPeek} onToggle={toggleSheetPeek} label={`${filtered.length} vessels`} />}
           {filtered.length === 0 ? (
             <MarketEmpty
               title={views.length === 0 ? "No open tonnage yet" : "No vessels match these filters"}
