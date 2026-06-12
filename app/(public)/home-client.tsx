@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion, useScroll, useTransform, useInView } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import {
   Ship,
   ArrowRight,
@@ -114,13 +114,17 @@ function AnimatedStat({
   suffix: string;
   hint?: string;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
   const isNumeric = /^\d+$/.test(value);
   const [count, setCount] = useState(0);
 
+  // The hero counters are always above the fold on the landing page, so they
+  // animate on mount (and re-animate whenever the live value arrives) rather
+  // than gating on scroll-into-view — an IntersectionObserver gate proved
+  // unreliable here (element under a fading/transforming parent right at the
+  // fold could settle as "already seen" and the count-up never fired, leaving
+  // solid numbers).
   useEffect(() => {
-    if (!isInView || !isNumeric) return;
+    if (!isNumeric) return;
     const target = parseInt(value, 10);
     // Reduced-motion: render the final count immediately, no animation.
     // (Deferred a frame so it isn't a synchronous setState inside the effect.)
@@ -152,10 +156,10 @@ function AnimatedStat({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [isInView, isNumeric, value]);
+  }, [isNumeric, value]);
 
   return (
-    <div ref={ref} className="text-center flex flex-col items-center gap-1">
+    <div className="text-center flex flex-col items-center gap-1">
       <div className="text-4xl max-sm:text-3xl font-bold text-white tracking-tight tabular-nums">
         {isNumeric ? count : value}
         {suffix && <span className="text-foam-300 ml-0.5">{suffix}</span>}
