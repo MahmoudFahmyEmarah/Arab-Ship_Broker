@@ -1,3 +1,8 @@
+// Port geometry: [lat, lon] optionally followed by the seaward bearing
+// (degrees, 0=N) loaded from ports.seaward_bearing — drives land/sea marker
+// anchoring (09 §7). Fallback entries carry coords only.
+export type PortGeo = [number, number] | [number, number, number];
+
 // Static fallback port coordinates keyed by UN/LOCODE (5-char, no space) -> [lat, lon].
 // Live coordinates come from the `ports` table via loadPortCoords; this keeps the
 // maps fully populated and click-responsive even before that DB backfill is applied.
@@ -6,10 +11,10 @@
 // lat/lon); a small number of non-standard market locodes not in that reference
 // keep a display-grade city centroid (tagged "(centroid)"). Plain module (no
 // Leaflet) so it is safe to import from server components too.
-export const FALLBACK_PORTS: Record<string, [number, number]> = {
-  AEDXB: [25.25, 55.2667], // Jebel Ali
-  AEFUJ: [25.16, 56.34], // Fujairah  (centroid)
-  AEJEA: [25.0, 55.05], // Port of Jebel Ali
+export const FALLBACK_PORTS: Record<string, PortGeo> = {
+  AEDXB: [25.25, 55.2667, 315], // Jebel Ali
+  AEFUJ: [25.16, 56.34, 90], // Fujairah  (centroid)
+  AEJEA: [25.0, 55.05, 315], // Port of Jebel Ali
   AEKFK: [25.34, 56.36], // Khor Fakkan  (centroid)
   AERWP: [24.1, 52.7167], // Ruwais
   ALDRZ: [41.3246, 19.4565], // Durres
@@ -45,12 +50,12 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
   EGAAC: [31.13, 33.8], // El Arish  (centroid)
   EGABQ: [31.32, 30.07], // Abu Qir  (centroid)
   EGADB: [29.87, 32.48], // Adabiya  (centroid)
-  EGALY: [31.1833, 29.9167], // Alexandria
-  EGDAM: [31.4167, 31.8167], // Damietta
+  EGALY: [31.1833, 29.9167, 0], // Alexandria
+  EGDAM: [31.4167, 31.8167, 0], // Damietta
   EGDKH: [31.15, 29.81], // El Dekheila  (centroid)
   EGHAM: [26.2086, 34.0375], // Hamrawein
-  EGPSD: [31.2653, 32.3019], // Port Said
-  EGPSE: [31.2167, 32.35], // Port Said East
+  EGPSD: [31.2653, 32.3019, 0], // Port Said
+  EGPSE: [31.2167, 32.35, 0], // Port Said East
   EGSFW: [26.73, 33.94], // Safaga  (centroid)
   EGSGA: [26.73, 33.94], // Safaga  (centroid)
   EGSOK: [29.65, 32.35], // Ain Sokhna
@@ -87,7 +92,7 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
   GNCKY: [9.6412, -13.5784], // Conakry
   GNKAM: [10.65, -14.61], // Kamsar  (centroid)
   GRAPL: [39.1667, 22.8833], // Amaliapolis
-  GRATH: [37.9833, 23.7333], // Athens / Piraeus
+  GRATH: [37.9833, 23.7333, 200], // Athens / Piraeus
   GRAXD: [40.85, 25.8667], // Alexandroupolis
   GRFLS: [38.0333, 23.5333], // Eleusis
   GRGPA: [38.2333, 21.7167], // Patras
@@ -99,7 +104,7 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
   GRNKV: [40.9667, 24.5167], // Nea Karvali
   GRNMD: [40.24, 23.28], // Nea Moudhania  (centroid)
   GRPIG: [38.25, 22.08], // Aigion / WC Greece  (centroid)
-  GRPIR: [37.9333, 23.6167], // Piraeus
+  GRPIR: [37.9333, 23.6167, 200], // Piraeus
   GRRET: [35.3667, 24.4667], // Rethymno
   GRSKG: [40.6333, 22.95], // Thessaloniki
   GRSKH: [40.63, 22.93], // Thessaloniki  (centroid)
@@ -118,7 +123,7 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
   IDDUM: [1.6833, 101.45], // Dumai
   IDGRK: [-7.15, 112.65], // Gresik  (centroid)
   IDJKT: [-6.1333, 106.8333], // Jakarta
-  INBOM: [18.9667, 72.8167], // Mumbai
+  INBOM: [18.9667, 72.8167, 250], // Mumbai
   INCCU: [22.5667, 88.35], // Kolkata
   INIXE: [12.9141, 74.856], // New Mangalore
   INIXY: [23.0333, 70.2167], // Kandla
@@ -157,11 +162,11 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
   ITSVN: [44.2833, 8.5], // Savona
   ITTER: [37.98, 13.7], // Termini Imerese  (centroid)
   ITTMI: [37.98, 13.7], // Termini Imerese  (centroid)
-  JOAQB: [29.5167, 35.0], // 'Aqaba
-  JOAQJ: [29.5333, 35.0], // Aqaba
+  JOAQB: [29.5167, 35.0, 180], // 'Aqaba
+  JOAQJ: [29.5333, 35.0, 180], // Aqaba
   KWSWK: [29.35, 47.9333], // Shuwaikh
   LBBCH: [5.88, -10.05], // Buchanan  (centroid)
-  LBBEY: [33.8333, 35.4833], // Beirut
+  LBBEY: [33.8333, 35.4833, 270], // Beirut
   LBJIE: [33.66, 35.42], // Jieh  (centroid)
   LBKYE: [34.4346, 35.8362], // Tripoli LB
   LBSAI: [33.56, 35.37], // Saida  (centroid)
@@ -187,31 +192,31 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
   NLTNZ: [51.4667, 3.8167], // Terneuzen
   OMMCT: [23.6, 58.5833], // Muscat
   OMSLL: [17.0507, 54.1066], // Salalah
-  OMSOH: [24.3461, 56.7075], // Sohar
+  OMSOH: [24.3461, 56.7075, 45], // Sohar
   PKKHI: [24.8167, 66.9833], // Karachi
   PLGDN: [54.35, 18.65], // Gdansk
   PLGDY: [54.5, 18.55], // Gdynia
   PLSZZ: [53.4285, 14.5528], // Szczecin
   PTLIS: [38.7167, -9.1333], // Lisbon
   ROBRA: [45.27, 27.97], // Braila  (centroid)
-  ROCND: [44.1833, 28.65], // Constanta
+  ROCND: [44.1833, 28.65, 110], // Constanta
   ROGAL: [45.4333, 28.05], // Galati
   ROMID: [44.3333, 28.6167], // Midia
   ROSUL: [45.15, 29.6667], // Sulina
   ROTLN: [45.18, 28.8], // Tulcea  (centroid)
   RUKVZ: [45.33, 36.66], // Kavkaz  (centroid)
-  RUNOI: [44.72, 37.79], // Novorossiysk  (centroid)
-  RUNVS: [44.7167, 37.7667], // Novorossiysk
+  RUNOI: [44.72, 37.79, 225], // Novorossiysk  (centroid)
+  RUNVS: [44.7167, 37.7667, 225], // Novorossiysk
   RUROV: [47.22, 39.72], // Rostov-on-Don  (centroid)
   RUTAG: [47.2167, 38.9167], // Taganrog
   RUTMK: [45.3, 37.39], // Temryuk  (centroid)
   RUTUA: [44.1065, 39.0806], // Tuapse
   SAJAZ: [16.89, 42.55], // Jazan  (centroid)
-  SAJED: [21.5333, 39.1667], // Jeddah
+  SAJED: [21.5333, 39.1667, 270], // Jeddah
   SAJIZ: [16.89, 42.55], // Jizan  (centroid)
   SAJUB: [27.017, 49.667], // Jubail
   SAKAC: [22.4, 39.083], // King Abdullah Port
-  SAYAN: [24.09, 38.06], // Yanbu  (centroid)
+  SAYAN: [24.09, 38.06, 250], // Yanbu  (centroid)
   SDPZU: [19.5903, 37.1902], // Port Sudan
   SIKOP: [46.1919, 13.7798], // Koper
   SLFNA: [8.4657, -13.2317], // Freetown
@@ -242,14 +247,14 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
   TRGLE: [40.43, 29.15], // Gemlik  (centroid)
   TRGUL: [37.2333, 27.6], // Gulluk
   TRHER: [40.7938, 29.626], // Hereke
-  TRISK: [36.5833, 36.1667], // Iskenderun
-  TRIST: [41.0167, 28.9667], // Istanbul
-  TRIZM: [38.4167, 27.15], // Izmir
+  TRISK: [36.5833, 36.1667, 225], // Iskenderun
+  TRIST: [41.0167, 28.9667, 180], // Istanbul
+  TRIZM: [38.4167, 27.15, 270], // Izmir
   TRIZT: [40.7833, 29.95], // Izmit
   TRKOC: [40.77, 29.92], // Kocaeli  (centroid)
   TRKRS: [41.0667, 30.7833], // Karasu
   TRMAR: [40.97, 27.96], // Marmara Ereglisi  (centroid)
-  TRMER: [36.7167, 34.6333], // Mersin
+  TRMER: [36.7167, 34.6333, 180], // Mersin
   TRMRA: [40.5833, 27.55], // Marmara Adasi (old code)
   TRMRM: [36.85, 28.2667], // Marmara Adasi
   TRNEM: [38.7833, 26.9166], // Nemrut Bay
@@ -262,13 +267,13 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
   TRTZX: [41.0, 39.7333], // Trabzon
   TRUNY: [41.1333, 37.2833], // Unye
   TRZMT: [40.77, 29.92], // Izmit (Kocaeli)  (centroid)
-  TZDAR: [-6.8, 39.2833], // Dar Es Salaam
+  TZDAR: [-6.8, 39.2833, 90], // Dar Es Salaam
   TZTAN: [-5.07, 39.1], // Tanga  (centroid)
   UAILK: [46.3167, 30.6667], // Chornomorsk
   UAIZM: [45.3167, 28.85], // Izmail
   UAKER: [45.36, 36.47], // Kerch  (centroid)
   UAKHE: [46.6167, 32.6167], // Kherson
-  UAODS: [46.5, 30.75], // Odessa
+  UAODS: [46.5, 30.75, 135], // Odessa
   UAPOC: [46.49, 30.74], // Port of Call Ukraine  (centroid)
   UAREN: [45.46, 28.28], // Reni  (centroid)
   UASEV: [44.62, 33.53], // Sevastopol  (centroid)
@@ -289,8 +294,8 @@ export const FALLBACK_PORTS: Record<string, [number, number]> = {
 
 export function resolveCoord(
   locode: string | null | undefined,
-  portCoords?: Record<string, [number, number]>,
-): [number, number] | null {
+  portCoords?: Record<string, PortGeo>,
+): PortGeo | null {
   if (!locode) return null;
   const key = locode.trim().toUpperCase().replace(/\s+/g, "");
   return portCoords?.[locode] ?? portCoords?.[key] ?? FALLBACK_PORTS[key] ?? null;

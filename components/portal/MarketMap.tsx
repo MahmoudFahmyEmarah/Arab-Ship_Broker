@@ -12,7 +12,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "@/lib/portal/map.css";
 import { CargoView, VesselView } from "@/lib/portal/types";
-import { FALLBACK_PORTS } from "@/lib/portal/port-coords";
+import { FALLBACK_PORTS, type PortGeo } from "@/lib/portal/port-coords";
 import { MapFilterPanel } from "./MapFilterPanel";
 import { CARGO_FACETS, VESSEL_FACETS, passesFacets, type Selections } from "@/lib/portal/map-filters";
 import { VoyOpexPanel } from "./VoyOpexPanel";
@@ -230,18 +230,51 @@ export default function MarketMap({
   onSelectCargo?: (c: CargoView) => void;
   onSelectVessel?: (v: VesselView) => void;
   // Live locode → [lat, lon] from the ports table; falls back to FALLBACK_PORTS.
-  portCoords?: Record<string, [number, number]>;
+  portCoords?: Record<string, PortGeo>;
   // My Vessels: draw a dashed vector from each vessel's open port toward its
   // first preferred-trade zone (off elsewhere so other map surfaces are clean).
   vesselVectors?: boolean;
 }) {
-  const coordFor = React.useCallback(
-    (locode?: string | null): [number, number] | null => {
+  const geoFor = React.useCallback(
+    (locode?: string | null): PortGeo | null => {
       if (!locode) return null;
       const key = locode.trim().toUpperCase().replace(/\s+/g, "");
       return portCoords?.[locode] ?? portCoords?.[key] ?? FALLBACK_PORTS[key] ?? null;
     },
     [portCoords],
+  );
+  const coordFor = React.useCallback(
+    (locode?: string | null): [number, number] | null => {
+      const g = geoFor(locode);
+      return g ? [g[0], g[1]] : null;
+    },
+    [geoFor],
+  );
+  // Geographic anchoring (09 §7): when the port carries a seaward bearing,
+  // cargo is placed LANDWARD of it (goods at the terminal — never in the sea)
+  // and vessels SEAWARD (in the approaches — never on land); same-port jitter
+  // runs along the coast-parallel axis only, so spreading can never flip a
+  // marker across the coastline. Ports without a bearing keep plain jitter.
+  const anchoredLL = React.useCallback(
+    (geo: PortGeo, side: "land" | "sea", seedA: number, seedB: number): [number, number] => {
+      const [lat, lon, bearing] = geo;
+      const fa = (seedA % 7) / 7; // 0..1 deterministic from the id
+      const fb = (seedB % 7) / 7;
+      if (bearing == null) {
+        // legacy fallback: plain bounded jitter
+        return [lat + fa * 0.28 - 0.14, lon + fb * 0.28 - 0.14];
+      }
+      const D2R = Math.PI / 180;
+      const b = bearing * D2R;
+      const lonScale = 1 / Math.max(0.2, Math.cos(lat * D2R));
+      const sign = side === "sea" ? 1 : -1;
+      const dist = side === "sea" ? 0.10 + fa * 0.08 : 0.08 + fa * 0.05;
+      const along = (fb - 0.5) * 0.18;
+      const uLat = Math.cos(b), uLon = Math.sin(b) * lonScale; // seaward unit
+      const vLat = -Math.sin(b), vLon = Math.cos(b) * lonScale; // coast-parallel
+      return [lat + sign * dist * uLat + along * vLat, lon + sign * dist * uLon + along * vLon];
+    },
+    [],
   );
 
   const hostRef = React.useRef<HTMLDivElement>(null);
@@ -264,10 +297,14 @@ export default function MarketMap({
   const [selections, setSelections] = React.useState<Selections>({});
   const [qtyMin, setQtyMin] = React.useState<number | "">("");
   const [qtyMax, setQtyMax] = React.useState<number | "">("");
-  // Click-to-pair (dashboard = both sides present): anchor cargo + picked vessel.
-  const [pairCargo, setPairCargo] = React.useState<CargoView | null>(null);
-  const [pairVessel, setPairVessel] = React.useState<VesselView | null>(null);
-  const isDashboard = cargos.length > 0 && vessels.length > 0;
+  // Click-to-pair (09 §8): any cargo OR vessel marker becomes the pair anchor;
+  // eligible counterparts stay bright, everything else fades; clicking an
+  // eligible counterpart completes the pair. Enabled wherever both market
+  // sides are on the map (the layer-registry equivalent).
+  const pairingEnabled = cargos.length > 0 && vessels.length > 0;
+  const [pairAnchor, setPairAnchor] = React.useState<{ kind: "cargo" | "vessel"; id: string } | null>(null);
+  const [pairDone, setPairDone] = React.useState<{ cargo: CargoView; vessel: VesselView } | null>(null);
+  const clearPairing = React.useCallback(() => { setPairAnchor(null); setPairDone(null); }, []);
   const [cargoOn, setCargoOn] = React.useState(true);
   const [vesselsOn, setVesselsOn] = React.useState(true);
   const [zonesOn, setZonesOn] = React.useState(true);
@@ -290,6 +327,41 @@ export default function MarketMap({
     () => vessels.filter((v) => passesFacets(v, VESSEL_FACETS, selections)),
     [vessels, selections],
   );
+  const anchorCargo = pairAnchor?.kind === "cargo" ? cargos.find((c) => c.id === pairAnchor.id) ?? null : null;
+  const anchorVessel = pairAnchor?.kind === "vessel" ? vessels.find((v) => v.id === pairAnchor.id) ?? null : null;
+  const eligibleVesselIds = React.useMemo(
+    () => (anchorCargo ? new Set(visVessels.filter((v) => pairEligible(anchorCargo, v)).map((v) => v.id)) : null),
+    [anchorCargo, visVessels],
+  );
+  const eligibleCargoIds = React.useMemo(
+    () => (anchorVessel ? new Set(visCargos.filter((c) => pairEligible(c, anchorVessel)).map((c) => c.id)) : null),
+    [anchorVessel, visCargos],
+  );
+  // Marker pair-state class (styled on .leaflet-marker-icon in map.css).
+  const pairCls = (kind: "cargo" | "vessel", id: string): string => {
+    if (!pairingEnabled || !pairAnchor) return "";
+    if (pairAnchor.kind === kind) return pairAnchor.id === id ? " is-anchor" : " is-faded";
+    const elig = kind === "vessel" ? eligibleVesselIds : eligibleCargoIds;
+    return elig?.has(id) ? " is-eligible" : " is-faded";
+  };
+  const handlePairClick = (kind: "cargo" | "vessel", id: string): boolean => {
+    if (!pairingEnabled) return false;
+    if (!pairAnchor || pairAnchor.kind === kind) {
+      setPairAnchor({ kind, id });
+      setPairDone(null);
+      return true;
+    }
+    const cargo = kind === "cargo" ? cargos.find((c) => c.id === id) : cargos.find((c) => c.id === pairAnchor.id);
+    const vessel = kind === "vessel" ? vessels.find((v) => v.id === id) : vessels.find((v) => v.id === pairAnchor.id);
+    if (cargo && vessel && pairEligible(cargo, vessel)) {
+      setPairDone({ cargo, vessel });
+    } else {
+      setPairAnchor({ kind, id }); // ineligible pick re-anchors instead
+      setPairDone(null);
+    }
+    return true;
+  };
+
   const toggleOption = React.useCallback((facetId: string, value: string) => {
     setSelections((prev) => {
       const set = new Set(prev[facetId] ?? []);
@@ -440,25 +512,22 @@ export default function MarketMap({
     if (cargoOn) {
       const state = cargoStateForZoom(map.getZoom());
       visCargos.forEach((c) => {
-        const ll = coordFor(c.route?.polCode);
-        if (!ll) return;
-        const jx = ((c.id || "").charCodeAt(0) % 7) * 0.04 - 0.12;
-        const jy = ((c.id || "").charCodeAt(1) % 7) * 0.04 - 0.12;
+        const geo = geoFor(c.route?.polCode);
+        if (!geo) return;
+        // Cargo anchors LANDWARD of the port (09 §7) — never in the sea.
+        const pos = anchoredLL(geo, "land", (c.id || "").charCodeAt(0) || 0, (c.id || "").charCodeAt(1) || 0);
         const sel = focusedCargoId === c.id;
         const ic = cargoIcon(c, state, sel);
-        const mk = L.marker([ll[0] + jy, ll[1] + jx], {
-          icon: L.divIcon({ html: ic.html, className: "cargo-marker", iconSize: ic.size, iconAnchor: ic.anchor }),
+        const mk = L.marker(pos, {
+          icon: L.divIcon({ html: ic.html, className: "cargo-marker" + pairCls("cargo", c.id), iconSize: ic.size, iconAnchor: ic.anchor }),
           riseOnHover: true,
         });
         mk.on("click", (ev) => {
           L.DomEvent.stopPropagation(ev);
+          // Pairing-enabled surfaces: the click drives the pairing state machine.
+          if (handlePairClick("cargo", c.id)) { onSelectCargo?.(c); return; }
           setPopup({ kind: "cargo", data: c, ll: mk.getLatLng() });
           onSelectCargo?.(c);
-          // Dashboard: clicking a cargo anchors a pairing — eligible vessels highlight.
-          if (isDashboard) {
-            setPairCargo(c);
-            setPairVessel(null);
-          }
         });
         cargoMk.current[c.id] = mk;
         cluster.addLayer(mk);
@@ -467,19 +536,19 @@ export default function MarketMap({
 
     if (vesselsOn) {
       visVessels.forEach((v) => {
-        const ll = coordFor(v.openPortLocode);
-        if (!ll) return;
-        const jx = ((v.id || "").charCodeAt(0) % 7) * 0.05 - 0.15;
-        const jy = ((v.id || "").charCodeAt(1) % 7) * 0.05 - 0.15;
+        const geo = geoFor(v.openPortLocode);
+        if (!geo) return;
+        // Vessels anchor SEAWARD — in or just off the approaches, never on land.
+        const pos = anchoredLL(geo, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0);
         const sel = focusedVesselId === v.id;
-        const dim = !!pairCargo && !pairEligible(pairCargo, v);
+        const dim = pairCls("vessel", v.id) === " is-faded";
 
         // Preferred-direction vector (My Vessels): dashed curve open port →
         // first preferred-zone centroid, with an arrowhead at the far end.
         if (vesselVectors && vecRef.current) {
           const z = v.preferredZones?.[0] ? zoneByCode(v.preferredZones[0]) : null;
           const dest = z ? zoneCentroid(z) : null;
-          const a: [number, number] = [ll[0] + jy, ll[1] + jx];
+          const a: [number, number] = pos;
           if (dest && (dest[0] !== a[0] || dest[1] !== a[1])) {
             const pts = curvePts(a, dest);
             const line = sel ? "#2A6FDB" : "#8C9BB5";
@@ -497,26 +566,21 @@ export default function MarketMap({
           }
         }
         const box = Math.max(vesselSize(v).w, vesselSize(v).h, 28);
-        const mk = L.marker([ll[0] + jy, ll[1] + jx], {
-          icon: L.divIcon({ html: vesselTriangleHTML(v, sel, dim), className: "vessel-marker", iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
+        const mk = L.marker(pos, {
+          icon: L.divIcon({ html: vesselTriangleHTML(v, sel, dim), className: "vessel-marker" + pairCls("vessel", v.id), iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
           riseOnHover: true,
         });
         mk.on("click", (ev) => {
           L.DomEvent.stopPropagation(ev);
-          // If a cargo is anchored, picking a vessel forms the pair card instead
-          // of the normal vessel popup.
-          if (pairCargo) {
-            setPairVessel(v);
-          } else {
-            setPopup({ kind: "vessel", data: v, ll: mk.getLatLng() });
-            onSelectVessel?.(v);
-          }
+          if (handlePairClick("vessel", v.id)) { onSelectVessel?.(v); return; }
+          setPopup({ kind: "vessel", data: v, ll: mk.getLatLng() });
+          onSelectVessel?.(v);
         });
         cluster.addLayer(mk);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visCargos, visVessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready, pairCargo, isDashboard, vesselVectors]);
+  }, [visCargos, visVessels, cargoOn, vesselsOn, focusedCargoId, focusedVesselId, ready, pairAnchor, pairDone, pairingEnabled, vesselVectors]);
 
   // Focused cargo → route + fit
   React.useEffect(() => {
@@ -701,42 +765,42 @@ export default function MarketMap({
 
       <VoyOpexPanel open={voyOpen && !voyLocked} onClose={() => setVoyOpen(false)} />
 
-      {pairCargo && (
+      {/* Armed-pairing hint (09 §8) — visible legend state while anchored. */}
+      {pairingEnabled && pairAnchor && !pairDone && (
+        <div className="dash-pair-hint" onClick={(e) => e.stopPropagation()}>
+          <span className="dash-pair-hint__dot" />
+          {pairAnchor.kind === "cargo"
+            ? <>Cargo anchored — click a <strong>highlighted vessel</strong> to estimate the pairing</>
+            : <>Vessel anchored — click a <strong>highlighted cargo</strong> to estimate the pairing</>}
+          <button type="button" onClick={clearPairing} aria-label="Clear">✕</button>
+        </div>
+      )}
+
+      {pairDone && (
         <div className="pair-card">
           <div className="pair-card__head">
             <span className="pair-card__ttl">Pairing</span>
-            <button
-              type="button"
-              className="pair-card__close"
-              aria-label="Clear pairing"
-              onClick={() => { setPairCargo(null); setPairVessel(null); }}
-            >×</button>
+            <button type="button" className="pair-card__close" aria-label="Clear pairing" onClick={clearPairing}>×</button>
           </div>
-          <div className="pair-card__route">{pairCargo.cargo} · <span className="mono">{pairCargo.refId}</span></div>
-          {!pairVessel ? (
-            <div className="pair-card__hint">
-              Pick a highlighted vessel — {visVessels.filter((v) => pairEligible(pairCargo, v)).length} eligible
-            </div>
-          ) : (
-            (() => {
-              const band = fitLabel(pairCargo, pairVessel);
-              return (
-                <>
-                  <div className="pair-card__to">→ {pairVessel.name}</div>
-                  <div className={`pair-band band-${band.toLowerCase()}`}>{band} fit</div>
-                  <div className="pair-card__chips">
-                    <span>{pairVessel.type}</span>
-                    <span>{pairVessel.dwt} DWT</span>
-                    <span>{pairVessel.openPortZone}</span>
-                  </div>
-                  <div className="pair-card__note">
-                    Indicative fit label via Arab ShipBroker — open the Voyage
-                    Estimator for full economics. No counterparty contact is shared.
-                  </div>
-                </>
-              );
-            })()
-          )}
+          <div className="pair-card__route">{pairDone.cargo.cargo} · <span className="mono">{pairDone.cargo.refId}</span></div>
+          {(() => {
+            const band = fitLabel(pairDone.cargo, pairDone.vessel);
+            return (
+              <>
+                <div className="pair-card__to">→ {pairDone.vessel.name}</div>
+                <div className={`pair-band band-${band.toLowerCase()}`}>{band} fit</div>
+                <div className="pair-card__chips">
+                  <span>{pairDone.vessel.type}</span>
+                  <span>{pairDone.vessel.dwt} DWT</span>
+                  <span>{pairDone.vessel.openPortZone}</span>
+                </div>
+                <div className="pair-card__note">
+                  Indicative fit label via Arab ShipBroker — open the Voyage
+                  Estimator for full economics. No counterparty contact is shared.
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
     </div>

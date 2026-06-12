@@ -13,7 +13,7 @@ import Link from "next/link";
 import "@/lib/portal/fleet.css";
 import { VesselView } from "@/lib/portal/types";
 import { FleetVesselCard, type FleetVM } from "./FleetVesselCard";
-import { resolveCoord } from "@/lib/portal/port-coords";
+import { resolveCoord, type PortGeo } from "@/lib/portal/port-coords";
 import { zoneByCode, zoneCentroid, zonesLabel } from "@/lib/portal/zones";
 import { IconMap, IconPlus } from "./icons";
 import {
@@ -37,7 +37,7 @@ const MarketMap = dynamic(() => import("./MarketMap"), {
 const uniq = (xs: (string | null | undefined)[]) =>
   Array.from(new Set(xs.filter(Boolean) as string[]));
 
-function toFleetVM(v: VesselView, portCoords?: Record<string, [number, number]>): FleetVM {
+function toFleetVM(v: VesselView, portCoords?: Record<string, PortGeo>): FleetVM {
   const open = resolveCoord(v.openPortLocode, portCoords);
   const prefZone = v.preferredZones?.[0] ? zoneByCode(v.preferredZones[0]) : null;
   const dest = prefZone ? zoneCentroid(prefZone) : null;
@@ -81,7 +81,7 @@ export function MyVesselsFleetBoard({
 }: {
   views: VesselView[];
   source?: "live" | "sample";
-  portCoords?: Record<string, [number, number]>;
+  portCoords?: Record<string, PortGeo>;
   postHref?: string;
   addHref?: string;
 }) {

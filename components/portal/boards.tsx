@@ -10,6 +10,7 @@ import { CargoCard } from "./CargoCard";
 import { VesselCard } from "./VesselCard";
 import { BunkerTicker } from "./BunkerTicker";
 import { DashboardPanel } from "./dashboard";
+import type { PortGeo } from "@/lib/portal/port-coords";
 import { CargoDetailPanel, VesselDetailPanel } from "./DetailPanels";
 import { DashboardTierBanner } from "./TierBanner";
 import {
@@ -148,7 +149,7 @@ export function DashboardBoard({
   cargos: CargoView[];
   vessels: VesselView[];
   source?: "live" | "sample";
-  portCoords?: Record<string, [number, number]>;
+  portCoords?: Record<string, PortGeo>;
 }) {
   const [mode, setMode] = React.useState<"cargo" | "vessel">("cargo");
   const [focusedCargo, setFocusedCargo] = React.useState<string | null>(null);
@@ -359,7 +360,7 @@ export function CargoBoard({
   variant?: "market" | "my";
   source?: "live" | "sample";
   postHref?: string;
-  portCoords?: Record<string, [number, number]>;
+  portCoords?: Record<string, PortGeo>;
 }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [mapOpen, setMapOpen] = React.useState(false);
@@ -462,7 +463,7 @@ export function VesselBoard({
   variant?: "market" | "my";
   source?: "live" | "sample";
   postHref?: string;
-  portCoords?: Record<string, [number, number]>;
+  portCoords?: Record<string, PortGeo>;
 }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [mapOpen, setMapOpen] = React.useState(false);

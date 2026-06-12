@@ -4,6 +4,7 @@
 // (asb/pages.jsx PageCargoMarket / PageTonnageMarket): 2-row functional filter
 // bar, account-tier gating (limited cargo / masked vessel for T1/T2),
 // Show/Hide side map (selection focuses the map), list/card view.
+import type { PortGeo } from "@/lib/portal/port-coords";
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { CargoView, VesselView } from "@/lib/portal/types";
@@ -53,7 +54,7 @@ export function CargoMarketBoard({
 }: {
   views: CargoView[];
   source?: "live" | "sample";
-  portCoords?: Record<string, [number, number]>;
+  portCoords?: Record<string, PortGeo>;
   archiveLabel?: string;
 }) {
   const limited = isLimitedTier(useViewerTier());
@@ -189,7 +190,7 @@ export function TonnageMarketBoard({
 }: {
   views: VesselView[];
   source?: "live" | "sample";
-  portCoords?: Record<string, [number, number]>;
+  portCoords?: Record<string, PortGeo>;
 }) {
   const masked = isLimitedTier(useViewerTier());
 

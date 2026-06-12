@@ -12,6 +12,7 @@ import {
   getMatchesForAvailability,
 } from "@/sdk/app/vessels";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import type { PortGeo } from "./port-coords";
 import { getTemporalAccess, type TemporalAccess } from "@/lib/temporal";
 import { toCargoView, vesselFromAvailability } from "./adapters";
 import { MOCK_CARGOS, MOCK_VESSELS } from "./mock";
@@ -157,20 +158,23 @@ export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<Carg
 // or under the unauthenticated preview (ports RLS requires an authed user).
 export async function loadPortCoords(
   locodes: string[],
-): Promise<Record<string, [number, number]>> {
+): Promise<Record<string, PortGeo>> {
   const unique = Array.from(new Set(locodes.filter(Boolean)));
   if (!unique.length || !isSupabaseConfigured()) return {};
   try {
     const supabase = await getSupabaseServerClient();
     const { data, error } = await supabase
       .from("ports")
-      .select("locode, latitude, longitude")
+      .select("locode, latitude, longitude, seaward_bearing")
       .in("locode", unique);
     if (error || !data) return {};
-    const out: Record<string, [number, number]> = {};
-    for (const p of data as { locode: string; latitude: number | null; longitude: number | null }[]) {
+    const out: Record<string, PortGeo> = {};
+    for (const p of data as { locode: string; latitude: number | null; longitude: number | null; seaward_bearing?: number | null }[]) {
       if (p.latitude != null && p.longitude != null) {
-        out[p.locode] = [Number(p.latitude), Number(p.longitude)];
+        out[p.locode] =
+          p.seaward_bearing != null
+            ? [Number(p.latitude), Number(p.longitude), Number(p.seaward_bearing)]
+            : [Number(p.latitude), Number(p.longitude)];
       }
     }
     return out;
