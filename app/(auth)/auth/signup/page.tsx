@@ -14,6 +14,7 @@ import {
   Mail,
   Lock,
   User,
+  Anchor,
   Ship,
   Package,
   ArrowRight,
@@ -41,17 +42,23 @@ const signupSchema = z
     email: z.string().email("Invalid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
     confirmPassword: z.string().min(1, "Please confirm your password"),
-    wantsCargo: z.boolean(),
-    wantsVessel: z.boolean(),
+    // Account taxonomy (per the design): principals or a broker desk.
+    accountKind: z.enum(["principal_owner", "principal_charterer", "broker"], {
+      message: "Please choose how you'll trade",
+    }),
+    brokerDesk: z.enum(["cargo", "vessel", "dual"]),
+    // Optional company step — register a new company or join an existing one.
+    companyMode: z.enum(["none", "register", "join"]),
+    companyName: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
     path: ["confirmPassword"],
   })
-  .refine((data) => data.wantsCargo || data.wantsVessel, {
-    message: "Please select at least one profile type",
-    path: ["wantsCargo"],
-  });
+  .refine(
+    (data) => data.companyMode === "none" || data.companyName.trim().length >= 2,
+    { message: "Please enter your company name", path: ["companyName"] },
+  );
 
 type SignupFormData = z.infer<typeof signupSchema>;
 
@@ -134,26 +141,41 @@ export default function SignupPage() {
       email: "",
       password: "",
       confirmPassword: "",
-      wantsCargo: false,
-      wantsVessel: false,
+      accountKind: undefined as unknown as "broker",
+      brokerDesk: "dual",
+      companyMode: "none",
+      companyName: "",
     },
   });
 
-  const wantsCargo = form.watch("wantsCargo");
-  const wantsVessel = form.watch("wantsVessel");
+  const accountKind = form.watch("accountKind");
+  const brokerDesk = form.watch("brokerDesk");
+  const companyMode = form.watch("companyMode");
 
   const onSubmit = async (data: SignupFormData) => {
     setIsSubmitting(true);
     try {
-      const profiles: ProfileType[] = [];
-      if (data.wantsCargo) profiles.push("cargo");
-      if (data.wantsVessel) profiles.push("vessel");
+      // Taxonomy → personas: principals get their side's profile; a broker
+      // desk gets cargo, vessel or both (dual ⇒ legacy 'broker' role).
+      const declaredRole =
+        data.accountKind === "broker" ? (`broker_${data.brokerDesk}` as const) : data.accountKind;
+      const profiles: ProfileType[] =
+        data.accountKind === "principal_owner" ? ["vessel"]
+        : data.accountKind === "principal_charterer" ? ["cargo"]
+        : data.brokerDesk === "cargo" ? ["cargo"]
+        : data.brokerDesk === "vessel" ? ["vessel"]
+        : ["cargo", "vessel"];
 
       const result = await signupAction({
         name: data.name,
         email: data.email,
         password: data.password,
         profiles,
+        declaredRole,
+        company:
+          data.companyMode === "none"
+            ? null
+            : { mode: data.companyMode, name: data.companyName },
       });
 
       if (result.success) {
@@ -268,39 +290,115 @@ export default function SignupPage() {
                 <motion.div variants={itemVariants}>
                   <div className="space-y-2">
                     <p className="text-slate-700 font-semibold text-xs uppercase tracking-wider">
-                      I want to...{" "}
+                      I am a...{" "}
                       <span className="normal-case font-normal text-slate-400">
-                        (select one or both)
+                        (choose one)
                       </span>
                     </p>
-                    <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-3">
+                    <div className="grid grid-cols-3 max-[768px]:grid-cols-1 gap-3">
                       <ProfileTile
-                        label="Post Cargo"
-                        description="I have cargo that needs a vessel"
-                        icon={Package}
-                        selected={wantsCargo}
+                        label="Principal Vessel Owner"
+                        description="I own / operate vessels looking for cargo"
+                        icon={Ship}
+                        selected={accountKind === "principal_owner"}
                         onToggle={() =>
-                          form.setValue("wantsCargo", !wantsCargo, {
-                            shouldValidate: true,
-                          })
+                          form.setValue("accountKind", "principal_owner", { shouldValidate: true })
                         }
                       />
                       <ProfileTile
-                        label="List Vessels"
-                        description="I have vessels looking for cargo"
-                        icon={Ship}
-                        selected={wantsVessel}
+                        label="Principal Cargo Owner"
+                        description="Charterer / shipper — I have cargo to move"
+                        icon={Package}
+                        selected={accountKind === "principal_charterer"}
                         onToggle={() =>
-                          form.setValue("wantsVessel", !wantsVessel, {
-                            shouldValidate: true,
-                          })
+                          form.setValue("accountKind", "principal_charterer", { shouldValidate: true })
+                        }
+                      />
+                      <ProfileTile
+                        label="Broker"
+                        description="I broker cargo, tonnage or both"
+                        icon={Anchor}
+                        selected={accountKind === "broker"}
+                        onToggle={() =>
+                          form.setValue("accountKind", "broker", { shouldValidate: true })
                         }
                       />
                     </div>
-                    {form.formState.errors.wantsCargo && (
+                    {accountKind === "broker" && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-xs text-slate-500 font-medium">Desk:</span>
+                        {([["cargo", "Cargo"], ["vessel", "Vessel"], ["dual", "Dual (cargo + vessel)"]] as const).map(([v, l]) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => form.setValue("brokerDesk", v)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                              brokerDesk === v
+                                ? "bg-ocean-600 border-ocean-600 text-white"
+                                : "bg-white border-slate-200 text-slate-600 hover:border-ocean-300"
+                            }`}
+                          >
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {form.formState.errors.accountKind && (
                       <p className="text-xs text-red-500 mt-1">
-                        {form.formState.errors.wantsCargo.message}
+                        {form.formState.errors.accountKind.message}
                       </p>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Company / enterprise step — companies are the principals; people
+                    are seats under them (org admin manages the team). */}
+                <motion.div variants={itemVariants}>
+                  <div className="space-y-2">
+                    <p className="text-slate-700 font-semibold text-xs uppercase tracking-wider">
+                      Trading as a company?{" "}
+                      <span className="normal-case font-normal text-slate-400">(optional)</span>
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {([["none", "Just me for now"], ["register", "Register my company"], ["join", "Join my company's team"]] as const).map(([v, l]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => form.setValue("companyMode", v, { shouldValidate: true })}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                            companyMode === v
+                              ? "bg-ocean-600 border-ocean-600 text-white"
+                              : "bg-white border-slate-200 text-slate-600 hover:border-ocean-300"
+                          }`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                    {companyMode !== "none" && (
+                      <>
+                        <FormField
+                          control={form.control}
+                          name="companyName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  placeholder="Company name, e.g. Gulf Maritime LLC"
+                                  className="bg-slate-50 border-slate-200 focus:bg-white focus:border-ocean-600 focus:ring-ocean-600/20 h-11 rounded"
+                                />
+                              </FormControl>
+                              <FormMessage className="text-xs" />
+                            </FormItem>
+                          )}
+                        />
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          {companyMode === "register"
+                            ? "You'll be the company's admin and can approve teammates who join."
+                            : "Your request goes to your company's admin for approval — your seat activates once they confirm."}
+                        </p>
+                      </>
                     )}
                   </div>
                 </motion.div>
