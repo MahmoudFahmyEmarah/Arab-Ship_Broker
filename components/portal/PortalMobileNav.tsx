@@ -27,7 +27,7 @@ export function PortalMobileNav({
   // Map-first default: the market boards (which carry the chart) are the
   // primary phone surface, so they sit center.
   const tabs: Tab[] = [
-    { href: `${basePath}`, label: "Home", icon: (a) => <IconDashboard size={20} color={c(a)} /> },
+    { href: `${basePath}`, label: "Dashboard", icon: (a) => <IconDashboard size={20} color={c(a)} /> },
     ...(isCargo
       ? [{ href: `${basePath}/cargo`, label: "Cargo", icon: (a: boolean) => <IconCargo size={20} color={c(a)} /> }]
       : []),

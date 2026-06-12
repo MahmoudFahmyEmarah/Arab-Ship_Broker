@@ -2958,12 +2958,18 @@ button { font: inherit; cursor: pointer; }
   display: inline-flex; align-items: center; justify-content: center; font-size: 15px;
 }
 
-/* ── Mobile market boards: MarineTraffic-style map-first (≤900px) ──
-   The map fills the surface; the listing list rides over it as a bottom
-   sheet (rounded top, grab handle, own scroll). With the map hidden the
-   list returns to a normal full-height pane. The !importants exist only to
-   beat the panes' desktop inline styles inside this media block. */
+/* ════════════════════════════════════════════════════════════════════
+   Mobile market + workspace boards · MarineTraffic-style · phones ≤ 900px
+   Map fills the surface; the list rides over it as a bottom sheet with a
+   tap-to-toggle handle (half ↔ peek = full-screen map). Desktop untouched;
+   the !importants only beat the panes' desktop inline styles in this block.
+   ════════════════════════════════════════════════════════════════════ */
+.mkt-sheet-handle { display: none; }
+
 @media (max-width: 900px) {
+  /* Stop the page behind the sheet from rubber-banding/dragging */
+  .asb-portal { overscroll-behavior: none; }
+
   .mkt-body { position: relative; display: block !important; }
 
   .mkt-body.has-map .mkt-mappane {
@@ -2973,58 +2979,102 @@ button { font: inherit; cursor: pointer; }
     border-left: none !important;
     z-index: 0;
   }
+
   .mkt-body.has-map .mkt-listpane {
     position: absolute !important;
     left: 0; right: 0; bottom: 0;
-    height: 44%;
+    top: auto !important;
+    height: 46%;
     z-index: 5;
     background: var(--asb-white);
-    border-radius: 14px 14px 0 0;
+    border-radius: 16px 16px 0 0;
+    border-left: none !important;
     box-shadow: 0 -8px 28px rgba(8, 20, 38, 0.18);
-    padding-top: 14px !important;
+    padding-top: 30px !important;
+    overscroll-behavior: contain;   /* scroll stays in the sheet */
+    touch-action: pan-y;
+    transition: height .22s ease;
   }
-  /* grab handle */
-  .mkt-body.has-map .mkt-listpane::before {
-    content: "";
-    position: absolute;
-    top: 6px; left: 50%;
-    width: 38px; height: 4px;
-    margin-left: -19px;
-    border-radius: 99px;
-    background: var(--asb-gray-200);
+  /* Peek = full-screen map: collapse the sheet to just its handle bar */
+  .mkt-body.has-map .mkt-listpane.is-peek {
+    height: 34px;
+    overflow: hidden !important;
   }
   /* map hidden → plain full-height list */
   .mkt-body:not(.has-map) .mkt-listpane { height: 100%; }
+  .mkt-body:not(.has-map) .mkt-listpane { padding-top: 0 !important; }
+  .mkt-body:not(.has-map) .mkt-sheet-handle { display: none !important; }
 
-  /* Filter bar: one horizontal swipe row instead of wrapping */
-  .mkt-filterbar { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .mkt-filterbar .row { flex-wrap: nowrap !important; width: max-content; }
+  /* The handle: a real tappable bar pinned to the top of the sheet */
+  .mkt-sheet-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 30px;
+    z-index: 6;
+    border: none;
+    background: var(--asb-white);
+    border-radius: 16px 16px 0 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--asb-gray-500);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mkt-sheet-grip {
+    position: absolute; top: 6px; left: 50%; margin-left: -19px;
+    width: 38px; height: 4px; border-radius: 99px; background: var(--asb-gray-200);
+  }
+  .mkt-sheet-label { margin-top: 9px; }
 
-  /* Touch targets: roomier chips and rows */
-  .mkt-filterbar .asb-chip { padding: 7px 11px; }
-}
-
-/* ── Mobile workspace boards + detail bottom sheet (≤900px) ── */
-@media (max-width: 900px) {
-  /* Detail panel rides over the surface as a tall bottom sheet */
+  /* Detail panel = tall bottom sheet above the tab bar */
   .mkt-detailpane {
     position: fixed !important;
-    left: 0; right: 0; bottom: 0;
-    top: auto !important;
-    height: 72dvh;
-    z-index: 60; /* above the bottom tab bar */
+    left: 0; right: 0; bottom: 0; top: auto !important;
+    height: 76dvh;
+    z-index: 60;
     background: var(--asb-white);
-    border-radius: 14px 14px 0 0;
+    border-radius: 16px 16px 0 0;
     border-left: none !important;
     box-shadow: 0 -10px 36px rgba(8, 20, 38, 0.28);
     overflow: hidden !important;
+    overscroll-behavior: contain;
     animation: mktSheetUp .2s ease-out;
   }
   @keyframes mktSheetUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .mkt-detailpane { animation: none; } }
-  .mkt-detailpane .detail-panel { height: 100%; overflow: auto; }
+  .mkt-detailpane .detail-panel { height: 100%; overflow: auto; overscroll-behavior: contain; }
 
-  /* Touch comfort across portal lists and chips */
-  .asb-chip { min-height: 32px; }
+  /* Dashboard board: reuse the same map-first treatment (it carries the
+     mkt-body/mkt-listpane/mkt-mappane hooks too). */
+  .dash-right { padding-right: 0 !important; }
+
+  /* ── Filter bar: two wrapping rows of smaller chips, no side-scroll ── */
+  .mkt-filterbar { overflow: visible !important; padding: 6px 12px !important; }
+  .mkt-filterbar .row { flex-wrap: wrap !important; width: auto !important; gap: 5px !important; }
+  .mkt-filterbar .asb-chip,
+  .mkt-filterbar .filter-menu__btn,
+  .mkt-filterbar button { font-size: 11px; }
+  /* Drop the desktop-only "layer/archive" caption + the match divider */
+  .mkt-layer-note, .mkt-filterbar .divider { display: none !important; }
+
+  /* ── Top bar: keep the title, drop the archive badge + listings count ── */
+  .mkt-head-meta { display: none !important; }
+
+  /* ── Cards: use the full mobile width, larger readable type ── */
+  .asb-card { padding: 12px 14px; }
+  .asb-card .card-title, .cargo-card__title, .vessel-card__title { font-size: 15px !important; }
+  .asb-card .mono, .asb-card .card-sub { font-size: 12px !important; }
+  .cargo-card .kv, .vessel-card .kv,
+  .asb-card .kv span, .asb-card .field-row { font-size: 12.5px !important; }
+  /* One card per row on phones so the content can breathe */
+  .mkt-listpane .asb-card { width: 100%; }
+
+  /* Touch comfort */
+  .asb-chip { min-height: 30px; }
   .nav-item { min-height: 40px; }
 }

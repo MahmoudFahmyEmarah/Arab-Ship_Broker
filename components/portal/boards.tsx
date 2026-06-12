@@ -5,6 +5,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { SheetHandle } from "./SheetHandle";
 import { CargoView, VesselView } from "@/lib/portal/types";
 import { CargoCard } from "./CargoCard";
 import { VesselCard } from "./VesselCard";
@@ -152,6 +153,7 @@ export function DashboardBoard({
   portCoords?: Record<string, PortGeo>;
 }) {
   const [mode, setMode] = React.useState<"cargo" | "vessel">("cargo");
+  const [sheetPeek, setSheetPeek] = React.useState(false);
   const [focusedCargo, setFocusedCargo] = React.useState<string | null>(null);
   const [focusedVessel, setFocusedVessel] = React.useState<string | null>(null);
 
@@ -293,8 +295,9 @@ export function DashboardBoard({
       </div>
 
       {/* Body: panels left + map right (new design order) */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(330px, 0.7fr) 1.3fr", gap: 12, padding: 12, minHeight: 0, overflow: "hidden" }}>
-        <div className="dash-right" style={{ overflow: "auto", overflowX: "hidden", paddingRight: 4, minWidth: 0 }}>
+      <div className="mkt-body has-map" style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(330px, 0.7fr) 1.3fr", gap: 12, padding: 12, minHeight: 0, overflow: "hidden" }}>
+        <div className={`dash-right mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ overflow: "auto", overflowX: "hidden", paddingRight: 4, minWidth: 0 }}>
+          <SheetHandle peek={sheetPeek} onToggle={() => setSheetPeek((p) => !p)} label="Dashboard panels" />
           <DashboardPanel<CargoView>
             kind="cargo"
             title="Cargo positions"
@@ -329,7 +332,7 @@ export function DashboardBoard({
             )}
           </DashboardPanel>
         </div>
-        <div style={{ minHeight: 0, borderRadius: 4, overflow: "hidden", border: "var(--bd)" }}>
+        <div className="mkt-mappane" style={{ minHeight: 0, borderRadius: 4, overflow: "hidden", border: "var(--bd)" }}>
           <MarketMap
             cargos={filteredCargos}
             vessels={filteredVessels}
@@ -364,6 +367,7 @@ export function CargoBoard({
 }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [mapOpen, setMapOpen] = React.useState(false);
+  const [sheetPeek, setSheetPeek] = React.useState(false);
   useEscClear(setSelectedId);
 
   const [fZones, setFZones] = React.useState<string[]>([]);
@@ -431,7 +435,8 @@ export function CargoBoard({
       </div>
 
       <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-        <div className="mkt-listpane" style={{ flex: 1, overflow: "auto", padding: 16, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div className={`mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ flex: 1, overflow: "auto", padding: 16, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+          {mapOpen && <SheetHandle peek={sheetPeek} onToggle={() => setSheetPeek((p) => !p)} label={`${filtered.length} listed`} />}
           <div style={{ display: "grid", gridTemplateColumns: cols, gap: 6, transition: "grid-template-columns var(--t-base)" }}>
             {filtered.map((c) => (
               <CargoCard key={c.id} data={c} selected={selectedId === c.id} onSelect={(id) => setSelectedId((s) => (s === id ? null : id))} />
@@ -467,6 +472,7 @@ export function VesselBoard({
 }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [mapOpen, setMapOpen] = React.useState(false);
+  const [sheetPeek, setSheetPeek] = React.useState(false);
   useEscClear(setSelectedId);
 
   const [fZones, setFZones] = React.useState<string[]>([]);
@@ -533,7 +539,8 @@ export function VesselBoard({
       </div>
 
       <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-        <div className="mkt-listpane" style={{ flex: 1, overflow: "auto", padding: 16, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div className={`mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ flex: 1, overflow: "auto", padding: 16, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+          {mapOpen && <SheetHandle peek={sheetPeek} onToggle={() => setSheetPeek((p) => !p)} label={`${filtered.length} listed`} />}
           <div style={{ display: "grid", gridTemplateColumns: cols, gap: 14, transition: "grid-template-columns var(--t-base)" }}>
             {filtered.map((v) => (
               <VesselCard key={v.id} data={v} selected={selectedId === v.id} onSelect={(id) => setSelectedId((s) => (s === id ? null : id))} />

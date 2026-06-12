@@ -15,6 +15,7 @@ import { DashCargoRow } from "./dashboard";
 import { useViewerTier, isLimitedTier } from "@/lib/portal/tier";
 import { fetchMyMatchedCargoIds, fetchMyMatchedAvailabilityIds } from "@/lib/portal/actions";
 import { IconMap } from "./icons";
+import { SheetHandle } from "./SheetHandle";
 import {
   FilterMenu,
   CheckList,
@@ -80,6 +81,7 @@ export function CargoMarketBoard({
     if (!mineOnly || myMatchIds !== null) return;
     fetchMyMatchedCargoIds().then((ids) => setMyMatchIds(new Set(ids))).catch(() => setMyMatchIds(new Set()));
   }, [mineOnly, myMatchIds]);
+  const [sheetPeek, setSheetPeek] = React.useState(false);
 
   const ZONE_OPTS = React.useMemo(() => uniq(views.flatMap((c) => [c.route?.polZone, c.route?.podZone])), [views]);
   const TYPE_OPTS = React.useMemo(() => uniq(views.map((c) => c.type)), [views]);
@@ -112,8 +114,8 @@ export function CargoMarketBoard({
         <div className="row-sb">
           <h1 className="page-title">Cargo Market</h1>
           <div className="row" style={{ gap: 8 }}>
-            <span className="asb-badge review">{archiveLabel ?? "Standard access · 1 month archive"}</span>
-            <span style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>{filtered.length} listings found</span>
+            <span className="asb-badge review mkt-head-meta">{archiveLabel ?? "Standard access · 1 month archive"}</span>
+            <span className="mkt-head-meta" style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>{filtered.length} listings found</span>
             <div className="dash-view-toggle" style={{ marginLeft: 4 }}>
               <button type="button" className={view === "list" ? "is-on" : ""} onClick={() => setView("list")} aria-label="List view">
                 <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><line x1="3" y1="4" x2="11" y2="4" /><line x1="3" y1="7" x2="11" y2="7" /><line x1="3" y1="10" x2="11" y2="10" /></svg>
@@ -139,7 +141,7 @@ export function CargoMarketBoard({
             </button>
           </div>
           <span className="divider" />
-          <span style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>Layer 1 · future · Layer 2 · 6d archive · Layer 3 · 1mo archive</span>
+          <span className="mkt-layer-note" style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>Layer 1 · future · Layer 2 · 6d archive · Layer 3 · 1mo archive</span>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <FilterMenu label="Zone" badge={fZones.length || null} active={fZones.length > 0} width={150}>
@@ -167,7 +169,8 @@ export function CargoMarketBoard({
       </div>
 
       <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-        <div className="mkt-listpane" style={{ flex: 1, overflow: "auto", padding: view === "list" ? 0 : "10px 12px" }} onClick={() => setSelectedId(null)}>
+        <div className={`mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ flex: 1, overflow: "auto", padding: view === "list" ? 0 : "10px 12px" }} onClick={() => setSelectedId(null)}>
+          {mapOpen && <SheetHandle peek={sheetPeek} onToggle={() => setSheetPeek((p) => !p)} label={`${filtered.length} listings`} />}
           {filtered.length === 0 ? (
             <MarketEmpty
               title={views.length === 0 ? "No cargo on the market yet" : "No cargo matches these filters"}
@@ -228,6 +231,7 @@ export function TonnageMarketBoard({
     if (!mineOnly || myMatchIds !== null) return;
     fetchMyMatchedAvailabilityIds().then((ids) => setMyMatchIds(new Set(ids))).catch(() => setMyMatchIds(new Set()));
   }, [mineOnly, myMatchIds]);
+  const [sheetPeek, setSheetPeek] = React.useState(false);
 
   const ZONE_OPTS = React.useMemo(() => uniq(views.map((v) => v.openPortZone)), [views]);
   const TYPE_OPTS = React.useMemo(() => uniq(views.map((v) => v.type)), [views]);
@@ -265,7 +269,7 @@ export function TonnageMarketBoard({
           <h1 className="page-title">Tonnage Market</h1>
           <div className="row" style={{ gap: 10 }}>
             <input className="asb-search" placeholder="Search vessel name or IMO…" style={{ width: 230 }} value={q} onChange={(e) => setQ(e.target.value)} />
-            <span style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>{filtered.length} vessels</span>
+            <span className="mkt-head-meta" style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>{filtered.length} vessels</span>
             <button className={`asb-chip ${mapOpen ? "is-active" : ""}`} onClick={() => setMapOpen((o) => !o)}>
               <IconMap size={12} /> {mapOpen ? "Hide map" : "Show map"}
             </button>
@@ -307,7 +311,8 @@ export function TonnageMarketBoard({
       </div>
 
       <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-        <div className="mkt-listpane" style={{ flex: 1, overflow: "auto", padding: "14px 16px" }} onClick={() => setSelectedId(null)}>
+        <div className={`mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ flex: 1, overflow: "auto", padding: "14px 16px" }} onClick={() => setSelectedId(null)}>
+          {mapOpen && <SheetHandle peek={sheetPeek} onToggle={() => setSheetPeek((p) => !p)} label={`${filtered.length} vessels`} />}
           {filtered.length === 0 ? (
             <MarketEmpty
               title={views.length === 0 ? "No open tonnage yet" : "No vessels match these filters"}
