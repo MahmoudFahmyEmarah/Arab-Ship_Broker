@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import { ScrollZoomBackground } from "@/components/ScrollZoomBackground";
+import { PublicStatsBar } from "@/components/PublicStatsBar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
@@ -418,6 +419,9 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
               ))}
             </div>
           </motion.div>
+
+          {/* Real platform reach — totals across the whole book */}
+          <PublicStatsBar variant="dark" className="mt-4 bg-ocean-950/70 backdrop-blur-xl" />
         </div>
       </section>
 

@@ -8,6 +8,7 @@ import {
 } from "@/lib/market-insights";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { FuelPanelMember, FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
+import { PublicStatsBar } from "@/components/PublicStatsBar";
 
 // Session-gated fuel panel reads cookies → must render per request.
 export const dynamic = "force-dynamic";
@@ -179,6 +180,9 @@ export default async function MarketInsightsPage({
             );
           })}
         </div>
+
+        {/* ── Public reach bar — real platform totals ── */}
+        <PublicStatsBar className="mb-5" />
 
         {/* ── Snapshot cards ── */}
         <div className="grid grid-cols-4 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-3 mb-5">
