@@ -12,6 +12,7 @@ export type AdminPerms = Record<string, "edit" | "view">;
 // (ETA holds tax credentials; Admins manages other admins).
 export const ADMIN_SECTIONS: { id: string; href: string }[] = [
   { id: "dashboard", href: "/admin/dashboard" },
+  { id: "stats", href: "/admin/stats" },
   { id: "review", href: "/admin/queue" },
   { id: "cargo", href: "/admin/cargo" },
   { id: "vesselavail", href: "/admin/vessel-availability" },
@@ -76,6 +77,7 @@ export function canAccess(
   if (!tier) return "none";
   if (tier === "super") return "edit";
   if (OWNER_ONLY[sectionId]) return "none";
-  if (sectionId === "dashboard") return "view"; // implicit for every admin
+  // Read-only overview surfaces every admin may see (aggregate counts, no PII).
+  if (sectionId === "dashboard" || sectionId === "stats") return "view";
   return perms?.[sectionId] ?? "none";
 }
