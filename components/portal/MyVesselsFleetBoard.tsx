@@ -217,7 +217,7 @@ export function MyVesselsFleetBoard({
                     Vessel &amp; cargo positions on the chart are a <b>Tier 3</b> feature.
                     Tier 1–2 subscribers see listing essentials only.
                   </div>
-                  <span className="mvb-maplock__cta">Upgrade to Tier 3</span>
+                  <Link className="mvb-maplock__cta" href="/dashboard/account?tab=billing" onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none" }}>Upgrade to Tier 3</Link>
                 </div>
               </div>
             ) : (

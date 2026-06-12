@@ -4,6 +4,7 @@
 // (asb/detail-panel.jsx). Real values from the view models; "—" where the
 // source row has no value (no invented data). Rules-engine tooltips deferred.
 import * as React from "react";
+import Link from "next/link";
 import { CargoView, VesselView, VesselOwnershipView } from "@/lib/portal/types";
 import { MatchVesselView, MatchCargoView } from "@/lib/portal/match-views";
 import { fetchCargoMatches, fetchAvailabilityMatches, fetchVesselOwnership } from "@/lib/portal/actions";
@@ -108,7 +109,7 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
             <span className="mono" style={{ fontSize: 12, color: "var(--asb-gray-500)" }}>{cargo.refId}</span>
           </button>
           <div className="row" style={{ gap: 4 }}>
-            <button className="asb-btn primary">Full edit →</button>
+            <Link className="asb-btn primary" href={`/dashboard/cargo/${cargo.id}/edit`} style={{ textDecoration: "none" }}>Full edit →</Link>
             <button className="asb-btn ghost" onClick={onClose} style={{ padding: "5px 8px" }}>
               <IconClose size={14} />
             </button>
@@ -227,7 +228,7 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
             <span className="mono" style={{ fontSize: 12, color: "var(--asb-gray-500)" }}>IMO {v.imo}</span>
           </button>
           <div className="row" style={{ gap: 4 }}>
-            <button className="asb-btn primary">Edit vessel →</button>
+            <Link className="asb-btn primary" href={`/dashboard/vessels/${v.vesselId ?? v.id}`} style={{ textDecoration: "none" }}>Edit vessel →</Link>
             <button className="asb-btn ghost" onClick={onClose} style={{ padding: "5px 8px" }}>
               <IconClose size={14} />
             </button>

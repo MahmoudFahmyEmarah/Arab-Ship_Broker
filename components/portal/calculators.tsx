@@ -137,7 +137,7 @@ function Locked({ title }: { title: string }) {
           <div className="locked-title">{title}</div>
           <div className="locked-features">Voyage cost estimate · Port disbursements<br />Suez Canal toll</div>
           <div className="locked-tier-note">Available from Subscriber tier (T3+)</div>
-          <Link href="/dashboard/account" className="locked-upgrade-btn">Upgrade to Subscriber →</Link>
+          <Link href="/dashboard/account?tab=billing" className="locked-upgrade-btn">Upgrade to Subscriber →</Link>
         </div>
       </div>
     </div>
