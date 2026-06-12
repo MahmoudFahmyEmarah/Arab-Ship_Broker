@@ -40,7 +40,7 @@ const features = [
     icon: BarChart3,
     title: "Live Market Intelligence",
     description:
-      "Real-time freight rate signals across the Red Sea, Arabian Gulf, and East Mediterranean — so you negotiate from a position of knowledge, not guesswork.",
+      "Real-time freight rate signals across the Red Sea, Arabian Gulf, and East Mediterranean, so you negotiate from a position of knowledge, not guesswork.",
     accent: "from-foam-400 to-foam-600",
     iconBg:
       "bg-foam-50 text-foam-600 group-hover:bg-foam-600 group-hover:text-white",
@@ -68,7 +68,7 @@ const steps = [
     number: "02",
     title: "Intelligent Matching",
     description:
-      "Our engine cross-references zone, capacity, laycan, vessel type, and special requirements — filtering the entire register to surface only valid matches.",
+      "Our engine cross-references zone, capacity, laycan, vessel type, and special requirements, filtering the entire register to surface only valid matches.",
     icon: Users,
   },
   {
@@ -345,7 +345,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
               className="text-[18px] max-sm:text-base text-ocean-100/80 mb-11 max-sm:mb-9 max-w-2xl mx-auto leading-relaxed"
             >
               Precision cargo-to-vessel matching across the Red Sea, Arabian
-              Gulf, East Mediterranean, and Black Sea — with compliance,
+              Gulf, East Mediterranean, and Black Sea, with compliance,
               confidentiality, and speed built in.
             </motion.p>
 
@@ -398,7 +398,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
           <SectionHeader
             eyebrow="Why Arab ShipBroker"
             title="Built for the MENA Market"
-            subtitle="We don't offer generic maritime services. Every feature — from zone-aware matching to sanctions screening — is purpose-built for the Red Sea and Arabian Gulf trade lanes."
+            subtitle="We don't offer generic maritime services. Every feature, from zone-aware matching to sanctions screening, is purpose-built for the Red Sea and Arabian Gulf trade lanes."
           />
 
           <div className="grid grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-7 max-sm:gap-5">
@@ -465,7 +465,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                 <p>
                   Our boutique approach delivers personalized service without
                   sacrificing reach. We specialize in dry-bulk and break-bulk
-                  commodities across the MENA region — from chartering to vessel
+                  commodities across the MENA region: from chartering to vessel
                   S&P.
                 </p>
                 <p>
@@ -542,7 +542,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
           <SectionHeader
             eyebrow="Process"
             title="How It Works"
-            subtitle="Three precise steps from requirement to fixture — no friction, no wasted time."
+            subtitle="Three precise steps from requirement to fixture. No friction, no wasted time."
             light
           />
 
@@ -802,7 +802,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
             </h2>
             <p className="text-ocean-200/65 text-[17px] max-sm:text-base mb-10 leading-relaxed">
               Whether you need to charter a vessel, move cargo, or explore the
-              market — our expert team is ready.
+              market? Our expert team is ready.
             </p>
             <div className="flex flex-row max-sm:flex-col gap-4 justify-center">
               <Link

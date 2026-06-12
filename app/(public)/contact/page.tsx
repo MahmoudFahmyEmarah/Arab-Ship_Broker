@@ -470,7 +470,7 @@ export default function ContactPage() {
                     With a Master&apos;s in Fleet Operations, a Master Mariner
                     License, and over 15 years of combined sea and shore
                     experience, Capt. Mohamed leads Arab ShipBroker with
-                    hands-on maritime expertise. Reach out directly — he&apos;s
+                    hands-on maritime expertise. Reach out directly. He&apos;s
                     always happy to discuss your shipping needs.
                   </p>
                   <Button

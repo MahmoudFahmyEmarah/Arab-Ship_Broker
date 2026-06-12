@@ -76,7 +76,7 @@ const faqs = [
   {
     question: "What is your edge?",
     answer:
-      "We've been where it matters—onboard ships, touching cargo, seeing ports with our own eyes, not just through documents. Having worked across every tier of the maritime industry, we know the difference between genuine value and inflated costs. We help you avoid paying premium prices for standard services, delivering the same result for significantly less.",
+      "We've been where it matters: onboard ships, touching cargo, seeing ports with our own eyes, not just through documents. Having worked across every tier of the maritime industry, we know the difference between genuine value and inflated costs. We help you avoid paying premium prices for standard services, delivering the same result for significantly less.",
   },
   {
     question: "What principles are you committed to?",
@@ -98,7 +98,7 @@ A full first-time shipment involves a much larger cycle, including:
 • Cargo insurance and risk coverage
 • Payment methods and trade finance (LC, TT, etc.)
 
-We do not claim to handle all of these deeply — and we never overpromise. However, we remain at the intersection where all these circles meet. We help you navigate the shipping leg with confidence and, where needed, guide you to the right partners for the rest — because a smooth voyage starts with the right vessel and the right advice.`,
+We do not claim to handle all of these deeply, and we never overpromise. However, we remain at the intersection where all these circles meet. We help you navigate the shipping leg with confidence and, where needed, guide you to the right partners for the rest, because a smooth voyage starts with the right vessel and the right advice.`,
   },
 ];
 
