@@ -307,8 +307,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         ref={heroRef}
         className="relative min-h-[92vh] flex items-center justify-center pt-28 pb-36 max-lg:pt-24 max-lg:pb-28 max-sm:pt-20 max-sm:pb-20"
       >
-        {/* TRIAL hero (high-res 4160px terminal-at-sunset, Capt. Dawoud's own shot already in the repo). Undo = revert this commit; the original /website-cover.jpeg is untouched. */}
-        <ScrollZoomBackground image="/6.jpeg" />
+        <ScrollZoomBackground image="/website-cover.jpeg" />
 
         <div className="absolute inset-0 z-1 pointer-events-none">
           <div className="absolute inset-0 bg-ocean-950/50" />
