@@ -26,8 +26,8 @@ export function LogoutButton({
     try {
       const supabase = getSupabaseBrowserClient();
       await logout(supabase);
-      toast.success("Anchor raised! Logged out successfully.");
-      router.push("/");
+      toast.success("Signed out.");
+      router.push("/auth/login");
       if (onComplete) onComplete();
     } catch (error) {
       console.error("Logout error:", error);

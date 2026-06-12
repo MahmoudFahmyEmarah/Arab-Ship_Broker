@@ -5,7 +5,10 @@
 // sidebar drive the /portal preview now and the real /dashboard later.
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { logout } from "@/sdk/auth";
 import { useViewerTier, isCalculatorLocked } from "@/lib/portal/tier";
 import {
   IconDashboard,
@@ -85,7 +88,22 @@ export function PortalSidebar({
   basePath?: string;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = React.useState(false);
+  const [signingOut, setSigningOut] = React.useState(false);
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await logout(getSupabaseBrowserClient());
+      router.push("/auth/login");
+      router.refresh();
+    } catch {
+      toast.error("Couldn't sign out — please try again.");
+      setSigningOut(false);
+    }
+  };
   const econLocked = isCalculatorLocked(useViewerTier());
 
   const isCargo = role === "broker" || role === "cargo_owner" || role === "admin";
@@ -234,6 +252,9 @@ export function PortalSidebar({
         </div>
 
         <button
+          type="button"
+          onClick={handleSignOut}
+          disabled={signingOut}
           style={{
             display: "flex",
             alignItems: "center",
@@ -245,12 +266,13 @@ export function PortalSidebar({
             color: "var(--asb-gray-500)",
             justifyContent: collapsed ? "center" : "flex-start",
             width: "100%",
-            cursor: "pointer",
+            cursor: signingOut ? "default" : "pointer",
+            opacity: signingOut ? 0.6 : 1,
           }}
           title={collapsed ? "Sign out" : undefined}
         >
           <IconSignOut size={12} />
-          {!collapsed && "Sign out"}
+          {!collapsed && (signingOut ? "Signing out…" : "Sign out")}
         </button>
       </div>
     </aside>
