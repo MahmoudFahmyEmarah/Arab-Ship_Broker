@@ -20,7 +20,8 @@ import {
   updatePassword,
   deleteMyAccount,
 } from "@/app/(dashboard)/dashboard/account/actions";
-import { IconUser, IconDoc, IconDashboard, IconBell, IconShield, IconShieldLock } from "./icons";
+import { IconUser, IconDoc, IconDashboard, IconBell, IconShield, IconShieldLock, IconVessel } from "./icons";
+import { PosCheckinFreqRow } from "./PositionCheckin";
 import { BillingPanel } from "./BillingPanel";
 import { TwoFactorSetup } from "./TwoFactorSetup";
 
@@ -490,6 +491,18 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                 {NOTIF_KEYS.map(([k, label]) => (
                   <ToggleRow key={k} label={label} on={notifs[k]} onToggle={() => toggleNotif(k)} />
                 ))}
+              </div>
+              {/* Vessel position check-in reminder (Pre_Final §13) — shares its
+                  source of truth with the popup via PosCheckinFreqRow. */}
+              <div className="settings-card">
+                <div className="head">
+                  <span className="icon-box" style={{ background: "var(--asb-blue-light)", color: "var(--asb-blue)" }}><IconVessel size={16} /></span>
+                  <span className="title">Vessel position check-in</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--asb-gray-500)", marginBottom: 8 }}>
+                  The reminder asking to confirm or update each vessel&apos;s ETA, port and open date.
+                </div>
+                <PosCheckinFreqRow />
               </div>
             </>
           )}

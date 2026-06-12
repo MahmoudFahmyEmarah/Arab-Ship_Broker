@@ -12,6 +12,7 @@ import "@/lib/portal/portal.css";
 import { DashboardProvider, useDashboard } from "@/contexts/DashboardContext";
 import { PortalSidebar, PortalRole } from "@/components/portal/PortalSidebar";
 import { PortalMobileNav } from "@/components/portal/PortalMobileNav";
+import { PositionCheckin } from "@/components/portal/PositionCheckin";
 import { TierProvider, type Tier } from "@/lib/portal/tier";
 import { MarketPartnerHost } from "@/components/portal/MarketPartnerPanel";
 import type { AppRole } from "@/lib/role";
@@ -53,6 +54,10 @@ function DashboardShell({
         </main>
       </div>
       <PortalMobileNav role={role} basePath="/dashboard" />
+      {/* Position check-in: vessel persona only, never admin (admins are
+          routed to /admin before this shell). Renders nothing for users with
+          no open positions, so mounting per-shell is safe. */}
+      {(role === "vessel_owner" || role === "broker") && <PositionCheckin />}
       <MarketPartnerHost />
     </div>
   );
