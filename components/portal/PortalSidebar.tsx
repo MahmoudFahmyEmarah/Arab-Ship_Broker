@@ -16,6 +16,7 @@ import {
   IconVessel,
   IconVoyage,
   IconSettings,
+  IconDoc,
   IconSidebar,
   IconBell,
   IconSignOut,
@@ -209,6 +210,7 @@ export function PortalSidebar({
       <div style={{ borderTop: "var(--bd)" }}>
         {!collapsed && <div className="nav-section">Account</div>}
         <NavItem href={`${basePath}/alerts`} label="My Alerts" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconBell className="nav-icon" size={16} color={c(a)} />} />
+        <NavItem href={`${basePath}/team`} label="My Company" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconDoc className="nav-icon" size={16} color={c(a)} />} />
         {/* Billing is a tab inside Settings (not a separate page). */}
         <NavItem href={`${basePath}/account`} label="Settings" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconSettings className="nav-icon" size={16} color={c(a)} />} />
 
