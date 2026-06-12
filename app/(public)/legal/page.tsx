@@ -177,9 +177,9 @@ const sections = [
           </h4>
           <p className="pl-8 max-[1024px]:pl-0">
             If Arab ShipBroker wishes to share your information for any purpose
-            outside the operational scope—such as investor presentations,
+            outside the operational scope, such as investor presentations,
             academic publications with identifying details, or commercial
-            partnerships—we will seek your{" "}
+            partnerships, we will seek your{" "}
             <strong className="font-semibold text-ocean-900">
               prior written consent
             </strong>

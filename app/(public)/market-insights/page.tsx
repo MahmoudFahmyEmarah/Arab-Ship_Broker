@@ -79,7 +79,7 @@ function RankTable({ title, items }: { title: string; items: InsightBucket[] }) 
 }
 
 const MEMBER_DEPTH = [
-  { title: "Full lane matrix", blurb: "Every zone-pair with counts, size split and momentum — not just the headline lanes." },
+  { title: "Full lane matrix", blurb: "Every zone-pair with counts, size split and momentum, not just the headline lanes." },
   { title: "Zone-by-zone supply / demand balance", blurb: "Open tonnage vs. live cargo per zone, so you see where it's long and where it's tight." },
   { title: "Route distances & voyage economics", blurb: "ECDIS distances feeding TCE on the in-portal Voyage Estimator." },
   { title: "Live matching board", blurb: "Real-time cargo & position board with firewalled, broker-mediated introductions." },
@@ -116,10 +116,10 @@ export default async function MarketInsightsPage({
               {ed.sample && <span className="ml-1 text-[9px] text-slate-400 normal-case tracking-normal font-medium">(sample)</span>}
             </div>
             <h1 className="text-3xl max-sm:text-2xl font-bold text-ocean-950 tracking-tight">
-              {weekLabel(ed.week_id)} — {formatRange(ed.range_from, ed.range_to)}
+              {weekLabel(ed.week_id)} · {formatRange(ed.range_from, ed.range_to)}
             </h1>
             <p className="text-sm text-slate-500 mt-2 max-w-2xl">
-              Regional dry bulk &amp; break-bulk activity — AG / R.Sea / E.Med / B.Sea / A.Sea,
+              Regional dry bulk &amp; break-bulk activity: AG / R.Sea / E.Med / B.Sea / A.Sea,
               sub-66K focus. <span className="font-semibold text-slate-700">Activity intelligence, not freight-rate data.</span>
             </p>
           </div>
@@ -207,7 +207,7 @@ export default async function MarketInsightsPage({
             </h2>
             <p className="text-ocean-100/85 text-[15px] leading-relaxed">
               The edition above is the aggregated teaser. Inside the portal the same data opens
-              into the cuts that actually move a fixture — gated because that depth is the membership.
+              into the cuts that actually move a fixture, gated because that depth is the membership.
             </p>
           </div>
 
