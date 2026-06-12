@@ -1088,3 +1088,204 @@
 }
 .asb-map .route-tag i { font-style: normal; font-size: 8.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #EF9F27; }
 .asb-map .route-tag.is-exact i { color: #97C459; }
+
+/* ════════════════════════════════════════════════════════════════════
+   09_pre_final_polish overrides — glass map chrome (§5–§6, §8)
+   Values verbatim from the prototype asb/map.css; appended last so they
+   win the cascade over the earlier blocks above.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Transparent rail — no card; the map shows through. Icons keep their own
+   faint glass chip so they stay legible over either basemap. */
+.asb-map .left-bar,
+.asb-map .right-bar {
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  height: auto;
+  width: auto;
+  padding: 0;
+  gap: 6px;
+  z-index: 600;
+}
+.asb-map .bar-icon,
+.asb-map .voy-opex-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(10, 22, 36, 0.42);
+  border: 0.5px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 1px 4px rgba(4, 12, 24, 0.30);
+}
+.asb-map .bar-icon:hover  { background: rgba(10, 22, 36, 0.78); color: #fff; }
+.asb-map .bar-icon.active { background: rgba(24, 95, 165, 0.82); color: #fff; border-color: rgba(123, 184, 240, 0.7); }
+.asb-map .bar-badge {
+  top: 5px; right: 5px;
+  width: 6px; height: 6px;
+  border: 1.5px solid rgba(10, 22, 36, 0.95);
+}
+.asb-map .bar-divider { background: transparent; height: 4px; }
+/* Day basemap: chips flip to light glass + navy ink */
+.asb-map.base-light .bar-icon,
+.asb-map.base-light .voy-opex-icon {
+  background: rgba(248, 251, 254, 0.55);
+  border-color: rgba(13, 38, 64, 0.20);
+  color: rgba(13, 38, 64, 0.78);
+}
+.asb-map.base-light .bar-icon:hover { background: rgba(248, 251, 254, 0.85); color: #0D2640; }
+.asb-map.base-light .bar-icon.active { background: rgba(24, 95, 165, 0.85); color: #fff; }
+
+/* Floating glass filter panel — right of nothing, left of the rail. */
+.asb-map .filter-panel {
+  right: 52px; top: 10px; bottom: 10px;
+  left: auto;
+  height: auto;
+  background: rgba(8, 18, 30, 0.55);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(4, 12, 24, 0.35);
+  color: rgba(255, 255, 255, 0.88);
+}
+.asb-map .filter-panel.open { width: 172px; }
+.asb-map.is-fullscreen .filter-panel.open { width: 172px; }
+.asb-map .filter-panel__inner { width: 172px; }
+.asb-map.is-fullscreen .filter-panel__inner { width: 172px; }
+.asb-map.base-light .filter-panel {
+  background: rgba(248, 251, 254, 0.62);
+  border-color: rgba(13, 38, 64, 0.18);
+  box-shadow: 0 10px 30px rgba(13, 38, 64, 0.20);
+  color: #1C3450;
+}
+.asb-map.base-light .filter-panel__title,
+.asb-map.base-light .filter-facet__label { color: rgba(13, 38, 64, 0.62); }
+.asb-map.base-light .filter-chip {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(13, 38, 64, 0.24);
+  color: rgba(13, 38, 64, 0.62);
+}
+.asb-map.base-light .filter-chip:hover { border-color: rgba(13, 38, 64, 0.5); color: #0D2640; }
+.asb-map.base-light .filter-chip.is-on { background: #185FA5; border-color: #185FA5; color: #fff; }
+.asb-map.base-light .filter-reset {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(13, 38, 64, 0.22);
+  color: rgba(13, 38, 64, 0.7);
+}
+
+/* Voy OPEX panel — identical glass geometry; result pills max 2 per row. */
+.asb-map .voy-panel {
+  right: 52px; top: 10px; bottom: 10px;
+  left: auto;
+  height: auto;
+  background: rgba(8, 18, 30, 0.55);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(4, 12, 24, 0.35);
+}
+.asb-map.base-light .voy-panel {
+  background: rgba(248, 251, 254, 0.62);
+  border-color: rgba(13, 38, 64, 0.18);
+  box-shadow: 0 10px 30px rgba(13, 38, 64, 0.20);
+  color: #1C3450;
+}
+.asb-map .voy-pills { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+/* Cargo thumbnail — transparent glass card, the map shows through. */
+.cargo-thumb-marker {
+  background: rgba(10, 22, 36, 0.30);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  border-left: 2px solid #97C459; /* overridden inline per scope */
+  backdrop-filter: blur(2.5px);
+  -webkit-backdrop-filter: blur(2.5px);
+}
+.cargo-thumb-marker:hover {
+  border-color: rgba(123, 184, 240, 0.7);
+  background: rgba(10, 22, 36, 0.55);
+  transform: translateY(-2px);
+}
+.cargo-thumb-marker.is-selected {
+  border-color: #7BB8F0;
+  background: rgba(24, 95, 165, 0.55);
+  transform: scale(1.08);
+}
+.asb-map.base-light .cargo-thumb-marker {
+  background: rgba(248, 251, 254, 0.42);
+  border-color: rgba(13, 38, 64, 0.22);
+}
+.asb-map.base-light .cargo-thumb-marker svg { color: rgba(13, 38, 64, 0.88); }
+.asb-map.base-light .cargo-thumb-marker span {
+  color: rgba(13, 38, 64, 0.78);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+.asb-map.base-light .cargo-thumb-marker:hover { background: rgba(248, 251, 254, 0.72); }
+.asb-map.base-light .cargo-thumb-marker.is-selected { background: rgba(24, 95, 165, 0.30); }
+
+/* ── Pairing marker states + armed hint (§8 star feature) ───────────── */
+.asb-map .leaflet-marker-icon.is-anchor {
+  filter: drop-shadow(0 0 7px #7BB8F0) !important;
+  z-index: 1200 !important;
+}
+.asb-map .leaflet-marker-icon.is-eligible {
+  filter: drop-shadow(0 0 6px #97C459);
+  z-index: 1000 !important;
+}
+.asb-map .leaflet-marker-icon.is-faded {
+  opacity: 0.26 !important;
+  filter: grayscale(0.7);
+}
+.asb-map .dash-pair-hint {
+  position: absolute;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 650;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(8, 16, 28, 0.92);
+  border: 0.5px solid rgba(123, 184, 240, 0.4);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  backdrop-filter: blur(3px);
+  white-space: nowrap;
+}
+.asb-map .dash-pair-hint strong { color: #8FC3F5; font-weight: 600; }
+.asb-map .dash-pair-hint__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #7BB8F0;
+  animation: pair-pulse 1.4s ease infinite;
+}
+@keyframes pair-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(123,184,240,0.5); }
+  70%  { box-shadow: 0 0 0 6px rgba(123,184,240,0); }
+  100% { box-shadow: 0 0 0 0 rgba(123,184,240,0); }
+}
+.asb-map .dash-pair-hint button {
+  background: none; border: none; color: rgba(255,255,255,0.5);
+  cursor: pointer; font-size: 12px; padding: 0 0 0 2px; line-height: 1;
+}
+.asb-map .dash-pair-hint button:hover { color: #fff; }
+
+/* Markets variant: rail on the map's inner-left edge; pills centred clear of
+   the Leaflet attribution; panels open from the left. */
+.asb-map.bar-inner-left .right-bar { right: auto; left: 8px; }
+.asb-map.bar-inner-left .filter-panel { left: 52px; right: auto; }
+.asb-map.bar-inner-left .voy-panel { left: 52px; right: auto; }
+.asb-map.bar-inner-left .layer-strip {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  justify-content: center;
+}
