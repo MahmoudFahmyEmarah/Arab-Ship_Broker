@@ -152,8 +152,8 @@ export function CargoMarketBoard({
         </div>
       </div>
 
-      <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-        <div style={{ flex: 1, overflow: "auto", padding: view === "list" ? 0 : "10px 12px" }} onClick={() => setSelectedId(null)}>
+      <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
+        <div className="mkt-listpane" style={{ flex: 1, overflow: "auto", padding: view === "list" ? 0 : "10px 12px" }} onClick={() => setSelectedId(null)}>
           {filtered.length === 0 ? (
             <MarketEmpty
               title={views.length === 0 ? "No cargo on the market yet" : "No cargo matches these filters"}
@@ -174,7 +174,7 @@ export function CargoMarketBoard({
           )}
         </div>
         {mapOpen && (
-          <div style={{ width: "50%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }}>
+          <div className="mkt-mappane" style={{ width: "50%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }}>
             <MarketMap barLeft cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
           </div>
         )}
@@ -280,8 +280,8 @@ export function TonnageMarketBoard({
         </div>
       </div>
 
-      <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-        <div style={{ flex: 1, overflow: "auto", padding: "14px 16px" }} onClick={() => setSelectedId(null)}>
+      <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
+        <div className="mkt-listpane" style={{ flex: 1, overflow: "auto", padding: "14px 16px" }} onClick={() => setSelectedId(null)}>
           {filtered.length === 0 ? (
             <MarketEmpty
               title={views.length === 0 ? "No open tonnage yet" : "No vessels match these filters"}
@@ -296,7 +296,7 @@ export function TonnageMarketBoard({
           )}
         </div>
         {mapOpen && (
-          <div style={{ width: "55%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }}>
+          <div className="mkt-mappane" style={{ width: "55%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }}>
             <MarketMap barLeft cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
           </div>
         )}
