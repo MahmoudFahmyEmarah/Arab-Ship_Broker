@@ -222,6 +222,7 @@ export function MyVesselsFleetBoard({
               </div>
             ) : (
               <MarketMap
+                barLeft
                 cargos={[]}
                 vessels={filteredViews}
                 portCoords={portCoords}

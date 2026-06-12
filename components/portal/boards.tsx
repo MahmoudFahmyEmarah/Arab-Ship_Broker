@@ -440,7 +440,7 @@ export function CargoBoard({
         </div>
         {mapOpen ? (
           <div style={{ width: "58%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
-            <MarketMap cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
+            <MarketMap barLeft cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
           </div>
         ) : selectedId ? (
           <div style={{ flex: "0 0 40%", overflow: "hidden", borderLeft: "var(--bd)" }} onClick={(e) => e.stopPropagation()}>
@@ -542,7 +542,7 @@ export function VesselBoard({
         </div>
         {mapOpen ? (
           <div style={{ width: "55%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
-            <MarketMap cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
+            <MarketMap barLeft cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
           </div>
         ) : selectedId ? (
           <div style={{ flex: "0 0 42%", overflow: "hidden", borderLeft: "var(--bd)" }} onClick={(e) => e.stopPropagation()}>

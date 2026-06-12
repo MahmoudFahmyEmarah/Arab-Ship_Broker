@@ -175,7 +175,7 @@ export function CargoMarketBoard({
         </div>
         {mapOpen && (
           <div style={{ width: "50%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }}>
-            <MarketMap cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
+            <MarketMap barLeft cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
           </div>
         )}
       </div>
@@ -297,7 +297,7 @@ export function TonnageMarketBoard({
         </div>
         {mapOpen && (
           <div style={{ width: "55%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }}>
-            <MarketMap cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
+            <MarketMap barLeft cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
           </div>
         )}
       </div>

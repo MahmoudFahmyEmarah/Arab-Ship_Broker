@@ -112,14 +112,35 @@ function cargoRegime(c: CargoView): CargoRegime {
   if (c.isGrain) return "grain";
   return "imsbc";
 }
-function regimeGlyph(regime: CargoRegime): string {
+// Commodity-aware glyphs (09 §6) — inline SVGs (no icon-font dependency, so
+// every glyph is guaranteed to render): grain→wheat · bagged→shopping bag ·
+// steel/pipes→cylinder · project→crane hook · liquid→droplet · other break
+// bulk→packages · dry bulk→layered stack.
+function commodityGlyph(c: CargoView, regime: CargoRegime): string {
   const s = `width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const name = `${c.commodity || c.cargo || ""}`.toLowerCase();
+  if (/bag|cement|rice|sugar|flour/.test(name)) {
+    // shopping bag (bagged cargo)
+    return `<svg ${s}><path d="M6 7h12l-1 13H7L6 7Z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>`;
+  }
+  if (/steel|pipe|coil|rebar|billet/.test(name)) {
+    // cylinder (steel / pipes)
+    return `<svg ${s}><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/></svg>`;
+  }
+  if (/project|machinery|equipment|turbine|transformer/.test(name)) {
+    // crane hook (project cargo)
+    return `<svg ${s}><path d="M12 3v9"/><path d="M12 12a3 3 0 1 0 3 3"/><path d="M4 7l8-4 8 4"/></svg>`;
+  }
+  if (/oil|liquid|molasses|chemical/.test(name)) {
+    // droplet (liquid)
+    return `<svg ${s}><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z"/></svg>`;
+  }
   if (regime === "grain") {
     // wheat ear
     return `<svg ${s}><path d="M12 22V8"/><path d="M12 8c0-2 1.6-3.5 3.5-3.5C15.5 6.5 14 8 12 8Z"/><path d="M12 8c0-2-1.6-3.5-3.5-3.5C8.5 6.5 10 8 12 8Z"/><path d="M12 13c0-2 1.6-3.5 3.5-3.5C15.5 11.5 14 13 12 13Z"/><path d="M12 13c0-2-1.6-3.5-3.5-3.5C8.5 11.5 10 13 12 13Z"/></svg>`;
   }
   if (regime === "breakbulk") {
-    // crate / box
+    // packages (other break bulk)
     return `<svg ${s}><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M9 3v18"/></svg>`;
   }
   // IMSBC dry bulk — layered stack
@@ -154,14 +175,14 @@ function cargoIcon(c: CargoView, state: CargoState, selected: boolean) {
   }
   if (state === "pill") {
     return {
-      html: `<div class="cargo-marker-wrap cargo-pill-marker${rg}${sel}" data-scope="${scope}" data-regime="${regime}" style="border-left-color:${SCOPE_COLOR[scope]}"><span class="pill-glyph" style="color:${SCOPE_COLOR[scope]}">${regimeGlyph(regime)}</span><span class="pill-name">${shortCargoName(c)}</span>${hoverTip(c)}</div>`,
+      html: `<div class="cargo-marker-wrap cargo-pill-marker${rg}${sel}" data-scope="${scope}" data-regime="${regime}" style="border-left-color:${SCOPE_COLOR[scope]}"><span class="pill-glyph" style="color:${SCOPE_COLOR[scope]}">${commodityGlyph(c, regime)}</span><span class="pill-name">${shortCargoName(c)}</span>${hoverTip(c)}</div>`,
       size: [88, 16] as [number, number],
       anchor: [44, 8] as [number, number],
     };
   }
   const wog = c.wog ? '<span class="wog-dot"></span>' : "";
   return {
-    html: `<div class="cargo-marker-wrap cargo-thumb-marker${rg}${sel}" data-scope="${scope}" data-regime="${regime}" style="border-left-color:${SCOPE_COLOR[scope]}">${regimeGlyph(regime)}<span>${shortCargoName(c)}</span>${wog}${hoverTip(c)}</div>`,
+    html: `<div class="cargo-marker-wrap cargo-thumb-marker${rg}${sel}" data-scope="${scope}" data-regime="${regime}" style="border-left-color:${SCOPE_COLOR[scope]}">${commodityGlyph(c, regime)}<span>${shortCargoName(c)}</span>${wog}${hoverTip(c)}</div>`,
     size: [44, 30] as [number, number],
     anchor: [22, 30] as [number, number],
   };
@@ -222,6 +243,7 @@ export default function MarketMap({
   onSelectVessel,
   portCoords,
   vesselVectors = false,
+  barLeft = false,
 }: {
   cargos: CargoView[];
   vessels: VesselView[];
@@ -234,6 +256,9 @@ export default function MarketMap({
   // My Vessels: draw a dashed vector from each vessel's open port toward its
   // first preferred-trade zone (off elsewhere so other map surfaces are clean).
   vesselVectors?: boolean;
+  // Card+map pages (markets, My Cargo/My Vessels): mirror the icon rail to the
+  // map's inner-left edge — the map sits right of the cards (09 §5).
+  barLeft?: boolean;
 }) {
   const geoFor = React.useCallback(
     (locode?: string | null): PortGeo | null => {
@@ -668,7 +693,7 @@ export default function MarketMap({
   );
 
   return (
-    <div ref={rootRef} data-zoom="far" className={`asb-map base-${base}${fullscreen ? " is-fullscreen" : ""}`}>
+    <div ref={rootRef} data-zoom="far" className={`asb-map base-${base}${barLeft ? " bar-inner-left" : ""}${fullscreen ? " is-fullscreen" : ""}`}>
       <div className="map-canvas">
         <div ref={hostRef} className="leaflet-host" />
 
