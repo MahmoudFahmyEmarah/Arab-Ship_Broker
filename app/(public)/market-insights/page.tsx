@@ -3,12 +3,12 @@ import {
   Activity, Ship, Boxes, Route, Lock, ArrowRight, ShieldCheck, CalendarDays,
 } from "lucide-react";
 import {
-  getLatestEdition, getEdition, getArchive, formatRange, currentIsoWeek,
-  SIZE_BAND_ORDER, type InsightBucket, type InsightEdition,
+  getLatestEdition, getEdition, getArchive, getTrendSeries, formatRange,
+  currentIsoWeek, type InsightBucket, type InsightEdition,
 } from "@/lib/market-insights";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { FuelPanelMember, FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
-import { PublicStatsBar } from "@/components/PublicStatsBar";
+import { TrendChart, RegimeDonut, SizeBandColumns, LanesTable } from "@/components/market-insights/Charts";
 
 // Session-gated fuel panel reads cookies → must render per request.
 export const dynamic = "force-dynamic";
@@ -98,9 +98,10 @@ export default async function MarketInsightsPage({
   searchParams: Promise<{ week?: string }>;
 }) {
   const { week } = await searchParams;
-  const [edition, archive] = await Promise.all([
+  const [edition, archive, trend] = await Promise.all([
     week ? getEdition(week).then((e) => e ?? getLatestEdition()) : getLatestEdition(),
     getArchive(),
+    getTrendSeries(),
   ]);
   const ed: InsightEdition = edition;
   const p = ed.payload;
@@ -113,12 +114,13 @@ export default async function MarketInsightsPage({
   const { data: { user } } = await supabase.auth.getUser();
   const isMember = Boolean(user);
 
-  // Order size bands consistently.
-  const sizeBands = [...p.size_bands].sort(
-    (a, b) => SIZE_BAND_ORDER.indexOf(a.label as never) - SIZE_BAND_ORDER.indexOf(b.label as never),
-  );
   // Display labels for the cargo-mix regimes (display only).
   const regimeMix = p.regime_mix.map((b) => ({ ...b, label: regimeDisplayLabel(b.label) }));
+
+  // Typical size band = the modal band of the week (design snapshot card).
+  const typicalBand =
+    [...p.size_bands].filter((b) => b.label !== "Other").sort((a, b) => b.count - a.count)[0]?.label
+    ?? (p.snapshot.avg_cargo_size_mt != null ? `~${nf.format(p.snapshot.avg_cargo_size_mt)}` : "n/a");
 
   // Editions strip (Pre_Final §11): the current in-progress ISO week shows as a
   // disabled chip so nobody wonders where this week's report is; published
@@ -181,33 +183,36 @@ export default async function MarketInsightsPage({
           })}
         </div>
 
-        {/* ── Public reach bar — real platform totals ── */}
-        <PublicStatsBar className="mb-5" />
-
-        {/* ── Snapshot cards ── */}
+        {/* ── Snapshot cards (design labels) ── */}
         <div className="grid grid-cols-4 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-3 mb-5">
-          <SnapshotCard icon={Activity} label="Cargoes live" value={nf.format(p.snapshot.cargoes_live)} sub="approved & circulating" />
-          <SnapshotCard icon={Ship} label="Open tonnage" value={nf.format(p.snapshot.open_tonnage)} sub="positions in region" />
-          <SnapshotCard icon={Boxes} label="Avg cargo size" value={p.snapshot.avg_cargo_size_mt != null ? `~${nf.format(p.snapshot.avg_cargo_size_mt)}` : "—"} sub="MT (rounded)" />
+          <SnapshotCard icon={Activity} label="Cargoes posted" value={nf.format(p.snapshot.cargoes_live)} sub="approved & circulating" />
+          <SnapshotCard icon={Ship} label="Open positions" value={nf.format(p.snapshot.open_tonnage)} sub="in region" />
+          <SnapshotCard icon={Boxes} label="Typical size band (MT)" value={typicalBand} sub="most common band" />
           <SnapshotCard icon={Route} label="Active lanes" value={nf.format(p.snapshot.active_lanes)} sub="zone-to-zone" />
         </div>
 
-        {/* ── Charts ── */}
-        <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-4 mb-6">
+        {/* ── Weekly trend — same snapshot figures across stored editions ── */}
+        <div className="mb-4">
+          <TrendChart series={trend} />
+        </div>
+
+        {/* ── Regime donut + size-band columns ── */}
+        <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-4 mb-4">
+          <RegimeDonut items={regimeMix} />
+          <SizeBandColumns items={p.size_bands} />
+        </div>
+
+        {/* ── Lanes table + commodities ── */}
+        <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-4 mb-4">
+          <LanesTable items={p.top_lanes} />
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">Cargo mix by regime</div>
-            <BarList items={regimeMix} />
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">Size-band distribution</div>
-            <BarList items={sizeBands} accent="foam" />
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">Top commodities</div>
+            <BarList items={p.top_commodities} />
           </div>
         </div>
 
-        {/* ── Tables ── */}
+        {/* ── Zones ── */}
         <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-4 mb-6">
-          <RankTable title="Top lanes" items={p.top_lanes} />
-          <RankTable title="Top commodities" items={p.top_commodities} />
           <RankTable title="Top load zones" items={p.load_zones} />
           <RankTable title="Top discharge zones" items={p.disch_zones} />
         </div>

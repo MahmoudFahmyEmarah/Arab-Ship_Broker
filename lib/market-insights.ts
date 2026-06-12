@@ -229,3 +229,44 @@ export function currentIsoWeek(now: Date = new Date()): {
     range_to: sunday.toISOString().slice(0, 10),
   };
 }
+
+// ── Weekly trend series: snapshot numbers across stored editions ──
+// (Pre_Final §12: the trend is the SAME snapshot figures across editions —
+// no surface recomputes its own numbers.) Reads the published, frozen rows
+// directly (RLS exposes published editions to anon); oldest first, last 6.
+export interface TrendPoint {
+  weekId: string;
+  cargoes: number;
+  positions: number;
+}
+
+export async function getTrendSeries(): Promise<TrendPoint[]> {
+  const c = anon();
+  if (c) {
+    try {
+      const { data } = await c
+        .from("market_insights_editions")
+        .select("week_id, range_from, payload")
+        .not("published_at", "is", null)
+        .order("range_from", { ascending: false })
+        .limit(6);
+      if (Array.isArray(data) && data.length) {
+        return (data as { week_id: string; payload: InsightPayload }[])
+          .reverse()
+          .map((e) => ({
+            weekId: e.week_id,
+            cargoes: e.payload?.snapshot?.cargoes_live ?? 0,
+            positions: e.payload?.snapshot?.open_tonnage ?? 0,
+          }));
+      }
+    } catch (err) {
+      console.error("[insights] trend load failed:", err);
+    }
+  }
+  // Sample fallback mirrors the sample edition so the chart renders in preview.
+  return [
+    { weekId: "2026-W21", cargoes: 71, positions: 18 },
+    { weekId: "2026-W22", cargoes: 78, positions: 17 },
+    { weekId: SAMPLE_EDITION.week_id, cargoes: SAMPLE_EDITION.payload.snapshot.cargoes_live, positions: SAMPLE_EDITION.payload.snapshot.open_tonnage },
+  ];
+}

@@ -3,6 +3,7 @@ import { Package, Ship, Activity, Anchor, Clock, AlertTriangle, Boxes, Wrench } 
 import { requireAdmin, getAdminSupabaseClient } from "@/lib/admin/require-admin";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { StatCard } from "@/components/admin/dashboard/StatCard";
+import { PublicStatsBar } from "@/components/PublicStatsBar";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,9 @@ export default async function AdminStatsPage() {
       <AdminPageHeader title="Platform Stats" subtitle="Live cargo and vessel activity, straight from the platform database">
         <span className="text-[11px] text-asb-gray-400">Updated {generated}</span>
       </AdminPageHeader>
+
+      {/* ── Platform reach (whole-book totals) ── */}
+      <PublicStatsBar className="mb-6" />
 
       {/* ── Headline stats bar ── */}
       <div className="grid grid-cols-4 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-4 mb-8">
