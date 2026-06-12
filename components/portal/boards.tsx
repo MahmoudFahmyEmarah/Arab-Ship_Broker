@@ -25,57 +25,10 @@ import {
   CLASS_OPTS,
   type SizeRange,
 } from "./filters";
-import { calcVoyage } from "@/lib/portal/econ";
 import { IconPlus, IconBell, IconMap } from "./icons";
 
-// ── Top matches — symmetric cargo ↔ vessel pairing for the dashboard panel ──
-type DashMatch = {
-  commodity: string; qtyMt: string;
-  pol: string; pod: string; polZone: string; podZone: string;
-  vessel: string; vClass: string; dwt: string; vOpen: string;
-  laycan: number | null; tce: number; quality: "Strong" | "Good" | "Possible";
-};
-
-function buildTopMatches(cargos: CargoView[], vessels: VesselView[]): DashMatch[] {
-  const used = new Set<string>();
-  const out: DashMatch[] = [];
-  for (const c of cargos) {
-    if (out.length >= 3) break;
-    const q = toMt(c.qtyMt);
-    let best: VesselView | null = null;
-    let bestScore = -1;
-    for (const v of vessels) {
-      if (used.has(v.id)) continue;
-      const d = toMt(v.dwt);
-      const zoneOk = !!v.openPortZone && (v.openPortZone === c.route?.polZone || v.openPortZone === c.route?.podZone);
-      let s = 0;
-      if (zoneOk) s += 2;
-      if (q > 0 && d >= q * 0.9 && d <= q * 1.3) s += 2;
-      else if (q > 0 && d >= q) s += 1;
-      if (s > bestScore) { bestScore = s; best = v; }
-    }
-    if (!best) continue;
-    used.add(best.id);
-    let tce = 0;
-    try { tce = Math.round(calcVoyage(best, c).costs.tce); } catch { tce = 0; }
-    out.push({
-      commodity: c.commodity || c.cargo,
-      qtyMt: c.qtyMt,
-      pol: c.route?.polName || c.route?.polCode || "—",
-      pod: c.route?.podName || c.route?.podCode || "—",
-      polZone: c.route?.polZone || "",
-      podZone: c.route?.podZone || "",
-      vessel: best.name,
-      vClass: vesselClassTags(best)[0] || best.type,
-      dwt: best.dwt,
-      vOpen: best.openPortZone || "—",
-      laycan: c.laycanDays ?? null,
-      tce,
-      quality: bestScore >= 4 ? "Strong" : bestScore >= 2 ? "Good" : "Possible",
-    });
-  }
-  return out;
-}
+// Top matches: ONE matching module (lib/portal/matching) — same gates as the map pairing.
+import { buildTopMatches, type DashMatch } from "@/lib/portal/matching";
 
 function fmtTce(tce: number): string {
   if (!tce) return "—";
@@ -270,7 +223,7 @@ export function DashboardBoard({
   );
 
   const topMatches = React.useMemo(
-    () => buildTopMatches(filteredCargos, filteredVessels),
+    () => buildTopMatches(filteredCargos, filteredVessels, (v) => vesselClassTags(v)[0] || v.type),
     [filteredCargos, filteredVessels],
   );
 

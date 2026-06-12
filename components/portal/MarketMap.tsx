@@ -19,6 +19,7 @@ import { VoyOpexPanel } from "./VoyOpexPanel";
 import { useViewerTier } from "@/lib/portal/tier";
 import { routeGeometry } from "@/lib/portal/routeGeometry";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
+import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
 
 // Geographic bearing a→b (deg clockwise from north) — for the vector arrowhead.
 function bearing(a: [number, number], b: [number, number]): number {
@@ -172,42 +173,8 @@ function vesselTriangleHTML(v: VesselView, selected: boolean, dim = false): stri
   return `<div class="vessel-tri-wrap${selected ? " is-selected" : ""}${dim ? " is-dim" : ""}" style="width:${Math.max(w, 28)}px;height:${Math.max(h, 28)}px;"><div class="v-tri" style="border-left:${w / 2}px solid transparent;border-right:${w / 2}px solid transparent;border-bottom:${h}px solid ${colour};filter:drop-shadow(0 0 3px ${colour}80);transform:rotate(${course}deg);"></div><div class="v-label">${v.name}</div></div>`;
 }
 
-// ── Dashboard click-to-pair (firewall-safe: qualitative LABEL, never a raw
-//    score or TCE number; no counterparty contact anywhere) ──────────────────
-function dwtNum(v: VesselView): number {
-  return parseInt(String(v.dwt || "").replace(/[,\s]/g, ""), 10) || 0;
-}
-function cargoQtyMax(c: CargoView): number {
-  if (c.qty?.max != null) return c.qty.max;
-  return parseInt(String(c.qtyMt || "").replace(/[^\d]/g, ""), 10) || 0;
-}
-function pairEligible(c: CargoView, v: VesselView): boolean {
-  const z = v.openPortZone;
-  const zoneOk = !!z && (z === c.route.polZone || z === c.route.podZone);
-  const dwt = dwtNum(v);
-  const q = cargoQtyMax(c);
-  const dwtOk = dwt > 0 && q > 0 && dwt >= q * 0.8 && dwt <= q * 1.2;
-  const grainOk = !c.isGrain || v.grainCertified === true; // grain hard-block
-  const dgOk = !c.isDg || v.dgCertified === true; // DG hard-block
-  return zoneOk && dwtOk && grainOk && dgOk;
-}
-type FitBand = "Strong" | "Good" | "Possible" | "Weak";
-function fitLabel(c: CargoView, v: VesselView): FitBand {
-  if (c.isGrain && !v.grainCertified) return "Weak";
-  if (c.isDg && !v.dgCertified) return "Weak";
-  const dwt = dwtNum(v);
-  const q = cargoQtyMax(c);
-  const util = dwt > 0 ? q / dwt : 0;
-  let s = 0;
-  if (util >= 0.9 && util <= 1.0) s += 2;
-  else if (util >= 0.8 && util <= 1.1) s += 1;
-  const z = v.openPortZone;
-  if (z === c.route.polZone) s += 2;
-  else if (z === c.route.podZone) s += 1;
-  if (!c.requiresGeared || v.geared) s += 1;
-  return s >= 4 ? "Strong" : s >= 3 ? "Good" : s >= 1 ? "Possible" : "Weak";
-}
-
+// Pairing eligibility + fit labels come from the ONE matching module —
+// the same gates the Top Matches panel uses (no per-surface math).
 // ── Persisted light/dark base ──────────────────────────────────────────────
 function useMapBase(): ["light" | "dark", (b: "light" | "dark") => void] {
   const [base, setBase] = React.useState<"light" | "dark">("dark");
