@@ -354,7 +354,7 @@ export default async function AdminVesselAvailabilityDetailPage({
 
         <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           {owner && (
-            <div className="bg-white border border-asb-gray-200 rounded p-5">
+            <div className="dp-card p-5">
               <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
                 Owner
               </p>
@@ -400,7 +400,7 @@ function InfoCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-asb-gray-200 rounded p-5">
+    <div className="dp-card p-5">
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-asb-gray-100">
         <Icon className="w-4 h-4 text-asb-gray-400" />
         <h3 className="text-xs font-bold text-asb-gray-500 uppercase tracking-wider">

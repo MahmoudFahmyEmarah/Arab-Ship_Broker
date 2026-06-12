@@ -229,7 +229,7 @@ export default async function AdminDashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Activity chart */}
-        <div className="lg:col-span-3 bg-white rounded border border-asb-gray-200 p-6">
+        <div className="lg:col-span-3 dp-card p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
               <h2 className="text-sm font-bold text-asb-navy">
@@ -241,7 +241,7 @@ export default async function AdminDashboardPage() {
           <ActivityChart data={activity} />
         </div>
 
-        <div className="lg:col-span-2 bg-white rounded border border-asb-gray-200 p-6 flex flex-col">
+        <div className="lg:col-span-2 dp-card p-6 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold text-asb-navy">
               Oldest pending items

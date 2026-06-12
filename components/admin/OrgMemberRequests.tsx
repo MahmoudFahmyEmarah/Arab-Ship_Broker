@@ -25,7 +25,7 @@ export function OrgMemberRequests({ initial }: { initial: PendingRequest[] }) {
 
   if (rows.length === 0) {
     return (
-      <div className="bg-white border border-asb-gray-200 rounded p-8 text-center text-sm text-asb-gray-400">
+      <div className="dp-card p-8 text-center text-sm text-asb-gray-400">
         No pending membership requests.
       </div>
     );
@@ -37,7 +37,7 @@ export function OrgMemberRequests({ initial }: { initial: PendingRequest[] }) {
       {rows.map((r) => (
         <div
           key={key(r)}
-          className="bg-white border border-asb-gray-200 rounded p-4 flex items-center gap-4 flex-wrap"
+          className="dp-card p-4 flex items-center gap-4 flex-wrap"
         >
           <div className="w-9 h-9 rounded bg-asb-blue-light flex items-center justify-center shrink-0">
             <Building2 className="w-4.5 h-4.5 text-asb-blue" />

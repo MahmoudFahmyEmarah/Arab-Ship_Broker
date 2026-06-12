@@ -105,7 +105,7 @@ export default async function AdminCargoPage({
         subtitle={`${listings.length} listings shown`}
       />
 
-      <div className="flex items-center gap-1 bg-white border border-asb-gray-200 rounded p-1 w-fit flex-wrap">
+      <div className="flex items-center gap-1 dp-card p-1 w-fit flex-wrap">
         {STATUS_TABS.map((tab) => (
           <Link
             key={tab}
@@ -154,7 +154,7 @@ export default async function AdminCargoPage({
       </form>
 
       {listings.length === 0 ? (
-        <div className="bg-white border border-asb-gray-200 rounded py-16 text-center">
+        <div className="dp-card py-16 text-center">
           <Package className="w-8 h-8 text-asb-gray-400 mx-auto mb-3" />
           <p className="text-asb-gray-500 font-semibold">No listings found</p>
         </div>
@@ -164,7 +164,7 @@ export default async function AdminCargoPage({
             <Link
               key={cl.id as string}
               href={`/admin/cargo/${cl.id}`}
-              className="group bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
+              className="group dp-card p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2">

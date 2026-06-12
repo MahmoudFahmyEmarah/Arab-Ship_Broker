@@ -131,7 +131,7 @@ export default async function AdminUserDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-5">
-          <div className="bg-white border border-asb-gray-200 rounded p-6">
+          <div className="dp-card p-6">
             <div className="flex items-start gap-4 mb-5">
               <div className="w-14 h-14 bg-asb-blue-light rounded flex items-center justify-center shrink-0">
                 <User className="w-7 h-7 text-asb-blue" />
@@ -317,7 +317,7 @@ function HistorySection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+    <div className="dp-card overflow-hidden">
       <div className="px-5 py-3.5 border-b border-asb-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className="w-4 h-4 text-asb-gray-400" />

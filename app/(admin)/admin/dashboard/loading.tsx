@@ -13,7 +13,7 @@ export default function AdminDashboardLoading() {
             {[0, 1, 2, 3].map((col) => (
               <div
                 key={col}
-                className="bg-white rounded border border-asb-gray-200 p-5 space-y-3"
+                className="dp-card p-5 space-y-3"
               >
                 <div className="w-9 h-9 bg-asb-gray-100 rounded" />
                 <div className="space-y-1.5">
@@ -27,11 +27,11 @@ export default function AdminDashboardLoading() {
       ))}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-3 bg-white rounded border border-asb-gray-200 p-6">
+        <div className="lg:col-span-3 dp-card p-6">
           <div className="h-4 w-32 bg-asb-gray-200 rounded mb-6" />
           <div className="h-48 bg-asb-gray-50 rounded" />
         </div>
-        <div className="lg:col-span-2 bg-white rounded border border-asb-gray-200 p-6">
+        <div className="lg:col-span-2 dp-card p-6">
           <div className="h-4 w-40 bg-asb-gray-200 rounded mb-4" />
           <div className="space-y-2">
             {[0, 1, 2, 3].map((i) => (

@@ -79,7 +79,7 @@ function DetailCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-asb-gray-200 rounded p-5">
+    <div className="dp-card p-5">
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-asb-gray-100">
         <Icon className="w-4 h-4 text-asb-gray-400" />
         <h3 className="text-xs font-bold text-asb-gray-500 uppercase tracking-wider">
@@ -682,7 +682,7 @@ export default async function QueueItemPage({
         </div>
 
         <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <div className="bg-white border border-asb-gray-200 rounded p-5">
+          <div className="dp-card p-5">
             <h2 className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
               Submitter
             </h2>
@@ -769,7 +769,7 @@ export default async function QueueItemPage({
               listingType={item.listing_type}
             />
           ) : (
-            <div className="bg-white border border-asb-gray-200 rounded p-5 text-center">
+            <div className="dp-card p-5 text-center">
               {item.status === "APPROVED" ? (
                 <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
               ) : (

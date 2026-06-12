@@ -63,7 +63,7 @@ export function VesselAvailabilityStatusControls({
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+      <div className="dp-card overflow-hidden">
         <div className="px-5 py-3.5 border-b border-asb-gray-100">
           <h3 className="text-xs font-bold text-asb-gray-500 uppercase tracking-wider">
             Operational status
@@ -112,7 +112,7 @@ export function VesselAvailabilityStatusControls({
           successRedirectPath={`/admin/vessel-availability/${availabilityId}`}
         />
       ) : (
-        <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+        <div className="dp-card overflow-hidden">
           <div className="px-5 py-3.5 border-b border-asb-gray-100">
             <h3 className="text-xs font-bold text-asb-gray-500 uppercase tracking-wider">
               Moderation

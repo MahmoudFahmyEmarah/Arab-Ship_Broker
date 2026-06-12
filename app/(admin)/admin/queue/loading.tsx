@@ -6,7 +6,7 @@ export default function QueueLoading() {
         <div className="h-4 w-36 bg-asb-gray-100 rounded-lg" />
       </div>
 
-      <div className="flex gap-1 bg-white border border-asb-gray-200 rounded p-1 w-fit">
+      <div className="flex gap-1 dp-card p-1 w-fit">
         {[80, 72, 68, 60, 48].map((w, i) => (
           <div
             key={i}
@@ -16,7 +16,7 @@ export default function QueueLoading() {
         ))}
       </div>
 
-      <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+      <div className="dp-card overflow-hidden">
         <div className="h-10 bg-asb-gray-50 border-b border-asb-gray-100" />
         {[0, 1, 2, 3, 4].map((i) => (
           <div

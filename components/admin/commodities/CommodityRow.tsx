@@ -53,7 +53,7 @@ export function CommodityRow({
   return (
     <div
       className={cn(
-        "bg-white border border-asb-gray-200 rounded p-5 flex flex-col gap-4",
+        "dp-card p-5 flex flex-col gap-4",
         !c.is_active && "opacity-60",
       )}
     >

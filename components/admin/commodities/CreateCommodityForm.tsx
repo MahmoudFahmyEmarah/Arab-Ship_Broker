@@ -84,7 +84,7 @@ export function CreateCommodityForm() {
   }
 
   return (
-    <div className="bg-white border border-asb-gray-200 rounded p-6 space-y-5">
+    <div className="dp-card p-6 space-y-5">
       <h3 className="text-sm font-bold text-asb-ink">New commodity</h3>
 
       <div className="grid grid-cols-2 gap-4">

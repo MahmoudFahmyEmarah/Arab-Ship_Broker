@@ -112,7 +112,7 @@ export default async function AdminUsersPage({
         subtitle={`${users.length} user${users.length !== 1 ? "s" : ""} shown`}
       />
 
-      <div className="flex items-center gap-1 bg-white border border-asb-gray-200 rounded p-1 w-fit flex-wrap">
+      <div className="flex items-center gap-1 dp-card p-1 w-fit flex-wrap">
         {TIER_TABS.map((tab) => {
           const active = tierFilter === tab.value;
           const count = tab.value !== "ALL" ? countMap[tab.value] : undefined;
@@ -179,7 +179,7 @@ export default async function AdminUsersPage({
       </div>
 
       {users.length === 0 ? (
-        <div className="bg-white border border-asb-gray-200 rounded py-16 text-center">
+        <div className="dp-card py-16 text-center">
           <Users className="w-8 h-8 text-asb-gray-400 mx-auto mb-3" />
           <p className="text-asb-gray-500 font-semibold">No users found</p>
           <p className="text-asb-gray-400 text-sm mt-1">
@@ -192,7 +192,7 @@ export default async function AdminUsersPage({
             <Link
               key={user.id}
               href={`/admin/users/${user.id}`}
-              className="group bg-white border border-asb-gray-200 rounded p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
+              className="group dp-card p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2">

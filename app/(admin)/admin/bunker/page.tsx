@@ -32,7 +32,7 @@ export default async function AdminBunkerPage() {
       />
 
       {/* Add supplier */}
-      <form action={addSupplier} className="bg-white border border-asb-gray-200 rounded p-5 flex flex-wrap items-end gap-3">
+      <form action={addSupplier} className="dp-card p-5 flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1"><label className="text-xs font-semibold text-asb-gray-500">Supplier name *</label><input name="name" required className={field} /></div>
         <div className="flex flex-col gap-1"><label className="text-xs font-semibold text-asb-gray-500">Port(s)</label><input name="port" placeholder="Fujairah" className={field} /></div>
         <div className="flex flex-col gap-1"><label className="text-xs font-semibold text-asb-gray-500">Website</label><input name="website" placeholder="https://…" className={field} /></div>
@@ -46,7 +46,7 @@ export default async function AdminBunkerPage() {
       {suppliers.map((s) => {
         const a = acctFor(s.id);
         return (
-          <div key={s.id} className="bg-white border border-asb-gray-200 rounded p-5 space-y-4">
+          <div key={s.id} className="dp-card p-5 space-y-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <h3 className="font-bold text-asb-navy">{s.name}</h3>
@@ -101,7 +101,7 @@ export default async function AdminBunkerPage() {
       <div className="bg-asb-blue-light border border-asb-gray-200 rounded p-4 text-xs text-asb-gray-600">
         <p className="font-bold mb-1">Supplier ingest channel</p>
         <p>Suppliers POST to <code>/api/bunker/ingest</code> with HTTP Basic auth (their username/password) and a JSON body:</p>
-        <pre className="mt-2 bg-white border border-asb-gray-200 rounded p-2 overflow-auto">{`{ "prices": [ { "fuel":"VLSFO","value":1183,"dir":"down" }, { "fuel":"LSMGO","value":1118,"dir":"down" } ] }`}</pre>
+        <pre className="mt-2 dp-card p-2 overflow-auto">{`{ "prices": [ { "fuel":"VLSFO","value":1183,"dir":"down" }, { "fuel":"LSMGO","value":1118,"dir":"down" } ] }`}</pre>
         <p className="mt-2">Auth + insert run inside the <code>bunker_ingest()</code> DB function — no service-role key is exposed. Prices flow straight into the public ticker (active suppliers, ≤21 days old).</p>
       </div>
     </div>

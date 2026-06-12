@@ -63,10 +63,9 @@ export function StatCard({
   const content = (
     <div
       className={cn(
-        "h-full min-h-34 bg-white rounded border p-5 transition-all flex flex-col justify-between",
-        styles.border,
-        urgent && "border-red-300 ring-1 ring-inset ring-red-200",
-        href && "hover:border-asb-blue hover:shadow-sm cursor-pointer",
+        "h-full min-h-34 dp-card p-5 transition-all flex flex-col justify-between",
+        urgent && "ring-1 ring-inset ring-red-200",
+        href && "dp-clickable cursor-pointer",
       )}
     >
       <div className="flex items-start justify-between gap-2">

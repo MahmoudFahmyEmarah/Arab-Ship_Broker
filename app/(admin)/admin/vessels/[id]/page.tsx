@@ -103,7 +103,7 @@ export default async function AdminVesselDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-4">
-          <div className="bg-white border border-asb-gray-200 rounded p-6">
+          <div className="dp-card p-6">
             <div className="flex items-center gap-2 flex-wrap mb-5">
               <RiskLevelBadge level={v.risk_level} />
               <AdminBadge variant="neutral" label={v.scope} />
@@ -159,7 +159,7 @@ export default async function AdminVesselDetailPage({
 
           {/* Ownership */}
           {(v.owner_company || v.manager_company) && (
-            <div className="bg-white border border-asb-gray-200 rounded p-5">
+            <div className="dp-card p-5">
               <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
                 Ownership
               </p>
@@ -192,7 +192,7 @@ export default async function AdminVesselDetailPage({
           )}
 
           {v.notes && (
-            <div className="bg-white border border-asb-gray-200 rounded p-5">
+            <div className="dp-card p-5">
               <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-1">
                 Admin notes
               </p>
@@ -204,7 +204,7 @@ export default async function AdminVesselDetailPage({
 
           {/* Claims */}
           {claimRows.length > 0 && (
-            <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+            <div className="dp-card overflow-hidden">
               <div className="px-5 py-3.5 border-b border-asb-gray-100">
                 <p className="text-sm font-bold text-asb-ink-soft">
                   Registered by
@@ -236,7 +236,7 @@ export default async function AdminVesselDetailPage({
             </div>
           )}
 
-          <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+          <div className="dp-card overflow-hidden">
             <div className="px-5 py-3.5 border-b border-asb-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Anchor className="w-4 h-4 text-asb-gray-400" />

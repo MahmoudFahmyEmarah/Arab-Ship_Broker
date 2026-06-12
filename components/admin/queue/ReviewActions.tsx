@@ -106,7 +106,7 @@ export function ReviewActions({
   }
 
   return (
-    <div className="bg-white border border-asb-gray-200 rounded overflow-hidden">
+    <div className="dp-card overflow-hidden">
       <div className="px-6 py-4 border-b border-asb-gray-100">
         <h2 className="text-sm font-bold text-asb-navy">Review decision</h2>
         <p className="text-xs text-asb-gray-400 mt-0.5">

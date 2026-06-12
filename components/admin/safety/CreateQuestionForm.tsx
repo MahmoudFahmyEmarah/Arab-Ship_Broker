@@ -108,7 +108,7 @@ export function CreateQuestionForm() {
   }
 
   return (
-    <div className="bg-white border border-asb-gray-200 rounded p-6 space-y-5">
+    <div className="dp-card p-6 space-y-5">
       <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded px-3 py-2.5">
         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
         <p className="text-xs text-amber-700">

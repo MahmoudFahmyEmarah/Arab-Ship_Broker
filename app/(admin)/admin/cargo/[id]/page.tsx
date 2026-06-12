@@ -348,7 +348,7 @@ export default async function AdminCargoDetailPage({
         <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           {/* Owner */}
           {owner && (
-            <div className="bg-white border border-asb-gray-200 rounded p-5">
+            <div className="dp-card p-5">
               <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-3">
                 Owner
               </p>
@@ -393,7 +393,7 @@ function InfoCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-asb-gray-200 rounded p-5">
+    <div className="dp-card p-5">
       <p className="text-xs font-bold text-asb-gray-400 uppercase tracking-wider mb-4 pb-3 border-b border-asb-gray-100">
         {title}
       </p>

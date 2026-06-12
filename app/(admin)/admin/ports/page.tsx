@@ -107,7 +107,7 @@ export default async function AdminPortsPage({
       )}
 
       <div className="flex items-center gap-1 overflow-x-auto pb-1 hide-scrollbar">
-        <div className="flex items-center gap-1 bg-white border border-asb-gray-200 rounded p-1 shrink-0">
+        <div className="flex items-center gap-1 dp-card p-1 shrink-0">
           {ZONE_TABS.slice(0, 5).map((tab) => (
             <Link
               key={tab}
@@ -123,7 +123,7 @@ export default async function AdminPortsPage({
             </Link>
           ))}
         </div>
-        <div className="flex items-center gap-1 bg-white border border-asb-gray-200 rounded p-1 shrink-0">
+        <div className="flex items-center gap-1 dp-card p-1 shrink-0">
           {ZONE_TABS.slice(5).map((tab) => (
             <Link
               key={tab}
@@ -188,7 +188,7 @@ export default async function AdminPortsPage({
       </div>
 
       {ports.length === 0 ? (
-        <div className="bg-white border border-asb-gray-200 rounded py-16 text-center">
+        <div className="dp-card py-16 text-center">
           <MapPin className="w-8 h-8 text-asb-gray-400 mx-auto mb-3" />
           <p className="text-asb-gray-500 font-semibold">No ports found</p>
         </div>
