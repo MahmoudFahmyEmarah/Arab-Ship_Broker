@@ -18,17 +18,47 @@ export function cargoQtyMax(c: CargoView): number {
   return parseInt(String(c.qtyMt || "").replace(/[^\d]/g, ""), 10) || 0;
 }
 
-// Hard eligibility gates (mirrors the DB funnel): zone compatibility,
-// DWT vs quantity (±20%), grain + DG certification hard-blocks.
+// Client-side fallback gates — mirror the canonical DB funnel
+// (get_matches_for_availability / get_matches_for_cargo, latest = the DG-block
+// refactor) as closely as the loaded view fields allow. The AUTHORITATIVE
+// eligibility on the map comes from the DB RPC on anchor; this is only used in
+// sample/offline mode and to rank Top Matches. Stages mirrored: 3 geography,
+// 4 capacity (qty_min floor + 10%/20% part-cargo tier), 5 vessel type, 6 timing
+// (approx via days-from-now), 7a geared, 7b grain cert, DG cert, 7d draft.
 export function pairEligible(c: CargoView, v: VesselView): boolean {
+  // 3 · geography
   const z = v.openPortZone;
-  const zoneOk = !!z && (z === c.route?.polZone || z === c.route?.podZone);
+  if (!(z && (z === c.route?.polZone || z === c.route?.podZone))) return false;
+
+  // 4 · capacity — qty_min floor + tiered tolerance (±10% / ±20% part cargo)
   const dwt = dwtNum(v);
-  const q = cargoQtyMax(c);
-  const dwtOk = dwt > 0 && q > 0 && dwt >= q * 0.8 && dwt <= q * 1.2;
-  const grainOk = !c.isGrain || v.grainCertified === true;
-  const dgOk = !c.isDg || v.dgCertified === true;
-  return zoneOk && dwtOk && grainOk && dgOk;
+  const qmax = cargoQtyMax(c);
+  const qmin = c.qty?.min ?? qmax;
+  if (!(dwt > 0 && qmax > 0)) return false;
+  const part = v.acceptsPartCargo === true;
+  const hi = qmax * (part ? 1.2 : 1.1);
+  const lo = qmax * (part ? 0.8 : 0.9);
+  if (!(dwt >= qmin && dwt <= hi && dwt >= lo)) return false;
+
+  // 5 · vessel type — Dry Bulk requires Bulk Carrier / General Cargo
+  if (c.type !== "Break Bulk" && !(v.type === "Bulk Carrier" || v.type === "General Cargo")) return false;
+
+  // 7a · geared · 7b · grain cert · DG cert
+  if (c.requiresGeared === true && v.geared !== true) return false;
+  if (c.isGrain && v.grainCertified !== true) return false;
+  if (c.isDg && v.dgCertified !== true) return false;
+
+  // 7d · max draft
+  if (c.maxDraft != null && v.draft) {
+    const d = parseFloat(v.draft);
+    if (!isNaN(d) && d > c.maxDraft) return false;
+  }
+
+  // 6 · timing (approx) — vessel open within [laycan-21, laycan+14] days
+  if (!c.spot && c.laycanDays != null && v.openDateDays != null) {
+    if (!(v.openDateDays >= c.laycanDays - 21 && v.openDateDays <= c.laycanDays + 14)) return false;
+  }
+  return true;
 }
 
 export type FitBand = "Strong" | "Good" | "Possible" | "Weak";

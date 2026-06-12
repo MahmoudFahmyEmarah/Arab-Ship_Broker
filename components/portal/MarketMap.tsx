@@ -20,6 +20,9 @@ import { useViewerTier } from "@/lib/portal/tier";
 import { routeGeometry } from "@/lib/portal/routeGeometry";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
 import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { getMatchesForCargo } from "@/sdk/app/cargos";
+import { getMatchesForAvailability } from "@/sdk/app/vessels";
 
 // Geographic bearing a→b (deg clockwise from north) — for the vector arrowhead.
 function bearing(a: [number, number], b: [number, number]): number {
@@ -354,13 +357,42 @@ export default function MarketMap({
   );
   const anchorCargo = pairAnchor?.kind === "cargo" ? cargos.find((c) => c.id === pairAnchor.id) ?? null : null;
   const anchorVessel = pairAnchor?.kind === "vessel" ? vessels.find((v) => v.id === pairAnchor.id) ?? null : null;
+
+  // AUTHORITATIVE eligibility (09 §9): on anchor, fetch the match set from the
+  // SAME database RPC the count badges use (get_matches_for_cargo /
+  // get_matches_for_availability). dbEligible holds the opposite-side ids
+  // (vessel ids when a cargo is anchored, cargo ids when a vessel is anchored).
+  // If the DB is unreachable (sample/offline), we fall back to the client gates
+  // in lib/portal/matching, which mirror the same funnel.
+  const [dbEligible, setDbEligible] = React.useState<Set<string> | null>(null);
+  React.useEffect(() => {
+    if (!pairAnchor) { setDbEligible(null); return; }
+    let cancelled = false;
+    setDbEligible(null);
+    (async () => {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        if (pairAnchor.kind === "cargo") {
+          const res = await getMatchesForCargo(supabase, pairAnchor.id);
+          if (!cancelled) setDbEligible(new Set(res.map((r) => r.availability_id)));
+        } else {
+          const res = await getMatchesForAvailability(supabase, pairAnchor.id);
+          if (!cancelled) setDbEligible(new Set(res.map((r) => r.cargo_id)));
+        }
+      } catch {
+        if (!cancelled) setDbEligible(null); // -> client fallback below
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [pairAnchor]);
+
   const eligibleVesselIds = React.useMemo(
-    () => (anchorCargo ? new Set(visVessels.filter((v) => pairEligible(anchorCargo, v)).map((v) => v.id)) : null),
-    [anchorCargo, visVessels],
+    () => (anchorCargo ? (dbEligible ?? new Set(visVessels.filter((v) => pairEligible(anchorCargo, v)).map((v) => v.id))) : null),
+    [anchorCargo, visVessels, dbEligible],
   );
   const eligibleCargoIds = React.useMemo(
-    () => (anchorVessel ? new Set(visCargos.filter((c) => pairEligible(c, anchorVessel)).map((c) => c.id)) : null),
-    [anchorVessel, visCargos],
+    () => (anchorVessel ? (dbEligible ?? new Set(visCargos.filter((c) => pairEligible(c, anchorVessel)).map((c) => c.id))) : null),
+    [anchorVessel, visCargos, dbEligible],
   );
   // Marker pair-state class (styled on .leaflet-marker-icon in map.css).
   const pairCls = (kind: "cargo" | "vessel", id: string): string => {
@@ -376,9 +408,13 @@ export default function MarketMap({
       setPairDone(null);
       return true;
     }
+    // Completion uses the SAME eligible set that drives the highlighting, so
+    // a pairing can only be formed with a marker the DB (or the mirrored
+    // fallback) actually matched — map and badges can never disagree.
+    const elig = kind === "vessel" ? eligibleVesselIds : eligibleCargoIds;
     const cargo = kind === "cargo" ? cargos.find((c) => c.id === id) : cargos.find((c) => c.id === pairAnchor.id);
     const vessel = kind === "vessel" ? vessels.find((v) => v.id === id) : vessels.find((v) => v.id === pairAnchor.id);
-    if (cargo && vessel && pairEligible(cargo, vessel)) {
+    if (cargo && vessel && elig?.has(id)) {
       setPairDone({ cargo, vessel });
     } else {
       setPairAnchor({ kind, id }); // ineligible pick re-anchors instead
