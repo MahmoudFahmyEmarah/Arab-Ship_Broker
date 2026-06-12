@@ -130,43 +130,52 @@ export function Navbar() {
                   )}
                 />
               </div>
-              <div className="flex flex-col leading-none min-w-0">
+              {/* English and Arabic brand blocks side by side on one grid:
+                  both names share row 1's baseline, both small lines share
+                  row 2, each block centered under its name — no outlier.
+                  Colour tracks the hero state so it stays white over the
+                  photo and legible on the solid header. */}
+              <div className="grid grid-cols-[auto_auto_auto] grid-rows-[auto_auto] items-baseline justify-items-center gap-x-3 gap-y-0.75 min-w-0 leading-none">
                 <span
                   className={cn(
-                    "font-bold text-[15px] tracking-tight truncate transition-colors duration-300",
+                    "font-bold text-[15px] tracking-tight whitespace-nowrap transition-colors duration-300",
                     showTransparent ? "text-white" : "text-ocean-950",
                   )}
                 >
                   Arab ShipBroker
                 </span>
                 <span
+                  aria-hidden
                   className={cn(
-                    "text-[9.5px] font-bold uppercase tracking-[0.2em] mt-0.75 transition-colors duration-300",
-                    showTransparent ? "text-foam-300/70" : "text-foam-600/80",
+                    "row-span-2 self-center w-px h-7 transition-colors duration-300",
+                    showTransparent ? "bg-white/25" : "bg-ocean-950/15",
                   )}
-                >
-                  MENA Maritime
-                </span>
-                {/* Arabic brand name (RTL, Arabic webfont). Colour tracks the
-                    English so it stays white over the hero and legible on the
-                    solid header. */}
+                />
                 <span
                   dir="rtl"
                   lang="ar"
                   style={{ fontFamily: "var(--font-arabic)" }}
                   className={cn(
-                    "text-[13px] font-semibold leading-tight mt-1 truncate text-center transition-colors duration-300",
+                    "text-[15px] font-semibold whitespace-nowrap transition-colors duration-300",
                     showTransparent ? "text-white" : "text-ocean-950",
                   )}
                 >
                   الوسيط العربي للسفن
                 </span>
                 <span
+                  className={cn(
+                    "text-[9.5px] font-bold uppercase tracking-[0.2em] whitespace-nowrap transition-colors duration-300",
+                    showTransparent ? "text-foam-300/70" : "text-foam-600/80",
+                  )}
+                >
+                  MENA Maritime
+                </span>
+                <span
                   dir="rtl"
                   lang="ar"
                   style={{ fontFamily: "var(--font-arabic)" }}
                   className={cn(
-                    "text-[10px] italic leading-tight truncate text-center transition-colors duration-300 max-sm:hidden",
+                    "text-[10px] italic whitespace-nowrap transition-colors duration-300 max-sm:hidden",
                     showTransparent ? "text-white/75" : "text-ocean-700",
                   )}
                 >
