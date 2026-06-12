@@ -1,3 +1,4 @@
+import { getAppUserRow } from "@/lib/app-user";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
@@ -23,11 +24,7 @@ export default async function RegisterVesselPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: appUser } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const appUser = await getAppUserRow<{ role?: string }>(supabase, user.id, "role");
 
   const canAccessVesselPages =
     appUser?.role === "vessel_owner" || appUser?.role === "broker";

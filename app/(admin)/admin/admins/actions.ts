@@ -13,7 +13,7 @@ export async function promoteToSubAdmin(userId: string, preset: string): Promise
   const me = await requireAdmin({ section: "admins", edit: true });
   const p = ADMIN_PRESETS[preset];
   if (!p) return { success: false, error: "Unknown preset" };
-  if (userId === me.supabaseUserId) return { success: false, error: "You are already the Superior Admin." };
+  if (userId === me.rowId) return { success: false, error: "You are already the Superior Admin." };
 
   const { error } = await getSupabaseAdminClient()
     .from("users")
@@ -27,7 +27,7 @@ export async function promoteToSubAdmin(userId: string, preset: string): Promise
 // Demote a sub-admin back to a regular member (role broker keeps both personas).
 export async function demoteSubAdmin(userId: string): Promise<Result> {
   const me = await requireAdmin({ section: "admins", edit: true });
-  if (userId === me.supabaseUserId) return { success: false, error: "You cannot demote yourself." };
+  if (userId === me.rowId) return { success: false, error: "You cannot demote yourself." };
 
   const client = getSupabaseAdminClient();
   const { data } = await client.from("users").select("admin_tier").eq("id", userId).single();

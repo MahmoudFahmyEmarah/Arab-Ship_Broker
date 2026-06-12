@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { functionalStore, openCookieSettings } from "@/lib/consent";
 import { getMyProfiles, updateProfile } from "@/sdk/app/profiles";
 import type { Profile } from "@/lib/schemas/account";
 import * as V from "@/lib/portal/validation";
@@ -262,14 +263,14 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
   }, [prefs.theme, prefs.density]);
   const savePrefs = () => {
     setPrefs(prefDraft);
-    try { localStorage.setItem("asb:prefs", JSON.stringify(prefDraft)); } catch {}
+    functionalStore.set("asb:prefs", JSON.stringify(prefDraft));
     setEditPrefs(false);
     toast.success("Preferences saved");
   };
   const toggleNotif = (k: string) => {
     setNotifs((n) => {
       const next = { ...n, [k]: !n[k] };
-      try { localStorage.setItem("asb:notifs", JSON.stringify(next)); } catch {}
+      functionalStore.set("asb:notifs", JSON.stringify(next));
       return next;
     });
   };
@@ -520,6 +521,7 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                 <SettingsRow k="3rd-party sharing" v={<span style={{ color: "var(--asb-green)" }}>Never</span>} />
                 <SettingsRow k="Retention" v="7 years per maritime regs" />
                 <SettingsRow k="Visibility" v="Arab ShipBroker only until your listing is approved" />
+                <SettingsRow k="Cookies" v={<button className="action" style={{ color: "var(--asb-blue)", padding: 0 }} onClick={openCookieSettings}>Cookie settings →</button>} />
                 <button
                   className="asb-btn danger"
                   style={{ width: "100%", justifyContent: "center", marginTop: 8 }}

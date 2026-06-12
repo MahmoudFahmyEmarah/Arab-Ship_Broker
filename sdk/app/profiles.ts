@@ -1,3 +1,4 @@
+import { getAppUserRow } from "@/lib/app-user";
 import { SupabaseClient } from "@supabase/supabase-js";
 import type { Profile, ProfileType } from "@/lib/schemas/account";
 
@@ -9,13 +10,8 @@ export async function getMyProfiles(
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data: account, error: accountError } = await supabase
-    .from("users")
-    .select("id")
-    .eq("id", user.id)
-    .single();
-
-  if (accountError || !account) return [];
+  const account = await getAppUserRow(supabase, user.id, "id");
+  if (!account) return [];
 
   const { data, error } = await supabase
     .from("profiles")
@@ -39,13 +35,8 @@ export async function addProfileToAccount(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("You must be logged in.");
 
-  const { data: account, error: accountError } = await supabase
-    .from("users")
-    .select("id, full_name")
-    .eq("id", user.id)
-    .single();
-
-  if (accountError || !account) throw new Error("Account not found.");
+  const account = await getAppUserRow<{ full_name: string }>(supabase, user.id, "id, full_name");
+  if (!account) throw new Error("Account not found.");
 
   const { data, error } = await supabase
     .from("profiles")

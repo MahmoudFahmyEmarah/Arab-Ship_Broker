@@ -1,3 +1,4 @@
+import { getAppUserRow } from "@/lib/app-user";
 import { SupabaseClient } from "@supabase/supabase-js";
 import type { AccountWithProfiles, ProfileType } from "@/lib/schemas/account";
 import { normalizeRole } from "@/lib/role";
@@ -105,13 +106,10 @@ export async function getCurrentUser(
   // Production schema: read public.users directly (id == auth uid) and derive
   // the cargo/vessel personas from `role` — prod has no `profiles` table or
   // `v_account_profiles` view.
-  const { data, error } = await supabase
-    .from("users")
-    .select("id, full_name, email, trust_tier, is_active, role")
-    .eq("id", authData.user.id)
-    .single();
-
-  if (error) throw error;
+  const data = await getAppUserRow<{
+    full_name: string; email: string; trust_tier: string; is_active: boolean; role: string;
+  }>(supabase, authData.user.id, "id, full_name, email, trust_tier, is_active, role");
+  if (!data) throw new Error("Account record not found");
 
   const role = normalizeRole(data.role);
   const hasCargoProfile = role === "cargo_owner" || role === "broker";

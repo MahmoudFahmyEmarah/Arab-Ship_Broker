@@ -5,6 +5,7 @@
 // only if Supabase isn't configured (or the query yields nothing), falls back
 // to typed sample rows so the /portal preview always renders. Wiring a page to
 // live data therefore required no UI changes — just these loaders.
+import { getAppUserRow } from "@/lib/app-user";
 import { getCargos, getMyCargoListings, getMatchesForCargo } from "@/sdk/app/cargos";
 import {
   getOpenVesselAvailability,
@@ -32,12 +33,8 @@ async function loadArchiveAccess(supabase: SupabaseClient): Promise<TemporalAcce
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return getTemporalAccess("", "NEW");
-    const { data } = await supabase
-      .from("users")
-      .select("role, trust_tier")
-      .eq("id", user.id)
-      .single();
-    const row = data as { role?: string; trust_tier?: string } | null;
+    const row = await getAppUserRow<{ role?: string; trust_tier?: string }>(
+      supabase, user.id, "role, trust_tier");
     return getTemporalAccess(normalizeRole(row?.role) ?? "", row?.trust_tier ?? "NEW");
   } catch {
     return getTemporalAccess("", "NEW"); // safest default: most restrictive window
@@ -303,11 +300,8 @@ export async function loadViewerContext(): Promise<{ tier: Tier; role: AppRole |
     const supabase = await getSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { tier: "T3", role: null, userName: null };
-    const { data } = await supabase
-      .from("users")
-      .select("role, full_name, subscription_tier")
-      .eq("id", user.id)
-      .single();
+    const data = await getAppUserRow<{ role?: string; full_name?: string; subscription_tier?: string | null; is_market_partner?: boolean | null }>(
+      supabase, user.id, "role, full_name, subscription_tier");
     const vt = viewerTierFrom(data as { subscription_tier?: string | null; is_market_partner?: boolean | null } | null);
     const tier = (vt.isMarketPartner ? "T3" : vt.tier) as Tier;
     return { tier, role: normalizeRole((data as { role?: string } | null)?.role), userName: (data as { full_name?: string } | null)?.full_name ?? null };

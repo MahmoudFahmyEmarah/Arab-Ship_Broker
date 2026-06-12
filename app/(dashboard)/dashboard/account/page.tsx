@@ -1,3 +1,4 @@
+import { getAppUserRow } from "@/lib/app-user";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
@@ -28,11 +29,8 @@ export default async function AccountSettingsPage() {
 
   // role + created_at aren't on the dashboard-context account object, so load
   // them here and pass to the (client) design board.
-  const { data: appUser } = await supabase
-    .from("users")
-    .select("role, created_at")
-    .eq("id", user.id)
-    .single();
+  const appUser = await getAppUserRow<{ role: string | null; created_at: string | null }>(
+    supabase, user.id, "role, created_at");
 
   const row = appUser as { role: string | null; created_at: string | null } | null;
   const memberSince = row?.created_at

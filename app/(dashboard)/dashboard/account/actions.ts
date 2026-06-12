@@ -1,5 +1,6 @@
 "use server";
 
+import { getAppUserRow } from "@/lib/app-user";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
@@ -34,10 +35,12 @@ export async function updateBasicInfo(
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Not authenticated." };
 
+  const row = await getAppUserRow(supabase, user.id, "id");
+  if (!row) return { success: false, error: "Account record not found." };
   const { error } = await supabase
     .from("users")
     .update({ full_name: full_name.trim() })
-    .eq("id", user.id);
+    .eq("id", row.id);
 
   if (error) return { success: false, error: error.message };
 
@@ -61,12 +64,7 @@ export async function updateProfileInfo(
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Not authenticated." };
 
-  const { data: appUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("id", user.id)
-    .single();
-
+  const appUser = await getAppUserRow(supabase, user.id, "id");
   if (!appUser) return { success: false, error: "User record not found." };
 
   const payload: Record<string, string | null> = {};

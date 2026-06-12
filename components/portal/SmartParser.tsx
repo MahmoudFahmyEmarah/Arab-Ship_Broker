@@ -10,6 +10,7 @@
 // by setting NEXT_PUBLIC_ASSISTANT_ENABLED=true (and the server ANTHROPIC_API_KEY).
 // Flip the flag to go live — no code change needed.
 import * as React from "react";
+import { functionalStore } from "@/lib/consent";
 import type { CircularParseResult } from "@/lib/circulars/types";
 
 // Switched on commercially via env; defaults to the "coming soon" teaser.
@@ -94,7 +95,7 @@ export function SmartParser({
     if (!drag.current) return;
     drag.current = null;
     try {
-      if (pos) localStorage.setItem(STORE_KEY, JSON.stringify(pos));
+      if (pos) functionalStore.set(STORE_KEY, JSON.stringify(pos));
     } catch {}
   }
 

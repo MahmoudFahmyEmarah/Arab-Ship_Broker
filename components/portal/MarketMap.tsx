@@ -21,6 +21,7 @@ import { routeGeometry } from "@/lib/portal/routeGeometry";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
 import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { functionalStore } from "@/lib/consent";
 import { getMatchesForCargo } from "@/sdk/app/cargos";
 import { getMatchesForAvailability } from "@/sdk/app/vessels";
 

@@ -1,3 +1,4 @@
+import { getAppUserRow } from "@/lib/app-user";
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
@@ -95,11 +96,7 @@ export default async function VesselDetailPage({
   const isClaimed = !!claim;
 
   // Commercial/contact card is for the vessel's own owner or admin only.
-  const { data: appUser } = await supabase
-    .from("users")
-    .select("role, subscription_tier")
-    .eq("id", user.id)
-    .maybeSingle();
+  const appUser = await getAppUserRow<{ role?: string; subscription_tier?: string | null }>(supabase, user.id, "role, subscription_tier");
   const canSeeCommercial = isClaimed || appUser?.role === "admin";
   // Non-owner view: subscribers (T3/T4/partner) get the "brokered by ASB"
   // locked card; non-subscribers (T1/T2) get the upgrade teaser. Neither

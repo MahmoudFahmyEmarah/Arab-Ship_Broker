@@ -1,5 +1,6 @@
 "use client";
 
+import { getAppUserRow } from "@/lib/app-user";
 import { useEffect, useRef, useState } from "react";
 import { motion, easeOut } from "framer-motion";
 import { useForm } from "react-hook-form";
@@ -97,11 +98,8 @@ export default function LoginPage() {
 
       let role: string | null = null;
       if (userId) {
-        const { data: dbUser } = await supabase
-          .from("users")
-          .select("role, is_active")
-          .eq("id", userId)
-          .maybeSingle();
+        const dbUser = await getAppUserRow<{ role?: string; is_active?: boolean }>(
+          supabase, userId, "role, is_active");
 
         if (dbUser && dbUser.is_active === false) {
           await supabase.auth.signOut();

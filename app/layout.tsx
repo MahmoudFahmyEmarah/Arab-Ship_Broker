@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { Geist, Inter, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { PropellerLoader } from "@/components/portal/PropellerLoader";
+import { CookieConsent } from "@/components/CookieConsent";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -45,6 +46,7 @@ export default function RootLayout({
           <PropellerLoader />
         </Suspense>
         <main className="flex-1">{children}</main>
+        <CookieConsent />
         <Toaster position="top-right" />
       </body>
     </html>

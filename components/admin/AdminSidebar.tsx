@@ -1,5 +1,6 @@
 "use client";
 
+import { getAppUserRow } from "@/lib/app-user";
 import * as React from "react";
 
 import Image from "next/image";
@@ -116,11 +117,8 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
         const supabase = getSupabaseBrowserClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data } = await supabase
-          .from("users")
-          .select("admin_tier, admin_perms")
-          .eq("id", user.id)
-          .single();
+        const data = await getAppUserRow<{ admin_tier?: string | null; admin_perms?: AdminPerms | null }>(
+          supabase, user.id, "admin_tier, admin_perms");
         const row = data as { admin_tier?: string | null; admin_perms?: AdminPerms | null } | null;
         setCtx({ tier: ((row?.admin_tier ?? "super") as AdminTier), perms: row?.admin_perms ?? null });
       } catch {}

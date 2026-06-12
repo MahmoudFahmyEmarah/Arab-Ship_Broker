@@ -1,3 +1,4 @@
+import { getAppUserRow } from "@/lib/app-user";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
@@ -7,6 +8,7 @@ import { canAccess, type AdminTier, type AdminPerms } from "@/lib/admin/sections
 
 export type AdminUser = {
   supabaseUserId: string;
+  rowId: string; // public.users.id (NOT the auth uid — they differ)
   email: string;
   fullName: string;
   tier: AdminTier;
@@ -41,11 +43,10 @@ export async function requireAdmin(
     redirect("/auth/login");
   }
 
-  const { data: appUser } = await supabase
-    .from("users")
-    .select("full_name, email, role, is_active, admin_tier, admin_perms")
-    .eq("id", user.id)
-    .single();
+  const appUser = await getAppUserRow<{
+    full_name: string | null; email: string; role: string; is_active: boolean;
+    admin_tier?: string | null; admin_perms?: AdminPerms | null;
+  }>(supabase, user.id, "full_name, email, role, is_active, admin_tier, admin_perms");
 
   if (!appUser || normalizeRole(appUser.role) !== "admin") {
     redirect(appUser ? "/dashboard" : "/auth/login");
@@ -69,6 +70,7 @@ export async function requireAdmin(
 
   return {
     supabaseUserId: user.id,
+    rowId: appUser.id,
     email: appUser.email,
     fullName: appUser.full_name ?? "Admin",
     tier,
