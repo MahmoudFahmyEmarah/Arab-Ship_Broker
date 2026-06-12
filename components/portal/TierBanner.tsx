@@ -4,6 +4,7 @@
 // Shows only for real T1/T2 accounts. (The demo tier pill was removed per the
 // spec — tier is account-derived, never toggled in the UI.)
 import * as React from "react";
+import Link from "next/link";
 import { useViewerTier, Tier } from "@/lib/portal/tier";
 
 const TIER_MSGS: Partial<Record<Tier, { label: string; body: string }>> = {
@@ -27,7 +28,7 @@ export function DashboardTierBanner() {
       <span className="asb-tier-banner__msg">
         You are on the <strong>{msg.label}</strong>. {msg.body}
       </span>
-      <button className="asb-tier-banner__cta" type="button">Upgrade →</button>
+      <Link className="asb-tier-banner__cta" href="/dashboard/account?tab=billing">Upgrade →</Link>
     </div>
   );
 }

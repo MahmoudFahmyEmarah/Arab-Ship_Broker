@@ -139,6 +139,13 @@ const ROLE_LABEL: Record<string, string> = {
 export function SettingsBoard({ role, memberSince }: { role?: string | null; memberSince?: string | null }) {
   const [tab, setTab] = React.useState("account");
   const router = useRouter();
+
+  // Deep-link support: /dashboard/account?tab=billing opens that tab (the tier
+  // banner "Upgrade" CTA and any other in-app link can land here directly).
+  React.useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t && ["account", "preferences", "security", "billing"].includes(t)) setTab(t);
+  }, []);
   const { account } = useDashboard();
   const email = account?.email ?? "—";
   const roleLabel = role ? ROLE_LABEL[role] ?? role.toUpperCase() : "—";

@@ -107,7 +107,7 @@ export function Navbar() {
           <div className="flex items-center justify-between h-17.5 max-lg:h-15.5">
             <Link
               href="/"
-              className="flex items-center gap-3 min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-foam-500"
+              className="flex items-center gap-3 max-md:gap-2.5 min-w-0 shrink rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-foam-500"
               aria-label="Arab ShipBroker"
             >
               <div
@@ -130,12 +130,10 @@ export function Navbar() {
                   )}
                 />
               </div>
-              {/* English and Arabic brand blocks side by side on one grid:
-                  both names share row 1's baseline, both small lines share
-                  row 2, each block centered under its name — no outlier.
-                  Colour tracks the hero state so it stays white over the
-                  photo and legible on the solid header. */}
-              <div className="grid grid-cols-[auto_auto_auto] grid-rows-[auto_auto] items-baseline justify-items-center gap-x-3 gap-y-0.75 min-w-0 leading-none">
+              {/* ≥ sm: English and Arabic side by side on one grid (both names
+                  on row 1, both small lines on row 2, divider between). Colour
+                  tracks the hero state. */}
+              <div className="max-sm:hidden grid grid-cols-[auto_auto_auto] grid-rows-[auto_auto] items-baseline justify-items-center gap-x-3 gap-y-0.75 min-w-0 leading-none">
                 <span
                   className={cn(
                     "font-bold text-[15px] tracking-tight whitespace-nowrap transition-colors duration-300",
@@ -175,7 +173,42 @@ export function Navbar() {
                   lang="ar"
                   style={{ fontFamily: "var(--font-arabic)" }}
                   className={cn(
-                    "text-[10px] italic whitespace-nowrap transition-colors duration-300 max-sm:hidden",
+                    "text-[10px] italic whitespace-nowrap transition-colors duration-300",
+                    showTransparent ? "text-white/75" : "text-ocean-700",
+                  )}
+                >
+                  ربان محمد داود وشركاه
+                </span>
+              </div>
+
+              {/* < sm: compact stacked brand that still carries BOTH names and
+                  the founder line, sized to never crowd the menu button. */}
+              <div className="sm:hidden flex flex-col min-w-0 leading-tight">
+                <span
+                  className={cn(
+                    "font-bold text-[13px] tracking-tight truncate transition-colors duration-300",
+                    showTransparent ? "text-white" : "text-ocean-950",
+                  )}
+                >
+                  Arab ShipBroker
+                </span>
+                <span
+                  dir="rtl"
+                  lang="ar"
+                  style={{ fontFamily: "var(--font-arabic)" }}
+                  className={cn(
+                    "text-[12px] font-semibold truncate transition-colors duration-300",
+                    showTransparent ? "text-white" : "text-ocean-950",
+                  )}
+                >
+                  الوسيط العربي للسفن
+                </span>
+                <span
+                  dir="rtl"
+                  lang="ar"
+                  style={{ fontFamily: "var(--font-arabic)" }}
+                  className={cn(
+                    "text-[8.5px] italic truncate transition-colors duration-300",
                     showTransparent ? "text-white/75" : "text-ocean-700",
                   )}
                 >
@@ -291,7 +324,7 @@ export function Navbar() {
               aria-expanded={mobileMenuOpen}
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               className={cn(
-                "md:hidden inline-flex items-center justify-center w-9 h-9 rounded-xl shrink-0 transition-all duration-200",
+                "md:hidden inline-flex items-center justify-center w-9 h-9 ml-3 rounded-xl shrink-0 transition-all duration-200",
                 showTransparent
                   ? "text-white/80 hover:text-white hover:bg-white/10"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100",
