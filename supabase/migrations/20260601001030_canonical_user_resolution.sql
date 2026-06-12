@@ -57,45 +57,58 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
 $$;
 
 -- ── fn_request_org_membership (…000890) — same body, canonical user id ──
-CREATE OR REPLACE FUNCTION public.fn_request_org_membership(p_org_id uuid)
-RETURNS public.organization_members
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_uid    uuid := public.fn_app_user_id();
-  v_name   text;
-  v_domain text;
-  v_row    public.organization_members;
+-- Guarded: its RETURNS public.organization_members row-type is validated at
+-- CREATE time even with check_function_bodies = off, so on a schema without
+-- the org table this whole statement would fail. Skip cleanly when absent.
+DO $mig$
 BEGIN
-  IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
-
-  SELECT name INTO v_name FROM public.organizations WHERE id = p_org_id;
-  IF v_name IS NULL THEN RAISE EXCEPTION 'Unknown company'; END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM public.organization_members
-    WHERE user_id = v_uid AND status = 'active' AND org_id <> p_org_id
-  ) THEN
-    RAISE EXCEPTION 'You already belong to a company. Leave it before joining another.';
+  IF to_regclass('public.organization_members') IS NULL THEN
+    RAISE NOTICE 'public.organization_members not present — skipping fn_request_org_membership';
+    RETURN;
   END IF;
 
-  SELECT lower(nullif(split_part(email, '@', 2), '')) INTO v_domain
-    FROM public.users WHERE id = v_uid;
+  EXECUTE $ddl$
+    CREATE OR REPLACE FUNCTION public.fn_request_org_membership(p_org_id uuid)
+    RETURNS public.organization_members
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+    DECLARE
+      v_uid    uuid := public.fn_app_user_id();
+      v_name   text;
+      v_domain text;
+      v_row    public.organization_members;
+    BEGIN
+      IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
 
-  INSERT INTO public.organization_members
-    (org_id, user_id, member_role, is_current, status, requested_company_name, requested_email_domain)
-  VALUES
-    (p_org_id, v_uid, 'broker', false, 'pending', v_name, v_domain)
-  ON CONFLICT (org_id, user_id) DO UPDATE
-    SET status = CASE WHEN public.organization_members.status = 'active'
-                      THEN 'active' ELSE 'pending' END,
-        is_current = (public.organization_members.status = 'active'),
-        requested_company_name = EXCLUDED.requested_company_name,
-        requested_email_domain = EXCLUDED.requested_email_domain
-  RETURNING * INTO v_row;
+      SELECT name INTO v_name FROM public.organizations WHERE id = p_org_id;
+      IF v_name IS NULL THEN RAISE EXCEPTION 'Unknown company'; END IF;
 
-  RETURN v_row;
-END;
-$$;
+      IF EXISTS (
+        SELECT 1 FROM public.organization_members
+        WHERE user_id = v_uid AND status = 'active' AND org_id <> p_org_id
+      ) THEN
+        RAISE EXCEPTION 'You already belong to a company. Leave it before joining another.';
+      END IF;
+
+      SELECT lower(nullif(split_part(email, '@', 2), '')) INTO v_domain
+        FROM public.users WHERE id = v_uid;
+
+      INSERT INTO public.organization_members
+        (org_id, user_id, member_role, is_current, status, requested_company_name, requested_email_domain)
+      VALUES
+        (p_org_id, v_uid, 'broker', false, 'pending', v_name, v_domain)
+      ON CONFLICT (org_id, user_id) DO UPDATE
+        SET status = CASE WHEN public.organization_members.status = 'active'
+                          THEN 'active' ELSE 'pending' END,
+            is_current = (public.organization_members.status = 'active'),
+            requested_company_name = EXCLUDED.requested_company_name,
+            requested_email_domain = EXCLUDED.requested_email_domain
+      RETURNING * INTO v_row;
+
+      RETURN v_row;
+    END;
+    $fn$;
+  $ddl$;
+END $mig$;
 
 -- ── fn_my_admin_org_id + fn_org_manage_member (…001010) ──
 CREATE OR REPLACE FUNCTION public.fn_my_admin_org_id()

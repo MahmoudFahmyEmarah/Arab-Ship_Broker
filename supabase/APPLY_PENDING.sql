@@ -1,11 +1,15 @@
 -- ════════════════════════════════════════════════════════════════════
 -- Arab ShipBroker — pending migrations bundle (generated 2026-06-12)
--- Paste this WHOLE file into the Supabase SQL editor and click Run ONCE.
--- Every statement is idempotent: safe to re-run if some were applied.
--- Order: …000950 → 000960 → 000970 → 000990 → 001000 → 001010 → 001020 → 001030
+-- Paste this WHOLE file into the Supabase SQL editor and Run ONCE.
+-- Idempotent + existence-guarded: safe on any schema baseline; statements
+-- that depend on a table you don't have are skipped, not failed.
 -- ════════════════════════════════════════════════════════════════════
 
--- ───────────────────────── 20260601000950_public_stats_totals ─────────────────────────
+-- Let functions that reference not-yet-present tables (profiles, orgs,
+-- listings) create anyway; they only run for features whose tables exist.
+SET check_function_bodies = off;
+
+-- ───────── 20260601000950_public_stats_totals ─────────
 
 -- ════════════════════════════════════════════════════════════════════
 -- Landing live counters — WIDENED to platform totals · append-only · firewall-safe
@@ -37,7 +41,7 @@ SELECT jsonb_build_object(
 $$;
 GRANT EXECUTE ON FUNCTION public.get_public_stats() TO anon, authenticated;
 
--- ───────────────────────── 20260601000960_zone_enum_additions ─────────────────────────
+-- ───────── 20260601000960_zone_enum_additions ─────────
 
 -- ════════════════════════════════════════════════════════════════════
 -- Zone enum additions — append-only
@@ -54,62 +58,79 @@ GRANT EXECUTE ON FUNCTION public.get_public_stats() TO anon, authenticated;
 ALTER TYPE public.zone_enum ADD VALUE IF NOT EXISTS 'ECSA';
 ALTER TYPE public.zone_enum ADD VALUE IF NOT EXISTS 'WCI';
 
--- ───────────────────────── 20260601000970_profile_market_fields ─────────────────────────
+-- ───────── 20260601000970_profile_market_fields ─────────
 
 -- ════════════════════════════════════════════════════════════════════
--- Market Profile fields — append-only
+-- Market Profile fields · append-only · existence-guarded
 --
--- The Settings "Market Profile" card showed Operating zones / Preferred cargo
--- / DWT range focus as "Not set" because they had no storage. Add them to the
--- per-account profile so members can declare their trading focus (visible to
--- Arab ShipBroker only — same row the owner already updates via RLS).
+-- Adds operating_zones / preferred_cargo / dwt_min / dwt_max to profiles so
+-- members can declare their trading focus. Guarded: if this database has no
+-- public.profiles table (some environments derive personas from users.role
+-- instead), the migration logs a notice and skips rather than failing.
 -- ════════════════════════════════════════════════════════════════════
 
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS operating_zones public.zone_enum[],
-  ADD COLUMN IF NOT EXISTS preferred_cargo TEXT[],
-  ADD COLUMN IF NOT EXISTS dwt_min INTEGER CHECK (dwt_min IS NULL OR dwt_min >= 0),
-  ADD COLUMN IF NOT EXISTS dwt_max INTEGER CHECK (dwt_max IS NULL OR dwt_max >= 0);
+DO $$
+BEGIN
+  IF to_regclass('public.profiles') IS NULL THEN
+    RAISE NOTICE 'public.profiles not present — skipping market-profile columns';
+    RETURN;
+  END IF;
 
--- Owners already have UPDATE on their own profiles (RLS "Users update own
--- profiles"); make sure the new columns are grantable.
-GRANT SELECT (operating_zones, preferred_cargo, dwt_min, dwt_max),
-      UPDATE (operating_zones, preferred_cargo, dwt_min, dwt_max)
-  ON public.profiles TO authenticated;
+  ALTER TABLE public.profiles
+    ADD COLUMN IF NOT EXISTS operating_zones public.zone_enum[],
+    ADD COLUMN IF NOT EXISTS preferred_cargo TEXT[],
+    ADD COLUMN IF NOT EXISTS dwt_min INTEGER,
+    ADD COLUMN IF NOT EXISTS dwt_max INTEGER;
 
--- ───────────────────────── 20260601000990_ports_seaward_bearing ─────────────────────────
+  -- CHECK constraints (added separately so IF NOT EXISTS column guard stays clean)
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_dwt_min_chk') THEN
+    ALTER TABLE public.profiles ADD CONSTRAINT profiles_dwt_min_chk CHECK (dwt_min IS NULL OR dwt_min >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_dwt_max_chk') THEN
+    ALTER TABLE public.profiles ADD CONSTRAINT profiles_dwt_max_chk CHECK (dwt_max IS NULL OR dwt_max >= 0);
+  END IF;
+
+  EXECUTE 'GRANT SELECT (operating_zones, preferred_cargo, dwt_min, dwt_max),
+                 UPDATE (operating_zones, preferred_cargo, dwt_min, dwt_max)
+             ON public.profiles TO authenticated';
+END $$;
+
+-- ───────── 20260601000990_ports_seaward_bearing ─────────
 
 -- ════════════════════════════════════════════════════════════════════
--- Ports — seaward bearing · append-only (09_pre_final_polish §7)
+-- Ports — seaward bearing · append-only · existence-guarded (09 §7)
 --
--- Compass direction (degrees, 0 = North) from the port toward open water.
--- Drives geographic marker anchoring on every map: cargo is placed LANDWARD
--- (opposite the bearing — goods at the terminal, never floating), vessels
--- SEAWARD (in the approaches, never on land); same-port jitter runs along
--- the coast-parallel axis only so it can never flip a marker across the
--- coastline. Per the spec, this belongs in the ports table beside lat/lng —
--- not hardcoded in the UI.
+-- Compass direction (0 = North) from the port toward open water; drives the
+-- land/sea marker anchoring. Guarded: skips cleanly if public.ports is absent.
 -- ════════════════════════════════════════════════════════════════════
 
-ALTER TABLE public.ports
-  ADD COLUMN IF NOT EXISTS seaward_bearing SMALLINT
-    CHECK (seaward_bearing IS NULL OR (seaward_bearing BETWEEN 0 AND 359));
+DO $$
+BEGIN
+  IF to_regclass('public.ports') IS NULL THEN
+    RAISE NOTICE 'public.ports not present — skipping seaward_bearing';
+    RETURN;
+  END IF;
 
-GRANT SELECT (seaward_bearing) ON public.ports TO authenticated;
+  ALTER TABLE public.ports
+    ADD COLUMN IF NOT EXISTS seaward_bearing SMALLINT;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ports_seaward_bearing_chk') THEN
+    ALTER TABLE public.ports ADD CONSTRAINT ports_seaward_bearing_chk
+      CHECK (seaward_bearing IS NULL OR (seaward_bearing BETWEEN 0 AND 359));
+  END IF;
+  EXECUTE 'GRANT SELECT (seaward_bearing) ON public.ports TO authenticated';
 
--- Surveyed bearings from the design registry (asb/map.jsx PORTS). Ports not
--- listed keep NULL → the UI falls back to plain coordinate jitter.
-UPDATE public.ports SET seaward_bearing = v.b
-FROM (VALUES
-  ('Constanta', 110), ('Istanbul', 180), ('Novorossiysk', 225), ('Odessa', 135),
-  ('Izmir', 270), ('Piraeus', 200), ('Mersin', 180), ('Iskenderun', 225),
-  ('Beirut', 270), ('Alexandria', 0), ('Damietta', 0), ('Port Said', 0),
-  ('Aqaba', 180), ('Yanbu', 250), ('Jeddah', 270), ('Jebel Ali', 315),
-  ('Sohar', 45), ('Fujairah', 90), ('Mumbai', 250), ('Dar es Salaam', 90)
-) AS v(name, b)
-WHERE public.ports.trade_name = v.name;
+  UPDATE public.ports SET seaward_bearing = v.b
+  FROM (VALUES
+    ('Constanta', 110), ('Istanbul', 180), ('Novorossiysk', 225), ('Odessa', 135),
+    ('Izmir', 270), ('Piraeus', 200), ('Mersin', 180), ('Iskenderun', 225),
+    ('Beirut', 270), ('Alexandria', 0), ('Damietta', 0), ('Port Said', 0),
+    ('Aqaba', 180), ('Yanbu', 250), ('Jeddah', 270), ('Jebel Ali', 315),
+    ('Sohar', 45), ('Fujairah', 90), ('Mumbai', 250), ('Dar es Salaam', 90)
+  ) AS v(name, b)
+  WHERE public.ports.trade_name = v.name AND public.ports.seaward_bearing IS NULL;
+END $$;
 
--- ───────────────────────── 20260601001000_declared_role ─────────────────────────
+-- ───────── 20260601001000_declared_role ─────────
 
 -- ════════════════════════════════════════════════════════════════════
 -- Onboarding taxonomy — declared role · append-only
@@ -128,7 +149,7 @@ ALTER TABLE public.users
 
 GRANT SELECT (declared_role) ON public.users TO authenticated;
 
--- ───────────────────────── 20260601001010_org_admin_team ─────────────────────────
+-- ───────── 20260601001010_org_admin_team ─────────
 
 -- ════════════════════════════════════════════════════════════════════
 -- Org-admin team management · append-only · firewall-safe
@@ -203,7 +224,7 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.fn_org_manage_member(uuid, uuid, text) TO authenticated;
 
--- ───────────────────────── 20260601001020_admin_tiers ─────────────────────────
+-- ───────── 20260601001020_admin_tiers ─────────
 
 -- ════════════════════════════════════════════════════════════════════
 -- Sub-admin authorization model · append-only (design admin-roles.js)
@@ -229,7 +250,7 @@ WHERE role = 'admin' AND admin_tier IS NULL;
 -- Each admin can read their own tier/perms (the sidebar filters with it).
 GRANT SELECT (admin_tier, admin_perms) ON public.users TO authenticated;
 
--- ───────────────────────── 20260601001030_canonical_user_resolution ─────────────────────────
+-- ───────── 20260601001030_canonical_user_resolution ─────────
 
 -- ════════════════════════════════════════════════════════════════════
 -- Canonical user resolution · append-only · CRITICAL consistency fix
@@ -290,45 +311,58 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
 $$;
 
 -- ── fn_request_org_membership (…000890) — same body, canonical user id ──
-CREATE OR REPLACE FUNCTION public.fn_request_org_membership(p_org_id uuid)
-RETURNS public.organization_members
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_uid    uuid := public.fn_app_user_id();
-  v_name   text;
-  v_domain text;
-  v_row    public.organization_members;
+-- Guarded: its RETURNS public.organization_members row-type is validated at
+-- CREATE time even with check_function_bodies = off, so on a schema without
+-- the org table this whole statement would fail. Skip cleanly when absent.
+DO $mig$
 BEGIN
-  IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
-
-  SELECT name INTO v_name FROM public.organizations WHERE id = p_org_id;
-  IF v_name IS NULL THEN RAISE EXCEPTION 'Unknown company'; END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM public.organization_members
-    WHERE user_id = v_uid AND status = 'active' AND org_id <> p_org_id
-  ) THEN
-    RAISE EXCEPTION 'You already belong to a company. Leave it before joining another.';
+  IF to_regclass('public.organization_members') IS NULL THEN
+    RAISE NOTICE 'public.organization_members not present — skipping fn_request_org_membership';
+    RETURN;
   END IF;
 
-  SELECT lower(nullif(split_part(email, '@', 2), '')) INTO v_domain
-    FROM public.users WHERE id = v_uid;
+  EXECUTE $ddl$
+    CREATE OR REPLACE FUNCTION public.fn_request_org_membership(p_org_id uuid)
+    RETURNS public.organization_members
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+    DECLARE
+      v_uid    uuid := public.fn_app_user_id();
+      v_name   text;
+      v_domain text;
+      v_row    public.organization_members;
+    BEGIN
+      IF v_uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
 
-  INSERT INTO public.organization_members
-    (org_id, user_id, member_role, is_current, status, requested_company_name, requested_email_domain)
-  VALUES
-    (p_org_id, v_uid, 'broker', false, 'pending', v_name, v_domain)
-  ON CONFLICT (org_id, user_id) DO UPDATE
-    SET status = CASE WHEN public.organization_members.status = 'active'
-                      THEN 'active' ELSE 'pending' END,
-        is_current = (public.organization_members.status = 'active'),
-        requested_company_name = EXCLUDED.requested_company_name,
-        requested_email_domain = EXCLUDED.requested_email_domain
-  RETURNING * INTO v_row;
+      SELECT name INTO v_name FROM public.organizations WHERE id = p_org_id;
+      IF v_name IS NULL THEN RAISE EXCEPTION 'Unknown company'; END IF;
 
-  RETURN v_row;
-END;
-$$;
+      IF EXISTS (
+        SELECT 1 FROM public.organization_members
+        WHERE user_id = v_uid AND status = 'active' AND org_id <> p_org_id
+      ) THEN
+        RAISE EXCEPTION 'You already belong to a company. Leave it before joining another.';
+      END IF;
+
+      SELECT lower(nullif(split_part(email, '@', 2), '')) INTO v_domain
+        FROM public.users WHERE id = v_uid;
+
+      INSERT INTO public.organization_members
+        (org_id, user_id, member_role, is_current, status, requested_company_name, requested_email_domain)
+      VALUES
+        (p_org_id, v_uid, 'broker', false, 'pending', v_name, v_domain)
+      ON CONFLICT (org_id, user_id) DO UPDATE
+        SET status = CASE WHEN public.organization_members.status = 'active'
+                          THEN 'active' ELSE 'pending' END,
+            is_current = (public.organization_members.status = 'active'),
+            requested_company_name = EXCLUDED.requested_company_name,
+            requested_email_domain = EXCLUDED.requested_email_domain
+      RETURNING * INTO v_row;
+
+      RETURN v_row;
+    END;
+    $fn$;
+  $ddl$;
+END $mig$;
 
 -- ── fn_my_admin_org_id + fn_org_manage_member (…001010) ──
 CREATE OR REPLACE FUNCTION public.fn_my_admin_org_id()
