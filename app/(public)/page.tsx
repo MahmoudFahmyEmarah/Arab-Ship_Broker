@@ -9,14 +9,13 @@ import { HomeClient } from "./home-client";
 export const revalidate = 300;
 
 export default async function HomePage() {
-  // Real platform figures from the unified master dataset (731 cargo · 88
-  // vessels · 16 trade zones). These are the floor: live RPC counts override
-  // them when there's real DB activity, but a live 0 must NOT render a dead "0"
-  // on the marketing hero — it falls back to these real figures.
-  const BASE = { cargo: 731, vessel: 88, zone: 16 };
-  let cargoCount = BASE.cargo;
-  let vesselCount = BASE.vessel;
-  let zoneCount = BASE.zone;
+  // The hero shows ONLY what is genuinely available this week (the RPC mirrors
+  // the portal boards' status filters + a ±7-day window). These are real
+  // figures, so a live 0 is the TRUTH and must render as 0 — no inflated
+  // baseline. The browser re-fetches and lands on the current count.
+  let cargoCount = 0;
+  let vesselCount = 0;
+  let zoneCount = 0;
 
   try {
     const supabase = createClient(
@@ -29,15 +28,14 @@ export default async function HomePage() {
       vessel_count?: number;
       zone_count?: number;
     } | null;
-    if (!error && s && typeof s.cargo_count === "number") {
-      // Use live counts when they're non-zero; otherwise keep the baseline so
-      // cargo/vessel/zone never show 0 on the public hero.
-      if (s.cargo_count > 0) cargoCount = s.cargo_count;
-      if (typeof s.vessel_count === "number" && s.vessel_count > 0) vesselCount = s.vessel_count;
-      if (typeof s.zone_count === "number" && s.zone_count > 0) zoneCount = s.zone_count;
+    if (!error && s) {
+      if (typeof s.cargo_count === "number") cargoCount = s.cargo_count;
+      if (typeof s.vessel_count === "number") vesselCount = s.vessel_count;
+      if (typeof s.zone_count === "number") zoneCount = s.zone_count;
     }
   } catch {
-    // RPC unavailable — keep the sensible fallbacks (never render NaN).
+    // RPC unavailable — leave at 0 (honest) rather than render a fabricated
+    // figure; the browser refresh in HomeClient will fill it in.
   }
 
   return (

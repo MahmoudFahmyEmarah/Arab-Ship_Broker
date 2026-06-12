@@ -273,6 +273,8 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
   // Live hero stats. Server values paint first (ISR may serve a cached build),
   // then the browser refreshes them from the same aggregate-only RPC so the
   // counters always land on the CURRENT database numbers, never a stale cache.
+  // A live 0 is the truth (nothing open this week) and DOES replace the server
+  // value — these are real availability figures, not a marketing floor.
   const [live, setLive] = useState({ cargoCount, vesselCount, zoneCount });
   useEffect(() => {
     let cancelled = false;
@@ -282,19 +284,21 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         if (cancelled || error || !data) return;
         const s = data as { cargo_count?: number; vessel_count?: number; zone_count?: number };
         setLive((prev) => ({
-          cargoCount: typeof s.cargo_count === "number" && s.cargo_count > 0 ? s.cargo_count : prev.cargoCount,
-          vesselCount: typeof s.vessel_count === "number" && s.vessel_count > 0 ? s.vessel_count : prev.vesselCount,
-          zoneCount: typeof s.zone_count === "number" && s.zone_count > 0 ? s.zone_count : prev.zoneCount,
+          cargoCount: typeof s.cargo_count === "number" ? s.cargo_count : prev.cargoCount,
+          vesselCount: typeof s.vessel_count === "number" ? s.vessel_count : prev.vesselCount,
+          zoneCount: typeof s.zone_count === "number" ? s.zone_count : prev.zoneCount,
         }));
       });
     return () => { cancelled = true; };
   }, []);
 
-  // The "+" on Cargo Records is decorative; the animation lands on the exact DB number.
+  // What's genuinely on the market this week — same status filters as the
+  // portal boards plus a ±7-day window (get_public_stats). The animation lands
+  // on the exact DB number.
   const stats = [
-    { value: String(live.cargoCount), label: "Cargo Records", suffix: "+", hint: "across 16 trade zones" },
-    { value: String(live.vesselCount), label: "Vessels Tracked", suffix: "" },
-    { value: String(live.zoneCount), label: "Trade Zones", suffix: "" },
+    { value: String(live.cargoCount), label: "Open Cargoes", suffix: "", hint: "available this week" },
+    { value: String(live.vesselCount), label: "Open Vessels", suffix: "", hint: "open this week" },
+    { value: String(live.zoneCount), label: "Active Zones", suffix: "", hint: "with live business" },
   ];
 
   return (
