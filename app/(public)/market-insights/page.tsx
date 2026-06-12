@@ -6,6 +6,11 @@ import {
   getLatestEdition, getEdition, getArchive, formatRange,
   SIZE_BAND_ORDER, type InsightBucket, type InsightEdition,
 } from "@/lib/market-insights";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { FuelPanelMember, FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
+
+// Session-gated fuel panel reads cookies → must render per request.
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Market Insights — Arab ShipBroker",
@@ -98,6 +103,14 @@ export default async function MarketInsightsPage({
   const ed: InsightEdition = edition;
   const p = ed.payload;
 
+  // ── Fuel-cost firewall (Pre_Final §11) ──
+  // Resolve the session SERVER-SIDE. Only an authenticated member session
+  // renders the real fuel panel; for everyone else the page emits the locked
+  // teaser, so the FUEL_COST figures are never serialized into the public DOM.
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isMember = Boolean(user);
+
   // Order size bands consistently.
   const sizeBands = [...p.size_bands].sort(
     (a, b) => SIZE_BAND_ORDER.indexOf(a.label as never) - SIZE_BAND_ORDER.indexOf(b.label as never),
@@ -174,6 +187,11 @@ export default async function MarketInsightsPage({
           <RankTable title="Top load zones" items={p.load_zones} />
           <RankTable title="Top discharge zones" items={p.disch_zones} />
         </div>
+
+        {/* ── Handysize fuel-cost panel — members see figures, public sees the
+              locked teaser only (no figures in the public DOM). Fuel cost,
+              never a freight/hire quote. ── */}
+        {isMember ? <FuelPanelMember /> : <FuelTeaserPublic />}
 
         {/* ── Narrative ── */}
         {ed.narrative && (

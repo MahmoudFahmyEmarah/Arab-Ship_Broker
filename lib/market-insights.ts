@@ -164,3 +164,39 @@ export function formatRange(from: string, to: string): string {
   const d = (x: Date) => x.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   return `${d(f)}–${t.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Handysize daily FUEL-COST estimate (Pre_Final §11). MEMBER-ONLY.
+//
+// FIREWALL (correctness requirement): this object must only ever be rendered
+// for an authenticated member session. The public Market Insights page must
+// NOT embed any of these figures in its DOM — render the locked teaser there
+// instead. It is an ASB operational fuel-cost estimate, NOT a freight/hire
+// market quote, and depends on no external broker data.
+//
+// Basis: Handysize · LSMGO · 12.5 kn sea steaming. Scenarios: Normal $1,000/t,
+// Hormuz-stress $1,400/t (Strait of Hormuz escalation premium).
+// ════════════════════════════════════════════════════════════════════
+export interface FuelTier {
+  label: string;
+  cons: number; // sea consumption, t/day
+  normal: number; // $/day @ $1,000/t
+  stress: number; // $/day @ $1,400/t
+}
+
+export const FUEL_COST = {
+  basis:
+    "Handysize · LSMGO · 12.5 kn · sea steaming. Port basis ~3 t/day working cargo.",
+  estimateLabel: "ASB operational estimate · not a market quote",
+  scenarios: {
+    normal: { label: "Normal", price: 1000 },
+    stress: { label: "Hormuz-stress", price: 1400 },
+  },
+  tiers: [
+    { label: "Modern (5yr)", cons: 13, normal: 13000, stress: 18200 },
+    { label: "10-year", cons: 14, normal: 14000, stress: 19600 },
+    { label: "15-year", cons: 15, normal: 15000, stress: 21000 },
+    { label: "20-year+", cons: 16, normal: 16000, stress: 22400 },
+  ] as FuelTier[],
+  port: { cons: "3 t/day", normal: 3000, stress: 4200 },
+} as const;
