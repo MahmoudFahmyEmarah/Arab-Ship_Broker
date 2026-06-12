@@ -307,7 +307,7 @@ export default function SignupPage() {
                       />
                       <ProfileTile
                         label="Principal Cargo Owner"
-                        description="Charterer / shipper — I have cargo to move"
+                        description="Charterer / shipper / freight forwarder — cargo to move"
                         icon={Package}
                         selected={accountKind === "principal_charterer"}
                         onToggle={() =>
