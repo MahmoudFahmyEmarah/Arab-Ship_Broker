@@ -31,8 +31,8 @@ export function Footer() {
             </Link>
             <p className="text-sm leading-relaxed text-ocean-200/80 max-w-sm">
               Premier maritime brokerage serving the MENA region with
-              specialized expertise in dry-bulk chartering, vessel sales &
-              purchase, and comprehensive shipping solutions.
+              specialized expertise in dry-bulk & break-bulk brokerage, vessel
+              sales & purchase, and dedicated MENA shipping market insights.
             </p>
             <div className="flex items-center space-x-4">
               <a
