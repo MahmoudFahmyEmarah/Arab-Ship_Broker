@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import { ScrollZoomBackground } from "@/components/ScrollZoomBackground";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
 
@@ -265,12 +266,31 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.9], [1, 0]);
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 80]);
 
-  // Live hero stats (counts come from the server wrapper). The "+" on Cargo
-  // Records is decorative; the animation lands on the exact DB number.
+  // Live hero stats. Server values paint first (ISR may serve a cached build),
+  // then the browser refreshes them from the same aggregate-only RPC so the
+  // counters always land on the CURRENT database numbers, never a stale cache.
+  const [live, setLive] = useState({ cargoCount, vesselCount, zoneCount });
+  useEffect(() => {
+    let cancelled = false;
+    getSupabaseBrowserClient()
+      .rpc("get_public_stats")
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        const s = data as { cargo_count?: number; vessel_count?: number; zone_count?: number };
+        setLive((prev) => ({
+          cargoCount: typeof s.cargo_count === "number" && s.cargo_count > 0 ? s.cargo_count : prev.cargoCount,
+          vesselCount: typeof s.vessel_count === "number" && s.vessel_count > 0 ? s.vessel_count : prev.vesselCount,
+          zoneCount: typeof s.zone_count === "number" && s.zone_count > 0 ? s.zone_count : prev.zoneCount,
+        }));
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // The "+" on Cargo Records is decorative; the animation lands on the exact DB number.
   const stats = [
-    { value: String(cargoCount), label: "Cargo Records", suffix: "+", hint: "across 16 trade zones" },
-    { value: String(vesselCount), label: "Vessels Tracked", suffix: "" },
-    { value: String(zoneCount), label: "Trade Zones", suffix: "" },
+    { value: String(live.cargoCount), label: "Cargo Records", suffix: "+", hint: "across 16 trade zones" },
+    { value: String(live.vesselCount), label: "Vessels Tracked", suffix: "" },
+    { value: String(live.zoneCount), label: "Trade Zones", suffix: "" },
   ];
 
   return (
