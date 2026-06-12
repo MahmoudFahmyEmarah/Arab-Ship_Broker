@@ -17,6 +17,9 @@ export function ScrollZoomBackground({
   const [scale, setScale] = useState(1);
 
   useEffect(() => {
+    // Reduced-motion users get a static, full-sharpness background.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
     let ticking = false;
 
     const handleScroll = () => {
@@ -25,7 +28,10 @@ export function ScrollZoomBackground({
           const scrollY = window.scrollY;
           const viewportHeight = window.innerHeight;
           const progress = Math.min(scrollY / viewportHeight, 1);
-          setScale(1 + progress * 0.25);
+          // Keep the parallax feel but cap the zoom at 6%: the old 25% blew a
+          // full-bleed photo well past its native pixels (visible resolution
+          // loss) and the large continuous motion read as dizzying.
+          setScale(1 + progress * 0.06);
           ticking = false;
         });
         ticking = true;
@@ -49,6 +55,8 @@ export function ScrollZoomBackground({
         alt="Background"
         fill
         priority
+        sizes="100vw"
+        quality={92}
         className="object-cover will-change-transform"
         style={{
           transform: `scale(${scale})`,

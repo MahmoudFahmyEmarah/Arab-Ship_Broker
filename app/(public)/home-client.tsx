@@ -748,13 +748,17 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
 
               <div className="p-14 max-lg:p-10 max-sm:p-8 flex flex-row max-lg:flex-col items-center max-lg:items-start max-sm:items-center gap-12 max-sm:gap-8">
                 <div className="shrink-0 relative">
-                  <div className="w-36 h-36 max-sm:w-28 max-sm:h-28 rounded-2xl overflow-hidden shadow-2xl border-4 border-white rotate-1 max-sm:rotate-0 hover:rotate-0 transition-transform duration-400">
+                  {/* Straight (no tilt/wobble) and served at 3x the display
+                      size with high quality so the portrait stays as crisp as
+                      the original. */}
+                  <div className="w-36 h-36 max-sm:w-28 max-sm:h-28 rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
                     <Image
                       src="/cp.jpeg"
                       alt="Capt. Mohamed Dawoud"
-                      width={144}
-                      height={144}
-                      className="object-cover"
+                      width={432}
+                      height={432}
+                      quality={95}
+                      className="w-full h-full object-cover"
                     />
                   </div>
                   <div className="absolute -bottom-3 -right-3 w-10 h-10 bg-ocean-600 rounded-xl flex items-center justify-center shadow-lg border-4 border-white">

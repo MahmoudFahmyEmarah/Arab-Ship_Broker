@@ -441,13 +441,14 @@ export default function ContactPage() {
 
               <div className="p-14 max-[1024px]:p-10 max-[768px]:p-8 flex flex-row max-[1024px]:flex-col items-center max-[1024px]:items-start max-[768px]:items-center gap-10">
                 <div className="shrink-0 relative">
-                  <div className="w-40 h-40 max-[768px]:w-32 max-[768px]:h-32 rounded-3xl overflow-hidden shadow-2xl border-4 border-white rotate-2 max-[768px]:rotate-0 hover:rotate-0 transition-transform duration-500">
+                  <div className="w-40 h-40 max-[768px]:w-32 max-[768px]:h-32 rounded-3xl overflow-hidden shadow-2xl border-4 border-white">
                     <Image
                       src="/cp.jpeg"
                       alt="Capt. Mohamed Dawoud"
                       className="w-full h-full object-cover"
-                      width={160}
-                      height={160}
+                      width={480}
+                      height={480}
+                      quality={95}
                     />
                   </div>
                   <div className="absolute -bottom-3 -right-3 w-12 h-12 max-[768px]:w-10 max-[768px]:h-10 bg-ocean-600 rounded-2xl flex items-center justify-center shadow-xl border-4 border-white">
