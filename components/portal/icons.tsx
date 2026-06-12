@@ -38,13 +38,14 @@ export function IconCargo({
   color,
   className,
   plus = false,
-}: IconProps & { plus?: boolean }) {
+  fleck = "#fff",
+}: IconProps & { plus?: boolean; fleck?: string }) {
   const fill = color || "currentColor";
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" className={className} fill="none">
       <path d="M 13.5 6 L 22.5 19 L 9.5 19 Z" fill={fill} />
       <path d="M 7 10 L 14.5 19 L 1.5 19 L 5 14 Z" fill={fill} />
-      <g fill="#fff" opacity="0.85">
+      <g fill={fleck} opacity="0.85">
         <circle cx="6" cy="17" r="0.35" />
         <circle cx="8" cy="15.5" r="0.3" />
         <circle cx="10" cy="17.5" r="0.35" />
@@ -68,7 +69,8 @@ export function IconVessel({
   color,
   className,
   plus = false,
-}: IconProps & { plus?: boolean }) {
+  fleck = "#fff",
+}: IconProps & { plus?: boolean; fleck?: string }) {
   const fill = color || "currentColor";
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" className={className} fill="none">
@@ -78,7 +80,7 @@ export function IconVessel({
         d="M 1.5 14 L 17 14 Q 21 14 22.5 11 L 22.5 16 Q 22 17.5 19 17.5 L 4 17.5 Q 2 17.5 1.5 16 Z"
         fill={fill}
       />
-      <rect x="19" y="13" width="1.6" height="1" fill="#fff" opacity="0.85" rx="0.2" />
+      <rect x="19" y="13" width="1.6" height="1" fill={fleck} opacity="0.85" rx="0.2" />
       <path
         d="M 1.5 19.5 Q 4 18.5 6.5 19.5 T 11.5 19.5 T 16.5 19.5 T 22.5 19.5"
         stroke={fill}
