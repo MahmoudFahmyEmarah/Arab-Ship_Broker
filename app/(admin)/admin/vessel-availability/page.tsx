@@ -35,7 +35,7 @@ export default async function AdminVesselAvailabilityPage({
 }: {
   searchParams: Promise<{ status?: string; review?: string; q?: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "vesselavail" });
   const params = await searchParams;
   const supabase = await getAdminSupabaseClient();
 

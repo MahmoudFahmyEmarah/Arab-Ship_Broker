@@ -59,7 +59,7 @@ export default async function AdminCargoPage({
     zone?: string;
   }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "cargo" });
   const params = await searchParams;
   const supabase = await getAdminSupabaseClient();
 

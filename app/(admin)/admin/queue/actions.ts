@@ -54,7 +54,7 @@ async function executeReviewAction(
 }
 
 export async function approveQueueItem(queueItemId: string) {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin({ section: "review", edit: true });
   try {
     await executeReviewAction(
       queueItemId,
@@ -75,7 +75,7 @@ export async function approveQueueItem(queueItemId: string) {
 }
 
 export async function rejectQueueItem(queueItemId: string, reason: string) {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin({ section: "review", edit: true });
   if (!reason.trim())
     return { success: false, error: "A rejection reason is required." };
   try {
@@ -101,7 +101,7 @@ export async function amendQueueItem(
   queueItemId: string,
   amendmentDetail: string,
 ) {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin({ section: "review", edit: true });
   if (!amendmentDetail.trim())
     return { success: false, error: "Amendment details are required." };
   try {
@@ -124,7 +124,7 @@ export async function amendQueueItem(
 }
 
 export async function flagQueueItem(queueItemId: string, reason: string) {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin({ section: "review", edit: true });
   if (!reason.trim())
     return { success: false, error: "A flag reason is required." };
   try {

@@ -5,7 +5,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin/require-admin";
 
 async function getAdminCtx() {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin({ section: "users", edit: true });
   const client = getSupabaseAdminClient();
   return { admin, client };
 }

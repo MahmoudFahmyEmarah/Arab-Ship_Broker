@@ -43,7 +43,7 @@ function formatDate(iso: string): string {
 
 export default async function AdminDashboardPage() {
   // Guard: throws/redirects if not admin
-  const admin = await requireAdmin();
+  const admin = await requireAdmin({ section: "dashboard" });
   const supabase = await getAdminSupabaseClient();
 
   const [statsResult, activityResult, queueResult] = await Promise.all([

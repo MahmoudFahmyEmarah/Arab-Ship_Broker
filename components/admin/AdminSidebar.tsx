@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -23,6 +25,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { logout } from "@/sdk/auth";
+import { ADMIN_SECTIONS, canAccess, type AdminTier, type AdminPerms } from "@/lib/admin/sections";
 
 interface AdminSidebarProps {
   mobileOpen?: boolean;
@@ -79,9 +82,21 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Users", href: "/admin/users", icon: Users },
       { label: "Company Members", href: "/admin/org-members", icon: Building2 },
       { label: "Messages", href: "/admin/messages", icon: Mail },
+      { label: "Bunker Prices", href: "/admin/bunker", icon: Layers },
+    ],
+  },
+  {
+    label: "Owner",
+    items: [
+      { label: "ETA e-invoicing", href: "/admin/eta", icon: ShieldCheck },
+      { label: "Admins", href: "/admin/admins", icon: ShieldCheck },
     ],
   },
 ];
+
+const SECTION_BY_HREF: Record<string, string> = Object.fromEntries(
+  ADMIN_SECTIONS.map((s) => [s.href, s.id]),
+);
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/admin/dashboard") return pathname === "/admin/dashboard";
@@ -91,6 +106,38 @@ function isActive(pathname: string, href: string): boolean {
 export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // The viewer's admin tier/perms — drives nav filtering (the server-side
+  // requireAdmin gate on each page is the real enforcement; this is UX).
+  const [ctx, setCtx] = React.useState<{ tier: AdminTier; perms: AdminPerms | null } | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from("users")
+          .select("admin_tier, admin_perms")
+          .eq("id", user.id)
+          .single();
+        const row = data as { admin_tier?: string | null; admin_perms?: AdminPerms | null } | null;
+        setCtx({ tier: ((row?.admin_tier ?? "super") as AdminTier), perms: row?.admin_perms ?? null });
+      } catch {}
+    })();
+  }, []);
+
+  const visibleSections = NAV_SECTIONS.map((sec) => ({
+    ...sec,
+    items: sec.items.filter((it) => {
+      const id = SECTION_BY_HREF[it.href];
+      if (!id) return true;
+      // Until ctx loads, show only the always-safe dashboard to avoid flashing
+      // sections a sub can't open.
+      if (!ctx) return id === "dashboard";
+      return canAccess(id, ctx.tier, ctx.perms) !== "none";
+    }),
+  })).filter((sec) => sec.items.length > 0);
 
   const handleLogout = async () => {
     try {
@@ -140,7 +187,7 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 sidebar-scroll space-y-5">
-        {NAV_SECTIONS.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.label}>
             <p className="px-3 mb-1.5 text-[10px] font-bold text-asb-gray-400/80 uppercase tracking-[0.14em]">
               {section.label}

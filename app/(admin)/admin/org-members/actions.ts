@@ -24,7 +24,7 @@ export type PendingRequest = {
 };
 
 export async function listPendingRequests(): Promise<PendingRequest[]> {
-  await requireAdmin();
+  await requireAdmin({ section: "orgmembers", edit: true });
   const c = await getAdminSupabaseClient();
   const { data, error } = await c.rpc("fn_pending_membership_requests");
   if (error) {
@@ -40,7 +40,7 @@ export async function decideRequest(
   approve: boolean,
   makeAdmin = false,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  await requireAdmin({ section: "orgmembers", edit: true });
   const c = await getAdminSupabaseClient();
   const { error } = await c.rpc("fn_decide_org_membership", {
     p_org_id: orgId,

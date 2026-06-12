@@ -38,7 +38,7 @@ const ANSWER_TYPE_COLORS: Record<string, string> = {
 };
 
 export default async function AdminSafetyQuestionsPage() {
-  await requireAdmin();
+  await requireAdmin({ section: "safety" });
   const supabase = await getAdminSupabaseClient();
 
   const { data } = await supabase

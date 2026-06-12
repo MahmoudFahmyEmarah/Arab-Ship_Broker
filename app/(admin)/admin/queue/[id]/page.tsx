@@ -131,7 +131,7 @@ export default async function QueueItemPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "review" });
   const { id } = await params;
   const supabase = await getAdminSupabaseClient();
 

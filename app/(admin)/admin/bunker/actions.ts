@@ -11,7 +11,7 @@ function slugify(s: string) {
 }
 
 export async function addSupplier(formData: FormData) {
-  await requireAdmin();
+  await requireAdmin({ section: "bunker", edit: true });
   const supabase = await getSupabaseServerClient();
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
@@ -25,7 +25,7 @@ export async function addSupplier(formData: FormData) {
 }
 
 export async function toggleSupplier(formData: FormData) {
-  await requireAdmin();
+  await requireAdmin({ section: "bunker", edit: true });
   const supabase = await getSupabaseServerClient();
   const id = String(formData.get("id"));
   const active = String(formData.get("active")) === "true";
@@ -34,7 +34,7 @@ export async function toggleSupplier(formData: FormData) {
 }
 
 export async function addPrice(formData: FormData) {
-  await requireAdmin();
+  await requireAdmin({ section: "bunker", edit: true });
   const supabase = await getSupabaseServerClient();
   const supplier_id = String(formData.get("supplier_id"));
   const fuel = String(formData.get("fuel") || "").trim();
@@ -52,7 +52,7 @@ export async function addPrice(formData: FormData) {
 }
 
 export async function setCredential(formData: FormData) {
-  await requireAdmin();
+  await requireAdmin({ section: "bunker", edit: true });
   const supabase = await getSupabaseServerClient();
   const supplier_id = String(formData.get("supplier_id"));
   const username = String(formData.get("username") || "").trim();

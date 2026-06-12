@@ -65,7 +65,7 @@ export default async function AdminQueuePage({
 }: {
   searchParams: Promise<{ status?: string; type?: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "review" });
   const params = await searchParams;
   const supabase = await getAdminSupabaseClient();
 

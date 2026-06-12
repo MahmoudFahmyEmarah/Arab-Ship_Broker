@@ -8,7 +8,7 @@ type Account = { supplier_id: string; username: string; last_seen_at: string | n
 type Price = { supplier_id: string; fuel: string; value: number; dir: string | null; observed_at: string };
 
 export default async function AdminBunkerPage() {
-  await requireAdmin();
+  await requireAdmin({ section: "bunker" });
   const supabase = await getSupabaseServerClient();
 
   const [{ data: sup }, { data: acc }, { data: pr }] = await Promise.all([

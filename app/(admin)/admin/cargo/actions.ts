@@ -5,7 +5,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin/require-admin";
 
 async function adminClient() {
-  await requireAdmin();
+  await requireAdmin({ section: "cargo", edit: true });
   return getSupabaseAdminClient();
 }
 

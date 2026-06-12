@@ -46,7 +46,7 @@ export default async function AdminVesselDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "vessels" });
   const { id } = await params;
   const adminClient = getSupabaseAdminClient();
 

@@ -6,7 +6,7 @@ import { listPendingRequests } from "./actions";
 export const metadata = { title: "Company Members — Admin" };
 
 export default async function AdminOrgMembersPage() {
-  await requireAdmin();
+  await requireAdmin({ section: "orgmembers" });
   const pending = await listPendingRequests();
 
   return (

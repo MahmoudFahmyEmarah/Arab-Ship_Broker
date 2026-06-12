@@ -41,7 +41,7 @@ export default async function AdminPortsPage({
     create?: string;
   }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "ports" });
   const params = await searchParams;
   const supabase = await getAdminSupabaseClient();
 

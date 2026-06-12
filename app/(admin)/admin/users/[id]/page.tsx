@@ -48,7 +48,7 @@ export default async function AdminUserDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "users" });
   const { id } = await params;
   const supabase = await getAdminSupabaseClient();
 

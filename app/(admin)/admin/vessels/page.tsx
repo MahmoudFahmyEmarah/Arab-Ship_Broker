@@ -26,7 +26,7 @@ export default async function AdminVesselsPage({
 }: {
   searchParams: Promise<{ risk?: string; q?: string; sanctioned?: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "vessels" });
   const params = await searchParams;
 
   const riskFilter = (params.risk ?? "ALL") as RiskLevel | "ALL";

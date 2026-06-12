@@ -57,7 +57,7 @@ export default async function AdminUsersPage({
     inactive?: string;
   }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "users" });
   const params = await searchParams;
   const supabase = await getAdminSupabaseClient();
 

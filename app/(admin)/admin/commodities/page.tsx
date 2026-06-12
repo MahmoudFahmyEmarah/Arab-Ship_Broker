@@ -14,7 +14,7 @@ export default async function AdminCommoditiesPage({
 }: {
   searchParams: Promise<{ inactive?: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "commodities" });
   const params = await searchParams;
   const supabase = await getAdminSupabaseClient();
   const showInactive = params.inactive === "1";

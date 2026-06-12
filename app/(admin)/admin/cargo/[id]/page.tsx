@@ -64,7 +64,7 @@ export default async function AdminCargoDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "cargo" });
   const { id } = await params;
   const supabase = await getAdminSupabaseClient();
 

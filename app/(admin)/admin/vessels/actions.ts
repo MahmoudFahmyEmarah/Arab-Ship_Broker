@@ -10,7 +10,7 @@ import type {
 } from "@/lib/admin/types";
 
 async function adminClient() {
-  await requireAdmin();
+  await requireAdmin({ section: "vessels", edit: true });
   return getSupabaseAdminClient();
 }
 

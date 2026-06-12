@@ -16,7 +16,7 @@ export default async function AdminMessagesPage({
 }: {
   searchParams: Promise<{ filter?: string }>;
 }) {
-  await requireAdmin();
+  await requireAdmin({ section: "messages" });
   const params = await searchParams;
   const supabase = await getAdminSupabaseClient();
   const filter = params.filter ?? "unread";
