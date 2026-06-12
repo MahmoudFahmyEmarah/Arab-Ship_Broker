@@ -34,7 +34,10 @@ export function AlertsBoard() {
             <h1 className="page-title">My Alerts</h1>
             <div className="eyebrow" style={{ marginTop: 2 }}>{active} active triggers · {totalMatches} live matches</div>
           </div>
-          <button className="asb-btn primary"><IconPlus size={12} color="#fff" /> New alert</button>
+          <button className="asb-btn primary" disabled aria-disabled title="The alert builder ships with the notifications engine. Coming soon."
+            style={{ opacity: 0.55, cursor: "not-allowed" }}>
+            <IconPlus size={12} color="#fff" /> New alert <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.06em" }}>SOON</span>
+          </button>
         </div>
       </div>
 

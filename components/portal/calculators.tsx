@@ -59,11 +59,26 @@ function CountUp({ value, format, duration = 750 }: { value: number; format: (n:
 }
 
 // ── Shared chrome ────────────────────────────────────────────────────────────
+// Plain-text export download (real export, no backend needed): the visible
+// estimate, serialized. Filename carries the calculator + date.
+function downloadText(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function EconShell({
-  title, subtitle, actionLabel, selector, headerAside, children,
+  title, subtitle, actionLabel, selector, headerAside, children, onAction,
 }: {
   title: string; subtitle: string; actionLabel: string;
   selector: React.ReactNode; headerAside?: React.ReactNode; children: React.ReactNode;
+  onAction?: () => void;
 }) {
   return (
     <div className="ve-page">
@@ -77,7 +92,9 @@ function EconShell({
             </div>
             <div className="ve-head-right">
               {headerAside}
-              <button className="ve-btn" type="button">{actionLabel}</button>
+              {onAction && (
+                <button className="ve-btn" type="button" onClick={onAction}>{actionLabel}</button>
+              )}
             </div>
           </div>
         </div>
@@ -175,8 +192,38 @@ export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initia
     </div>
   );
 
+  const exportEstimate = !calc || !vessel || !cargo ? undefined : () => {
+    const L: string[] = [];
+    L.push("ARAB SHIPBROKER · VOYAGE COST ESTIMATE");
+    L.push(`Generated ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`);
+    L.push("");
+    L.push(`Vessel:  ${vessel.name} · IMO ${vessel.imo}`);
+    L.push(`Cargo:   ${cargo.refId} · ${cargo.commodity} · ${cargo.qtyMt} MT`);
+    L.push(`Route:   ${cargo.route.polName} (${cargo.route.polCode}) -> ${cargo.route.podName} (${cargo.route.podCode})`);
+    L.push("");
+    L.push(`Distance:        ${fmtNM(calc.totals.nm)} NM`);
+    L.push(`Voyage days:     ${fmtDays(calc.totals.days)}`);
+    L.push(`VLSFO:           ${fmtMT(calc.totals.vlsfo)} MT @ $${fuel.vlsfo} = ${fmtUSD(calc.costs.bunkerVLSFO)}`);
+    L.push(`LSMGO:           ${fmtMT(calc.totals.lsmgo)} MT @ $${fuel.lsmgo} = ${fmtUSD(calc.costs.bunkerLSMGO)}`);
+    L.push(`Bunker total:    ${fmtUSD(calc.costs.bunker)}`);
+    L.push(`POL PDA:         ${fmtUSD(calc.costs.polPDA)}`);
+    L.push(`POD PDA:         ${fmtUSD(calc.costs.podPDA)} (manual)`);
+    L.push(`Suez transit:    ${calc.suez.required ? fmtUSD(calc.costs.suezTotal) : "Not applicable"}`);
+    L.push(`Insurance:       ${fmtUSD(calc.costs.insurance)}`);
+    L.push(`Stevedoring:     ${fmtUSD(calc.costs.stevedoring)}`);
+    L.push(`GROSS EXPENSES:  ${fmtUSD(calc.costs.grossExpenses)}`);
+    L.push("");
+    L.push(`Gross freight:   ${cargo.qtyMt} MT x $${cargo.freightIdea ?? 0} = ${fmtUSD(calc.costs.grossFreight)}`);
+    L.push(`Commission:      -${fmtUSD(calc.costs.commissionAmt)} (${cargo.commission ?? 0}%)`);
+    L.push(`NET FREIGHT:     ${fmtUSD(calc.costs.netFreight)}`);
+    L.push(`Net / voy day:   ${fmtUSD(calc.costs.netFreight / Math.max(calc.totals.days, 0.1))}`);
+    L.push("");
+    L.push("Estimate only. Proforma figures; confirm with agents before fixing.");
+    downloadText(`ASB-voyage-estimate-${cargo.refId}-${new Date().toISOString().slice(0, 10)}.txt`, L.join("\n"));
+  };
+
   return (
-    <EconShell title="Voyage Cost Estimator" subtitle="Complete voyage P&L" actionLabel="Export estimate" selector={selector} headerAside={headerAside}>
+    <EconShell title="Voyage Cost Estimator" subtitle="Complete voyage P&L" actionLabel="Export estimate" selector={selector} headerAside={headerAside} onAction={exportEstimate}>
       {!calc || !vessel || !cargo ? (
         <div className="ve-empty">Select a vessel and a cargo to calculate.</div>
       ) : (
@@ -343,7 +390,29 @@ export function PortsDA({ vessels, cargos }: { vessels: VesselView[]; cargos: Ca
   );
 
   return (
-    <EconShell title="Ports DA Calculator" subtitle="Proforma port disbursement estimate" actionLabel="Export DA" selector={selector}>
+    <EconShell title="Ports DA Calculator" subtitle="Proforma port disbursement estimate" actionLabel="Export DA" selector={selector}
+      onAction={!vessel ? undefined : () => {
+        const L: string[] = [];
+        L.push("ARAB SHIPBROKER · PROFORMA PORT DA");
+        L.push(`Generated ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`);
+        L.push("");
+        L.push(`Vessel:        ${vessel.name} · IMO ${vessel.imo}`);
+        L.push(`Port of call:  ${port?.name ?? portCode} (${portCode})`);
+        L.push(`Days in port:  ${days} · Cargo qty ${qty.toLocaleString()} MT · Agent: ${agent}`);
+        L.push("");
+        L.push(`Berth hire:           ${fmtSAR(pda.berthHire)}  (${fmtUSD2(usd(pda.berthHire))})`);
+        L.push(`Port dues:            ${fmtSAR(pda.portDues)}  (${fmtUSD2(usd(pda.portDues))})`);
+        L.push(`Mooring/unmooring:    ${fmtSAR(pda.mooring)}  (${fmtUSD2(usd(pda.mooring))})`);
+        L.push(`Waste/garbage:        ${fmtSAR(pda.waste)}  (${fmtUSD2(usd(pda.waste))})`);
+        L.push(`Tabdul notification:  ${fmtSAR(pda.tabdul)}  (${fmtUSD2(usd(pda.tabdul))})`);
+        L.push(`Agency fee:           ${fmtSAR(pda.agency)}  (${fmtUSD2(usd(pda.agency))})`);
+        L.push(`Subtotal excl. stev:  ${fmtSAR(pda.subtotalExcl)}  (${fmtUSD2(pda.usdExcl)})`);
+        L.push(`Stevedoring:          ${owner ? `${fmtSAR(pda.stevedoring)}  (${fmtUSD2(usd(pda.stevedoring))})` : "On charterer / receiver account"}`);
+        L.push(`TOTAL incl. stev:     ${fmtSAR(pda.subtotalIncl)}  (${fmtUSD2(pda.usdIncl)})`);
+        L.push("");
+        L.push("Estimate only. Actual disbursements may vary.");
+        downloadText(`ASB-port-DA-${portCode}-${new Date().toISOString().slice(0, 10)}.txt`, L.join("\n"));
+      }}>
       {!vessel ? <div className="ve-empty">Select a vessel to calculate.</div> : (
         <div className="ve-calc">
           {!isKAP && (
@@ -424,7 +493,23 @@ export function SuezToll({ vessels }: { vessels: VesselView[] }) {
   );
 
   return (
-    <EconShell title="Suez Canal Toll" subtitle="Proforma transit toll estimate" actionLabel="Export estimate" selector={selector}>
+    <EconShell title="Suez Canal Toll" subtitle="Proforma transit toll estimate" actionLabel="Export estimate" selector={selector}
+      onAction={!vessel ? undefined : () => {
+        const L: string[] = [];
+        L.push("ARAB SHIPBROKER · SUEZ CANAL TOLL ESTIMATE");
+        L.push(`Generated ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`);
+        L.push("");
+        L.push(`Vessel:     ${vessel.name} · IMO ${vessel.imo}`);
+        L.push(`Direction:  ${dir} · ${status}`);
+        L.push(`SCNRT:      ${scnrt.toLocaleString()} (tariff ${tariff.toFixed(3)} SDR · ${SUEZ_SDR_USD.toFixed(2)} SDR/USD)`);
+        L.push("");
+        L.push(`Transit toll:       ${fmtUSD2(suez.toll)}`);
+        SUEZ_FIXED.forEach(([label, amt]) => L.push(`${(label + ":").padEnd(20)}${fmtUSD2(amt)}`));
+        L.push(`TOTAL TRANSIT COST: ${fmtUSD2(suez.total)}`);
+        L.push("");
+        L.push("Estimate only. Confirm SCNRT and the current SDR rate with the SCA agent before transit.");
+        downloadText(`ASB-suez-toll-${vessel.imo}-${new Date().toISOString().slice(0, 10)}.txt`, L.join("\n"));
+      }}>
       {!vessel ? <div className="ve-empty">Select a vessel to calculate.</div> : (
         <div className="ve-calc">
           <div className="ve-input-grid">

@@ -64,10 +64,14 @@ export function EtaConsole() {
         </div>
       </div>
 
-      <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-        <button className="asb-btn primary">Submit pending →</button>
-        <button className="asb-btn">Download ETA report</button>
-        <button className="asb-btn">Credentials &amp; signing config</button>
+      <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+        <button className="asb-btn primary" disabled aria-disabled style={{ opacity: 0.55, cursor: "not-allowed" }}
+          title="Enabled once the ETA portal credentials are configured.">Submit pending →</button>
+        <button className="asb-btn" disabled aria-disabled style={{ opacity: 0.55, cursor: "not-allowed" }}
+          title="Enabled once the ETA portal credentials are configured.">Download ETA report</button>
+        <button className="asb-btn" disabled aria-disabled style={{ opacity: 0.55, cursor: "not-allowed" }}
+          title="Enabled once the ETA portal credentials are configured.">Credentials &amp; signing config</button>
+        <span style={{ fontSize: 10, color: "var(--asb-gray-500)" }}>ETA e-invoicing goes live when the tax credentials are configured.</span>
       </div>
     </div>
   );

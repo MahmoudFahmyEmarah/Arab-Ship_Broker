@@ -253,10 +253,10 @@ export function DashboardBoard({
           </div>
           <div className="row" style={{ gap: 8 }}>
             <SourcePill source={source} />
-            <button className="asb-btn ghost" title="Alerts" aria-label="Alerts" style={{ padding: "5px 8px", position: "relative" }}>
+            <Link className="asb-btn ghost" href="/dashboard/alerts" title="Alerts" aria-label="Alerts" style={{ padding: "5px 8px", position: "relative", textDecoration: "none" }}>
               <IconBell size={15} />
               <span style={{ position: "absolute", top: 3, right: 5, width: 6, height: 6, borderRadius: 99, background: "var(--asb-red)" }} />
-            </button>
+            </Link>
           </div>
         </div>
       </div>

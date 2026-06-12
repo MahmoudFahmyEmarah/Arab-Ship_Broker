@@ -13,6 +13,7 @@ import { VesselCard } from "./VesselCard";
 import { BunkerTicker } from "./BunkerTicker";
 import { DashCargoRow } from "./dashboard";
 import { useViewerTier, isLimitedTier } from "@/lib/portal/tier";
+import { fetchMyMatchedCargoIds, fetchMyMatchedAvailabilityIds } from "@/lib/portal/actions";
 import { IconMap } from "./icons";
 import {
   FilterMenu,
@@ -71,6 +72,15 @@ export function CargoMarketBoard({
   const [fTime, setFTime] = React.useState<number | null>(null);
   const [sort, setSort] = React.useState<string | null>("Newest first");
 
+  // "My matches only" — ids of cargo matching MY open positions, from the same
+  // match RPCs the detail panels use. Loaded lazily on first toggle.
+  const [mineOnly, setMineOnly] = React.useState(false);
+  const [myMatchIds, setMyMatchIds] = React.useState<Set<string> | null>(null);
+  React.useEffect(() => {
+    if (!mineOnly || myMatchIds !== null) return;
+    fetchMyMatchedCargoIds().then((ids) => setMyMatchIds(new Set(ids))).catch(() => setMyMatchIds(new Set()));
+  }, [mineOnly, myMatchIds]);
+
   const ZONE_OPTS = React.useMemo(() => uniq(views.flatMap((c) => [c.route?.polZone, c.route?.podZone])), [views]);
   const TYPE_OPTS = React.useMemo(() => uniq(views.map((c) => c.type)), [views]);
   const TERMS_OPTS = React.useMemo(() => uniq(views.map((c) => c.loadTerms)), [views]);
@@ -78,6 +88,7 @@ export function CargoMarketBoard({
 
   const filtered = React.useMemo(() => {
     let out = views.filter((c) => {
+      if (mineOnly && !(myMatchIds?.has(c.id))) return false;
       if (fZones.length) { const z = [c.route?.polZone, c.route?.podZone]; if (!z.some((x) => x && fZones.includes(x))) return false; }
       if (fType.length && !fType.includes(c.type)) return false;
       if (fTerms.length && !(c.loadTerms && fTerms.includes(c.loadTerms))) return false;
@@ -90,7 +101,7 @@ export function CargoMarketBoard({
     if (sort === "Quantity ↓") out = [...out].sort((a, b) => toMt(b.qtyMt) - toMt(a.qtyMt));
     if (sort === "Laycan soonest") out = [...out].sort((a, b) => (a.laycanDays ?? 999) - (b.laycanDays ?? 999));
     return out;
-  }, [views, fZones, fType, fTerms, fImsbc, fSize, fTime, sort]);
+  }, [views, fZones, fType, fTerms, fImsbc, fSize, fTime, sort, mineOnly, myMatchIds]);
 
   const selected = filtered.find((c) => c.id === selectedId);
 
@@ -121,8 +132,11 @@ export function CargoMarketBoard({
       <div className="mkt-filterbar" style={{ background: "var(--asb-white)", borderBottom: "var(--bd)", padding: "6px 16px" }}>
         <div className="row" style={{ marginBottom: 6, gap: 8 }}>
           <div className="match-toggle">
-            <button className="is-on">All cargo</button>
-            <button>My matches only</button>
+            <button className={mineOnly ? "" : "is-on"} onClick={() => setMineOnly(false)}>All cargo</button>
+            <button className={mineOnly ? "is-on" : ""} onClick={() => setMineOnly(true)}
+              title="Only cargo that matches one of your open positions">
+              My matches only{mineOnly && myMatchIds === null ? " …" : ""}
+            </button>
           </div>
           <span className="divider" />
           <span style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>Layer 1 · future · Layer 2 · 6d archive · Layer 3 · 1mo archive</span>
@@ -207,11 +221,20 @@ export function TonnageMarketBoard({
   const [fDg, setFDg] = React.useState(false);
   const [sort, setSort] = React.useState<string | null>("Newest");
 
+  // "My matches only" — ids of open positions matching MY live cargo.
+  const [mineOnly, setMineOnly] = React.useState(false);
+  const [myMatchIds, setMyMatchIds] = React.useState<Set<string> | null>(null);
+  React.useEffect(() => {
+    if (!mineOnly || myMatchIds !== null) return;
+    fetchMyMatchedAvailabilityIds().then((ids) => setMyMatchIds(new Set(ids))).catch(() => setMyMatchIds(new Set()));
+  }, [mineOnly, myMatchIds]);
+
   const ZONE_OPTS = React.useMemo(() => uniq(views.map((v) => v.openPortZone)), [views]);
   const TYPE_OPTS = React.useMemo(() => uniq(views.map((v) => v.type)), [views]);
 
   const filtered = React.useMemo(() => {
     let out = views.filter((v) => {
+      if (mineOnly && !(myMatchIds?.has(v.id))) return false;
       if (q.trim()) {
         const s = q.trim().toLowerCase();
         if (!(v.name.toLowerCase().includes(s) || v.imo.toLowerCase().includes(s))) return false;
@@ -230,7 +253,7 @@ export function TonnageMarketBoard({
     if (sort === "DWT ↓") out = [...out].sort((a, b) => toMt(b.dwt) - toMt(a.dwt));
     if (sort === "Open soonest") out = [...out].sort((a, b) => (a.openDateDays ?? 999) - (b.openDateDays ?? 999));
     return out;
-  }, [views, q, fZones, fType, fSize, fTime, fGear, fGrain, fDg, sort]);
+  }, [views, q, fZones, fType, fSize, fTime, fGear, fGrain, fDg, sort, mineOnly, myMatchIds]);
 
   const selected = filtered.find((v) => v.id === selectedId);
 
@@ -253,8 +276,11 @@ export function TonnageMarketBoard({
       <div className="mkt-filterbar" style={{ background: "var(--asb-white)", borderBottom: "var(--bd)", padding: "6px 16px" }}>
         <div className="row" style={{ marginBottom: 6, gap: 8 }}>
           <div className="match-toggle">
-            <button className="is-on">All vessels</button>
-            <button>My matches only</button>
+            <button className={mineOnly ? "" : "is-on"} onClick={() => setMineOnly(false)}>All vessels</button>
+            <button className={mineOnly ? "is-on" : ""} onClick={() => setMineOnly(true)}
+              title="Only open positions that match one of your live cargoes">
+              My matches only{mineOnly && myMatchIds === null ? " …" : ""}
+            </button>
           </div>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
