@@ -430,8 +430,8 @@ export function CargoBoard({
         <span className="count">↗ {filtered.length} listed</span>
       </div>
 
-      <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-        <div style={{ flex: 1, overflow: "auto", padding: 16, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+      <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
+        <div className="mkt-listpane" style={{ flex: 1, overflow: "auto", padding: 16, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
           <div style={{ display: "grid", gridTemplateColumns: cols, gap: 6, transition: "grid-template-columns var(--t-base)" }}>
             {filtered.map((c) => (
               <CargoCard key={c.id} data={c} selected={selectedId === c.id} onSelect={(id) => setSelectedId((s) => (s === id ? null : id))} />
@@ -439,11 +439,11 @@ export function CargoBoard({
           </div>
         </div>
         {mapOpen ? (
-          <div style={{ width: "58%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
+          <div className="mkt-mappane" style={{ width: "58%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
             <MarketMap barLeft cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
           </div>
         ) : selectedId ? (
-          <div style={{ flex: "0 0 40%", overflow: "hidden", borderLeft: "var(--bd)" }} onClick={(e) => e.stopPropagation()}>
+          <div className="mkt-detailpane" style={{ flex: "0 0 40%", overflow: "hidden", borderLeft: "var(--bd)" }} onClick={(e) => e.stopPropagation()}>
             {selected && <CargoDetailPanel cargo={selected} onClose={() => setSelectedId(null)} />}
           </div>
         ) : null}
@@ -532,8 +532,8 @@ export function VesselBoard({
         <span className="count">↗ {filtered.length} listed</span>
       </div>
 
-      <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-        <div style={{ flex: 1, overflow: "auto", padding: 16, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+      <div className={`mkt-body${mapOpen ? " has-map" : ""}`} style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
+        <div className="mkt-listpane" style={{ flex: 1, overflow: "auto", padding: 16, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
           <div style={{ display: "grid", gridTemplateColumns: cols, gap: 14, transition: "grid-template-columns var(--t-base)" }}>
             {filtered.map((v) => (
               <VesselCard key={v.id} data={v} selected={selectedId === v.id} onSelect={(id) => setSelectedId((s) => (s === id ? null : id))} />
@@ -541,11 +541,11 @@ export function VesselBoard({
           </div>
         </div>
         {mapOpen ? (
-          <div style={{ width: "55%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
+          <div className="mkt-mappane" style={{ width: "55%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
             <MarketMap barLeft cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
           </div>
         ) : selectedId ? (
-          <div style={{ flex: "0 0 42%", overflow: "hidden", borderLeft: "var(--bd)" }} onClick={(e) => e.stopPropagation()}>
+          <div className="mkt-detailpane" style={{ flex: "0 0 42%", overflow: "hidden", borderLeft: "var(--bd)" }} onClick={(e) => e.stopPropagation()}>
             {selected && <VesselDetailPanel vessel={selected} onClose={() => setSelectedId(null)} />}
           </div>
         ) : null}

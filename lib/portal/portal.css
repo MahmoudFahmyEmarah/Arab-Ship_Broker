@@ -3003,3 +3003,28 @@ button { font: inherit; cursor: pointer; }
   /* Touch targets: roomier chips and rows */
   .mkt-filterbar .asb-chip { padding: 7px 11px; }
 }
+
+/* ── Mobile workspace boards + detail bottom sheet (≤900px) ── */
+@media (max-width: 900px) {
+  /* Detail panel rides over the surface as a tall bottom sheet */
+  .mkt-detailpane {
+    position: fixed !important;
+    left: 0; right: 0; bottom: 0;
+    top: auto !important;
+    height: 72dvh;
+    z-index: 60; /* above the bottom tab bar */
+    background: var(--asb-white);
+    border-radius: 14px 14px 0 0;
+    border-left: none !important;
+    box-shadow: 0 -10px 36px rgba(8, 20, 38, 0.28);
+    overflow: hidden !important;
+    animation: mktSheetUp .2s ease-out;
+  }
+  @keyframes mktSheetUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .mkt-detailpane { animation: none; } }
+  .mkt-detailpane .detail-panel { height: 100%; overflow: auto; }
+
+  /* Touch comfort across portal lists and chips */
+  .asb-chip { min-height: 32px; }
+  .nav-item { min-height: 40px; }
+}
