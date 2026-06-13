@@ -32,3 +32,16 @@ either:
 
 Once the files are in, tell me where you want each used and I'll place them
 (optimized via next/image, with the credit retained).
+
+## Received (founder portraits — © Capt. Mohamed Dawoud)
+
+| File | Subject | Used |
+|---|---|---|
+| `founder-on-deck.jpg` | Green shirt, on deck with bulker holds + sea (best) | Founder card (home + contact), also `/founder.jpg` |
+| `founder-deck-selfie.jpg` | Navy sweater, open-sea deck selfie | alternate |
+| `founder-ashore-suit.jpg` | Grey blazer ashore, city backdrop | alternate |
+| `founder-ship-office.jpg` | Red shirt, ship's office | alternate |
+
+STILL PENDING (send as a zip the same way — any name is fine): the marine
+chart with pilotage circles (for the contact header) and the ship-to-ship /
+bauxite loading shots (for the landing hero).

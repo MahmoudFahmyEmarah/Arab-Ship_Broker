@@ -754,12 +754,13 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                       the original. */}
                   <div className="w-36 h-36 max-sm:w-28 max-sm:h-28 rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
                     <Image
-                      src="/cp.jpeg"
+                      src="/founder.jpg"
                       alt="Capt. Mohamed Dawoud"
                       width={432}
                       height={432}
                       quality={92}
                       className="w-full h-full object-cover"
+                      style={{ objectPosition: "60% 30%" }}
                     />
                   </div>
                   <div className="absolute -bottom-3 -right-3 w-10 h-10 bg-ocean-600 rounded-xl flex items-center justify-center shadow-lg border-4 border-white">

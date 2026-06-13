@@ -443,9 +443,10 @@ export default function ContactPage() {
                 <div className="shrink-0 relative">
                   <div className="w-40 h-40 max-[768px]:w-32 max-[768px]:h-32 rounded-3xl overflow-hidden shadow-2xl border-4 border-white">
                     <Image
-                      src="/cp.jpeg"
+                      src="/founder.jpg"
                       alt="Capt. Mohamed Dawoud"
                       className="w-full h-full object-cover"
+                      style={{ objectPosition: "60% 30%" }}
                       width={480}
                       height={480}
                       quality={92}
