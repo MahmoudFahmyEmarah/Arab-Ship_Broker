@@ -448,7 +448,7 @@ export default function ContactPage() {
                       className="w-full h-full object-cover"
                       width={480}
                       height={480}
-                      quality={95}
+                      quality={92}
                     />
                   </div>
                   <div className="absolute -bottom-3 -right-3 w-12 h-12 max-[768px]:w-10 max-[768px]:h-10 bg-ocean-600 rounded-2xl flex items-center justify-center shadow-xl border-4 border-white">

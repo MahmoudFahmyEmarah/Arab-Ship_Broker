@@ -526,6 +526,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                   fill
                   className="object-cover"
                   sizes="(max-width: 1024px) 100vw, 50vw"
+                  quality={92}
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-ocean-950/75 via-ocean-950/15 to-transparent" />
 
@@ -757,7 +758,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                       alt="Capt. Mohamed Dawoud"
                       width={432}
                       height={432}
-                      quality={95}
+                      quality={92}
                       className="w-full h-full object-cover"
                     />
                   </div>
