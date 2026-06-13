@@ -45,3 +45,14 @@ Once the files are in, tell me where you want each used and I'll place them
 STILL PENDING (send as a zip the same way — any name is fine): the marine
 chart with pilotage circles (for the contact header) and the ship-to-ship /
 bauxite loading shots (for the landing hero).
+
+## Received (operations — © Capt. Mohamed Dawoud)
+
+| File | Placement |
+|---|---|
+| `night-loading-deck.jpg` | LANDING HERO (`/hero-bauxite-sts.jpg`) — high-res, fixes the resolution ceiling |
+| `nautical-chart-pilotage.jpg` | CONTACT header backdrop (`/contact-chart.jpg`) |
+| `cargo-loading-hold.jpg` | alternate (grab pouring into hold) |
+| `port-sunset-cranes.jpg` | alternate (terminal at sunrise) |
+| `telegraph-stop.jpg` | alternate (engine telegraph) |
+| `moonlit-vessel.jpg` | alternate (bulker under the moon) |

@@ -118,6 +118,19 @@ export default function ContactPage() {
   return (
     <div className="flex flex-col w-full overflow-hidden bg-slate-50">
       <section className="relative pt-40 pb-32 max-[1024px]:pt-32 max-[1024px]:pb-24 max-[768px]:pt-24 max-[768px]:pb-20 bg-ocean-950 overflow-hidden">
+        {/* Founder's own marine chart (pilotage approach) as the header
+            backdrop — © Capt. Mohamed Dawoud. Heavy navy scrim keeps the
+            white headline legible over the light paper chart. */}
+        <Image
+          src="/contact-chart.jpg"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          quality={90}
+          className="object-cover object-center opacity-30"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-ocean-950/80 via-ocean-950/70 to-ocean-950/90 pointer-events-none" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(43,185,211,0.15),transparent_70%)] pointer-events-none" />
         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03] mix-blend-overlay pointer-events-none" />
 
