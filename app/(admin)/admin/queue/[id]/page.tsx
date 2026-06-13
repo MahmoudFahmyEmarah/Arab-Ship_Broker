@@ -176,7 +176,7 @@ export default async function QueueItemPage({
   }
 
   return (
-    <div className="space-y-6 max-w-5xl py-2">
+    <div className="adm-page" style={{ maxWidth: 1024 }}>
       <Link
         href="/admin/queue"
         className="inline-flex items-center gap-1.5 text-sm text-asb-gray-500 hover:text-asb-ink transition-colors"

@@ -51,7 +51,7 @@ export default async function AdminSafetyQuestionsPage() {
   const inactive = questions.filter((q) => !q.is_active);
 
   return (
-    <div className="space-y-8">
+    <div className="adm-page">
       <AdminPageHeader
         title="Safety Questions"
         subtitle={`${active.length} active · ${inactive.length} inactive`}

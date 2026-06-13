@@ -114,7 +114,7 @@ export default async function AdminCargoDetailPage({
     queueHistory.find((rq) => rq.status === "PENDING")?.id ?? null;
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="adm-page" style={{ maxWidth: 1024 }}>
       <Link
         href="/admin/cargo"
         className="inline-flex items-center gap-1.5 text-sm text-asb-gray-500 hover:text-asb-ink transition-colors"

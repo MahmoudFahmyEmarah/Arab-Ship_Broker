@@ -57,7 +57,7 @@ export default async function AdminStatsPage() {
 
   if (error || !s) {
     return (
-      <div>
+      <div className="adm-page">
         <AdminPageHeader title="Platform Stats" subtitle="Live cargo and vessel activity" />
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-800">
           Stats are unavailable. {error?.message?.includes("function") || error?.message?.includes("does not exist")
@@ -73,7 +73,7 @@ export default async function AdminStatsPage() {
   });
 
   return (
-    <div>
+    <div className="adm-page">
       <AdminPageHeader title="Platform Stats" subtitle="Live cargo and vessel activity, straight from the platform database">
         <span className="text-[11px] text-asb-gray-400">Updated {generated}</span>
       </AdminPageHeader>

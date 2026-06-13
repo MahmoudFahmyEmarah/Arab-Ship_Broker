@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
 
 import {
   requireAdmin,
@@ -32,56 +32,35 @@ export default async function AdminCommoditiesPage({
   const inactive = all.filter((c) => !c.is_active);
 
   return (
-    <div className="space-y-8">
+    <div className="adm-page">
       <AdminPageHeader
         title="Commodities"
         subtitle={`${all.length} total · ${inactive.length} inactive`}
-      />
+      >
+        {!showInactive && inactive.length > 0 && (
+          <Link href="?inactive=1" className="adm-filter-chip">Show inactive</Link>
+        )}
+      </AdminPageHeader>
 
-      {/* Warning about question_key analogue */}
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded px-4 py-3">
-        <AlertTriangle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-        <p className="text-xs text-blue-700 leading-relaxed">
-          <strong>Note:</strong> Deactivating a commodity hides it from the
-          cargo form dropdown — existing listings that reference it are
-          preserved. Changing <code>canonical_name</code> will break matchmaking
-          on existing listings. Create a new record instead.
+      <div className="adm-card" style={{ borderLeft: "2px solid var(--adm-amber-bd)" }}>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--adm-muted)", lineHeight: 1.6 }}>
+          <strong style={{ color: "var(--adm-ink)" }}>Note:</strong> Deactivating a commodity hides it
+          from the cargo form dropdown. Existing listings that reference it are preserved. Changing the
+          canonical name breaks matchmaking on existing listings, so create a new record instead.
         </p>
       </div>
 
-      {/* Dry Bulk section */}
       <CommoditySection title="Dry Bulk" commodities={dryBulk} />
-
-      {/* Break Bulk section */}
       <CommoditySection title="Break Bulk" commodities={breakBulk} />
 
-      {/* Inactive section */}
-      {(showInactive || inactive.length > 0) && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-asb-gray-400 uppercase tracking-wider">
-              Inactive ({inactive.length})
-            </h2>
-            {!showInactive && inactive.length > 0 && (
-              <a
-                href="?inactive=1"
-                className="text-xs text-asb-blue hover:text-asb-blue font-semibold"
-              >
-                Show inactive
-              </a>
-            )}
-          </div>
-          {showInactive && inactive.length > 0 && (
-            <CommodityTable commodities={inactive} />
-          )}
-        </div>
+      {showInactive && inactive.length > 0 && (
+        <CommoditySection title="Inactive" commodities={inactive} />
       )}
 
-      {/* Create new */}
       <div>
-        <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider mb-3">
-          Add new commodity
-        </h2>
+        <div className="adm-card__head">
+          <span className="adm-card__title">Add new commodity</span>
+        </div>
         <CreateCommodityForm />
       </div>
     </div>
@@ -97,27 +76,20 @@ function CommoditySection({
 }) {
   return (
     <div>
-      <h2 className="text-sm font-bold text-asb-gray-500 uppercase tracking-wider mb-3">
-        {title}{" "}
-        <span className="text-asb-gray-400 font-normal normal-case ml-1">
-          ({commodities.length})
+      <div className="adm-card__head">
+        <span className="adm-card__title">
+          {title} <span style={{ color: "var(--adm-muted)", fontWeight: 400 }}>({commodities.length})</span>
         </span>
-      </h2>
+      </div>
       {commodities.length === 0 ? (
-        <p className="text-sm text-asb-gray-400 py-4">None</p>
+        <div className="adm-empty">None</div>
       ) : (
-        <CommodityTable commodities={commodities} />
+        <div className="adm-card-grid">
+          {commodities.map((c) => (
+            <CommodityRow key={c.id} commodity={c} />
+          ))}
+        </div>
       )}
-    </div>
-  );
-}
-
-function CommodityTable({ commodities }: { commodities: AdminCommodityRow[] }) {
-  return (
-    <div className="grid grid-cols-3 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 gap-4">
-      {commodities.map((c) => (
-        <CommodityRow key={c.id} commodity={c} />
-      ))}
     </div>
   );
 }

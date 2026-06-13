@@ -10,10 +10,10 @@ export default async function AdminOrgMembersPage() {
   const pending = await listPendingRequests();
 
   return (
-    <div>
+    <div className="adm-page">
       <AdminPageHeader
         title="Company Members"
-        subtitle="Confirm people who requested to join a pre-boarded company. Approving grants access to that firm's confidential vessel records — review before confirming."
+        subtitle="Confirm people who requested to join a pre-boarded company. Approving grants access to that firm's confidential vessel records, so review before confirming."
       />
       <OrgMemberRequests initial={pending} />
     </div>

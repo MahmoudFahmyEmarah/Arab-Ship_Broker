@@ -1,9 +1,13 @@
-// Admin pages now live INSIDE the portal shell — an admin is a broker who also
-// does admin work, so they get the same UI/UX (sidebar, chrome) with the Admin
-// tool section added (PortalSidebar shows it for role === "admin"). No separate
-// grey console. Per-page requireAdmin() guards still enforce access.
-import { loadViewerContext } from "@/lib/portal/data";
-import { DashboardShellClient } from "@/components/portal/DashboardShellClient";
+// Admin console shell — a distinct privileged surface (per the 14_admin_rebuild
+// design): dark navy topbar + amber live-edit banner + grouped light sidebar +
+// read-only ribbon. It is visibly the same product as the broker portal but
+// deliberately marked as the operator surface. Per-page requireAdmin() guards
+// remain the real access enforcement; the sidebar/ribbon are the UX layer.
+import "./admin.css";
+import { requireAdmin, getAdminSupabaseClient } from "@/lib/admin/require-admin";
+import { AdminTopbar } from "@/components/admin/shell/AdminTopbar";
+import { AdminSidebarNav } from "@/components/admin/shell/AdminSidebarNav";
+import { AdminReadonlyRibbon } from "@/components/admin/shell/AdminReadonlyRibbon";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +16,32 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { tier, role, userName } = await loadViewerContext();
+  const admin = await requireAdmin();
+
+  // Pending-review count for the sidebar badge (cheap, admin-only RPC).
+  let reviewCount = 0;
+  try {
+    const supabase = await getAdminSupabaseClient();
+    const { data } = await supabase.rpc("get_admin_stats");
+    reviewCount = (data as { queue_pending?: number } | null)?.queue_pending ?? 0;
+  } catch {
+    reviewCount = 0;
+  }
+
   return (
-    <DashboardShellClient tier={tier} role={role} userName={userName}>
-      <div className="p-8 max-[768px]:p-4 max-w-screen-2xl mx-auto w-full">
-        {children}
+    <div className="adm-shell">
+      <AdminTopbar name={admin.fullName} tier={admin.tier} />
+      <div className="adm-banner">
+        <span aria-hidden>⚠</span>
+        Admin panel: changes here affect the live platform immediately.
       </div>
-    </DashboardShellClient>
+      <div className="adm-body">
+        <AdminSidebarNav tier={admin.tier} perms={admin.perms} counts={{ review: reviewCount }} />
+        <main className="adm-main">
+          <AdminReadonlyRibbon tier={admin.tier} perms={admin.perms} />
+          {children}
+        </main>
+      </div>
+    </div>
   );
 }

@@ -1,30 +1,12 @@
 import Link from "next/link";
-import {
-  Package,
-  Ship,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  ArrowRight,
-  Filter,
-  User,
-  Calendar,
-  Weight,
-  MapPin,
-} from "lucide-react";
 
 import {
   requireAdmin,
   getAdminSupabaseClient,
 } from "@/lib/admin/require-admin";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import {
-  ReviewStatusBadge,
-  TrustTierBadge,
-} from "@/components/admin/AdminBadge";
+import { ReviewStatusBadge, TrustTierBadge } from "@/components/admin/AdminBadge";
 import type { QueueItem } from "@/lib/admin/types";
-import { cn } from "@/lib/utils";
 
 type StatusFilter = "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED" | "ALL";
 type TypeFilter = "cargo" | "vessel_availability" | "all";
@@ -38,26 +20,18 @@ function formatAge(iso: string): { label: string; urgent: boolean } {
   return { label: m > 0 ? `${h}h ${m}m ago` : `${h}h ago`, urgent };
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const STATUS_TABS: { label: string; value: StatusFilter }[] = [
+  { label: "Pending", value: "PENDING" },
+  { label: "Approved", value: "APPROVED" },
+  { label: "Rejected", value: "REJECTED" },
+  { label: "Flagged", value: "FLAGGED" },
+  { label: "All", value: "ALL" },
+];
 
-const STATUS_TABS: {
-  label: string;
-  value: StatusFilter;
-  icon: React.ElementType;
-}[] = [
-  { label: "Pending", value: "PENDING", icon: Clock },
-  { label: "Approved", value: "APPROVED", icon: CheckCircle2 },
-  { label: "Rejected", value: "REJECTED", icon: XCircle },
-  { label: "Flagged", value: "FLAGGED", icon: AlertTriangle },
-  { label: "All", value: "ALL", icon: Filter },
+const TYPE_TABS: { label: string; value: TypeFilter }[] = [
+  { label: "All", value: "all" },
+  { label: "Cargo", value: "cargo" },
+  { label: "Vessel", value: "vessel_availability" },
 ];
 
 export default async function AdminQueuePage({
@@ -77,12 +51,8 @@ export default async function AdminQueuePage({
     .select("*")
     .order("created_at", { ascending: true });
 
-  if (statusFilter !== "ALL") {
-    query = query.eq("status", statusFilter);
-  }
-  if (typeFilter !== "all") {
-    query = query.eq("listing_type", typeFilter);
-  }
+  if (statusFilter !== "ALL") query = query.eq("status", statusFilter);
+  if (typeFilter !== "all") query = query.eq("listing_type", typeFilter);
 
   const { data } = await query.limit(200);
   const items = (data ?? []) as QueueItem[];
@@ -98,261 +68,100 @@ export default async function AdminQueuePage({
   });
 
   return (
-    <div className="space-y-6">
+    <div className="adm-page">
       <AdminPageHeader
-        title="Review Queue"
-        subtitle={`${countMap["PENDING"] ?? 0} items pending review`}
+        title="Listing review queue"
+        subtitle="Approve, request changes, or reject pending submissions"
       />
 
-      <div className="flex items-center gap-1 dp-card p-1 w-fit flex-wrap">
+      <div className="adm-tabs">
         {STATUS_TABS.map((tab) => {
-          const active = statusFilter === tab.value;
-          const Icon = tab.icon;
           const count = tab.value !== "ALL" ? countMap[tab.value] : undefined;
           return (
             <Link
               key={tab.value}
               href={`/admin/queue?status=${tab.value}&type=${typeFilter}`}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                active
-                  ? "bg-asb-blue text-white shadow-sm"
-                  : "text-asb-gray-500 hover:bg-asb-gray-50 hover:text-asb-ink",
-              )}
+              className={`adm-tab${statusFilter === tab.value ? " is-on" : ""}`}
             >
-              <Icon className="w-3.5 h-3.5" />
               {tab.label}
-              {count !== undefined && count > 0 && (
-                <span
-                  className={cn(
-                    "ml-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none",
-                    active
-                      ? "bg-white/20 text-white"
-                      : tab.value === "PENDING"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-asb-gray-100 text-asb-gray-700",
-                  )}
-                >
-                  {count}
-                </span>
-              )}
+              {count !== undefined && count > 0 && <span className="adm-tab__count">{count}</span>}
             </Link>
           );
         })}
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-asb-gray-400 font-medium">Type:</span>
-        {[
-          { label: "All", value: "all" },
-          { label: "Cargo", value: "cargo" },
-          { label: "Vessel", value: "vessel_availability" },
-        ].map((t) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 10, color: "var(--adm-muted)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500 }}>
+          Type
+        </span>
+        {TYPE_TABS.map((t) => (
           <Link
             key={t.value}
             href={`/admin/queue?status=${statusFilter}&type=${t.value}`}
-            className={cn(
-              "text-xs px-2.5 py-1 rounded-lg font-medium border transition-all",
-              typeFilter === t.value
-                ? "bg-asb-navy-deep text-white border-asb-navy-deep"
-                : "bg-white text-asb-gray-500 border-asb-gray-200 hover:border-asb-gray-200",
-            )}
+            className={`adm-filter-chip${typeFilter === t.value ? " is-on" : ""}`}
           >
             {t.label}
           </Link>
         ))}
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 10, color: "var(--adm-muted)" }}>
+          {items.length} shown · oldest first
+        </span>
       </div>
 
       {items.length === 0 ? (
-        <div className="dp-card py-20 text-center">
-          <CheckCircle2 className="w-10 h-10 text-green-400 mx-auto mb-3" />
-          <p className="text-asb-gray-700 font-semibold">
-            {statusFilter === "PENDING"
-              ? "Queue is clear — nothing pending"
-              : `No ${statusFilter.toLowerCase()} items`}
-          </p>
-          <p className="text-asb-gray-400 text-sm mt-1">
-            {statusFilter === "PENDING"
-              ? "All submissions have been reviewed."
-              : "Adjust the filter to see other items."}
-          </p>
+        <div className="adm-empty">
+          {statusFilter === "PENDING"
+            ? "Queue is clear. All submissions have been reviewed."
+            : `No ${statusFilter.toLowerCase()} items. Adjust the filter to see others.`}
         </div>
       ) : (
-        <div className="grid grid-cols-3 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 gap-4">
+        <div className="adm-card" style={{ padding: "4px 16px" }}>
           {items.map((item) => {
             const isCargo = item.listing_type === "cargo";
             const age = formatAge(item.created_at);
-
             return (
-              <Link
-                key={item.id}
-                href={`/admin/queue/${item.id}`}
-                className="group dp-card p-5 hover:border-asb-blue hover:shadow-md transition-all flex flex-col gap-4"
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <div
-                      className={cn(
-                        "w-9 h-9 rounded flex items-center justify-center shrink-0 mt-0.5",
-                        isCargo ? "bg-asb-blue-light border border-asb-gray-200" : "bg-foam-50 border border-foam-100",
-                      )}
-                    >
-                      {isCargo ? (
-                        <Package className="w-4 h-4 text-asb-blue" />
-                      ) : (
-                        <Ship className="w-4 h-4 text-foam-600" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-asb-navy group-hover:text-asb-blue transition-colors truncate">
-                        {isCargo
-                          ? (item.commodity_name ?? "Cargo")
-                          : (item.vessel_name ?? "Vessel")}
-                      </p>
-                      <p className="text-xs text-asb-gray-400 truncate mt-0.5">
-                        {isCargo
-                          ? (item.cargo_type ?? "Cargo listing")
-                          : (item.vessel_type ?? "Vessel availability")}
-                      </p>
-                    </div>
+              <div key={item.id} className="adm-list__row">
+                <span className={`adm-list__icon ${isCargo ? "is-cargo" : "is-vessel"}`}>
+                  {isCargo ? "C" : "V"}
+                </span>
+                <div className="adm-list__body">
+                  <div className="adm-list__title">
+                    {isCargo ? (item.commodity_name ?? "Cargo") : (item.vessel_name ?? "Vessel")}
+                    {isCargo && item.qty_max_mt ? (
+                      <span style={{ color: "var(--adm-muted)", fontWeight: 400 }}> · {item.qty_max_mt.toLocaleString()} MT</span>
+                    ) : null}
+                    {!isCargo && item.dwt_grain ? (
+                      <span style={{ color: "var(--adm-muted)", fontWeight: 400 }}> · {item.dwt_grain.toLocaleString()} DWT</span>
+                    ) : null}
                   </div>
+                  <div className="adm-list__meta">
+                    {isCargo
+                      ? item.load_zone && item.disch_zone
+                        ? `${item.load_zone} → ${item.disch_zone}`
+                        : (item.cargo_type ?? "Cargo listing")
+                      : `${item.vessel_type ?? "Vessel"} · open ${item.open_port_name ?? "—"}`}
+                  </div>
+                  <div className="adm-list__meta" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                    <span>{item.submitter_name ?? item.submitter_email ?? "Unknown"}</span>
+                    {item.submitter_trust_tier && <TrustTierBadge tier={item.submitter_trust_tier} />}
+                    <span style={{ color: age.urgent && item.status === "PENDING" ? "#C84A4A" : undefined, fontWeight: age.urgent ? 600 : 400 }}>
+                      · {age.label}
+                    </span>
+                    {item.is_random_sample && <span className="adm-badge draft">Sample</span>}
+                  </div>
+                </div>
+                <div className="adm-list__actions" style={{ alignItems: "center" }}>
                   <ReviewStatusBadge status={item.status} />
+                  <Link href={`/admin/queue/${item.id}`} className="adm-btn small primary">
+                    {item.status === "PENDING" ? "Review →" : "Open →"}
+                  </Link>
                 </div>
-
-                {/* Details */}
-                <div className="grid grid-cols-2 gap-2">
-                  {isCargo ? (
-                    <>
-                      <DataPill
-                        icon={Weight}
-                        label="Quantity"
-                        value={
-                          item.qty_max_mt
-                            ? `${item.qty_max_mt.toLocaleString()} MT`
-                            : "—"
-                        }
-                      />
-                      <DataPill
-                        icon={MapPin}
-                        label="Route"
-                        value={
-                          item.load_zone && item.disch_zone
-                            ? `${item.load_zone} → ${item.disch_zone}`
-                            : "—"
-                        }
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <DataPill
-                        icon={Weight}
-                        label="DWT"
-                        value={
-                          item.dwt_grain
-                            ? `${item.dwt_grain.toLocaleString()} MT`
-                            : "—"
-                        }
-                      />
-                      <DataPill
-                        icon={MapPin}
-                        label="Open at"
-                        value={item.open_port_name ?? "—"}
-                      />
-                    </>
-                  )}
-                  <DataPill
-                    icon={Calendar}
-                    label={isCargo ? "Laycan" : "Open date"}
-                    value={
-                      isCargo
-                        ? item.is_spot
-                          ? "SPOT"
-                          : (item.laycan_from ?? "—")
-                        : (item.open_date ?? "—")
-                    }
-                  />
-                  <DataPill
-                    icon={User}
-                    label="Submitter"
-                    value={item.submitter_name ?? "—"}
-                  />
-                </div>
-
-                {/* Reason */}
-                {item.review_reason && (
-                  <p className="text-xs text-asb-gray-500 bg-asb-gray-50 rounded px-3 py-2 border border-asb-gray-100 line-clamp-2">
-                    {item.review_reason}
-                  </p>
-                )}
-
-                {/* Footer */}
-                <div className="flex items-center justify-between pt-3 border-t border-asb-gray-100 mt-auto">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {item.submitter_trust_tier && (
-                      <TrustTierBadge tier={item.submitter_trust_tier} />
-                    )}
-                    <div className="flex items-center gap-1">
-                      {age.urgent && item.status === "PENDING" && (
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
-                        </span>
-                      )}
-                      <span
-                        title={formatDate(item.created_at)}
-                        className={cn(
-                          "text-[11px]",
-                          age.urgent && item.status === "PENDING"
-                            ? "text-red-600 font-semibold"
-                            : "text-asb-gray-400",
-                        )}
-                      >
-                        {age.label}
-                      </span>
-                    </div>
-                    {item.is_random_sample && (
-                      <span className="text-[10px] font-bold text-asb-gray-400 bg-asb-gray-100 px-1.5 py-0.5 rounded">
-                        Sample
-                      </span>
-                    )}
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-asb-gray-400 group-hover:text-asb-blue group-hover:translate-x-0.5 transition-all" />
-                </div>
-              </Link>
+              </div>
             );
           })}
         </div>
       )}
-
-      {items.length > 0 && (
-        <p className="text-xs text-asb-gray-400 text-right">
-          Showing {items.length} item{items.length !== 1 ? "s" : ""}
-          {statusFilter !== "ALL" ? ` · ${statusFilter}` : ""}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function DataPill({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="bg-asb-gray-50 rounded-lg px-2.5 py-2 border border-asb-gray-100">
-      <p className="text-[10px] text-asb-gray-400 font-semibold uppercase tracking-wide mb-0.5">
-        {label}
-      </p>
-      <div className="flex items-center gap-1">
-        <Icon className="w-3 h-3 text-asb-gray-400 shrink-0" />
-        <p className="text-xs font-bold text-asb-ink-soft truncate">{value}</p>
-      </div>
     </div>
   );
 }

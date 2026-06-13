@@ -48,7 +48,7 @@ export default async function AdminMessagesPage({
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="adm-page">
       <AdminPageHeader
         title="Contact Messages"
         subtitle={`${unreadCount} unread · ${totalCount} total`}

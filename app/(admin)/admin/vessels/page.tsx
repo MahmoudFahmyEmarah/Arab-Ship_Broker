@@ -69,7 +69,7 @@ export default async function AdminVesselsPage({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="adm-page">
       <AdminPageHeader
         title="Vessel Intelligence"
         subtitle={`${vessels.length} vessels · ${sanctionedCount} sanctioned · ${highRiskCount} HIGH risk`}

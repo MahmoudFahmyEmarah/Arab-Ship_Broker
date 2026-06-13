@@ -115,7 +115,7 @@ export default async function AdminUserDetailPage({
     .limit(20);
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="adm-page" style={{ maxWidth: 1152 }}>
       <Link
         href="/admin/users"
         className="inline-flex items-center gap-1.5 text-sm text-asb-gray-500 hover:text-asb-ink transition-colors"

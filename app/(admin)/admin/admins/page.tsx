@@ -44,7 +44,7 @@ export default async function AdminsPage() {
     ADMIN_SECTIONS.find((s) => s.id === id) ? id : id;
 
   return (
-    <div>
+    <div className="adm-page">
       <AdminPageHeader
         title="Admins"
         subtitle="Superior Admin has every section. Sub-admins get a permission preset; ETA and this page stay owner-only."

@@ -25,7 +25,7 @@ export default async function AdminBunkerPage() {
   const field = "h-9 px-3 rounded border border-asb-gray-200 bg-white text-sm focus:outline-none focus:border-asb-blue";
 
   return (
-    <div className="space-y-8">
+    <div className="adm-page">
       <AdminPageHeader
         title="Bunker prices"
         subtitle="Manage suppliers, prices and the credentialed ingest channel (suppliers POST daily/weekly prices to /api/bunker/ingest)."
