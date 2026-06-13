@@ -122,8 +122,11 @@ export function Footer() {
                 />
                 <span className="text-ocean-200/80 leading-relaxed max-w-xs">
                   <span className="block font-semibold text-ocean-100">Arab ShipBroker</span>
-                  W51, 243 N Teseen, New Cairo 1
+                  Regus Business Center, W51, 243 N Teseen, New Cairo 1
                   <span className="block">Cairo Governorate 4730421, Egypt</span>
+                  <span className="block text-ocean-400 text-xs mt-0.5">
+                    (Legal establishment in process)
+                  </span>
                 </span>
               </div>
             </address>

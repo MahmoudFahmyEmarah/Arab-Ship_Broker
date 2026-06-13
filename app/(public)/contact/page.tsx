@@ -71,8 +71,9 @@ const contactInfo = [
     label: "Office Address",
     details: [
       "Arab ShipBroker",
-      "W51, 243 N Teseen, New Cairo 1",
+      "Regus Business Center, W51, 243 N Teseen, New Cairo 1",
       "Cairo Governorate 4730421, Egypt",
+      "(Legal establishment in process)",
     ],
   },
 ];
@@ -410,7 +411,11 @@ export default function ContactPage() {
                         {info.details.map((detail, i) => (
                           <p
                             key={i}
-                            className="text-slate-600 text-sm leading-relaxed"
+                            className={
+                              detail.startsWith("(")
+                                ? "text-slate-400 text-xs italic leading-relaxed"
+                                : "text-slate-600 text-sm leading-relaxed"
+                            }
                           >
                             {detail}
                           </p>
