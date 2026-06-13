@@ -85,10 +85,10 @@ export function StatCard({
         )}
       </div>
       <div>
-        <p className={cn("text-2xl font-bold tabular-nums", styles.value)}>
+        <p className={cn("text-[28px] leading-none font-bold tabular-nums tracking-tight", styles.value)}>
           {typeof value === "number" ? value.toLocaleString() : value}
         </p>
-        <p className="text-xs text-asb-gray-500 font-medium mt-0.5">{label}</p>
+        <p className="text-[12px] text-asb-gray-500 font-semibold mt-2">{label}</p>
         <p
           className="text-[11px] text-asb-gray-400 mt-1 min-h-4"
           aria-hidden={!hint}
