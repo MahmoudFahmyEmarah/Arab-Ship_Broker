@@ -97,17 +97,18 @@ export async function middleware(request: NextRequest) {
   const userRole = normalizeRole(appUser?.role);
 
   if (isAuthRoute) {
-    if (userRole === "admin") {
-      return redirectWithSupabaseCookies("/admin/dashboard");
-    }
+    // Admins are brokers-who-administer: land them in the portal (same UI),
+    // with the Admin tools available in the portal sidebar.
     return redirectWithSupabaseCookies("/dashboard");
   }
 
   if (isPublicRoute) return supabaseResponse;
 
   if (userRole === "admin") {
-    if (isAdminRoute) return supabaseResponse;
-    return redirectWithSupabaseCookies("/admin/dashboard");
+    // Admins may use BOTH the portal and the admin tool pages (both now render
+    // in the same portal shell). Only bounce them off non-app routes.
+    if (isAdminRoute || isDashboardRoute) return supabaseResponse;
+    return redirectWithSupabaseCookies("/dashboard");
   }
 
   const isDashboardRole = (

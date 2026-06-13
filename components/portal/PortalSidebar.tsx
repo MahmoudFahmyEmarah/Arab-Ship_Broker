@@ -20,6 +20,11 @@ import {
   IconSidebar,
   IconBell,
   IconSignOut,
+  IconMap,
+  IconUser,
+  IconShield,
+  IconShieldLock,
+  IconStar,
 } from "./icons";
 
 export type PortalRole = "cargo_owner" | "vessel_owner" | "broker" | "admin";
@@ -139,7 +144,21 @@ export function PortalSidebar({
     ...(role === "admin"
       ? [
           { section: "Admin" } as const,
-          { href: `/admin/dashboard`, label: "Admin Console", glyph: (a: boolean) => <IconSettings className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/dashboard`, label: "Admin Home", glyph: (a: boolean) => <IconDashboard className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/stats`, label: "Platform Stats", glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/queue`, label: "Review Queue", glyph: (a: boolean) => <IconBell className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/cargo`, label: "All Cargo", glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/vessel-availability`, label: "Vessel Availability", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/vessels`, label: "Vessel Intel", glyph: (a: boolean) => <IconShield className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/users`, label: "Users", glyph: (a: boolean) => <IconUser className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/org-members`, label: "Company Members", glyph: (a: boolean) => <IconUser className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/ports`, label: "Ports", glyph: (a: boolean) => <IconMap className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/commodities`, label: "Commodities", glyph: (a: boolean) => <IconDoc className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/safety-questions`, label: "Safety Questions", glyph: (a: boolean) => <IconDoc className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/messages`, label: "Messages", glyph: (a: boolean) => <IconBell className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/bunker`, label: "Bunker Prices", glyph: (a: boolean) => <IconDoc className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/eta`, label: "ETA e-invoicing", glyph: (a: boolean) => <IconShieldLock className="nav-icon" size={16} color={c(a)} /> },
+          { href: `/admin/admins`, label: "Admins", glyph: (a: boolean) => <IconStar className="nav-icon" size={16} color={c(a)} /> },
         ]
       : []),
   ];
