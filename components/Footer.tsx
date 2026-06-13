@@ -121,10 +121,9 @@ export function Footer() {
                   aria-hidden="true"
                 />
                 <span className="text-ocean-200/80 leading-relaxed max-w-xs">
-                  5th Settlement, New Cairo, Egypt
-                  <span className="block text-ocean-400 text-xs mt-0.5">
-                    (Office under set up)
-                  </span>
+                  <span className="block font-semibold text-ocean-100">Arab ShipBroker</span>
+                  W51, 243 N Teseen, New Cairo 1
+                  <span className="block">Cairo Governorate 4730421, Egypt</span>
                 </span>
               </div>
             </address>

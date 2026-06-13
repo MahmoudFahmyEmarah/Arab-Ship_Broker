@@ -70,8 +70,9 @@ const contactInfo = [
     icon: MapPin,
     label: "Office Address",
     details: [
-      "Regus Business Centre, W51 Plot 242/243",
-      "5th Settlement, New Cairo, Egypt",
+      "Arab ShipBroker",
+      "W51, 243 N Teseen, New Cairo 1",
+      "Cairo Governorate 4730421, Egypt",
     ],
   },
 ];
@@ -423,7 +424,7 @@ export default function ContactPage() {
               <div className="bg-white rounded-2xl p-2 border border-slate-200/60 shadow-lg shadow-slate-200/40">
                 <div className="w-full h-80 max-[1024px]:h-72 max-[768px]:h-56 rounded-xl overflow-hidden bg-slate-100">
                   <iframe
-                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d110502.61185040685!2d31.4332924!3d30.0596185!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x145818006e8b4e75%3A0xc343360b6168e3d3!2sNew%20Cairo%20City%2C%20Cairo%20Governorate%2C%20Egypt!5e0!3m2!1sen!2sus!4v1714589252000!5m2!1sen!2sus"
+                    src="https://maps.google.com/maps?q=2FH7%2BH6%20New%20Cairo%201%2C%20Egypt&z=16&output=embed"
                     width="100%"
                     height="100%"
                     style={{ border: 0 }}
