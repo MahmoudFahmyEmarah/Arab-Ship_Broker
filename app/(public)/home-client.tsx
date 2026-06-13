@@ -17,11 +17,9 @@ import {
   Phone,
   FlaskConical,
   Sparkles,
-  ShieldCheck,
-  Clock,
-  Lock,
 } from "lucide-react";
 
+import { Lock, Shield, Clock } from "@/components/icons";
 import { ScrollZoomBackground } from "@/components/ScrollZoomBackground";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
@@ -84,21 +82,21 @@ const steps = [
 const trustSignals = [
   {
     icon: Lock,
-    title: "Encrypted Contact Data",
+    title: "Your details stay yours",
     description:
-      "All contact information is encrypted at the application layer. Broker A never sees Broker B's details.",
+      "Sender identity and contact information are protected at the database layer, not just hidden on screen. Broker A never sees Broker B. Nothing is shared with third parties, ever.",
   },
   {
-    icon: ShieldCheck,
-    title: "Sanctions Screened",
+    icon: Shield,
+    title: "Sanctions screened",
     description:
-      "Every vessel in the register is screened. Iranian-flagged and sanctioned vessels are permanently blocked from match results.",
+      "Every vessel in the register is screened against international sanctions lists. Flagged and sanctioned tonnage is blocked from match results.",
   },
   {
     icon: Clock,
-    title: "2-Hour Review SLA",
+    title: "Reviewed before it goes live",
     description:
-      "New submissions are reviewed by our team within 2 hours during business hours, keeping the market data clean and reliable.",
+      "Every submission is checked by our team during business hours before it reaches the market, keeping the data clean and reliable.",
   },
 ];
 
@@ -626,8 +624,8 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         <div className="container">
           <SectionHeader
             eyebrow="Platform Standards"
-            title="Compliance Built In"
-            subtitle="This is not a simple marketplace. Every rule in our platform exists because shipping across MENA demands it."
+            title="Built for how the market actually works"
+            subtitle="This is not a marketplace. Every rule exists because shipping across the region demands it."
           />
 
           <div className="grid grid-cols-3 max-lg:grid-cols-1 gap-6 max-w-5xl mx-auto">
@@ -640,8 +638,8 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                 viewport={{ once: true }}
                 className="bg-white rounded-2xl p-7 border border-slate-200/70 shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
               >
-                <div className="w-11 h-11 rounded-xl bg-ocean-50 border border-ocean-100 flex items-center justify-center mb-5">
-                  <item.icon className="w-5 h-5 text-ocean-600" />
+                <div className="w-11 h-11 rounded-xl bg-ocean-50 border border-ocean-100 flex items-center justify-center mb-5 text-ocean-600">
+                  <item.icon width={26} height={26} />
                 </div>
                 <h3 className="text-[15px] font-bold text-ocean-950 mb-2.5 tracking-tight">
                   {item.title}
