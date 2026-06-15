@@ -12,6 +12,8 @@
 // The DB grows the exact tier: migration …000860 seeds port_routes; as more pairs
 // are stored, more lines draw exact. (This bundled ECDIS keeps the map standalone;
 // swap to a DB read of port_routes when you want it server-sourced.)
+import searoute from "searoute-js";
+
 export type LL = [number, number];
 export interface RouteGeo { pts: LL[]; nm: number | null; exact: boolean; source: "ecdis" | "corridor" | "arc" }
 
@@ -164,6 +166,42 @@ function arc(a: LL, b: LL): LL[] {
   return out;
 }
 
+// ── TIER 3: real sea-lane network (searoute-js / Eurostat marnet) ──
+// Dijkstra over the global maritime graph — guarantees a water-only path for
+// any port pair the ECDIS/corridor tiers don't cover (these previously fell
+// through to a straight-ish arc that cut across land). Input/Output GeoJSON is
+// [lon,lat]; we work in [lat,lon] (LL), so coordinates are swapped both ways.
+function seaRoute(polLL: LL, podLL: LL): RouteGeo | null {
+  try {
+    const feature = (ll: LL) => ({
+      type: "Feature" as const,
+      properties: {},
+      geometry: { type: "Point" as const, coordinates: [ll[1], ll[0]] as [number, number] },
+    });
+    // searoute-js console.logs on every snap/call — silence it locally.
+    const origLog = console.log;
+    console.log = () => {};
+    let res: ReturnType<typeof searoute>;
+    try {
+      res = searoute(feature(polLL), feature(podLL), "nm");
+    } finally {
+      console.log = origLog;
+    }
+    const coords = res?.geometry?.coordinates;
+    if (!coords || coords.length < 2) return null;
+    const pts: LL[] = coords.map(([lon, lat]) => [lat, lon] as LL);
+    // Pin the exact ports as the true endpoints (the network start/end are the
+    // nearest snapped sea nodes, a short hop off the actual berth).
+    pts[0] = polLL;
+    pts[pts.length - 1] = podLL;
+    const len = res?.properties?.length;
+    const nm = typeof len === "number" && isFinite(len) ? Math.round(len) : Math.round(pathNm(pts));
+    return { pts: dedupe(pts, 0.002), nm, exact: false, source: "corridor" };
+  } catch {
+    return null;
+  }
+}
+
 export interface RouteOpts {
   polCode?: string | null; podCode?: string | null;
   polLL?: LL | null; podLL?: LL | null;
@@ -188,6 +226,16 @@ export function routeGeometry(opts: RouteOpts): RouteGeo | null {
     }
   }
   if (!polLL || !podLL) return null;
+
+  // Real sea-lane network (searoute-js / Eurostat marnet) — the primary engine
+  // for every non-ECDIS pair. Dijkstra over the global shipping graph follows
+  // the actual chokepoints (Suez/Bosphorus/Bab-el-Mandeb/Hormuz) and is
+  // guaranteed water-only, so it replaces the old land-crossing arc/corridor.
+  const sea = seaRoute(polLL, podLL);
+  if (sea && sea.pts.length >= 2) return sea;
+
+  // Fallbacks (only if the network can't route the pair): hand-tuned zone
+  // corridor, then a gentle arc as the last resort.
   const zp = polZone && podZone ? zonePath(polZone, podZone) : null;
   if (zp && zp.length >= 2) {
     let chain: LL[] = [polLL];

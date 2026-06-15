@@ -156,6 +156,32 @@ export function DashboardBoard({
   const [focusedCargo, setFocusedCargo] = React.useState<string | null>(null);
   const [focusedVessel, setFocusedVessel] = React.useState<string | null>(null);
 
+  // Resizable split pane: left panel width as a percentage (20–75%).
+  const [splitPct, setSplitPct] = React.useState(35);
+  const splitContainerRef = React.useRef<HTMLDivElement>(null);
+  const isDragging = React.useRef(false);
+  const onDividerMouseDown = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev: MouseEvent) => {
+      if (!isDragging.current || !splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      setSplitPct(Math.max(20, Math.min(75, pct)));
+    };
+    const onUp = () => {
+      isDragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+
   // Filter state (zones pre-selected as a live example, matching the design).
   const [fZones, setFZones] = React.useState<string[]>(["E.MED", "R.SEA"]);
   const [fCargoType, setFCargoType] = React.useState<string[]>([]);
@@ -292,9 +318,9 @@ export function DashboardBoard({
         <span className="count">↗ {filteredCargos.length} cargo · {filteredVessels.length} tonnage</span>
       </div>
 
-      {/* Body: panels left + map right (new design order) */}
-      <div className="mkt-body has-map" style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(330px, 0.7fr) 1.3fr", gap: 12, padding: 12, minHeight: 0, overflow: "hidden" }}>
-        <div className={`dash-right mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ overflow: "auto", overflowX: "hidden", paddingRight: 4, minWidth: 0 }}>
+      {/* Body: panels left + map right — drag the divider to resize */}
+      <div ref={splitContainerRef} className="mkt-body has-map" style={{ flex: 1, display: "flex", padding: 12, gap: 0, minHeight: 0, overflow: "hidden" }}>
+        <div className={`dash-right mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ width: `${splitPct}%`, flexShrink: 0, overflow: "auto", overflowX: "hidden", paddingRight: 4, minWidth: 180 }}>
           <SheetHandle peek={sheetPeek} onToggle={toggleSheetPeek} label="Dashboard panels" />
           <DashboardPanel<CargoView>
             kind="cargo"
@@ -330,7 +356,28 @@ export function DashboardBoard({
             )}
           </DashboardPanel>
         </div>
-        <div className="mkt-mappane" style={{ minHeight: 0, borderRadius: 4, overflow: "hidden", border: "var(--bd)" }}>
+        {/* Drag handle */}
+        <div
+          onMouseDown={onDividerMouseDown}
+          title="Drag to resize"
+          style={{
+            width: 10,
+            flexShrink: 0,
+            cursor: "col-resize",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10,
+          }}
+        >
+          <div style={{
+            width: 3,
+            height: 36,
+            borderRadius: 999,
+            background: "#cbd5e1",
+          }} />
+        </div>
+        <div className="mkt-mappane" style={{ flex: 1, minHeight: 0, minWidth: 200, borderRadius: 4, overflow: "hidden", border: "var(--bd)" }}>
           <MarketMap
             cargos={filteredCargos}
             vessels={filteredVessels}

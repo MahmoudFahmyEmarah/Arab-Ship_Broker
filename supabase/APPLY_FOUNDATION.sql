@@ -196,7 +196,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_user public.users;
   v_pt   public.profile_type_enum;
-  v_cols text := 'supabase_user_id, email';
+  v_cols text := 'id, supabase_user_id, email';
   v_vals text;
   v_role text := CASE
     WHEN 'cargo'::public.profile_type_enum  = ANY (p_profiles)
@@ -205,7 +205,7 @@ DECLARE
     ELSE 'vessel_owner'
   END;
 BEGIN
-  v_vals := format('%L, %L', p_supabase_user_id, p_email);
+  v_vals := format('%L, %L, %L', p_supabase_user_id, p_supabase_user_id, p_email);
 
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'name') THEN

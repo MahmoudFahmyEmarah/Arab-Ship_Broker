@@ -123,7 +123,7 @@ export default function LoginPage() {
       }
 
       toast.success("Welcome back! Dropping anchor in your dashboard...");
-      router.push(role === "admin" ? "/admin/dashboard" : "/dashboard");
+      router.push("/dashboard");
     } catch (error) {
       console.error("Login error:", error);
 
@@ -165,7 +165,7 @@ export default function LoginPage() {
       });
       if (error) throw error;
       toast.success("Welcome back! Dropping anchor in your dashboard...");
-      router.push(mfa.role === "admin" ? "/admin/dashboard" : "/dashboard");
+      router.push("/dashboard");
     } catch {
       toast.error("That code didn't match. Try again.");
     } finally {
