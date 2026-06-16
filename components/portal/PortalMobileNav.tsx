@@ -15,13 +15,17 @@ type Tab = { href: string; label: string; icon: (active: boolean) => React.React
 export function PortalMobileNav({
   role,
   basePath = "/dashboard",
+  showCargo,
+  showVessel,
 }: {
   role: PortalRole;
   basePath?: string;
+  showCargo?: boolean;
+  showVessel?: boolean;
 }) {
   const pathname = usePathname();
-  const isCargo = role === "broker" || role === "cargo_owner" || role === "admin";
-  const isVessel = role === "broker" || role === "vessel_owner" || role === "admin";
+  const isCargo = showCargo ?? (role === "broker" || role === "cargo_owner" || role === "admin");
+  const isVessel = showVessel ?? (role === "broker" || role === "vessel_owner" || role === "admin");
   const c = (a: boolean) => (a ? "var(--asb-blue)" : "var(--asb-gray-500)");
 
   // Map-first default: the market boards (which carry the chart) are the

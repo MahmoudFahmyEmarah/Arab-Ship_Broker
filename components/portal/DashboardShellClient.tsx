@@ -36,10 +36,16 @@ function DashboardShell({
   const role: PortalRole = (serverRole as PortalRole) ?? profileRole(hasCargoProfile, hasVesselProfile);
   const displayName = userName ?? account?.fullName ?? "Account";
 
+  // Workspace visibility is the UNION of what the role implies and the account's
+  // actual profiles — so a "Vessel Owner" who also activated a cargo profile
+  // sees BOTH workspaces, while keeping their vessel-owner label.
+  const showCargo = role === "broker" || role === "cargo_owner" || role === "admin" || hasCargoProfile;
+  const showVessel = role === "broker" || role === "vessel_owner" || role === "admin" || hasVesselProfile;
+
   return (
     <div className="asb-portal">
       <div className="shell">
-        <PortalSidebar role={role} userName={displayName} basePath="/dashboard" />
+        <PortalSidebar role={role} userName={displayName} basePath="/dashboard" showCargo={showCargo} showVessel={showVessel} />
         <main
           style={{
             flex: 1,
@@ -53,7 +59,7 @@ function DashboardShell({
           {children}
         </main>
       </div>
-      <PortalMobileNav role={role} basePath="/dashboard" />
+      <PortalMobileNav role={role} basePath="/dashboard" showCargo={showCargo} showVessel={showVessel} />
       {/* Position check-in: vessel persona only, never admin (admins are
           routed to /admin before this shell). Renders nothing for users with
           no open positions, so mounting per-shell is safe. */}

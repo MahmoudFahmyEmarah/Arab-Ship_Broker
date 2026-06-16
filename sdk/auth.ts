@@ -103,17 +103,34 @@ export async function getCurrentUser(
     throw authError || new Error("No authenticated user found");
   }
 
-  // Production schema: read public.users directly (id == auth uid) and derive
-  // the cargo/vessel personas from `role` — prod has no `profiles` table or
-  // `v_account_profiles` view.
+  // Read public.users directly (id == auth uid) and seed the cargo/vessel
+  // personas from `role`.
   const data = await getAppUserRow<{
     full_name: string; email: string; trust_tier: string; is_active: boolean; role: string;
   }>(supabase, authData.user.id, "id, full_name, email, trust_tier, is_active, role");
   if (!data) throw new Error("Account record not found");
 
   const role = normalizeRole(data.role);
-  const hasCargoProfile = role === "cargo_owner" || role === "broker";
-  const hasVesselProfile = role === "vessel_owner" || role === "broker";
+  let hasCargoProfile = role === "cargo_owner" || role === "broker" || role === "admin";
+  let hasVesselProfile = role === "vessel_owner" || role === "broker" || role === "admin";
+
+  // The `profiles` table is the authoritative persona source where present — a
+  // vessel owner "interested in both" carries an extra cargo profile that `role`
+  // alone doesn't capture. UNION with the role-derived defaults so we only ever
+  // ADD a workspace, never remove one (and tolerate the table being absent).
+  try {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("profile_type, is_active")
+      .eq("account_id", data.id);
+    for (const p of (profs ?? []) as { profile_type: string; is_active: boolean }[]) {
+      if (p.is_active === false) continue;
+      if (p.profile_type === "cargo") hasCargoProfile = true;
+      if (p.profile_type === "vessel") hasVesselProfile = true;
+    }
+  } catch {
+    // profiles table unavailable → keep the role-derived personas
+  }
   const activeProfiles: ProfileType[] = [
     ...(hasCargoProfile ? (["cargo"] as ProfileType[]) : []),
     ...(hasVesselProfile ? (["vessel"] as ProfileType[]) : []),

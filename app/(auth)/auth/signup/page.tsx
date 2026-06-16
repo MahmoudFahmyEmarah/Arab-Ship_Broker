@@ -49,21 +49,23 @@ const signupSchema = z
 type SignupFormData = z.infer<typeof signupSchema>;
 
 // Design copy — exact, do not rephrase (Pre_Final §10).
+// Interest-framed choices: each maps directly to the workspace(s) you'll see.
+// vessels-only → vessel profile · cargo-only → cargo profile · both → both.
 const ROLE_OPTIONS = [
   {
     id: "vessel",
-    title: "Find cargo for my vessels",
-    desc: "Owner, Commercial Operator or Owner's Broker with open tonnage",
+    title: "Vessels only",
+    desc: "Owner, operator or owner's broker with open tonnage — vessel workspace",
   },
   {
     id: "cargo",
-    title: "Find vessels for my cargo",
-    desc: "Charterer, Shipper, Freight Forwarder or Charterer's Broker",
+    title: "Cargo only",
+    desc: "Charterer, shipper, forwarder or charterer's broker — cargo workspace",
   },
   {
     id: "broker",
-    title: "Broker both sides",
-    desc: "I work both for Cargo & Tonnage clients",
+    title: "Both cargo & vessels",
+    desc: "Work both sides — get the cargo and the vessel workspace",
   },
 ] as const;
 

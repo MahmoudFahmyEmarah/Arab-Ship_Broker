@@ -1,0 +1,41 @@
+{
+  "vessel_availability_updates": [
+    {
+      "id": "1a1b3cff-cea6-484e-b235-26709d9c55ec",
+      "open_zone": null,
+      "open_date": null,
+      "open_date_range_days": 7
+    },
+    {
+      "id": "60a626e5-017b-46af-9e20-fc25b57615df",
+      "open_zone": null,
+      "open_date": null,
+      "open_date_range_days": 7
+    },
+    {
+      "id": "d9435c87-27a8-4eb1-bd2d-5e833132f57f",
+      "open_zone": null,
+      "open_date": null,
+      "open_date_range_days": 7
+    },
+    {
+      "id": "ae5de1d4-ae1e-4095-959c-246eb55a1d33",
+      "open_zone": null,
+      "open_date": null,
+      "open_date_range_days": 7
+    },
+    {
+      "id": "4113ff5c-c34f-42b8-89b9-96800fbd462e",
+      "open_zone": null,
+      "open_date": null,
+      "open_date_range_days": 7
+    }
+  ],
+  "vessel_ownership_inserts": [
+    "e3ac8ea3-72a7-4471-a6e6-33e103a3f1a9",
+    "0eaedbb7-d209-4a41-9052-e0b3a042e885",
+    "996d3ef7-f549-49cd-8b06-285e0372bd4c",
+    "9f1e9aae-e922-4d86-b567-1d182d18030c",
+    "0c384805-cee1-41ac-b977-85c638473279"
+  ]
+}

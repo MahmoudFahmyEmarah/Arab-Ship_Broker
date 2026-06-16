@@ -145,11 +145,19 @@ export function DashboardBoard({
   vessels,
   source,
   portCoords,
+  matchCargos,
+  matchVessels,
 }: {
   cargos: CargoView[];
   vessels: VesselView[];
   source?: "live" | "sample";
   portCoords?: Record<string, PortGeo>;
+  // The universe to match the displayed listings against. For a normal user the
+  // displayed cargos/vessels are THEIR OWN, but matching must run against the
+  // whole open market — so the page passes the market here. Defaults to the
+  // displayed arrays (admin / discovery), so behaviour is unchanged when unset.
+  matchCargos?: CargoView[];
+  matchVessels?: VesselView[];
 }) {
   const [mode, setMode] = React.useState<"cargo" | "vessel">("cargo");
   const [sheetPeek, toggleSheetPeek] = useSheetPeek();
@@ -182,8 +190,9 @@ export function DashboardBoard({
     window.addEventListener("mouseup", onUp);
   }, []);
 
-  // Filter state (zones pre-selected as a live example, matching the design).
-  const [fZones, setFZones] = React.useState<string[]>(["E.MED", "R.SEA"]);
+  // Filter state — no zone pre-selection, so the viewer's own listings (which may
+  // be in any zone) are never hidden behind a default filter.
+  const [fZones, setFZones] = React.useState<string[]>([]);
   const [fCargoType, setFCargoType] = React.useState<string[]>([]);
   const [fVesselType, setFVesselType] = React.useState<string[]>([]);
   const [fClass, setFClass] = React.useState<string[]>([]);
@@ -206,54 +215,76 @@ export function DashboardBoard({
   const CARGO_TYPE_OPTS = React.useMemo(() => Array.from(new Set(cargos.map((c) => c.type).filter(Boolean))), [cargos]);
   const VESSEL_TYPE_OPTS = React.useMemo(() => Array.from(new Set(vessels.map((v) => v.type).filter(Boolean))), [vessels]);
 
-  const filteredCargos = React.useMemo(
-    () =>
-      cargos.filter((c) => {
-        if (fCargoType.length && !fCargoType.includes(c.type)) return false;
-        if (fZones.length) {
-          const z = [c.route?.polZone, c.route?.podZone];
-          if (!z.some((x) => x && fZones.includes(x))) return false;
-        }
-        if (fClass.length) {
-          const tags = cargoClassTags(c);
-          if (!tags.some((t) => fClass.includes(t))) return false;
-        }
-        if (fSize) {
-          const q = toMt(c.qtyMt);
-          if (fSize.min != null && q < fSize.min) return false;
-          if (fSize.max != null && q > fSize.max) return false;
-        }
-        if (fTime != null && !(c.laycanDays != null && c.laycanDays <= fTime)) return false;
-        return true;
-      }),
-    [cargos, fCargoType, fZones, fClass, fSize, fTime],
+  // Filter predicates (shared by the displayed lists AND the match universe).
+  const cargoPasses = React.useCallback(
+    (c: CargoView) => {
+      if (fCargoType.length && !fCargoType.includes(c.type)) return false;
+      if (fZones.length) {
+        const z = [c.route?.polZone, c.route?.podZone];
+        if (!z.some((x) => x && fZones.includes(x))) return false;
+      }
+      if (fClass.length) {
+        const tags = cargoClassTags(c);
+        if (!tags.some((t) => fClass.includes(t))) return false;
+      }
+      if (fSize) {
+        const q = toMt(c.qtyMt);
+        if (fSize.min != null && q < fSize.min) return false;
+        if (fSize.max != null && q > fSize.max) return false;
+      }
+      if (fTime != null && !(c.laycanDays != null && c.laycanDays <= fTime)) return false;
+      return true;
+    },
+    [fCargoType, fZones, fClass, fSize, fTime],
   );
-  const filteredVessels = React.useMemo(
-    () =>
-      vessels.filter((v) => {
-        if (fVesselType.length && !fVesselType.includes(v.type)) return false;
-        if (fZones.length && !fZones.includes(v.openPortZone)) return false;
-        if (fClass.length) {
-          const tags = vesselClassTags(v);
-          if (!tags.some((t) => fClass.includes(t))) return false;
-        }
-        if (fSize) {
-          const d = toMt(v.dwt);
-          if (fSize.min != null && d < fSize.min) return false;
-          if (fSize.max != null && d > fSize.max) return false;
-        }
-        if (fTime != null && !(v.openDateDays != null && v.openDateDays <= fTime)) return false;
-        if (fGear === "geared" && !v.geared) return false;
-        if (fGear === "gearless" && v.geared) return false;
-        return true;
-      }),
-    [vessels, fVesselType, fZones, fClass, fSize, fTime, fGear],
+  const vesselPasses = React.useCallback(
+    (v: VesselView) => {
+      if (fVesselType.length && !fVesselType.includes(v.type)) return false;
+      if (fZones.length && !fZones.includes(v.openPortZone)) return false;
+      if (fClass.length) {
+        const tags = vesselClassTags(v);
+        if (!tags.some((t) => fClass.includes(t))) return false;
+      }
+      if (fSize) {
+        const d = toMt(v.dwt);
+        if (fSize.min != null && d < fSize.min) return false;
+        if (fSize.max != null && d > fSize.max) return false;
+      }
+      if (fTime != null && !(v.openDateDays != null && v.openDateDays <= fTime)) return false;
+      if (fGear === "geared" && !v.geared) return false;
+      if (fGear === "gearless" && v.geared) return false;
+      return true;
+    },
+    [fVesselType, fZones, fClass, fSize, fTime, fGear],
   );
 
-  const topMatches = React.useMemo(
-    () => buildTopMatches(filteredCargos, filteredVessels, (v) => vesselClassTags(v)[0] || v.type),
-    [filteredCargos, filteredVessels],
+  const filteredCargos = React.useMemo(() => cargos.filter(cargoPasses), [cargos, cargoPasses]);
+  const filteredVessels = React.useMemo(() => vessels.filter(vesselPasses), [vessels, vesselPasses]);
+
+  // Match universe — the market to pair the displayed listings against. Defaults
+  // to the displayed arrays (admin / discovery view) when the page doesn't pass
+  // a separate market (the "my own" view does).
+  const filteredMatchCargos = React.useMemo(
+    () => (matchCargos ?? cargos).filter(cargoPasses),
+    [matchCargos, cargos, cargoPasses],
   );
+  const filteredMatchVessels = React.useMemo(
+    () => (matchVessels ?? vessels).filter(vesselPasses),
+    [matchVessels, vessels, vesselPasses],
+  );
+
+  // Two directions: my cargos → market vessels, and market cargos → my vessels.
+  // The mode switch picks which to show; buildTopMatches always anchors on its
+  // first arg, so each direction surfaces the displayed side as the anchor.
+  const cargoTopMatches = React.useMemo(
+    () => buildTopMatches(filteredCargos, filteredMatchVessels, (v) => vesselClassTags(v)[0] || v.type),
+    [filteredCargos, filteredMatchVessels],
+  );
+  const vesselTopMatches = React.useMemo(
+    () => buildTopMatches(filteredMatchCargos, filteredVessels, (v) => vesselClassTags(v)[0] || v.type),
+    [filteredMatchCargos, filteredVessels],
+  );
+  const topMatches = mode === "cargo" ? cargoTopMatches : vesselTopMatches;
 
   const focus = {
     cargo: (c: CargoView) => {

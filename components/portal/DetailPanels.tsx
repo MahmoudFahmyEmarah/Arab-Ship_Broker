@@ -116,7 +116,7 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
           </div>
         </div>
         <div className="row" style={{ gap: 4 }}>
-          <span className={`asb-badge ${cargo.scope}`}>{cargo.scope.toUpperCase()}</span>
+          {/* IN/OUT/PARTIAL status is internal guidance only — not shown to members. */}
           <span className="asb-badge neutral">{typeLabel}</span>
           {cargo.spot ? (
             <span className="asb-badge neutral">SPOT</span>

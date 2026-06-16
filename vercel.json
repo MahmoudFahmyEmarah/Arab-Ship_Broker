@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/market-insights",
       "schedule": "0 6 * * 1"
+    },
+    {
+      "path": "/api/cron/refresh-matches",
+      "schedule": "0 5 * * *"
     }
   ]
 }

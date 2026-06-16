@@ -1,0 +1,65 @@
+{
+  "cargo_ownership_updates": [
+    {
+      "ownership_id": "9eb3eda6-8d08-413c-bad3-88e6dd71fceb",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "bad1c255-9d4c-4bc5-8871-b1b12a0af76b",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "bc77fbd2-0604-48b5-b1fc-229f24e67a5c",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "755ae495-4281-4477-a837-394758d00f28",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "7320f97c-969f-470f-bb84-d819ffea8357",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "726ca0ad-499a-4849-a633-b884d7105b17",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "23b127f2-d647-45f9-a82d-43d2495cb2f5",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "7ea40e56-1e29-4ddb-881e-3267c11c83e6",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "e1be3733-6d7e-4ef3-9c48-c3a649b32673",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    },
+    {
+      "ownership_id": "90487d66-af31-4096-a36a-5ffa3f99aeaf",
+      "prev_owner_user_id": "a964be48-f190-4d6a-93b8-413b0e04f7ae",
+      "prev_role": "primary",
+      "prev_is_current": true
+    }
+  ],
+  "vessel_ownership_inserts": []
+}

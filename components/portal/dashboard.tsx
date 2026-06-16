@@ -34,7 +34,7 @@ export function DashCargoRow({
         <span className="dash-row__ref mono">{c.refId}</span>
       </div>
       <div className="dash-row__r2">
-        <span className={`asb-badge tiny ${c.scope}`}>{c.scope?.toUpperCase()}</span>
+        {/* IN/OUT/PARTIAL status is internal guidance only — not shown to members. */}
         <span className="asb-badge tiny cargo-type">{typeLabel}</span>
       </div>
       <div className="dash-row__r3">
@@ -164,7 +164,7 @@ export function DashboardPanel<T extends { id: string }>({
 
   return (
     <div className="asb-panel dash-panel">
-      <div className="panel-head">
+      <div className={`panel-head${headerAccessory ? " has-acc" : ""}`}>
         <span className="grip">⠿</span>
         <span className="title">{title}</span>
         {headerAccessory && <div className="panel-head__acc">{headerAccessory}</div>}

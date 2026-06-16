@@ -6,11 +6,10 @@
 // to typed sample rows so the /portal preview always renders. Wiring a page to
 // live data therefore required no UI changes — just these loaders.
 import { getAppUserRow } from "@/lib/app-user";
-import { getCargos, getMyCargoListings, getMatchesForCargo } from "@/sdk/app/cargos";
+import { getCargos, getMyCargoListings } from "@/sdk/app/cargos";
 import {
   getOpenVesselAvailability,
   getMyVesselAvailability,
-  getMatchesForAvailability,
 } from "@/sdk/app/vessels";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { PortGeo } from "./port-coords";
@@ -51,43 +50,49 @@ function isSupabaseConfigured(): boolean {
   return !!url && !url.includes("placeholder");
 }
 
-// Live match counts come from the per-listing match RPCs. We fan out in
-// parallel (bounded) and tolerate per-listing failures (default 0). For large
-// boards a dedicated count view/RPC would be more efficient — noted follow-up.
-const MATCH_COUNT_CAP = 60;
+// Match COUNTS come from the precomputed `matches` cache table — one query for
+// the whole board instead of an N-way RPC fan-out. The table is refreshed by
+// the /api/cron/refresh-matches job (fn_refresh_matches), which applies the
+// SAME eligibility gates as the get_matches_for_* RPCs. The RPCs remain the
+// source for the per-listing "view matches" drill-down (always fresh); this is
+// the cheap aggregate path for badges. On any failure we fall back to 0 so the
+// boards still render.
+async function tallyMatchCounts(
+  supabase: SupabaseClient,
+  column: "cargo_id" | "vessel_avail_id",
+  ids: string[],
+): Promise<Record<string, number>> {
+  if (!ids.length) return {};
+  try {
+    const { data, error } = await supabase
+      .from("matches")
+      .select(column)
+      .in(column, ids);
+    if (error || !data) return {};
+    const counts: Record<string, number> = {};
+    for (const row of data as Record<string, string>[]) {
+      const key = row[column];
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  } catch (err) {
+    console.error("[portal] match count tally failed:", err);
+    return {};
+  }
+}
 
-async function cargoMatchCounts(
+function cargoMatchCounts(
   supabase: SupabaseClient,
   rows: CargoListingRow[],
 ): Promise<Record<string, number>> {
-  const entries = await Promise.all(
-    rows.slice(0, MATCH_COUNT_CAP).map(async (r) => {
-      try {
-        const m = await getMatchesForCargo(supabase, r.id);
-        return [r.id, m.length] as const;
-      } catch {
-        return [r.id, 0] as const;
-      }
-    }),
-  );
-  return Object.fromEntries(entries);
+  return tallyMatchCounts(supabase, "cargo_id", rows.map((r) => r.id));
 }
 
-async function availabilityMatchCounts(
+function availabilityMatchCounts(
   supabase: SupabaseClient,
   rows: VesselAvailabilityWithVessel[],
 ): Promise<Record<string, number>> {
-  const entries = await Promise.all(
-    rows.slice(0, MATCH_COUNT_CAP).map(async (r) => {
-      try {
-        const m = await getMatchesForAvailability(supabase, r.id);
-        return [r.id, m.length] as const;
-      } catch {
-        return [r.id, 0] as const;
-      }
-    }),
-  );
-  return Object.fromEntries(entries);
+  return tallyMatchCounts(supabase, "vessel_avail_id", rows.map((r) => r.id));
 }
 
 // Live bunker prices for the calculators — the SAME admin-managed fuel_prices

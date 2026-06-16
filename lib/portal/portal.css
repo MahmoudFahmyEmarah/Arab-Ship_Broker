@@ -694,8 +694,10 @@ button { font: inherit; cursor: pointer; }
 }
 .nav-item .nav-icon { width: 16px; height: 16px; flex-shrink: 0; }
 .nav-item.is-active .nav-icon { color: var(--asb-blue); }
-.nav-item.action { color: var(--asb-blue); font-size: var(--fs-body); }
-.nav-item.action:hover { background: var(--asb-blue-light); }
+/* Action items (Post Cargo / Post Position) stay grey like every other item —
+   only the active page is blue. The "+" glyph still marks them as create actions. */
+.nav-item.action { font-size: var(--fs-body); }
+.nav-item.action:hover { background: var(--asb-gray-50); }
 
 /* Admin zone (Zone 5) — same metrics, amber accent so the admin
    always knows when they're in admin mode. */
@@ -909,6 +911,7 @@ button { font: inherit; cursor: pointer; }
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--asb-navy);
+  white-space: nowrap;
 }
 .asb-panel .panel-head .actions { margin-left: auto; display: inline-flex; gap: 4px; }
 .asb-panel .panel-head button.icon-btn {
@@ -1435,6 +1438,12 @@ button { font: inherit; cursor: pointer; }
 
 /* ── Match-mode pill switch (lives in the Top-matches panel header) ── */
 .panel-head__acc { display: inline-flex; align-items: center; margin-left: auto; }
+/* When the header carries an accessory (the Top Matches mode switch), let the
+   row wrap so the toggle drops to its own full-width line in the narrow panel
+   column — the title (nowrap) can never overlap it. The caret stays top-right. */
+.asb-panel .panel-head.has-acc { flex-wrap: wrap; height: auto; min-height: 32px; row-gap: 6px; }
+.asb-panel .panel-head.has-acc .panel-head__acc { order: 5; flex-basis: 100%; margin-left: 0; }
+.asb-panel .panel-head.has-acc .actions { order: 4; }
 .mm-switch { display: inline-flex; align-items: center; gap: 8px; }
 .mm-switch__lbl { font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--asb-gray-500); }
 .mm-switch__seg { display: inline-flex; align-items: center; background: var(--asb-gray-50); border: 0.5px solid var(--asb-gray-200); border-radius: 999px; padding: 2px; }

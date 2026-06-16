@@ -84,10 +84,17 @@ export function PortalSidebar({
   role = "broker",
   userName = "John Smith",
   basePath = "/dashboard",
+  showCargo,
+  showVessel,
 }: {
   role?: PortalRole;
   userName?: string;
   basePath?: string;
+  // Which workspaces to show. When provided (from the account's actual profiles)
+  // these win over the role-derived default, so a vessel owner "interested in
+  // both" sees the cargo workspace too without being relabelled a broker.
+  showCargo?: boolean;
+  showVessel?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -110,8 +117,8 @@ export function PortalSidebar({
   const econLocked = isCalculatorLocked(tier);
   const limitedTier = tier === "T1" || tier === "T2";
 
-  const isCargo = role === "broker" || role === "cargo_owner" || role === "admin";
-  const isVessel = role === "broker" || role === "vessel_owner" || role === "admin";
+  const isCargo = showCargo ?? (role === "broker" || role === "cargo_owner" || role === "admin");
+  const isVessel = showVessel ?? (role === "broker" || role === "vessel_owner" || role === "admin");
   const c = (a: boolean) => (a ? "var(--asb-blue)" : "var(--asb-gray-500)");
 
   const nav: (NavDef | { section: string })[] = [
@@ -121,13 +128,13 @@ export function PortalSidebar({
     ...(isCargo
       ? [
           { href: `${basePath}/cargo/my`, label: "My Cargo", glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} /> },
-          { href: `${basePath}/cargo/create`, label: "Post Cargo", action: true, glyph: () => <IconCargo className="nav-icon" size={16} color="var(--asb-blue)" plus /> },
+          { href: `${basePath}/cargo/create`, label: "Post Cargo", action: true, glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} plus /> },
         ]
       : []),
     ...(isVessel
       ? [
           { href: `${basePath}/vessels`, label: "My Vessels", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> },
-          { href: `${basePath}/vessels/register`, label: "Post Position", action: true, glyph: () => <IconVessel className="nav-icon" size={16} color="var(--asb-blue)" plus /> },
+          { href: `${basePath}/vessels/register`, label: "Post Position", action: true, glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} plus /> },
         ]
       : []),
     { section: "Discover" },

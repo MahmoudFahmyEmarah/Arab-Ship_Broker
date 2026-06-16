@@ -13,6 +13,7 @@
 // are stored, more lines draw exact. (This bundled ECDIS keeps the map standalone;
 // swap to a DB read of port_routes when you want it server-sourced.)
 import searoute from "searoute-js";
+import { seaGraphRoute } from "./seaGraph";
 
 export type LL = [number, number];
 export interface RouteGeo { pts: LL[]; nm: number | null; exact: boolean; source: "ecdis" | "corridor" | "arc" }
@@ -227,10 +228,20 @@ export function routeGeometry(opts: RouteOpts): RouteGeo | null {
   }
   if (!polLL || !podLL) return null;
 
-  // Real sea-lane network (searoute-js / Eurostat marnet) — the primary engine
-  // for every non-ECDIS pair. Dijkstra over the global shipping graph follows
-  // the actual chokepoints (Suez/Bosphorus/Bab-el-Mandeb/Hormuz) and is
-  // guaranteed water-only, so it replaces the old land-crossing arc/corridor.
+  // Curated regional sea-lane graph (Med · Black Sea · Aegean · Levant ·
+  // Adriatic · Red Sea · Gulf · near Atlantic) — the PRIMARY engine for the
+  // platform's region. Hand-placed water nodes + Dijkstra follow the real
+  // chokepoints (Bosphorus/Dardanelles/Suez/Gibraltar, round Sinai & the
+  // Peloponnese) and are water-only by construction. searoute-js's global
+  // network is unreliable through the Bosphorus and returned no route for most
+  // Black Sea ↔ E.Med pairs, so the graph routes them instead.
+  const g = seaGraphRoute(polLL, podLL);
+  if (g && g.pts.length >= 2) {
+    return { pts: smooth(dedupe(g.pts, 0.01), 4), nm: Math.round(g.nm), exact: false, source: "corridor" };
+  }
+
+  // Real sea-lane network (searoute-js) — fallback for pairs OUTSIDE the curated
+  // region (e.g. Far East / deep Atlantic), where searoute's global graph works.
   const sea = seaRoute(polLL, podLL);
   if (sea && sea.pts.length >= 2) return sea;
 
