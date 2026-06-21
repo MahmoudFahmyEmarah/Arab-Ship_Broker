@@ -8,7 +8,7 @@ export function Footer() {
 
   return (
     <footer className="bg-ocean-900 text-slate-300 border-t border-ocean-800">
-      <div className="container py-16 max-[1024px]:py-12 max-[768px]:py-10">
+      <div className="container py-6 max-[1024px]:py-6 max-[768px]:py-5">
         <div className="grid grid-cols-12 gap-10 max-[1024px]:grid-cols-1 max-[1024px]:gap-10 max-[768px]:gap-8">
           {/* Brand & About Section */}
           <div className="col-span-5 max-[1024px]:col-span-1 space-y-6">
@@ -134,7 +134,7 @@ export function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-ocean-800/50 mt-12 pt-8 flex justify-between items-center gap-4 text-left max-[1024px]:flex-col max-[1024px]:items-start max-[768px]:items-center max-[768px]:text-center">
+        <div className="border-t border-ocean-800/50 mt-5 pt-4 flex justify-between items-center gap-4 text-left max-[1024px]:flex-col max-[1024px]:items-start max-[768px]:items-center max-[768px]:text-center">
           <p className="text-ocean-400 text-sm">
             © {currentYear} Arab ShipBroker. All rights reserved.
           </p>

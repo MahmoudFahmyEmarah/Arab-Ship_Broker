@@ -150,13 +150,22 @@ button { font: inherit; cursor: pointer; }
 }
 .asb-card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(13,37,69,.07), 0 4px 10px rgba(13,37,69,.06), 0 22px 44px -14px rgba(13,37,69,.20); }
 .asb-card.is-selected {
-  box-shadow: 0 0 0 1.5px #0D2545, 0 14px 32px -12px rgba(13,37,69,.18);
+  box-shadow: 0 0 0 1px var(--asb-blue), 0 0 0 4px rgba(24,95,165,.13), 0 16px 34px -14px rgba(13,37,69,.22);
 }
+/* Status accent — a soft rounded pill inset from the edge so it never collides
+   with the card border or the selection ring (same red/amber/green meaning). */
 .asb-card::before {
-  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
-  width: 3px;
-  border-radius: 4px 0 0 4px;
+  content: ""; position: absolute; left: 7px; top: 16px; bottom: 16px;
+  width: 3.5px;
+  border-radius: 999px;
   background: var(--strip, var(--asb-green));
+  opacity: .85;
+  transition: opacity .14s ease, box-shadow .14s ease;
+}
+.asb-card:hover::before,
+.asb-card.is-selected::before {
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--strip, #97C459) 16%, transparent);
 }
 .asb-card.strip-in { --strip: #97C459; }
 .asb-card.strip-partial { --strip: #EF9F27; }
@@ -230,15 +239,29 @@ button { font: inherit; cursor: pointer; }
 }
 .cargo-card.is-selected {
   background: #FFFFFF;
-  box-shadow: 0 0 0 1.5px #0D2545, 0 14px 32px -12px rgba(13,37,69,.18);
+  box-shadow: 0 0 0 1px var(--asb-blue), 0 0 0 4px rgba(24,95,165,.13), 0 16px 34px -14px rgba(13,37,69,.22);
 }
-.cargo-card::before {
-  content: "";
+/* Cargo cards anchor the status accent to the grey info grid (see .cc-accent),
+   so the full-card edge strip is suppressed here. */
+.cargo-card::before { display: none; }
+
+/* Status accent — a soft rounded pill that spans exactly the grey info grid,
+   sitting in the left gutter (same red/amber/green meaning, never full-height). */
+.cc-grid-wrap { position: relative; margin: 2px 0 8px; }
+.cc-grid-wrap > .cc-grid { margin: 0; }
+.cc-accent {
   position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
+  left: -5px; top: 0; bottom: 0;
+  width: 3.5px;
+  border-radius: 999px;
   background: var(--strip, #97C459);
-  border-radius: 16px 0 0 16px;
+  opacity: .9;
+  transition: opacity .14s ease, box-shadow .14s ease;
+}
+.cargo-card:hover .cc-accent,
+.cargo-card.is-selected .cc-accent {
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--strip, #97C459) 16%, transparent);
 }
 
 /* LINE 1 — name + category badge */

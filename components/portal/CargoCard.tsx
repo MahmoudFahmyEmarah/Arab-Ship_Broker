@@ -90,7 +90,9 @@ export function CargoCard({
       </div>
 
       {!compact && (
-        <div className="cc-grid">
+        <div className="cc-grid-wrap">
+          <span className="cc-accent" aria-hidden />
+          <div className="cc-grid">
           <CCField label="QTY / VOL">
             <div className="cc-qty">
               <span className="cc-qty__w">{weight}</span>
@@ -153,6 +155,7 @@ export function CargoCard({
               <span>Group {c.imsbcGroup || "—"}</span>
             )}
           </CCField>
+          </div>
         </div>
       )}
 

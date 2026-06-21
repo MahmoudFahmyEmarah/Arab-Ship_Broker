@@ -200,11 +200,13 @@ function SectionHeader({
   title,
   subtitle,
   light = false,
+  subtitleClassName = "max-w-2xl",
 }: {
   eyebrow: string;
   title: string;
   subtitle: string;
   light?: boolean;
+  subtitleClassName?: string;
 }) {
   return (
     <motion.div
@@ -212,7 +214,7 @@ function SectionHeader({
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.2, 0, 0, 1] }}
       viewport={{ once: true }}
-      className="text-center mb-16 max-lg:mb-12 max-sm:mb-10"
+      className="text-center mb-12 max-lg:mb-10 max-sm:mb-8"
     >
       <EyebrowLabel label={eyebrow} light={light} />
       <h2
@@ -225,7 +227,8 @@ function SectionHeader({
       </h2>
       <p
         className={cn(
-          "text-[17px] max-sm:text-base max-w-2xl mx-auto leading-relaxed",
+          "text-[17px] max-sm:text-base mx-auto leading-relaxed",
+          subtitleClassName,
           light ? "text-ocean-100/70" : "text-slate-500",
         )}
       >
@@ -419,7 +422,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         </div>
       </section>
 
-      <section className="py-32 max-lg:py-24 max-sm:py-18 bg-slate-50">
+      <section className="py-20 max-lg:py-16 max-sm:py-14 bg-slate-50">
         <div className="container">
           <SectionHeader
             eyebrow="Why Arab ShipBroker"
@@ -620,15 +623,16 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         </div>
       </section>
 
-      <section className="py-28 max-lg:py-20 bg-slate-50">
+      <section className="pt-28 pb-12 max-lg:pt-20 max-lg:pb-10 bg-slate-50">
         <div className="container">
           <SectionHeader
             eyebrow="Platform Standards"
             title="Built for how the market actually works"
             subtitle="This is not a marketplace. Every rule exists because shipping across the region demands it."
+            subtitleClassName="max-w-4xl lg:whitespace-nowrap"
           />
 
-          <div className="grid grid-cols-3 max-lg:grid-cols-1 gap-6 max-w-5xl mx-auto">
+          <div className="grid grid-cols-3 max-lg:grid-cols-1 gap-6">
             {trustSignals.map((item, index) => (
               <motion.div
                 key={item.title}
@@ -653,7 +657,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         </div>
       </section>
 
-      <section className="py-28 max-lg:py-20 bg-slate-50 relative overflow-hidden">
+      <section className="pt-12 pb-12 max-lg:pt-10 max-lg:pb-10 bg-slate-50 relative overflow-hidden">
         <div className="container relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -727,7 +731,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         </div>
       </section>
 
-      <section className="py-28 max-lg:py-20 bg-white">
+      <section className="pt-12 pb-28 max-lg:pt-10 max-lg:pb-20 bg-white">
         <div className="container">
           <SectionHeader
             eyebrow="Leadership"

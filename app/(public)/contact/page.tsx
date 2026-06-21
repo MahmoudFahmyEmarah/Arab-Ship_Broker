@@ -20,8 +20,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { sendMessage } from "@/sdk/app/contact";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,16 +92,20 @@ export default function ContactPage() {
 
   const onSubmit = async (data: ContactFormData) => {
     setIsSubmitting(true);
-    const supabase = getSupabaseBrowserClient();
 
     try {
-      await sendMessage(supabase, {
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        how_did_you_find_us: data.howDidYouFindUs,
-        message: data.message,
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          how_did_you_find_us: data.howDidYouFindUs,
+          message: data.message,
+        }),
       });
+      if (!res.ok) throw new Error("Request failed");
 
       toast.success(
         "Message sent successfully! We'll get back to you within 24 hours.",
