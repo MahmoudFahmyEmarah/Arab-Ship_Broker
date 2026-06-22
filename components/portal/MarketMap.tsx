@@ -60,6 +60,15 @@ const ZONES: Record<string, { bounds: [[number, number], [number, number]]; colo
   AG: { bounds: [[23, 48], [30, 58]], color: ZONE_COLOR["AG"] },
 };
 
+// Approximate centroids for trade zones that have no bounds in FLEET_ZONES but
+// still appear as a vessel's open zone — used to place vessels that have no
+// open-port locode (open port "—") so they still show on the map.
+const ZONE_CENTROID_FALLBACK: Record<string, [number, number]> = {
+  "W.MED": [38, 6],
+  "ADRIATIC": [42.5, 16],
+  "E.AFR": [-4, 42],
+};
+
 const TILES = {
   light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
   dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
@@ -276,6 +285,20 @@ export default function MarketMap({
     (locode?: string | null): [number, number] | null => {
       const g = geoFor(locode);
       return g ? [g[0], g[1]] : null;
+    },
+    [geoFor],
+  );
+  // Where to place a vessel on the map: its open-port coordinates if it has a
+  // locode, else fall back to the centroid of its open zone, so vessels whose
+  // open port is "—" still appear (and can be focused from the card/list).
+  const vesselGeo = React.useCallback(
+    (v: VesselView): PortGeo | null => {
+      const g = geoFor(v.openPortLocode);
+      if (g) return g;
+      const z = zoneByCode(v.openPortZone);
+      if (z) { const c = zoneCentroid(z); return [c[0], c[1]]; }
+      const f = ZONE_CENTROID_FALLBACK[v.openPortZone];
+      return f ? [f[0], f[1]] : null;
     },
     [geoFor],
   );
@@ -598,7 +621,7 @@ export default function MarketMap({
 
     if (vesselsOn) {
       visVessels.forEach((v) => {
-        const geo = geoFor(v.openPortLocode);
+        const geo = vesselGeo(v);
         if (!geo) return;
         // Vessels anchor SEAWARD — in or just off the approaches, never on land.
         const pos = anchoredLL(geo, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0);
@@ -699,7 +722,8 @@ export default function MarketMap({
     const map = mapRef.current;
     if (!map || !ready) return;
     const v = vessels.find((x) => x.id === focusedVesselId);
-    const ll = v ? coordFor(v.openPortLocode) : null;
+    const geo = v ? vesselGeo(v) : null;
+    const ll: [number, number] | null = geo ? [geo[0], geo[1]] : null;
     if (ll) map.flyTo(ll, 7, { duration: 1.2 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedVesselId, ready]);
