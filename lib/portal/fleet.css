@@ -69,7 +69,13 @@
 .mvb-vcard{background:var(--mvb-card);border-radius:16px;overflow:visible;display:flex;flex-direction:column;box-shadow:0 0 0 1px rgba(13,37,69,.05),0 2px 4px rgba(13,37,69,.04),0 12px 28px -12px rgba(13,37,69,.14);transition:box-shadow .14s ease, transform .14s ease;cursor:pointer;}
 .mvb-vcard:hover{transform:translateY(-2px);box-shadow:0 0 0 1px rgba(13,37,69,.07),0 4px 10px rgba(13,37,69,.06),0 22px 44px -14px rgba(13,37,69,.20);}
 .mvb-vcard.is-selected{box-shadow:0 0 0 1.5px #0D2545,0 14px 32px -12px rgba(13,37,69,.18);}
-.mvb-vc__hd{padding:13px 15px 0;display:flex;align-items:flex-start;gap:10px;}
+/* Full-width tinted status header strip (matches the Tonnage Market vessel card). */
+.mvb-vc__statusbar{display:flex;align-items:center;gap:6px;padding:6px 15px;border-radius:16px 16px 0 0;font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;line-height:1.2;border-bottom:1px solid color-mix(in srgb, currentColor 18%, transparent);}
+.mvb-vc__statusbar .mvb-vc__sbdot{width:7px;height:7px;border-radius:999px;background:currentColor;flex:none;}
+.mvb-vc__statusbar.open{background:#DEF1E2;color:var(--mvb-green);}
+.mvb-vc__statusbar.review{background:#FBF2DF;color:var(--mvb-amber);}
+.mvb-vc__statusbar.fixed{background:#FBE3E3;color:var(--mvb-red);}
+.mvb-vc__hd{padding:11px 15px 0;display:flex;align-items:flex-start;gap:10px;}
 .mvb-vc__name{font-size:15.5px;font-weight:700;color:var(--mvb-navy);letter-spacing:-.01em;flex:1;min-width:0;}
 .mvb-chip-st{font-size:8.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;padding:3px 9px;border-radius:99px;white-space:nowrap;}
 .mvb-chip-st.open{background:#DEF1E2;color:var(--mvb-green);}
@@ -98,16 +104,17 @@
 /* Position bar — pinned to the bottom of the card, above the via line */
 .mvb-vc__pos{margin:0 15px;margin-top:auto;padding:9px 11px 10px;border-top:0.5px solid var(--mvb-line2);min-height:62px;display:flex;flex-direction:column;justify-content:center;gap:4px;}
 .mvb-vc__pos .posbar-eyebrow{font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--mvb-faint);font-weight:600;margin-bottom:1px;}
-.mvb-vc__pos .row1{display:flex;align-items:center;gap:9px;font-size:12px;}
-.mvb-vc__pos .port{font-weight:700;color:var(--mvb-navy);}
-.mvb-vc__pos .zone{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--mvb-slate);border:0.5px solid var(--mvb-line);background:#fff;padding:1px 6px;border-radius:99px;}
-.mvb-vc__pos .date{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--mvb-ink);}
+.mvb-vc__pos .row1{display:flex;align-items:center;flex-wrap:wrap;gap:5px 9px;font-size:12px;}
+.mvb-vc__pos .port{font-weight:700;color:var(--mvb-navy);min-width:0;overflow-wrap:anywhere;}
+.mvb-vc__pos .zone{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--mvb-slate);border:0.5px solid var(--mvb-line);background:#fff;padding:1px 6px;border-radius:99px;white-space:nowrap;flex:none;}
+.mvb-vc__pos .date{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--mvb-ink);white-space:nowrap;flex:none;}
 .mvb-lyc{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block;}
 .mvb-lyc.red{background:var(--mvb-red);}.mvb-lyc.amber{background:#E0A23A;}.mvb-lyc.green{background:var(--mvb-green);}
 .mvb-vc__pos .dir{font-size:10.5px;color:var(--mvb-slate);}
 .mvb-vc__pos .dir b{color:var(--mvb-ink);font-weight:600;}
-.mvb-vc__pos .undecl{font-weight:600;color:var(--mvb-slate);font-style:italic;}
-.mvb-vc__pos .optflag{font-size:8.5px;letter-spacing:.04em;color:var(--mvb-slate);border:0.5px solid var(--mvb-line);background:#fff;padding:1px 7px;border-radius:99px;}
+.mvb-vc__pos .row1.undeclared{align-items:baseline;}
+.mvb-vc__pos .undecl{font-weight:600;color:var(--mvb-slate);font-style:italic;flex:1;min-width:0;}
+.mvb-vc__pos .optflag{font-size:8.5px;letter-spacing:.04em;color:var(--mvb-slate);border:0.5px solid var(--mvb-line);background:#fff;padding:1px 7px;border-radius:99px;white-space:nowrap;flex:none;}
 
 .mvb-vc__fuel{margin:11px 15px 0;background:var(--mvb-soft);border-radius:11px;overflow:hidden;}
 .mvb-vc__fuel .fh{font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mvb-slate);font-weight:600;padding:6px 10px;background:var(--mvb-soft);border-bottom:0.5px solid var(--mvb-line2);}

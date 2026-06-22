@@ -173,6 +173,211 @@ button { font: inherit; cursor: pointer; }
 .asb-card.strip-review { --strip: var(--asb-blue); }
 .asb-card.strip-fixed { --strip: #6e7782; }
 
+/* Vessel card — compact to match the cargo card's density. Status is shown as a
+   tinted header strip (Option C) rather than a side bar; the bar is suppressed. */
+.asb-card.vessel-card { padding: 0; overflow: hidden; }
+.asb-card.vessel-card::before { display: none; }
+.vessel-card__body { padding: 10px 12px; }
+.vessel-card .field-row .lbl { font-size: 9px; }
+.vessel-card .field-row .val { font-size: 12px; }
+.vessel-card .grid-2 { gap: 5px 12px; }
+
+/* Status header strip — tinted band across the card top, using the site's own
+   status colour tokens. The dot and the faint divider derive from the strip's
+   text colour, so each status stays self-consistent. */
+.vessel-card__statusbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  font-size: var(--fs-label); font-weight: 700;
+  letter-spacing: 0.07em; text-transform: uppercase; line-height: 1.2;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+.vessel-card__statusbar .vc-dot {
+  width: 7px; height: 7px; border-radius: 999px;
+  background: currentColor; flex: none;
+}
+.vessel-card .sb-open, .vessel-card .sb-in { background: var(--asb-green-bg); color: var(--asb-green); }
+.vessel-card .sb-review, .vessel-card .sb-partial { background: var(--asb-amber-bg); color: var(--asb-amber); }
+.vessel-card .sb-fixed { background: var(--asb-red-bg); color: var(--asb-red); }
+.vessel-card .sb-neutral { background: var(--asb-gray-50); color: var(--asb-gray-500); }
+
+/* Open-date urgency legend / availability stats — slim strip under the Tonnage
+   filter chips. Reuses the .asb-dot tokens so it mirrors the dot on each card. */
+.open-date-legend {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 6px 14px; margin-top: 7px; padding-top: 7px;
+  border-top: 1px dashed var(--asb-gray-200, #e2e8f0);
+  font-size: 11px; color: var(--asb-gray-500);
+}
+.open-date-legend .odl-title {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--asb-gray-500);
+}
+.open-date-legend .odl-item { display: inline-flex; align-items: center; gap: 5px; }
+.open-date-legend .odl-label { color: var(--asb-ink, #1B3A5C); }
+.open-date-legend .odl-count {
+  font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--asb-ink, #1B3A5C);
+  background: var(--asb-gray-50); border-radius: 999px;
+  padding: 0 6px; min-width: 18px; text-align: center; line-height: 16px;
+}
+.open-date-legend .odl-note { margin-left: auto; font-style: italic; opacity: 0.75; }
+
+/* Tonnage Market grid — at most 4 columns, but sized to the PANE width (not the
+   viewport) so it shrinks gracefully to 3/2/1 when the side map is open, instead
+   of squeezing 4 cards into a narrow pane. The max()/calc trick caps columns at
+   4 (each ≥ a quarter of the pane) while keeping a 240px minimum. */
+.tonnage-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 24px) / 4)), 1fr));
+}
+/* Compact density — caps at up to 5 columns (vs 4) so denser cards pack tighter. */
+.tonnage-grid.is-compact {
+  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(max(210px, calc((100% - 24px) / 5)), 1fr));
+}
+
+/* Cargo Market card grid (was inline) + its compact variant. Columns are capped
+   to the PANE width (not the viewport) via the max()/calc trick, so the cards
+   stay comfortable: at most 4 across (map hidden) and gracefully 3/2/1 as the
+   pane narrows when the map is shown. Compact allows one more column. */
+.mkt-cards-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 18px) / 4)), 1fr));
+}
+.mkt-cards-grid.is-compact {
+  grid-template-columns: repeat(auto-fill, minmax(max(210px, calc((100% - 24px) / 5)), 1fr));
+}
+
+/* Compact card tightening — smaller paddings/fonts on both card types. */
+.vessel-card.is-compact .vessel-card__body { padding: 8px 11px; }
+.vessel-card.is-compact .vessel-card__statusbar { padding: 4px 11px; }
+.vessel-card.is-compact .grid-2 { gap: 4px 12px; }
+.cargo-card.is-compact { padding-bottom: 2px; }
+.cargo-card.is-compact .cc-grid-wrap { margin: 2px 0 6px; }
+
+/* "Load more" pagination button (under the market list/grid). */
+.mkt-loadmore { display: flex; justify-content: center; padding: 18px 0 10px; }
+.mkt-loadmore__btn {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--asb-navy, #0D2545);
+  background: var(--asb-white, #fff);
+  border: 1px solid var(--asb-gray-200, #d8dee9);
+  border-radius: 10px; padding: 9px 22px; cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+.mkt-loadmore__btn:hover {
+  background: var(--asb-gray-50, #f4f7fb);
+  border-color: var(--asb-gray-300, #c2cbd9);
+  box-shadow: 0 1px 3px rgba(13,37,69,.06);
+}
+.mkt-loadmore__rem { color: var(--asb-gray-500); font-weight: 500; }
+
+/* ── Cargo Market list (table) view ───────────────────────────
+   Polished table replacing the old dense row. Scrolls horizontally
+   inside the list pane on narrow widths; header sticks to the top. */
+.cargo-table { background: var(--asb-white); border: 1px solid var(--asb-gray-200, #e3e8ee); border-radius: 12px; overflow-x: auto; box-shadow: 0 1px 2px rgba(13,37,69,.05); }
+.cargo-table__inner { min-width: 1000px; }
+.cargo-table__head, .cargo-table__row {
+  display: grid;
+  grid-template-columns: minmax(200px,1.6fr) 112px 80px 84px 116px minmax(140px,1.4fr) 100px 104px 92px;
+  gap: 14px; align-items: center; padding: 11px 18px;
+}
+.cargo-table__head {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--asb-gray-50, #f6f8fa);
+  border-bottom: 1px solid var(--asb-gray-200, #e9edf1);
+}
+.cargo-table__head .ct-h { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--asb-gray-500); }
+.cargo-table__head .ct-h.right { text-align: right; }
+.cargo-table__row { border-bottom: 1px solid var(--asb-gray-100, #f1f4f7); cursor: pointer; transition: background .12s ease; }
+.cargo-table__row:last-child { border-bottom: none; }
+.cargo-table__row:hover { background: var(--asb-gray-50, #f9fbfd); }
+.cargo-table__row.is-selected { background: color-mix(in srgb, var(--asb-blue) 7%, #fff); box-shadow: inset 3px 0 0 0 var(--asb-blue); }
+
+.ct-cell { min-width: 0; }
+.ct-name-row { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; }
+.ct-name { font-size: 14px; font-weight: 600; color: var(--asb-ink, #1B3A5C); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ct-route { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ct-route .ports { font-weight: 600; color: var(--asb-gray-700, #3a4757); font-family: var(--asb-font-mono, monospace); }
+.ct-route .zone { color: var(--asb-gray-500); margin-left: 6px; }
+.ct-wog { font-size: 8.5px; font-weight: 700; letter-spacing: .04em; color: var(--asb-gray-500); border: 0.5px solid var(--asb-gray-200, #d6dde4); border-radius: 4px; padding: 1px 5px; }
+.ct-val { font-size: 13px; font-weight: 600; color: var(--asb-ink, #1B3A5C); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ct-sub { font-size: 11px; color: var(--asb-gray-400, #aab4c0); white-space: nowrap; }
+.ct-text { font-size: 13px; color: var(--asb-gray-700, #48566a); }
+.ct-mono { font-size: 12px; color: var(--asb-gray-700, #3a4757); font-family: var(--asb-font-mono, monospace); line-height: 1.4; white-space: normal; }
+.ct-ref { text-align: right; font-size: 11px; color: var(--asb-gray-400, #aab4c0); font-family: var(--asb-font-mono, monospace); }
+.ct-laycan { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .03em; padding: 3px 8px; border-radius: 5px; background: var(--asb-green-bg); color: var(--asb-green); white-space: nowrap; }
+.ct-laycan.is-overdue { background: var(--asb-red-bg); color: var(--asb-red); }
+.ct-warnv { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; white-space: nowrap; }
+.ct-warnv .warn { color: #B5790B; }
+.ct-status { display: flex; align-items: center; gap: 10px; }
+.ct-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.ct-chip .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.ct-chip.circ-on { color: var(--asb-green); } .ct-chip.circ-on .dot { background: var(--asb-green); }
+.ct-chip.circ-off { color: var(--asb-gray-400, #aab4c0); } .ct-chip.circ-off .dot { background: var(--asb-gray-300, #cbd5e1); }
+.ct-chip.match { color: var(--asb-blue); }
+.ct-chip.match.locked { color: var(--asb-gray-400, #9aa7b5); }
+
+/* ── Tonnage Market list (table) view ─────────────────────────
+   Reuses the .ct-* cell helpers above; wider grid (scrolls in pane). */
+.vessel-table { background: var(--asb-white); border: 1px solid var(--asb-gray-200, #e3e8ee); border-radius: 12px; overflow-x: auto; box-shadow: 0 1px 2px rgba(13,37,69,.05); }
+.vessel-table__inner { min-width: 1180px; }
+.vessel-table__head, .vessel-table__row {
+  display: grid;
+  grid-template-columns: 78px minmax(180px,1.4fr) 96px 110px 96px minmax(130px,1.1fr) 124px 86px minmax(180px,1.3fr) 70px;
+  gap: 14px; align-items: center; padding: 11px 18px;
+}
+.vessel-table__head {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--asb-gray-50, #f6f8fa);
+  border-bottom: 1px solid var(--asb-gray-200, #e9edf1);
+}
+.vessel-table__head .ct-h { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--asb-gray-500); }
+.vessel-table__head .ct-h.right { text-align: right; }
+.vessel-table__row { border-bottom: 1px solid var(--asb-gray-100, #f1f4f7); cursor: pointer; transition: background .12s ease; }
+.vessel-table__row:last-child { border-bottom: none; }
+.vessel-table__row:hover { background: var(--asb-gray-50, #f9fbfd); }
+.vessel-table__row.is-selected { background: color-mix(in srgb, var(--asb-blue) 7%, #fff); box-shadow: inset 3px 0 0 0 var(--asb-blue); }
+.vt-status { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--asb-gray-500); }
+.vt-status.sb-open, .vt-status.sb-in { color: var(--asb-green); }
+.vt-status.sb-review, .vt-status.sb-partial { color: var(--asb-amber); }
+.vt-status.sb-fixed { color: var(--asb-red); }
+.vt-lock { font-size: 10px; flex: none; }
+.vt-od { display: flex; align-items: center; gap: 6px; }
+.vt-match {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 7px;
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--asb-blue); background: color-mix(in srgb, var(--asb-blue) 10%, #fff);
+  border-radius: 999px;
+}
+
+/* Classic table pagination (Cargo Market list view). */
+.tbl-pager { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-top: 16px; padding: 2px; }
+.tbl-pager__count { font-size: 13px; color: var(--asb-gray-500); }
+.tbl-pager__count b { color: var(--asb-ink, #1f2d3d); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tbl-pager__pages { display: flex; align-items: center; gap: 6px; }
+.tbl-pg {
+  min-width: 32px; height: 32px; padding: 0 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: inherit; font-size: 13px; color: var(--asb-gray-700, #48566a);
+  background: var(--asb-white, #fff); border: 1px solid var(--asb-gray-200, #d6dde4);
+  border-radius: 7px; cursor: pointer; transition: background .12s ease, border-color .12s ease;
+}
+.tbl-pg:hover:not(:disabled):not(.is-active) { background: var(--asb-gray-50, #f4f7fb); border-color: var(--asb-gray-300, #c2cbd9); }
+.tbl-pg.is-active { background: var(--asb-blue); border-color: var(--asb-blue); color: #fff; font-weight: 600; }
+.tbl-pg.arrow { font-size: 15px; line-height: 1; }
+.tbl-pg:disabled { color: var(--asb-gray-300, #c2cad3); cursor: default; }
+.tbl-pg-ellipsis { color: var(--asb-gray-300, #c2cad3); padding: 0 2px; }
+.tbl-pager__rpp { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--asb-gray-500); }
+.tbl-pager__rpp select {
+  font-family: inherit; font-size: 13px; color: var(--asb-gray-700, #48566a); font-weight: 500;
+  background: var(--asb-white, #fff); border: 1px solid var(--asb-gray-200, #d6dde4);
+  border-radius: 7px; padding: 6px 8px; cursor: pointer;
+}
+
 /* ── Badge ────────────────────────────────────────────────── */
 .asb-badge {
   display: inline-flex; align-items: center; gap: 4px;
@@ -273,7 +478,7 @@ button { font: inherit; cursor: pointer; }
   margin-bottom: 4px;
 }
 .cc-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #1B3A5C;
   line-height: 1.25;
@@ -283,15 +488,19 @@ button { font: inherit; cursor: pointer; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Cargo type badge — same pill shape/size as .asb-badge (vessel cards) for a
+   consistent card family; keeps its own type colours below. */
 .cc-cat {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  font-size: 9px;
+  font-size: var(--fs-label);
   font-weight: 600;
   letter-spacing: 0.04em;
-  padding: 2px 5px;
-  border-radius: 3px;
+  text-transform: uppercase;
+  line-height: 1.2;
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
   white-space: nowrap;
 }
 .cc-cat--dryish { background: #E6F1FB; color: #0C447C; }

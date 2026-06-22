@@ -113,9 +113,13 @@ export function FleetVesselCard({
         onSelect(v.id);
       }}
     >
+      <div className={"mvb-vc__statusbar " + v.status.toLowerCase()}>
+        <span className="mvb-vc__sbdot" />
+        {v.status}
+      </div>
+
       <div className="mvb-vc__hd">
         <span className="mvb-vc__name">{v.name}</span>
-        <span className={"mvb-chip-st " + v.status.toLowerCase()}>{v.status}</span>
       </div>
 
       <Gate locked={masked} note="IMO · flag · type · Tier 3">

@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { User } from "@supabase/supabase-js";
 
 import { cn } from "@/lib/utils";
+import { BRAND } from "@/lib/brand";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -140,7 +141,7 @@ export function Navbar() {
                     showTransparent ? "text-white" : "text-ocean-950",
                   )}
                 >
-                  Arab ShipBroker
+                  {BRAND.nameEn}
                 </span>
                 <span
                   aria-hidden
@@ -158,7 +159,7 @@ export function Navbar() {
                     showTransparent ? "text-white" : "text-ocean-950",
                   )}
                 >
-                  الوسيط العربي للسفن
+                  {BRAND.nameAr}
                 </span>
                 <span
                   className={cn(
@@ -166,18 +167,18 @@ export function Navbar() {
                     showTransparent ? "text-foam-300/70" : "text-foam-600/80",
                   )}
                 >
-                  MENA Maritime
+                  {BRAND.taglineEn}
                 </span>
                 <span
                   dir="rtl"
                   lang="ar"
                   style={{ fontFamily: "var(--font-arabic)" }}
                   className={cn(
-                    "text-[10px] italic whitespace-nowrap transition-colors duration-300",
-                    showTransparent ? "text-white/75" : "text-ocean-700",
+                    "text-[10px] font-medium whitespace-nowrap transition-colors duration-300",
+                    showTransparent ? "text-foam-300/70" : "text-foam-600/80",
                   )}
                 >
-                  ربان محمد داود وشركاه
+                  {BRAND.taglineAr}
                 </span>
               </div>
 
@@ -190,7 +191,7 @@ export function Navbar() {
                     showTransparent ? "text-white" : "text-ocean-950",
                   )}
                 >
-                  Arab ShipBroker
+                  {BRAND.nameEn}
                 </span>
                 <span
                   dir="rtl"
@@ -202,17 +203,6 @@ export function Navbar() {
                   )}
                 >
                   الوسيط العربي للسفن
-                </span>
-                <span
-                  dir="rtl"
-                  lang="ar"
-                  style={{ fontFamily: "var(--font-arabic)" }}
-                  className={cn(
-                    "text-[8.5px] italic truncate transition-colors duration-300",
-                    showTransparent ? "text-white/75" : "text-ocean-700",
-                  )}
-                >
-                  ربان محمد داود وشركاه
                 </span>
               </div>
             </Link>
