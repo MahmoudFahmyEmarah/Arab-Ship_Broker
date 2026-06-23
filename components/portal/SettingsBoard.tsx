@@ -21,6 +21,7 @@ import {
   deleteMyAccount,
 } from "@/app/(dashboard)/dashboard/account/actions";
 import { IconUser, IconDoc, IconDashboard, IconBell, IconShield, IconShieldLock, IconVessel } from "./icons";
+import { ZONE_CODES } from "@/lib/zones";
 import { PosCheckinFreqRow } from "./PositionCheckin";
 import { BillingPanel } from "./BillingPanel";
 import { TwoFactorSetup } from "./TwoFactorSetup";
@@ -114,7 +115,9 @@ const NOTIF_KEYS = [
 ] as const;
 const DEFAULT_NOTIFS: Record<string, boolean> = Object.fromEntries(NOTIF_KEYS.map(([k, , d]) => [k, d as boolean]));
 
-const ZONE_CHIPS = ["AG", "R.SEA", "E.MED", "B.SEA", "W.MED", "C.MED", "A.SEA", "ADRIATIC", "NCONT", "F.EAST", "WCAF", "ECAF", "ECI", "WCI", "CARIB", "ECSA"];
+// Operating-zone chips: every zone code except the catch-all "Unknown",
+// sourced from the canonical registry so it can never drift from the data model.
+const ZONE_CHIPS = ZONE_CODES.filter((z) => z !== "Unknown");
 const CARGO_CHIPS = ["Dry Bulk", "Break Bulk", "Grain"];
 
 function ChipToggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {

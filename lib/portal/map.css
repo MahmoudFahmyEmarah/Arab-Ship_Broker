@@ -845,11 +845,13 @@
 .asb-map .voy-opex-icon.is-locked:hover { background: transparent; }
 
 .asb-zone-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  color: rgba(255, 255, 255, 0.45);
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.85);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75), 0 0 3px rgba(0, 0, 0, 0.55);
   pointer-events: none;
   font-family: var(--asb-font, "Inter", sans-serif);
 }

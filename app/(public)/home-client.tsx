@@ -735,7 +735,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         <div className="container">
           <SectionHeader
             eyebrow="Leadership"
-            title="Meet the Founder"
+            title="Meet the Founders"
             subtitle="Forged on ship steel, driven by the scent of cargo, dedicated to connecting MENA maritime markets."
           />
 
@@ -744,63 +744,81 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             viewport={{ once: true }}
-            className="max-w-4xl mx-auto"
+            className="grid grid-cols-2 max-lg:grid-cols-1 gap-8 max-w-5xl mx-auto"
           >
-            <div className="bg-slate-50 rounded-4xl border border-slate-200/70 overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.05)]">
-              <div className="h-1 bg-linear-to-r from-ocean-600 via-foam-400 to-ocean-600" />
+            {[
+              {
+                name: "Mohamed Dawoud",
+                role: "Dry Bulk Broker & Co-Founder",
+                creds: "Capt., BSc., MSc. “Fleet Ops.”",
+                bio: "His feet first stepped on ship steel years ago, and he still carries the scent of the cargo with him today. With an MSc. in Fleet Operations, a Master Mariner License, and 10+ years on bulk carriers, Capt. Mohamed brings academic rigor and hands-on maritime knowledge to every deal.",
+                img: "/founder.jpg",
+                imgPos: "60% 30%",
+                initials: "MD",
+                linkedin: "https://www.linkedin.com/in/cpt-mohamed-dawoud",
+              },
+              {
+                name: "Ahmed Abdallah",
+                role: "Dry Bulk Broker & Associate Founder",
+                creds: "C/O, Master Mariner, MSc. “Maritime Nav.”",
+                bio: "From the bridge to the brokerage desk, Ahmed pairs years at sea with deep dry-bulk insight. A Master Mariner who topped his MSc. Maritime Navigation class at the Arab Academy and sailed as Chief Officer across international fleets, he focuses on S&P and dry-bulk brokerage for owners across the Red Sea, Arabian Gulf, and Arabian Sea.",
+                img: "/cofounder.jpg" as string | null,
+                imgPos: "center 20%",
+                initials: "AA",
+                linkedin: "https://www.linkedin.com/in/ahmed-abdallah-8a26441a9/",
+              },
+            ].map((p) => (
+              <div
+                key={p.name}
+                className="bg-slate-50 rounded-4xl border border-slate-200/70 overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.05)] flex flex-col"
+              >
+                <div className="h-1 bg-linear-to-r from-ocean-600 via-foam-400 to-ocean-600" />
 
-              <div className="p-14 max-lg:p-10 max-sm:p-8 flex flex-row max-lg:flex-col items-center max-lg:items-start max-sm:items-center gap-12 max-sm:gap-8">
-                <div className="shrink-0 relative">
-                  {/* Straight (no tilt/wobble) and served at 3x the display
-                      size with high quality so the portrait stays as crisp as
-                      the original. */}
-                  <div className="w-36 h-36 max-sm:w-28 max-sm:h-28 rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
-                    <Image
-                      src="/founder.jpg"
-                      alt="Capt. Mohamed Dawoud"
-                      width={432}
-                      height={432}
-                      quality={92}
-                      className="w-full h-full object-cover"
-                      style={{ objectPosition: "60% 30%" }}
-                    />
-                  </div>
-                  <div className="absolute -bottom-3 -right-3 w-10 h-10 bg-ocean-600 rounded-xl flex items-center justify-center shadow-lg border-4 border-white">
-                    <Anchor className="w-4 h-4 text-white" />
-                  </div>
-                </div>
+                <div className="p-10 max-sm:p-8 flex flex-col gap-6 flex-1">
+                  <div className="flex items-center gap-5 max-sm:flex-col max-sm:items-center max-sm:text-center">
+                    <div className="shrink-0 relative">
+                      <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-2xl border-4 border-white bg-linear-to-br from-ocean-600 to-ocean-800 flex items-center justify-center">
+                        {p.img ? (
+                          <Image
+                            src={p.img}
+                            alt={p.name}
+                            width={288}
+                            height={288}
+                            quality={92}
+                            className="w-full h-full object-cover"
+                            style={{ objectPosition: p.imgPos }}
+                          />
+                        ) : (
+                          <span className="text-white text-2xl font-bold tracking-tight">{p.initials}</span>
+                        )}
+                      </div>
+                      <div className="absolute -bottom-3 -right-3 w-9 h-9 bg-ocean-600 rounded-xl flex items-center justify-center shadow-lg border-4 border-white">
+                        <Anchor className="w-3.5 h-3.5 text-white" />
+                      </div>
+                    </div>
 
-                <div className="flex-1 text-left max-lg:text-left max-sm:text-center">
-                  <h3 className="text-2xl font-bold text-ocean-950 tracking-tight mb-1">
-                    Mohamed Dawoud
-                  </h3>
-                  <p className="text-ocean-600 font-bold tracking-wide uppercase text-[11px] mb-1 leading-none">
-                    Dry Bulk Broker &amp; Co-Founder
-                  </p>
-                  <p className="text-slate-400 text-[12px] font-medium mb-5">
-                    Capt., BSc., MSc. &ldquo;Fleet Ops.&rdquo;
-                  </p>
-                  <div className="w-12 h-0.5 bg-foam-300 rounded-full mb-6 max-sm:mx-auto" />
-                  <p className="text-slate-500 text-[15px] leading-relaxed mb-7">
-                    His feet first stepped on ship steel years ago, and he still
-                    carries the scent of the cargo with him today. With an MSc.
-                    in Fleet Operations, a Master Mariner License, and over 10
-                    years of extensive shipboard experience on bulk carriers,
-                    Capt. Mohamed brings academic rigor and practical maritime
-                    knowledge to every deal.
-                  </p>
+                    <div>
+                      <h3 className="text-xl font-bold text-ocean-950 tracking-tight mb-1">{p.name}</h3>
+                      <p className="text-ocean-600 font-bold tracking-wide uppercase text-[11px] mb-1 leading-none">{p.role}</p>
+                      <p className="text-slate-400 text-[12px] font-medium">{p.creds}</p>
+                    </div>
+                  </div>
+
+                  <div className="w-12 h-0.5 bg-foam-300 rounded-full max-sm:mx-auto" />
+                  <p className="text-slate-500 text-[15px] leading-relaxed flex-1">{p.bio}</p>
+
                   <a
-                    href="https://www.linkedin.com/in/cpt-mohamed-dawoud"
+                    href={p.linkedin}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2.5 h-10 px-6 text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-ocean-50 hover:text-ocean-700 hover:border-ocean-200 rounded-xl transition-all"
+                    className="inline-flex items-center gap-2.5 h-10 px-6 text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-ocean-50 hover:text-ocean-700 hover:border-ocean-200 rounded-xl transition-all self-start max-sm:self-center"
                   >
                     <LinkedinIcon className="w-4 h-4 text-ocean-600" />
                     Connect on LinkedIn
                   </a>
                 </div>
               </div>
-            </div>
+            ))}
           </motion.div>
         </div>
       </section>

@@ -19,6 +19,7 @@ import { VoyOpexPanel } from "./VoyOpexPanel";
 import { useViewerTier } from "@/lib/portal/tier";
 import { routeGeometry } from "@/lib/portal/routeGeometry";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
+import { ZONE_SHAPES } from "@/lib/portal/zone-shapes";
 import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { functionalStore } from "@/lib/consent";
@@ -45,29 +46,9 @@ function curvePts(a: [number, number], b: [number, number], bend = 0.18): [numbe
   return out;
 }
 
-const ZONE_COLOR: Record<string, string> = {
-  AG: "#534AB7",
-  "R.SEA": "#EF9F27",
-  "E.MED": "#185FA5",
-  "B.SEA": "#2A9962",
-  "A.SEA": "#1F8A8A",
-  "E.AFR": "#7A5BA6",
-};
-const ZONES: Record<string, { bounds: [[number, number], [number, number]]; color: string }> = {
-  "B.SEA": { bounds: [[40.5, 27], [47, 42]], color: ZONE_COLOR["B.SEA"] },
-  "E.MED": { bounds: [[30, 22], [37, 37]], color: ZONE_COLOR["E.MED"] },
-  "R.SEA": { bounds: [[12, 32.5], [30, 44]], color: ZONE_COLOR["R.SEA"] },
-  AG: { bounds: [[23, 48], [30, 58]], color: ZONE_COLOR["AG"] },
-};
-
-// Approximate centroids for trade zones that have no bounds in FLEET_ZONES but
-// still appear as a vessel's open zone — used to place vessels that have no
-// open-port locode (open port "—") so they still show on the map.
-const ZONE_CENTROID_FALLBACK: Record<string, [number, number]> = {
-  "W.MED": [38, 6],
-  "ADRIATIC": [42.5, 16],
-  "E.AFR": [-4, 42],
-};
+// Zone shading is drawn from coastline-following polygons (lib/portal/zone-shapes)
+// so each zone reads as its real sea basin (the Red Sea looks like the Red Sea)
+// rather than a colored rectangle.
 
 const TILES = {
   light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
@@ -295,10 +276,11 @@ export default function MarketMap({
     (v: VesselView): PortGeo | null => {
       const g = geoFor(v.openPortLocode);
       if (g) return g;
+      // No locode → fall back to the open zone's registry centroid (null for
+      // unplaceable zones like "Unknown", in which case the vessel is hidden).
       const z = zoneByCode(v.openPortZone);
-      if (z) { const c = zoneCentroid(z); return [c[0], c[1]]; }
-      const f = ZONE_CENTROID_FALLBACK[v.openPortZone];
-      return f ? [f[0], f[1]] : null;
+      const c = z ? zoneCentroid(z) : null;
+      return c ? [c[0], c[1]] : null;
     },
     [geoFor],
   );
@@ -569,16 +551,28 @@ export default function MarketMap({
       map.removeLayer(lyr);
       return;
     }
-    Object.entries(ZONES).forEach(([key, z]) => {
-      L.rectangle(z.bounds, { color: z.color, weight: 1, opacity: 0.6, fillOpacity: 0.06, dashArray: "5 4" }).addTo(lyr);
-      const c = L.latLng((z.bounds[0][0] + z.bounds[1][0]) / 2, (z.bounds[0][1] + z.bounds[1][1]) / 2);
-      L.marker(c, {
+    ZONE_SHAPES.forEach((z) => {
+      // Coastline-following basin outline (dashed casing + soft tint), not a box.
+      L.polygon(z.poly, {
+        color: z.color,
+        weight: 1.6,
+        opacity: 0.85,
+        fillColor: z.color,
+        fillOpacity: 0.12,
+        dashArray: "6 5",
+        lineJoin: "round",
         interactive: false,
+      }).addTo(lyr);
+      // Floating zone code, placed at the basin's label anchor — sits above the
+      // polygons and fades out as you zoom in (see .asb-zone-label in map.css).
+      L.marker(z.labelAt, {
+        interactive: false,
+        zIndexOffset: 1000,
         icon: L.divIcon({
           className: "asb-zone-label-wrap",
-          html: `<div class="asb-zone-label" style="color:${z.color}">${key}</div>`,
-          iconSize: [60, 14],
-          iconAnchor: [30, 7],
+          html: `<div class="asb-zone-label" style="color:${z.color}">${z.code}</div>`,
+          iconSize: [80, 16],
+          iconAnchor: [40, 8],
         }),
       }).addTo(lyr);
     });

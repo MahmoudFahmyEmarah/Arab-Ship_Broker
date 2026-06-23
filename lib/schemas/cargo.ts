@@ -98,42 +98,11 @@ export const REVIEW_STATUSES = [
 ] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
-export const ZONE_CODES = [
-  "B.SEA",
-  "E.MED",
-  "W.MED",
-  "C.MED",
-  "ADRIATIC",
-  "R.SEA",
-  "AG",
-  "A.SEA",
-  "WCAF",
-  "ECAF",
-  "NCONT",
-  "CARIB",
-  "F.EAST",
-  "ECI",
-  "Unknown",
-] as const;
-export type ZoneCode = (typeof ZONE_CODES)[number];
-
-export const ZONE_LABELS: Record<ZoneCode, string> = {
-  "B.SEA": "Black Sea",
-  "E.MED": "East Mediterranean",
-  "W.MED": "West Mediterranean",
-  "C.MED": "Central Mediterranean",
-  ADRIATIC: "Adriatic Sea",
-  "R.SEA": "Red Sea",
-  AG: "Arabian Gulf",
-  "A.SEA": "Arabian Sea",
-  WCAF: "West Coast Africa",
-  ECAF: "East Coast Africa",
-  NCONT: "North Continent",
-  CARIB: "Caribbean",
-  "F.EAST": "Far East",
-  ECI: "East Coast India",
-  Unknown: "Unknown",
-};
+// Zone vocabulary lives in the canonical registry (lib/zones); re-exported here
+// so the many schema/form consumers can keep importing from "@/lib/schemas/cargo".
+export { ZONE_CODES, ZONE_LABELS } from "@/lib/zones";
+export type { ZoneCode } from "@/lib/zones";
+import type { ZoneCode } from "@/lib/zones";
 
 export type CommodityOption = {
   id: string;
