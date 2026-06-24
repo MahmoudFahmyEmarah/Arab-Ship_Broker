@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/next";
 
 import { Geist, Inter, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
@@ -48,6 +49,7 @@ export default function RootLayout({
         <main className="flex-1">{children}</main>
         <CookieConsent />
         <Toaster position="top-right" />
+        <Analytics />
       </body>
     </html>
   );
