@@ -169,17 +169,8 @@ export function Navbar() {
                 >
                   {BRAND.taglineEn}
                 </span>
-                <span
-                  dir="rtl"
-                  lang="ar"
-                  style={{ fontFamily: "var(--font-arabic)" }}
-                  className={cn(
-                    "text-[10px] font-medium whitespace-nowrap transition-colors duration-300",
-                    showTransparent ? "text-foam-300/70" : "text-foam-600/80",
-                  )}
-                >
-                  {BRAND.taglineAr}
-                </span>
+                {/* Arabic tagline intentionally omitted — the header carries only
+                    the Arabic name (BRAND.nameAr). */}
               </div>
 
               {/* < sm: compact stacked brand that still carries BOTH names and

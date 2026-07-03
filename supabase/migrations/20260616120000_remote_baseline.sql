@@ -50,7 +50,10 @@ do $$ begin
   create type public."listing_type_enum" as enum ('cargo', 'vessel_availability');
 exception when duplicate_object then null; end $$;
 do $$ begin
-  create type public."load_terms_enum" as enum ('FIO', 'FIOT', 'FIOST', 'FIOS', 'FIOS LSD', 'Liner Terms');
+  -- Legacy values 'FIOS LSD'/'Liner Terms' retained for parity with upgraded
+  -- databases; the app vocabulary (lib/schemas/cargo LOAD_TERMS) offers only the
+  -- standardised codes. See 20260703140000_load_terms_vocabulary.sql.
+  create type public."load_terms_enum" as enum ('FIO', 'FIOT', 'FIOST', 'FIOS', 'FIOS LSD', 'Liner Terms', 'FO', 'FILO', 'LIFO', 'FLT');
 exception when duplicate_object then null; end $$;
 do $$ begin
   create type public."ownership_role_enum" as enum ('primary', 'co_broker', 'admin_posted');
@@ -1868,6 +1871,11 @@ CREATE OR REPLACE FUNCTION public.get_public_stats()
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
+-- NOTE: the is_spot branch here has no date bound (spot cargoes count forever).
+-- This is the historical snapshot; migration 20260703120000_spot_active_window
+-- replaces this function with the admin-configurable spot active window. That
+-- migration runs after app_settings exists (created later in this file), which
+-- is why the reference lives there and not inline here.
 WITH avail_cargo AS (
   SELECT load_zone AS zone
   FROM public.cargo_listings
@@ -2461,3 +2469,33 @@ grant execute on function public."is_admin"() to authenticated;
 grant execute on function public."rls_auto_enable"() to anon;
 grant execute on function public."rls_auto_enable"() to service_role;
 grant execute on function public."rls_auto_enable"() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- app_settings: global platform key/value flags (admin-managed).
+-- Holds the "beta_mode" gate the dashboard reads to restrict non-admin viewers
+-- to the Dashboard while every other page shows a "coming soon" overlay.
+-- ---------------------------------------------------------------------------
+create table if not exists public."app_settings" (
+  "key" text not null,
+  "value" jsonb default 'null'::jsonb not null,
+  "updated_at" timestamp with time zone default now() not null,
+  primary key ("key")
+);
+
+insert into public."app_settings" ("key", "value")
+values ('beta_mode', 'false'::jsonb)
+on conflict ("key") do nothing;
+
+alter table public."app_settings" enable row level security;
+
+-- Any authenticated viewer may READ flags (the dashboard reads beta_mode).
+drop policy if exists "app_settings: read" on public."app_settings";
+create policy "app_settings: read" on public."app_settings"
+  as permissive for select to public using (true);
+
+-- Only admins may WRITE (the admin UI writes with the service-role key, which
+-- bypasses RLS; this policy is defense-in-depth for any session-scoped access).
+drop policy if exists "app_settings: admin write" on public."app_settings";
+create policy "app_settings: admin write" on public."app_settings"
+  as permissive for all to public
+  using (public.fn_is_admin()) with check (public.fn_is_admin());

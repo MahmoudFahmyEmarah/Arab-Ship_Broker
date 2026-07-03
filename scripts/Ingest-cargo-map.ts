@@ -283,14 +283,24 @@ function normaliseImsbcCategory(
 function normaliseLoadTerms(raw: unknown): string | null {
   const k = (toStr(raw) ?? "").toUpperCase().replace(/\//g, " ").trim();
   if (!k || ["--", "-", "N/A", "NA"].includes(k)) return null;
+  // Normalise raw source text → canonical LOAD_TERMS codes (lib/schemas/cargo).
+  // Legacy aliases fold into the closest standardised code.
   const map: Record<string, string> = {
     FIO: "FIO",
     FIOT: "FIOT",
     FIOS: "FIOS",
     FIOST: "FIOST",
-    "FIOS LSD": "FIOS LSD",
-    LINER: "Liner Terms",
-    "LINER TERMS": "Liner Terms",
+    "FIOS LSD": "FIOS", // legacy: lashed/secured/dunnaged variant → FIOS
+    FO: "FO",
+    "FREE OUT": "FO",
+    FILO: "FILO",
+    "FREE IN LINER OUT": "FILO",
+    LIFO: "LIFO",
+    "LINER IN FREE OUT": "LIFO",
+    FLT: "FLT",
+    "FULL LINER TERMS": "FLT",
+    LINER: "FLT",
+    "LINER TERMS": "FLT",
   };
   return map[k] ?? null;
 }

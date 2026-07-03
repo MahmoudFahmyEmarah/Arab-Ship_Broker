@@ -53,6 +53,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { id: "messages", label: "Messages", href: "/admin/messages", icon: "announ" },
       { id: "eta", label: "ETA / tax console", href: "/admin/eta", icon: "building", superOnly: true },
       { id: "admins", label: "Admin accounts", href: "/admin/admins", icon: "shieldlock", superOnly: true },
+      { id: "settings", label: "Platform settings", href: "/admin/settings", icon: "gear", superOnly: true },
     ],
   },
 ];

@@ -112,6 +112,12 @@ export const ADMIN_ICONS: Record<string, React.ReactNode> = {
       <path d="M5.9 6.2 V5.3 a1.1 1.1 0 0 1 2.2 0 v0.9" />
     </svg>
   ),
+  gear: (
+    <svg {...base} strokeLinejoin="round" strokeLinecap="round">
+      <circle cx="7" cy="7" r="2" />
+      <path d="M7 1.6v1.6M7 10.8v1.6M1.6 7h1.6M10.8 7h1.6M3.2 3.2l1.1 1.1M9.7 9.7l1.1 1.1M10.8 3.2L9.7 4.3M4.3 9.7L3.2 10.8" />
+    </svg>
+  ),
 };
 
 export function AdminIcon({ name }: { name: string }) {

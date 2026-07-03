@@ -1,0 +1,51 @@
+/* Beta-mode "Coming soon" lock overlay.
+   A see-through grey scrim covers the page (you can still read the real page
+   beneath it) and blocks all interaction. A centred maritime card explains the
+   page is not open yet. Three animated variants — radar / beacon / compass —
+   rotate page to page. Only the scrim + card live here; the rest is inline in
+   ComingSoon. */
+
+.asb-cs-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* the locked page is a glimpse — don't let it scroll */
+}
+
+.asb-cs-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(26, 38, 54, 0.40);
+  backdrop-filter: saturate(0.85);
+  cursor: not-allowed;
+}
+
+.asb-cs-center {
+  position: absolute;
+  inset: 0;
+  z-index: 51;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: none; /* card re-enables pointer events on itself */
+}
+
+.asb-cs-card {
+  pointer-events: auto;
+  animation: asbFadeUp 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes asbBob    { 0%, 100% { transform: translateY(0) rotate(-1.6deg); } 50% { transform: translateY(-7px) rotate(1.6deg); } }
+@keyframes asbWaveA  { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes asbWaveB  { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes asbSweep  { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes asbSpin   { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes asbPulse  { 0% { transform: scale(0.6); opacity: 0.55; } 100% { transform: scale(2.3); opacity: 0; } }
+@keyframes asbShimmer{ 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
+@keyframes asbBeam   { 0% { transform: rotate(-34deg); } 50% { transform: rotate(34deg); } 100% { transform: rotate(-34deg); } }
+@keyframes asbGlow   { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.95; } }
+@keyframes asbFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }

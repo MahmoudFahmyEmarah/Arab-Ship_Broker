@@ -8,6 +8,7 @@ import type { PortGeo } from "@/lib/portal/port-coords";
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { CargoView, VesselView } from "@/lib/portal/types";
+import { LOAD_TERMS } from "@/lib/schemas/cargo";
 import {
   cargoTypeLabel,
   cargoTypeBadgeVariant,
@@ -450,7 +451,10 @@ export function CargoMarketBoard({
 
   const ZONE_OPTS = React.useMemo(() => uniq(views.flatMap((c) => [c.route?.polZone, c.route?.podZone])), [views]);
   const TYPE_OPTS = React.useMemo(() => uniq(views.map((c) => c.type)), [views]);
-  const TERMS_OPTS = React.useMemo(() => uniq(views.map((c) => c.loadTerms)), [views]);
+  // Load terms is a CLOSED vocabulary — always offer the full canonical set from
+  // lib/schemas/cargo (source of truth), not just values present in live data
+  // (which would leave the dropdown empty when no listing has terms set yet).
+  const TERMS_OPTS = [...LOAD_TERMS];
   const IMSBC_OPTS = React.useMemo(() => uniq(views.map((c) => c.imsbcGroup)).map((g) => `Group ${g}`), [views]);
 
   const filtered = React.useMemo(() => {

@@ -194,6 +194,19 @@ export async function getCargos(
     );
   }
 
+  // Age out stale spot cargoes: a spot listing is only shown while it is within
+  // the active window (posted on/after spotActiveFrom). Non-spot rows (is_spot
+  // false or null) pass this clause unconditionally.
+  if (filters.spotActiveFrom) {
+    qb = qb.or(
+      [
+        `is_spot.is.null`,
+        `is_spot.eq.false`,
+        `created_at.gte.${filters.spotActiveFrom}`,
+      ].join(","),
+    );
+  }
+
   switch (filters.sort) {
     case "qty_asc":
       qb = qb.order("qty_max_mt", { ascending: true });

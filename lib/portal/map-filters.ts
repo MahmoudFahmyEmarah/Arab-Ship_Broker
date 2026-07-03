@@ -7,6 +7,7 @@
 // sets (zones, ports) are derived from the live data so the filter never offers
 // an empty result (no phantom zones).
 import { CargoView, VesselView } from "./types";
+import { LOAD_TERMS, CARGO_CATEGORIES } from "@/lib/schemas/cargo";
 
 export type FacetItem = CargoView | VesselView;
 
@@ -23,13 +24,13 @@ export interface EnumFacet<T extends FacetItem> {
 }
 
 // ── cargo categorisation (Grain is derived, not just c.type) ──
+// Returns one of CARGO_CATEGORIES (upper-cased). Grain takes precedence over the
+// raw type; anything else falls back to the type as-is.
 export function cargoCategory(c: CargoView): string {
   if (c.isGrain) return "GRAIN";
   const t = (c.type || "").toLowerCase();
   if (t === "dry bulk") return "DRY BULK";
   if (t === "break bulk") return "BREAK BULK";
-  if (t === "project") return "PROJECT";
-  if (t === "liquid") return "LIQUID";
   return (c.type || "—").toUpperCase();
 }
 
@@ -45,7 +46,9 @@ export const CARGO_FACETS: EnumFacet<CargoView>[] = [
     kind: "enum",
     group: "cargo",
     closed: true, // closed set — show all, incl. categories with no current data
-    options: ["GRAIN", "DRY BULK", "BREAK BULK", "PROJECT", "LIQUID"],
+    // Sourced from CARGO_CATEGORIES (lib/schemas/cargo) so the filter offers
+    // exactly what we collect at cargo entry: Grain, Dry Bulk, Break Bulk.
+    options: CARGO_CATEGORIES.map((c) => c.toUpperCase()),
     valueOf: (c) => cargoCategory(c),
   },
   {
@@ -63,7 +66,9 @@ export const CARGO_FACETS: EnumFacet<CargoView>[] = [
     kind: "enum",
     group: "cargo",
     closed: true,
-    options: ["FIOST", "FIO", "FIOT", "FIOS", "FI", "FO", "Liner Terms", "Gross Terms"],
+    // Sourced from the canonical LOAD_TERMS vocabulary (lib/schemas/cargo) so the
+    // filter offers exactly the terms a cargo can carry — never a stale mismatch.
+    options: [...LOAD_TERMS],
     valueOf: (c) => c.loadTerms ?? null,
   },
   {
