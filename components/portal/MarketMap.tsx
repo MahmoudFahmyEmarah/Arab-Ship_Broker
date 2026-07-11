@@ -19,6 +19,7 @@ import { VoyOpexPanel } from "./VoyOpexPanel";
 import { useViewerTier } from "@/lib/portal/tier";
 import { routeGeometry } from "@/lib/portal/routeGeometry";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
+import { ZONE_SHAPES } from "@/lib/portal/zone-shapes";
 import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { functionalStore } from "@/lib/consent";
@@ -45,20 +46,9 @@ function curvePts(a: [number, number], b: [number, number], bend = 0.18): [numbe
   return out;
 }
 
-const ZONE_COLOR: Record<string, string> = {
-  AG: "#534AB7",
-  "R.SEA": "#EF9F27",
-  "E.MED": "#185FA5",
-  "B.SEA": "#2A9962",
-  "A.SEA": "#1F8A8A",
-  "E.AFR": "#7A5BA6",
-};
-const ZONES: Record<string, { bounds: [[number, number], [number, number]]; color: string }> = {
-  "B.SEA": { bounds: [[40.5, 27], [47, 42]], color: ZONE_COLOR["B.SEA"] },
-  "E.MED": { bounds: [[30, 22], [37, 37]], color: ZONE_COLOR["E.MED"] },
-  "R.SEA": { bounds: [[12, 32.5], [30, 44]], color: ZONE_COLOR["R.SEA"] },
-  AG: { bounds: [[23, 48], [30, 58]], color: ZONE_COLOR["AG"] },
-};
+// Zone shading is drawn from coastline-following polygons (lib/portal/zone-shapes)
+// so each zone reads as its real sea basin (the Red Sea looks like the Red Sea)
+// rather than a colored rectangle.
 
 const TILES = {
   light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
@@ -276,6 +266,21 @@ export default function MarketMap({
     (locode?: string | null): [number, number] | null => {
       const g = geoFor(locode);
       return g ? [g[0], g[1]] : null;
+    },
+    [geoFor],
+  );
+  // Where to place a vessel on the map: its open-port coordinates if it has a
+  // locode, else fall back to the centroid of its open zone, so vessels whose
+  // open port is "—" still appear (and can be focused from the card/list).
+  const vesselGeo = React.useCallback(
+    (v: VesselView): PortGeo | null => {
+      const g = geoFor(v.openPortLocode);
+      if (g) return g;
+      // No locode → fall back to the open zone's registry centroid (null for
+      // unplaceable zones like "Unknown", in which case the vessel is hidden).
+      const z = zoneByCode(v.openPortZone);
+      const c = z ? zoneCentroid(z) : null;
+      return c ? [c[0], c[1]] : null;
     },
     [geoFor],
   );
@@ -546,16 +551,28 @@ export default function MarketMap({
       map.removeLayer(lyr);
       return;
     }
-    Object.entries(ZONES).forEach(([key, z]) => {
-      L.rectangle(z.bounds, { color: z.color, weight: 1, opacity: 0.6, fillOpacity: 0.06, dashArray: "5 4" }).addTo(lyr);
-      const c = L.latLng((z.bounds[0][0] + z.bounds[1][0]) / 2, (z.bounds[0][1] + z.bounds[1][1]) / 2);
-      L.marker(c, {
+    ZONE_SHAPES.forEach((z) => {
+      // Coastline-following basin outline (dashed casing + soft tint), not a box.
+      L.polygon(z.poly, {
+        color: z.color,
+        weight: 1.6,
+        opacity: 0.85,
+        fillColor: z.color,
+        fillOpacity: 0.12,
+        dashArray: "6 5",
+        lineJoin: "round",
         interactive: false,
+      }).addTo(lyr);
+      // Floating zone code, placed at the basin's label anchor — sits above the
+      // polygons and fades out as you zoom in (see .asb-zone-label in map.css).
+      L.marker(z.labelAt, {
+        interactive: false,
+        zIndexOffset: 1000,
         icon: L.divIcon({
           className: "asb-zone-label-wrap",
-          html: `<div class="asb-zone-label" style="color:${z.color}">${key}</div>`,
-          iconSize: [60, 14],
-          iconAnchor: [30, 7],
+          html: `<div class="asb-zone-label" style="color:${z.color}">${z.code}</div>`,
+          iconSize: [80, 16],
+          iconAnchor: [40, 8],
         }),
       }).addTo(lyr);
     });
@@ -598,7 +615,7 @@ export default function MarketMap({
 
     if (vesselsOn) {
       visVessels.forEach((v) => {
-        const geo = geoFor(v.openPortLocode);
+        const geo = vesselGeo(v);
         if (!geo) return;
         // Vessels anchor SEAWARD — in or just off the approaches, never on land.
         const pos = anchoredLL(geo, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0);
@@ -699,7 +716,8 @@ export default function MarketMap({
     const map = mapRef.current;
     if (!map || !ready) return;
     const v = vessels.find((x) => x.id === focusedVesselId);
-    const ll = v ? coordFor(v.openPortLocode) : null;
+    const geo = v ? vesselGeo(v) : null;
+    const ll: [number, number] | null = geo ? [geo[0], geo[1]] : null;
     if (ll) map.flyTo(ll, 7, { duration: 1.2 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedVesselId, ready]);

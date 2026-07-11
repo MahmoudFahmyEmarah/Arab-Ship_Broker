@@ -3,6 +3,14 @@ import { z } from "zod";
 export const CARGO_TYPES = ["Dry Bulk", "Break Bulk"] as const;
 export type CargoType = (typeof CARGO_TYPES)[number];
 
+// Discovery categories shown by the market map/board Category filter. This is
+// the SINGLE source of truth for cargo categorisation and must mirror exactly
+// what we collect at cargo entry: the two cargo TYPES plus the derived Grain
+// subtype (grain is dry bulk carried under grain rules, surfaced as its own
+// filter). No PROJECT/LIQUID — those are not part of the cargo model.
+export const CARGO_CATEGORIES = ["Grain", ...CARGO_TYPES] as const;
+export type CargoCategory = (typeof CARGO_CATEGORIES)[number];
+
 export const IMSBC_CATEGORIES = [
   "Cat_A",
   "Cat_B",
@@ -12,15 +20,37 @@ export const IMSBC_CATEGORIES = [
 ] as const;
 export type ImsbcCategory = (typeof IMSBC_CATEGORIES)[number];
 
+// Standardised load/discharge cost-responsibility terms (Baltic Exchange
+// convention). This is the SINGLE source of truth for load terms across the
+// whole application — the cargo form, cargo card, detail panels, the map and
+// board filters, the AI circular parser and the DB enum all derive from here,
+// so the vocabulary can never drift between the listing side and the filters.
+//
+// "Free" = the shipowner does NOT pay that cost; "Liner" = the shipowner DOES.
 export const LOAD_TERMS = [
   "FIO",
   "FIOT",
-  "FIOST",
   "FIOS",
-  "FIOS LSD",
-  "Liner Terms",
+  "FIOST",
+  "FO",
+  "FILO",
+  "LIFO",
+  "FLT",
 ] as const;
 export type LoadTerms = (typeof LOAD_TERMS)[number];
+
+// Human-readable expansion of each code — used for form option labels and
+// tooltips. Keep every LOAD_TERMS code represented here.
+export const LOAD_TERM_LABELS: Record<LoadTerms, string> = {
+  FIO: "Free in/out",
+  FIOT: "Free in/out & trimmed",
+  FIOS: "Free in/out & stowed",
+  FIOST: "Free in/out, stowed & trimmed",
+  FO: "Free out",
+  FILO: "Free in / liner out",
+  LIFO: "Liner in / free out",
+  FLT: "Full liner terms",
+};
 
 export const NOR_CLAUSES = ["WIBON", "WIPON", "WCCON", "EIU", "EIUU"] as const;
 export type NorClause = (typeof NOR_CLAUSES)[number];
@@ -98,42 +128,11 @@ export const REVIEW_STATUSES = [
 ] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
-export const ZONE_CODES = [
-  "B.SEA",
-  "E.MED",
-  "W.MED",
-  "C.MED",
-  "ADRIATIC",
-  "R.SEA",
-  "AG",
-  "A.SEA",
-  "WCAF",
-  "ECAF",
-  "NCONT",
-  "CARIB",
-  "F.EAST",
-  "ECI",
-  "Unknown",
-] as const;
-export type ZoneCode = (typeof ZONE_CODES)[number];
-
-export const ZONE_LABELS: Record<ZoneCode, string> = {
-  "B.SEA": "Black Sea",
-  "E.MED": "East Mediterranean",
-  "W.MED": "West Mediterranean",
-  "C.MED": "Central Mediterranean",
-  ADRIATIC: "Adriatic Sea",
-  "R.SEA": "Red Sea",
-  AG: "Arabian Gulf",
-  "A.SEA": "Arabian Sea",
-  WCAF: "West Coast Africa",
-  ECAF: "East Coast Africa",
-  NCONT: "North Continent",
-  CARIB: "Caribbean",
-  "F.EAST": "Far East",
-  ECI: "East Coast India",
-  Unknown: "Unknown",
-};
+// Zone vocabulary lives in the canonical registry (lib/zones); re-exported here
+// so the many schema/form consumers can keep importing from "@/lib/schemas/cargo".
+export { ZONE_CODES, ZONE_LABELS } from "@/lib/zones";
+export type { ZoneCode } from "@/lib/zones";
+import type { ZoneCode } from "@/lib/zones";
 
 export type CommodityOption = {
   id: string;
@@ -492,4 +491,8 @@ export type CargoListingFilters = {
   laycan_to?: string | null;
   sort?: "newest" | "qty_asc" | "qty_desc" | "laycan_asc";
   archiveCutoff?: string | null;
+  // ISO date; when set, spot cargoes must have been posted on/after this date to
+  // appear (mirrors the get_public_stats() spot-active window). Non-spot rows are
+  // unaffected. Ages out stale spot listings that would otherwise show forever.
+  spotActiveFrom?: string | null;
 };

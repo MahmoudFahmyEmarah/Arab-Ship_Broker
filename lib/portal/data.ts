@@ -6,6 +6,7 @@
 // to typed sample rows so the /portal preview always renders. Wiring a page to
 // live data therefore required no UI changes — just these loaders.
 import { getAppUserRow } from "@/lib/app-user";
+import { getSpotActiveDays, getVesselActiveDays } from "@/lib/app-settings";
 import { getCargos, getMyCargoListings } from "@/sdk/app/cargos";
 import {
   getOpenVesselAvailability,
@@ -132,10 +133,19 @@ export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<Carg
       if (mine) {
         rows = await getMyCargoListings(supabase);
       } else {
-        // Discovery: bound the result to the viewer's tier-based archive window.
+        // Discovery: bound the result to the viewer's tier-based archive window,
+        // and age out spot cargoes past the admin-configured active window so the
+        // board matches the public "available this week" count.
         const access = await loadArchiveAccess(supabase);
         archiveLabel = access.archiveLabel;
-        rows = await getCargos(supabase, { archiveCutoff: access.archiveCutoff ?? undefined });
+        const spotDays = await getSpotActiveDays();
+        const spotActiveFrom = new Date(Date.now() - spotDays * 86_400_000)
+          .toISOString()
+          .slice(0, 10);
+        rows = await getCargos(supabase, {
+          archiveCutoff: access.archiveCutoff ?? undefined,
+          spotActiveFrom,
+        });
       }
       const counts = rows.length ? await cargoMatchCounts(supabase, rows) : {};
       // Configured = real environment: return live results even when empty so
@@ -197,7 +207,14 @@ export async function loadVesselViews({ mine = false } = {}): Promise<Loaded<Ves
       } else {
         const access = await loadArchiveAccess(supabase);
         archiveLabel = access.archiveLabel;
-        rows = await getOpenVesselAvailability(supabase, { archiveCutoff: access.archiveCutoff ?? undefined });
+        const vesselDays = await getVesselActiveDays();
+        const vesselActiveFrom = new Date(Date.now() - vesselDays * 86_400_000)
+          .toISOString()
+          .slice(0, 10);
+        rows = await getOpenVesselAvailability(supabase, {
+          archiveCutoff: access.archiveCutoff ?? undefined,
+          vesselActiveFrom,
+        });
       }
       const counts = rows.length ? await availabilityMatchCounts(supabase, rows) : {};
       return {

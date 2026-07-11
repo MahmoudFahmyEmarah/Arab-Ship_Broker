@@ -21,6 +21,8 @@ import {
   IconBell,
   IconSignOut,
   IconShield,
+  IconPortDA,
+  IconSuezToll,
 } from "./icons";
 
 export type PortalRole = "cargo_owner" | "vessel_owner" | "broker" | "admin";
@@ -142,8 +144,8 @@ export function PortalSidebar({
     ...(isVessel ? [{ href: `${basePath}/vessels/browse`, label: "Tonnage Market", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> }] : []),
     { section: "Economic Calculators" },
     { href: `${basePath}/voyage-estimator`, label: "Voyage Cost Estimator", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
-    { href: `${basePath}/ports-da`, label: "Ports DA Calculator", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
-    { href: `${basePath}/suez-toll`, label: "Suez Canal Toll", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/ports-da`, label: "Ports DA Calculator", disabled: econLocked, glyph: (a: boolean) => <IconPortDA className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/suez-toll`, label: "Suez Canal Toll", disabled: econLocked, glyph: (a: boolean) => <IconSuezToll className="nav-icon" size={16} color={c(a)} /> },
     ...(role === "admin"
       ? [
           { section: "Admin" } as const,

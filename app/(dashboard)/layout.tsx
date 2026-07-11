@@ -4,6 +4,8 @@
 // toggle; tier gating + sidebar persona are derived from the signed-in account.
 import { loadViewerContext } from "@/lib/portal/data";
 import { DashboardShellClient } from "@/components/portal/DashboardShellClient";
+import { getBetaMode, getComingSoonDesign } from "@/lib/app-settings";
+import { BetaGate } from "@/components/portal/BetaGate";
 
 // Every dashboard route is per-user and reads auth cookies (viewer context,
 // live data). Mark the whole group dynamic so Next never attempts static
@@ -11,10 +13,19 @@ import { DashboardShellClient } from "@/components/portal/DashboardShellClient";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { tier, role, userName } = await loadViewerContext();
+  const [{ tier, role, userName }, betaMode, comingSoonDesign] = await Promise.all([
+    loadViewerContext(),
+    getBetaMode(),
+    getComingSoonDesign(),
+  ]);
+  // Beta mode (set in admin → Platform settings) restricts non-admin members to
+  // the Dashboard; BetaGate covers every other page with a "coming soon" lock,
+  // using the admin-selected design(s) (radar / beacon / compass, rotating).
   return (
     <DashboardShellClient tier={tier} role={role} userName={userName}>
-      {children}
+      <BetaGate betaMode={betaMode} isAdmin={role === "admin"} comingSoonDesign={comingSoonDesign}>
+        {children}
+      </BetaGate>
     </DashboardShellClient>
   );
 }

@@ -16,7 +16,9 @@ You understand maritime shorthand fluently. Common terms include:
 
 CARGO terms:
 - MOLOO / MOLOA: More or Less Owner's Option / Charterer's Option (±% on cargo qty)
-- FIO/FIOT/FIOST/FIOS: Free In/Out variants (load terms)
+- Load terms (owner's cost responsibility): FO (free out), FILO (free in/liner out),
+  FIO (free in/out), FIOS (…& stowed), FIOST (…stowed & trimmed), FIOT (…& trimmed),
+  FLT (full liner terms), LIFO (liner in/free out)
 - SSHEX / SHEX / SHINC / SSHINC / FSHEX / BENDS / EIU / PWWD: Laytime qualifiers
 - TTL: Total laytime (not split)
 - SF: Stowage factor (m³/t — values >0.83 are cubic-out)
@@ -69,7 +71,7 @@ For CARGO, extract these fields when present (omit if absent):
   "is_spot": true | false,
   "load_rate": "3,000 SSHEX",
   "disch_rate": "2,000",
-  "load_terms": "FIO" | "FIOT" | "FIOST" | "FIOS" | "FIOS LSD" | "Liner Terms",
+  "load_terms": "FIO" | "FIOT" | "FIOS" | "FIOST" | "FO" | "FILO" | "LIFO" | "FLT",
   "laytime_qualifier": "SSHEX BENDS",
   "freight_idea_usd_mt": 45,
   "commission_pct": 2.5,

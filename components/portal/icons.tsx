@@ -106,13 +106,13 @@ export function IconVoyage({ size = 16, color, className }: IconProps) {
       <rect x="4" y="6" width="1.6" height="3.5" fill={fill} />
       <circle cx="3.2" cy="5" r="1.0" fill={fill} />
       <circle cx="4.6" cy="3.7" r="1.0" fill={fill} />
+      <circle cx="2.4" cy="3.3" r="0.8" fill={fill} />
       <rect x="3.5" y="9.5" width="3.5" height="3.5" fill={fill} />
       <rect x="7" y="9.5" width="3.5" height="3.5" fill={fill} />
       <circle cx="17.5" cy="7.5" r="4.2" fill={fill} />
-      <text x="17.5" y="9.6" textAnchor="middle" fontSize="6.2" fontWeight="700" fill="#fff" fontFamily="Arial, sans-serif">
-        $
-      </text>
+      <text x="17.5" y="9.6" textAnchor="middle" fontSize="6.2" fontWeight="700" fill="#fff" fontFamily="Arial, sans-serif">$</text>
       <path d="M 1.5 13 L 21 13 L 17.5 18 L 5 18 Z" fill={fill} />
+      <path d="M 1.5 20.5 Q 4 19.5 6.5 20.5 T 11.5 20.5 T 16.5 20.5 T 22.5 20.5" stroke={fill} strokeWidth="1.2" fill="none" strokeLinecap="round" />
     </svg>
   );
 }
@@ -229,6 +229,34 @@ export function IconClose({ size = 14, color, className }: IconProps) {
       <line x1="6" y1="6" x2="18" y2="18" />
       <line x1="18" y1="6" x2="6" y2="18" />
     </svg>
+  );
+}
+
+// ── Ports DA Calculator — ASB grey logo (brand asset, per design sidebar.jsx) ──
+export function IconPortDA({ size = 16, className }: IconProps) {
+  return (
+    <img
+      src="/icons/asb-logo-grey.png"
+      alt=""
+      width={size}
+      height={size}
+      className={className}
+      style={{ objectFit: "contain", display: "block", flexShrink: 0 }}
+    />
+  );
+}
+
+// ── Suez Canal Toll — ASB anchor icon (brand asset, per design sidebar.jsx) ──
+export function IconSuezToll({ size = 16, className }: IconProps) {
+  return (
+    <img
+      src="/icons/asb-icon.png"
+      alt=""
+      width={size}
+      height={size}
+      className={className}
+      style={{ objectFit: "contain", display: "block", flexShrink: 0 }}
+    />
   );
 }
 

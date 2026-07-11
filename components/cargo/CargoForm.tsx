@@ -24,6 +24,7 @@ import {
   PortOption,
   computeCargoVolumeCbm,
   LOAD_TERMS,
+  LOAD_TERM_LABELS,
   PACKAGING_TYPES,
   CSS_CATEGORIES,
   TOLERANCE_HOLDERS,
@@ -950,7 +951,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
                       <option value="">Select terms…</option>
                       {LOAD_TERMS.map((t) => (
                         <option key={t} value={t}>
-                          {t}
+                          {t} — {LOAD_TERM_LABELS[t]}
                         </option>
                       ))}
                     </select>

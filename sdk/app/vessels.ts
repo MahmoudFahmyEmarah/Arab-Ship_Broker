@@ -254,6 +254,10 @@ export async function getOpenVesselAvailability(
     archiveCutoff?: string | null;
     zone?: string | null;
     limit?: number;
+    // ISO date; when set, vessels with no fixed open date must have been posted
+    // on/after this date to appear (mirrors get_public_stats()'s vessel window).
+    // Vessels that carry an open_date are unaffected by this clause.
+    vesselActiveFrom?: string | null;
   } = {},
 ): Promise<VesselAvailabilityWithVessel[]> {
   let qb = supabase
@@ -278,6 +282,18 @@ export async function getOpenVesselAvailability(
       [`open_date.is.null`, `open_date.gte.${options.archiveCutoff}`].join(
         ",",
       ),
+    );
+  }
+
+  // Age out stale open-ended vessels: one with no fixed open date shows only
+  // while within the active window (posted on/after vesselActiveFrom). Vessels
+  // that carry an open_date pass this clause unconditionally.
+  if (options.vesselActiveFrom) {
+    qb = qb.or(
+      [
+        `open_date.not.is.null`,
+        `created_at.gte.${options.vesselActiveFrom}`,
+      ].join(","),
     );
   }
 

@@ -231,6 +231,20 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# Email confirmation + password reset are OTP-based in this app (the user types
+# a 6-digit code on /auth/verify-email and /auth/verify-forgot-password via
+# supabase.auth.verifyOtp). These templates therefore present {{ .Token }} (the
+# code) instead of a magic link. NOTE: for the HOSTED project these must also be
+# set in the Supabase Dashboard → Authentication → Email Templates (config.toml
+# templates apply to local dev / `supabase config push`).
+[auth.email.template.confirmation]
+subject = "Activate your Arab ShipBroker account"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Arab ShipBroker password"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true

@@ -61,7 +61,7 @@ export function CargoCard({
 
   return (
     <div
-      className={`asb-card cargo-card ${stripClass} ${selected ? "is-selected" : ""}`}
+      className={`asb-card cargo-card ${stripClass} ${selected ? "is-selected" : ""} ${compact ? "is-compact" : ""}`}
       onClick={(e) => {
         e.stopPropagation();
         onSelect?.(c.id);
@@ -89,10 +89,9 @@ export function CargoCard({
         {c.wog && <span className="cc-wog">WOG</span>}
       </div>
 
-      {!compact && (
-        <div className="cc-grid-wrap">
-          <span className="cc-accent" aria-hidden />
-          <div className="cc-grid">
+      <div className="cc-grid-wrap">
+        <span className="cc-accent" aria-hidden />
+        <div className="cc-grid">
           <CCField label="QTY / VOL">
             <div className="cc-qty">
               <span className="cc-qty__w">{weight}</span>
@@ -115,6 +114,7 @@ export function CargoCard({
             )}
           </CCField>
 
+          {!compact && (<>
           <CCField label="TERMS">
             <span>{c.loadTerms || "—"}</span>
           </CCField>
@@ -155,9 +155,9 @@ export function CargoCard({
               <span>Group {c.imsbcGroup || "—"}</span>
             )}
           </CCField>
+          </>)}
           </div>
         </div>
-      )}
 
       <div className="cc-footer">
         <div className="cc-foot-col cc-foot-col--freight">

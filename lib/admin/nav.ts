@@ -47,12 +47,19 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     ],
   },
   {
+    section: "Data",
+    items: [
+      { id: "datasync", label: "Data Sync", href: "/admin/data-sync", icon: "sync", superOnly: true },
+    ],
+  },
+  {
     section: "Platform",
     items: [
       { id: "stats", label: "Analytics", href: "/admin/stats", icon: "chart" },
       { id: "messages", label: "Messages", href: "/admin/messages", icon: "announ" },
       { id: "eta", label: "ETA / tax console", href: "/admin/eta", icon: "building", superOnly: true },
       { id: "admins", label: "Admin accounts", href: "/admin/admins", icon: "shieldlock", superOnly: true },
+      { id: "settings", label: "Platform settings", href: "/admin/settings", icon: "gear", superOnly: true },
     ],
   },
 ];

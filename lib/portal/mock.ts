@@ -92,7 +92,7 @@ export const MOCK_CARGOS: CargoListingRow[] = [
     qty_min_mt: 3500, qty_max_mt: 3500, stowage_factor: 55, packaging_type: "Bagged",
     load_port_locode: "AEJEA", load_port_name: "Jebel Ali", load_zone: "AG", load_country: "UAE",
     disch_port_locode: "TZDAR", disch_port_name: "Dar es Salaam", disch_zone: "ECAF", disch_country: "Tanzania",
-    load_terms: "Liner Terms", load_rate: 450, disch_rate: 400, freight_idea_usd_mt: 52, commission_ttl_pct: 5,
+    load_terms: "FLT", load_rate: 450, disch_rate: 400, freight_idea_usd_mt: 52, commission_ttl_pct: 5,
     laycan_from: plus(2), laycan_to: plus(5),
   }),
   makeCargo({
