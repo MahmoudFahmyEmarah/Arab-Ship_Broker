@@ -371,6 +371,13 @@ function FoundersCarousel() {
   const [reduceMotion, setReduceMotion] = useState(false);
   const [stageHeight, setStageHeight] = useState(560);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const pausedRef = useRef(false);
+  const progressRef = useRef(0);
+  const fillRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -380,12 +387,42 @@ function FoundersCarousel() {
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  // Auto-advance. Restarting on `active` keeps a full interval after a click.
+  // A single rAF loop drives BOTH the progress bar and the auto-advance from the
+  // same elapsed-time source, so they can never drift apart. The bar width is
+  // updated imperatively (no per-frame re-renders); when it reaches 100% the
+  // carousel advances. Pausing just stops accumulating time.
   useEffect(() => {
-    if (paused || reduceMotion) return;
-    const id = setInterval(() => setActive((a) => (a + 1) % n), INTERVAL * 1000);
-    return () => clearInterval(id);
-  }, [paused, reduceMotion, n, active]);
+    if (reduceMotion) {
+      if (fillRef.current) fillRef.current.style.width = "100%";
+      return;
+    }
+    let raf = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = now - last;
+      last = now;
+      if (!pausedRef.current) {
+        progressRef.current += dt / (INTERVAL * 1000);
+        if (progressRef.current >= 1) {
+          progressRef.current = 0;
+          setActive((a) => (a + 1) % n);
+        }
+        if (fillRef.current) {
+          fillRef.current.style.width = `${Math.min(100, progressRef.current * 100)}%`;
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [reduceMotion, n]);
+
+  // Jump straight to a card (click / keyboard) and reset the timer + bar.
+  const goTo = (i: number) => {
+    progressRef.current = 0;
+    if (fillRef.current) fillRef.current.style.width = "0%";
+    setActive(i);
+  };
 
   // Absolutely-positioned cards leave the flow, so the stage needs an explicit
   // height. Track the tallest card (transforms don't affect offsetHeight) and
@@ -424,14 +461,14 @@ function FoundersCarousel() {
           return (
             <div
               key={p.name}
-              onClick={isCenter ? undefined : () => setActive(i)}
+              onClick={isCenter ? undefined : () => goTo(i)}
               onKeyDown={
                 isCenter
                   ? undefined
                   : (e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setActive(i);
+                        goTo(i);
                       }
                     }
               }
@@ -469,14 +506,9 @@ function FoundersCarousel() {
 
         <div className="absolute left-1/2 -translate-x-1/2 -bottom-9 w-45 h-[3px] rounded-full bg-slate-200 overflow-hidden">
           <div
-            key={active}
+            ref={fillRef}
             className="h-full bg-ocean-600 rounded-full"
-            style={{
-              width: reduceMotion ? "100%" : "0%",
-              animation: reduceMotion ? "none" : `asb-progress ${INTERVAL}s linear forwards`,
-              animationPlayState: paused ? "paused" : "running",
-              opacity: paused ? 0.35 : 1,
-            }}
+            style={{ width: "0%", opacity: paused ? 0.35 : 1 }}
           />
         </div>
       </div>
