@@ -24,14 +24,16 @@ export const ADMIN_SECTIONS: { id: string; href: string }[] = [
   { id: "orgmembers", href: "/admin/org-members" },
   { id: "messages", href: "/admin/messages" },
   { id: "bunker", href: "/admin/bunker" },
+  { id: "datasync", href: "/admin/data-sync" },
   { id: "eta", href: "/admin/eta" },
   { id: "admins", href: "/admin/admins" },
   { id: "settings", href: "/admin/settings" },
 ];
 
 // Owner-only sections — never exposed to sub-admins. ETA holds tax credentials;
-// Admins manages other admins; Settings flips platform-wide flags (beta mode).
-export const OWNER_ONLY: Record<string, boolean> = { eta: true, admins: true, settings: true };
+// Admins manages other admins; Settings flips platform-wide flags (beta mode);
+// Data Sync commits bulk writes to every core table (with rollback).
+export const OWNER_ONLY: Record<string, boolean> = { eta: true, admins: true, settings: true, datasync: true };
 
 // Sub-admin presets — the design's profiles (Sales / Broker / Accountant /
 // IT) mapped onto this app's real sections. Dashboard is implicit view for

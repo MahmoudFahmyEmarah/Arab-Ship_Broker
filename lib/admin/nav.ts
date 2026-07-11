@@ -47,6 +47,12 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     ],
   },
   {
+    section: "Data",
+    items: [
+      { id: "datasync", label: "Data Sync", href: "/admin/data-sync", icon: "sync", superOnly: true },
+    ],
+  },
+  {
     section: "Platform",
     items: [
       { id: "stats", label: "Analytics", href: "/admin/stats", icon: "chart" },

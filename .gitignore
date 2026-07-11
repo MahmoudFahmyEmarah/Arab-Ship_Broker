@@ -41,3 +41,5 @@ yarn-error.log*
 next-env.d.ts
 
 /scripts/ArabShipBroker CargoMap v3 05May2026.xlsx
+.wa-auth/
+.wa-worker.log

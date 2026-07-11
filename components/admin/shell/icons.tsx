@@ -37,6 +37,14 @@ export const ADMIN_ICONS: Record<string, React.ReactNode> = {
       <line x1="6" y1="10" x2="12" y2="10" />
     </svg>
   ),
+  sync: (
+    <svg {...base} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11.3 6 A4.4 4.4 0 0 0 3 5.2" />
+      <path d="M2.7 8 A4.4 4.4 0 0 0 11 8.8" />
+      <path d="M11.4 3 V6 H8.6" />
+      <path d="M2.6 11 V8 H5.4" />
+    </svg>
+  ),
   vessel: (
     <svg {...base} strokeLinecap="round" strokeLinejoin="round">
       <path d="M2.5 8 L7 9.5 L11.5 8" />
