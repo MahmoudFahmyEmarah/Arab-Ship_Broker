@@ -469,6 +469,15 @@ textarea:invalid {
   }
 }
 
+@keyframes asb-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
 .animate-float {
   animation: float 4s ease-in-out infinite;
 }

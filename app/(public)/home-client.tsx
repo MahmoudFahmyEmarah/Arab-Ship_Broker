@@ -260,6 +260,234 @@ function LinkedinIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 
+interface Founder {
+  name: string;
+  role: string;
+  creds: string;
+  bio: string;
+  img: string | null;
+  imgPos: string;
+  initials: string;
+  linkedin: string;
+}
+
+const founders: Founder[] = [
+  {
+    name: "Mohamed Dawoud",
+    role: "Dry Bulk Broker & Co-Founder",
+    creds: "Capt., BSc., MSc. “Fleet Ops.”",
+    bio: "His career began on ship steel, and the discipline of cargo operations continues to shape his work today. With an MSc in Fleet Operations, a Master Mariner Licence, and more than 10 years aboard bulk carriers, Capt. Mohamed combines hands-on maritime knowledge with strong commercial judgment. He supports owners and charterers with practical market insight, risk-aware negotiations, and reliable execution across dry-bulk transactions.",
+    img: "/founder.jpg",
+    imgPos: "60% 30%",
+    initials: "MD",
+    linkedin: "https://www.linkedin.com/in/cpt-mohamed-dawoud",
+  },
+  {
+    name: "Ahmed Abdallah",
+    role: "Dry Bulk Broker & Associate Founder",
+    creds: "C/O, Master Mariner, MSc. “Maritime Nav.”",
+    bio: "From the bridge to the brokerage desk, Ahmed combines years at sea with a strong understanding of dry-bulk markets. Having sailed as Chief Officer across international fleets, he brings practical operational insight to S&P and dry-bulk brokerage. Ahmed supports owners in evaluating opportunities, negotiating commercial terms, and executing transactions across the Red Sea, Arabian Gulf, and Arabian Sea.",
+    img: "/cofounder.jpg",
+    imgPos: "center 20%",
+    initials: "AA",
+    linkedin: "https://www.linkedin.com/in/ahmed-abdallah-8a26441a9/",
+  },
+  {
+    name: "Mahmoud Emarah",
+    role: "Chief Technology Officer & Co-Founder",
+    creds: "MSc. “Data Science”, RWTH Aachen University",
+    bio: "Mahmoud leads Arab ShipBroker's technology strategy, digital product development, and AI-driven transformation. His experience spans software engineering, data science, and enterprise AI platforms across international organizations including Vodafone and Saudi Telecom Company (STC), where he led large-scale AI ecosystems and award-winning innovation initiatives. At Arab ShipBroker, he builds the secure, data-driven platforms that modernize maritime brokerage and speed commercial decision-making across the MENA shipping market.",
+    img: "/cto.jpeg",
+    imgPos: "center 25%",
+    initials: "ME",
+    linkedin: "https://www.linkedin.com/in/mahmoud-emarah/",
+  },
+];
+
+function FounderCard({
+  p,
+  cardRef,
+}: {
+  p: Founder;
+  cardRef: (el: HTMLDivElement | null) => void;
+}) {
+  return (
+    <div
+      ref={cardRef}
+      className="w-full bg-slate-50 rounded-4xl border border-slate-200/70 overflow-hidden shadow-[0_18px_45px_rgba(10,26,47,0.10)] flex flex-col"
+    >
+      <div className="h-1 bg-linear-to-r from-ocean-600 via-foam-400 to-ocean-600" />
+
+      <div className="p-10 max-sm:p-8 flex flex-col gap-6 flex-1">
+        <div className="flex items-center gap-5 max-sm:flex-col max-sm:items-center max-sm:text-center">
+          <div className="shrink-0">
+            <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-2xl border-4 border-white bg-linear-to-br from-ocean-600 to-ocean-800 flex items-center justify-center">
+              {p.img ? (
+                <Image
+                  src={p.img}
+                  alt={p.name}
+                  width={288}
+                  height={288}
+                  quality={92}
+                  className="w-full h-full object-cover"
+                  style={{ objectPosition: p.imgPos }}
+                />
+              ) : (
+                <span className="text-white text-2xl font-bold tracking-tight">{p.initials}</span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-bold text-ocean-950 tracking-tight mb-1">{p.name}</h3>
+            <p className="text-ocean-600 font-bold tracking-wide uppercase text-[11px] mb-1 leading-none">{p.role}</p>
+            <p className="text-slate-400 text-[12px] font-medium">{p.creds}</p>
+          </div>
+        </div>
+
+        <div className="w-12 h-0.5 bg-foam-300 rounded-full max-sm:mx-auto" />
+        <p className="text-slate-500 text-[15px] leading-relaxed flex-1">{p.bio}</p>
+
+        <a
+          href={p.linkedin}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-2.5 h-10 px-6 text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-ocean-50 hover:text-ocean-700 hover:border-ocean-200 rounded-xl transition-all self-start max-sm:self-center"
+        >
+          <LinkedinIcon className="w-4 h-4 text-ocean-600" />
+          Connect on LinkedIn
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function FoundersCarousel() {
+  const n = founders.length;
+  const INTERVAL = 5; // seconds per card
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [stageHeight, setStageHeight] = useState(560);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Auto-advance. Restarting on `active` keeps a full interval after a click.
+  useEffect(() => {
+    if (paused || reduceMotion) return;
+    const id = setInterval(() => setActive((a) => (a + 1) % n), INTERVAL * 1000);
+    return () => clearInterval(id);
+  }, [paused, reduceMotion, n, active]);
+
+  // Absolutely-positioned cards leave the flow, so the stage needs an explicit
+  // height. Track the tallest card (transforms don't affect offsetHeight) and
+  // re-measure on resize so the layout stays correct across breakpoints.
+  useEffect(() => {
+    const measure = () => {
+      let max = 0;
+      for (const el of cardRefs.current) if (el) max = Math.max(max, el.offsetHeight);
+      if (max) setStageHeight(max);
+    };
+    measure();
+    const t = setTimeout(measure, 400);
+    window.addEventListener("resize", measure);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  return (
+    <div className="max-w-7xl mx-auto">
+      <div
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        className="relative mx-auto"
+        style={{ maxWidth: 1280, height: stageHeight, perspective: 1600 }}
+      >
+        {founders.map((p, i) => {
+          let offset = (i - active + n) % n;
+          if (offset === 2) offset = -1;
+          const isCenter = offset === 0;
+          const x = offset * 46;
+          const scale = isCenter ? 1 : 0.82;
+          const rotY = offset * -28;
+          const z = isCenter ? 0 : -160;
+          return (
+            <div
+              key={p.name}
+              onClick={isCenter ? undefined : () => setActive(i)}
+              onKeyDown={
+                isCenter
+                  ? undefined
+                  : (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setActive(i);
+                      }
+                    }
+              }
+              role={isCenter ? undefined : "button"}
+              tabIndex={isCenter ? undefined : 0}
+              aria-label={isCenter ? undefined : `Show ${p.name}`}
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                width: 600,
+                maxWidth: "88vw",
+                transform: `translate(-50%, -50%) translateX(${x}%) translateZ(${z}px) rotateY(${rotY}deg) scale(${scale})`,
+                transformStyle: "preserve-3d",
+                backfaceVisibility: "hidden",
+                zIndex: isCenter ? 3 : 1,
+                opacity: isCenter ? 1 : 0.45,
+                filter: isCenter ? "none" : "saturate(0.75)",
+                cursor: isCenter ? "default" : "pointer",
+                transition: reduceMotion
+                  ? "none"
+                  : "transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.7s ease, filter 0.7s ease",
+                willChange: "transform",
+              }}
+            >
+              <FounderCard
+                p={p}
+                cardRef={(el) => {
+                  cardRefs.current[i] = el;
+                }}
+              />
+            </div>
+          );
+        })}
+
+        <div className="absolute left-1/2 -translate-x-1/2 -bottom-9 w-45 h-[3px] rounded-full bg-slate-200 overflow-hidden">
+          <div
+            key={active}
+            className="h-full bg-ocean-600 rounded-full"
+            style={{
+              width: reduceMotion ? "100%" : "0%",
+              animation: reduceMotion ? "none" : `asb-progress ${INTERVAL}s linear forwards`,
+              animationPlayState: paused ? "paused" : "running",
+              opacity: paused ? 0.35 : 1,
+            }}
+          />
+        </div>
+      </div>
+
+      <p className="text-center mt-16 max-sm:mt-14 text-[13.5px] text-slate-400">
+        Hover a card to pause — click a side card to bring it forward
+      </p>
+    </div>
+  );
+}
+
 export interface HomeStats { cargoCount: number; vesselCount: number; zoneCount: number; }
 
 export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
@@ -744,81 +972,8 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             viewport={{ once: true }}
-            className="grid grid-cols-2 max-lg:grid-cols-1 gap-8 max-w-5xl mx-auto"
           >
-            {[
-              {
-                name: "Mohamed Dawoud",
-                role: "Dry Bulk Broker & Co-Founder",
-                creds: "Capt., BSc., MSc. “Fleet Ops.”",
-                bio: "His feet first stepped on ship steel years ago, and he still carries the scent of the cargo with him today. With an MSc. in Fleet Operations, a Master Mariner License, and 10+ years on bulk carriers, Capt. Mohamed brings academic rigor and hands-on maritime knowledge to every deal.",
-                img: "/founder.jpg",
-                imgPos: "60% 30%",
-                initials: "MD",
-                linkedin: "https://www.linkedin.com/in/cpt-mohamed-dawoud",
-              },
-              {
-                name: "Ahmed Abdallah",
-                role: "Dry Bulk Broker & Associate Founder",
-                creds: "C/O, Master Mariner, MSc. “Maritime Nav.”",
-                bio: "From the bridge to the brokerage desk, Ahmed pairs years at sea with deep dry-bulk insight. A Master Mariner who topped his MSc. Maritime Navigation class at the Arab Academy and sailed as Chief Officer across international fleets, he focuses on S&P and dry-bulk brokerage for owners across the Red Sea, Arabian Gulf, and Arabian Sea.",
-                img: "/cofounder.jpg" as string | null,
-                imgPos: "center 20%",
-                initials: "AA",
-                linkedin: "https://www.linkedin.com/in/ahmed-abdallah-8a26441a9/",
-              },
-            ].map((p) => (
-              <div
-                key={p.name}
-                className="bg-slate-50 rounded-4xl border border-slate-200/70 overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.05)] flex flex-col"
-              >
-                <div className="h-1 bg-linear-to-r from-ocean-600 via-foam-400 to-ocean-600" />
-
-                <div className="p-10 max-sm:p-8 flex flex-col gap-6 flex-1">
-                  <div className="flex items-center gap-5 max-sm:flex-col max-sm:items-center max-sm:text-center">
-                    <div className="shrink-0 relative">
-                      <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-2xl border-4 border-white bg-linear-to-br from-ocean-600 to-ocean-800 flex items-center justify-center">
-                        {p.img ? (
-                          <Image
-                            src={p.img}
-                            alt={p.name}
-                            width={288}
-                            height={288}
-                            quality={92}
-                            className="w-full h-full object-cover"
-                            style={{ objectPosition: p.imgPos }}
-                          />
-                        ) : (
-                          <span className="text-white text-2xl font-bold tracking-tight">{p.initials}</span>
-                        )}
-                      </div>
-                      <div className="absolute -bottom-3 -right-3 w-9 h-9 bg-ocean-600 rounded-xl flex items-center justify-center shadow-lg border-4 border-white">
-                        <Anchor className="w-3.5 h-3.5 text-white" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xl font-bold text-ocean-950 tracking-tight mb-1">{p.name}</h3>
-                      <p className="text-ocean-600 font-bold tracking-wide uppercase text-[11px] mb-1 leading-none">{p.role}</p>
-                      <p className="text-slate-400 text-[12px] font-medium">{p.creds}</p>
-                    </div>
-                  </div>
-
-                  <div className="w-12 h-0.5 bg-foam-300 rounded-full max-sm:mx-auto" />
-                  <p className="text-slate-500 text-[15px] leading-relaxed flex-1">{p.bio}</p>
-
-                  <a
-                    href={p.linkedin}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2.5 h-10 px-6 text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-ocean-50 hover:text-ocean-700 hover:border-ocean-200 rounded-xl transition-all self-start max-sm:self-center"
-                  >
-                    <LinkedinIcon className="w-4 h-4 text-ocean-600" />
-                    Connect on LinkedIn
-                  </a>
-                </div>
-              </div>
-            ))}
+            <FoundersCarousel />
           </motion.div>
         </div>
       </section>
