@@ -108,6 +108,13 @@ export type MarketplaceDefaults = {
   // "open this week" for this many days after posting, then age out. Vessels that
   // DO carry an open date use the ±7-day date window instead.
   vesselActiveDays: string;
+  // Market Insights only: for a DATED open position, how many days BEFORE the
+  // report week a vessel's open_date may fall and still count as "open" that
+  // week (a ship opening shortly before the week is still relevant). Distinct
+  // from the home board's ±7-day dated window — Insights looks further back.
+  // The two 14-day recency windows above are shared with get_public_stats();
+  // this lookback is Insights-specific. Read by fn_build_market_insights.
+  insightsOpenLookbackDays: string;
   brokerCommission: string;
   despatchRate: string;
   demurrage: string;
@@ -118,6 +125,9 @@ export type MarketplaceDefaults = {
 // get_public_stats() SQL defaults so the hero and the boards agree.
 export const DEFAULT_SPOT_ACTIVE_DAYS = 14;
 export const DEFAULT_VESSEL_ACTIVE_DAYS = 14;
+// Insights-only dated open-position lookback. Kept in sync with the
+// fn_build_market_insights() SQL fallback.
+export const DEFAULT_INSIGHTS_OPEN_LOOKBACK_DAYS = 14;
 
 export type PlatformSettingsData = {
   ai: AiSettings;
@@ -148,6 +158,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsData = {
     archiveLayer3: "1",
     spotActiveDays: String(DEFAULT_SPOT_ACTIVE_DAYS),
     vesselActiveDays: String(DEFAULT_VESSEL_ACTIVE_DAYS),
+    insightsOpenLookbackDays: String(DEFAULT_INSIGHTS_OPEN_LOOKBACK_DAYS),
     brokerCommission: "2.5",
     despatchRate: "Half demurrage",
     demurrage: "15,000",

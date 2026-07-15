@@ -4,6 +4,8 @@ A digital chartering & ship-brokering platform that connects **cargo owners**, *
 
 > Built with Next.js 16 (App Router) + React 19, Supabase (Postgres + Auth + RLS), and an optional Anthropic-powered document parser.
 
+> **New to this codebase?** Start with **[ONBOARDING.md](ONBOARDING.md)** — it covers the *current* state (including known code↔DB drift you must verify against the live schema), the Data Sync ingestion pipeline, and the non-obvious gotchas. This README documents the intended architecture; ONBOARDING documents today's reality.
+
 ---
 
 ## Table of contents
@@ -70,6 +72,7 @@ A public marketing site (home, services, market insights, contact) sits in front
 - Moderation **queue** for listing review/amend/strike, **users**, **org members**, **admins** (tiered sub-admins with per-section permissions).
 - Reference data: **ports**, **commodities**, **cargo classification**, **safety questions**, **bunker prices**, **ETA**.
 - **Dashboard / stats / ops stats**, contact **messages** inbox, vessel & vessel-availability administration.
+- **Data Sync** (`/admin/data-sync`) — bulk-ingest the CargoMap workbook (`.xlsx`): upload → stage & diff → review (with row-by-row selective sync) → **reversible** commit. Includes a **Manual Review** area (unmapped commodities, IMO-less vessels, and an invalid-rows "Needs fixing" queue by category) and a **"Post open positions"** action that turns `02_VESSELS` open rows into vessel availability. This is the primary data-loading path — see [ONBOARDING.md §6](ONBOARDING.md).
 
 ### Automation
 - **Weekly Market Insights cron** (`/api/cron/market-insights`, Mondays 06:00) calls a `SECURITY DEFINER` generator RPC that freezes an immutable, dated edition.
@@ -239,7 +242,9 @@ The backend is **Postgres on Supabase**, defined entirely as code in [supabase/m
 
 ### Enums (controlled vocabularies)
 
-`user_role` · `access_tier` · `access_granted_by` · `trust_tier_enum` · `zone_enum` (B.SEA, E.MED, AG, R.SEA, F.EAST …) · `port_type_enum` · `cargo_type_v2_enum` (Dry Bulk \| Break Bulk) · `imsbc_category_enum` · `answer_type_enum` · `vessel_type_enum` · `flag_category_enum` · `scope_enum` · `risk_level_enum` · `vessel_status_enum` (OPEN/FIXED/ON SUBS/INACTIVE) · `cargo_status_enum` · `cargo_priority_enum` · `review_status_enum` (PENDING/APPROVED/REJECTED/FLAGGED) · `load_terms_enum` · `ownership_role_enum` · `transfer_reason_enum` · `profile_type_enum`.
+`user_role` · `access_tier` · `access_granted_by` · `trust_tier_enum` · `zone_enum` (B.SEA, E.MED, AG, R.SEA, R.SEA.N, R.SEA.S, BALTIC, GLAKES, F.EAST …) · `port_type_enum` · `cargo_type_enum` (Dry Bulk \| Break Bulk) · `imsbc_category_enum` · `answer_type_enum` · `vessel_type_enum` (Bulk Carrier \| General Cargo \| Cargo Ship \| Other — "Cargo Ship" is the workbook alias of "General Cargo") · `flag_category_enum` · `scope_enum` · `risk_level_enum` · `vessel_status_enum` (OPEN/FIXED/ON SUBS/INACTIVE/BALLAST/OFF-HIRE) · `cargo_status_enum` · `cargo_priority_enum` · `review_status_enum` (PENDING/APPROVED/REJECTED/FLAGGED) · `load_terms_enum` · `ownership_role_enum` (primary/co_broker/admin_posted) · `transfer_reason_enum` · `profile_type_enum`.
+
+> Enum values evolve as the CargoMap workbook does; the live enum set is authoritative — verify with the Supabase dashboard rather than assuming from this list.
 
 ### Views (the firewall + read models)
 
@@ -263,6 +268,9 @@ Privileged / firewall-safe logic lives in `SECURITY DEFINER` functions invoked b
 - **Orgs / membership:** `fn_my_org_ids`, `fn_my_membership`, `fn_my_admin_org_id`, `fn_org_team`, `fn_org_manage_member`, `fn_search_organizations`, `fn_request_org_membership`, `fn_pending_membership_requests`, `fn_decide_org_membership` ([sdk/app/org.ts](sdk/app/org.ts), [app/(dashboard)/dashboard/account/company-actions.ts](app/(dashboard)/dashboard/account/company-actions.ts)).
 - **Admin:** `get_admin_stats`, `get_admin_ops_stats`, `get_admin_activity`, `admin_set_bunker_credential`.
 - **Bunker / positions:** `bunker_ingest`, `get_bunker_ticker`, `fn_position_checkin`.
+- **Data Sync (admin bulk ingestion):** `commit_sync_batch` (workbook → live tables, reversible, auto-approves marketplace listings), `undo_batch`, `edit_live_record` / `bulk_update_live_records`, `resolve_commodity_review`, `resolve_vessel_review`, `sync_vessel_positions` (`02_VESSELS` open rows → `vessel_availability`). See [lib/sync/](lib/sync/) + [app/(admin)/admin/data-sync/](app/\(admin\)/admin/data-sync/).
+
+> ⚠️ **Reality check:** the live DB has drifted from the code's expectations in places — some RPCs above were **restored recently** and at least one (`create_cargo_listing`) is **still missing on the live project**, so portal cargo posting doesn't work until it's rebuilt. **Always verify an RPC/table/column exists on the live schema before depending on it.** Full status in [ONBOARDING.md §5](ONBOARDING.md).
 
 ### Backend guarantees to understand
 

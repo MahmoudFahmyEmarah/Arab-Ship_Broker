@@ -32,7 +32,33 @@ import { SmartParser } from "@/components/portal/SmartParser";
 import type { CircularParseResult } from "@/lib/circulars/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
-import { ZONE_LABELS, ZONE_CODES, ZoneCode } from "@/lib/schemas/cargo";
+import {
+  ZONE_LABELS,
+  ZONE_CODES,
+  ZoneCode,
+  validateImoCheckDigit,
+} from "@/lib/schemas/cargo";
+import { stripVesselNamePrefix, CBFT_PER_CBM } from "@/lib/schemas/vessel";
+import { FLAG_STATES, PI_CLUBS } from "@/lib/geo/countries";
+
+// Map any free-text / legacy vessel type (from AI Bosun parsing or older data)
+// onto the stored canon. "Cargo Ship" and General/MPP/multi all fold to
+// "General Cargo"; anything with "bulk" → "Bulk Carrier"; else "Other".
+function normalizeVesselTypeOption(
+  v: unknown,
+): "Bulk Carrier" | "General Cargo" | "Other" | undefined {
+  if (typeof v !== "string" || !v.trim()) return undefined;
+  const t = v.toLowerCase();
+  if (t.includes("bulk")) return "Bulk Carrier";
+  if (
+    t.includes("cargo") ||
+    t.includes("general") ||
+    t.includes("mpp") ||
+    t.includes("multi")
+  )
+    return "General Cargo";
+  return "Other";
+}
 
 const extendedVesselSchema = z.object({
   vessel_name: z.string().min(2, "Vessel name is required"),
@@ -41,18 +67,30 @@ const extendedVesselSchema = z.object({
     .regex(/^\d{7}$/, "IMO must be exactly 7 digits")
     .optional()
     .or(z.literal("")),
-  vessel_type: z.enum([
-    "Bulk Carrier",
-    "General Cargo",
-    "MPP (Multi-Purpose)",
-    "Break Bulk",
-    "Geared Bulk",
-    "Open Hatch",
-    "Other",
-  ]),
-  dwt_grain: z.coerce.number().int().positive().optional(),
-  dwt_bale: z.coerce.number().int().positive().optional(),
-  grain_cbm: z.coerce.number().int().positive().optional(),
+  // Workbook two-value model is the source of truth (09_VESSEL_FIELD_SPEC /
+  // 10_ENUMS / DQ-V03). Stored values are the DB enum canon; "Cargo Ship" is
+  // shown in the UI but persisted as "General Cargo" (its synonym) so manual
+  // and synced rows stay consistent (see VESSEL_TYPE_OPTIONS).
+  vessel_type: z.enum(["Bulk Carrier", "General Cargo", "Other"]),
+  // DWT is THE match figure and is required; niche gate is <=30,000 (QC-13).
+  dwt_grain: z.coerce
+    .number()
+    .int()
+    .min(500, "DWT must be 500–30,000 MT")
+    .max(30000, "DWT must be 500–30,000 MT"),
+  dwt_bale: z.coerce
+    .number()
+    .int()
+    .max(30000, "DWT Bale must be 30,000 MT or less")
+    .positive()
+    .optional(),
+  // Cargo intake capacity (formerly Grain CBM) is required; stored in CBM.
+  grain_cbm: z.coerce
+    .number()
+    .int()
+    .min(500, "Cargo intake capacity must be 500–60,000 CBM")
+    .max(60000, "Cargo intake capacity must be 500–60,000 CBM"),
+  grain_cbm_unit: z.enum(["CBM", "CBFT"]).optional(),
   bale_cbm: z.coerce.number().int().positive().optional(),
   build_year: z.coerce
     .number()
@@ -66,7 +104,10 @@ const extendedVesselSchema = z.object({
   crane_swl_mt: z.coerce.number().positive().optional(),
   grain_certified: z.boolean().optional(),
   dg_certified: z.boolean().optional(),
-  max_loa_m: z.coerce.number().positive().optional(),
+  max_loa_m: z.coerce
+    .number()
+    .min(40, "LOA must be 40–200 m")
+    .max(200, "LOA must be 40–200 m"),
   max_draft_m: z.coerce.number().positive().optional(),
   pi_club: z.string().optional(),
   owner_company: z.string().optional(),
@@ -162,18 +203,33 @@ const extendedVesselSchema = z.object({
   gross_tonnage: z.coerce.number().int().positive().optional(),
   net_tonnage: z.coerce.number().int().positive().optional(),
   scnrt: z.coerce.number().int().positive().optional(),
-});
+})
+  .superRefine((d, ctx) => {
+    // IMO check-digit (PROPOSED → adopted): validate the 7th digit when an IMO
+    // is supplied. Emptiness is handled by the required-unless-bypass gate.
+    if (
+      d.imo_number &&
+      /^\d{7}$/.test(d.imo_number) &&
+      !validateImoCheckDigit(d.imo_number)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "IMO check digit is invalid — please verify the IMO number",
+        path: ["imo_number"],
+      });
+    }
+  });
 
 type ExtendedVesselValues = z.infer<typeof extendedVesselSchema>;
 
-const VESSEL_TYPES = [
-  "Bulk Carrier",
-  "General Cargo",
-  "MPP (Multi-Purpose)",
-  "Break Bulk",
-  "Geared Bulk",
-  "Open Hatch",
-  "Other",
+// Workbook two-value model (10_ENUMS / DQ-V03): "Cargo Ship" and "Bulk
+// Carrier". "Cargo Ship" is persisted as the DB-canonical "General Cargo" (its
+// synonym) so manually-added and workbook-synced rows never fragment. "Other"
+// is kept because the DB enum carries it for edge cases.
+const VESSEL_TYPE_OPTIONS = [
+  { value: "Bulk Carrier", label: "Bulk Carrier" },
+  { value: "General Cargo", label: "Cargo Ship" },
+  { value: "Other", label: "Other" },
 ] as const;
 
 const STEPS = [
@@ -187,7 +243,7 @@ const STEPS = [
 
 const STEP_FIELDS: Record<number, (keyof ExtendedVesselValues)[]> = {
   0: ["vessel_name", "vessel_type"],
-  1: ["dwt_grain"],
+  1: ["dwt_grain", "max_loa_m", "grain_cbm"],
   2: [],
   3: [],
   4: [],
@@ -493,6 +549,7 @@ export function VesselCreateForm() {
       preferred_trading_areas: [],
       // FIX 3: add to defaultValues so TypeScript can narrow the array type
       preferred_zones: [],
+      grain_cbm_unit: "CBM",
     },
     mode: "onChange",
   });
@@ -512,7 +569,7 @@ export function VesselCreateForm() {
       };
       put("vessel_name", e.vessel_name);
       put("imo_number", e.imo_number);
-      put("vessel_type", e.vessel_type);
+      put("vessel_type", normalizeVesselTypeOption(e.vessel_type));
       put("dwt_grain", e.dwt_grain);
       put("grain_cbm", e.grain_cbm);
       put("gross_tonnage", e.gross_tonnage);
@@ -555,6 +612,14 @@ export function VesselCreateForm() {
       );
       if (!valid) return;
     }
+    // IMO is required to leave the Identity step, unless the user has explicitly
+    // chosen "Continue without IMO" (DQ-V02: leave empty only if unverifiable).
+    if (step === 0 && !form.getValues("imo_number")?.trim() && !imoBypass) {
+      toast.error(
+        'IMO number is required. Use "Continue without IMO" only if it genuinely cannot be verified.',
+      );
+      return;
+    }
     navigate(Math.min(step + 1, STEPS.length - 1));
   };
 
@@ -562,19 +627,39 @@ export function VesselCreateForm() {
 
   // ── FIX 4: pass grain_cbm, bale_cbm, preferred_zones to createVessel ─────────
   const onSubmit = async (data: ExtendedVesselValues) => {
+    // DQ-V01: strip any MV/M.V/MT prefix from the name and tell the user.
+    const cleanedName = stripVesselNamePrefix(data.vessel_name);
+    if (cleanedName !== data.vessel_name) {
+      toast.info(`Vessel-name prefix removed — saving as "${cleanedName}".`);
+    }
+    // IMO required unless explicitly bypassed (mirrors the Identity-step gate).
+    const imo = data.imo_number?.trim() || undefined;
+    if (!imo && !imoBypass) {
+      setStep(0);
+      toast.error(
+        'IMO number is required. Use "Continue without IMO" only if it genuinely cannot be verified.',
+      );
+      return;
+    }
+    // Cargo intake capacity is stored in CBM; convert if entered as CBFT.
+    const grainCbm =
+      data.grain_cbm != null && data.grain_cbm_unit === "CBFT"
+        ? Math.round(data.grain_cbm / CBFT_PER_CBM)
+        : data.grain_cbm;
+
     setIsSubmitting(true);
     try {
       const supabase = getSupabaseBrowserClient();
       const { id } = await createVessel(supabase, {
-        vessel_name: data.vessel_name,
-        imo_number: data.imo_number,
+        vessel_name: cleanedName,
+        imo_number: imo,
         vessel_type: data.vessel_type as
           | "Bulk Carrier"
           | "General Cargo"
           | "Other",
         dwt_grain: data.dwt_grain,
         dwt_bale: data.dwt_bale,
-        grain_cbm: data.grain_cbm,
+        grain_cbm: grainCbm,
         bale_cbm: data.bale_cbm,
         build_year: data.build_year,
         flag: data.flag,
@@ -753,21 +838,14 @@ export function VesselCreateForm() {
                           <option value="" disabled>
                             Select type…
                           </option>
-                          {VESSEL_TYPES.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
+                          {VESSEL_TYPE_OPTIONS.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
                             </option>
                           ))}
                         </FieldSelect>
                       )}
                     />
-                    {values.vessel_type === "MPP (Multi-Purpose)" && (
-                      <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1">
-                        <Info className="w-3.5 h-3.5 shrink-0" />
-                        MPP vessels match both Dry Bulk and Break Bulk cargo
-                        listings.
-                      </p>
-                    )}
                   </div>
                   <div>
                     <FieldLabel hint="Required — IMO is the vessel's unique identifier for matchmaking, tracking and sanctions screening.">
@@ -803,11 +881,19 @@ export function VesselCreateForm() {
                     )}
                   </div>
                   <div>
-                    <FieldLabel>Flag state</FieldLabel>
+                    <FieldLabel hint="Country of registration — pick or type. FOC flags are normal here.">
+                      Flag state
+                    </FieldLabel>
                     <FieldInput
                       {...form.register("flag")}
+                      list="flag-states"
                       placeholder="e.g. Panama"
                     />
+                    <datalist id="flag-states">
+                      {FLAG_STATES.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="bg-blue-50 border border-blue-200 rounded p-4 flex gap-3">
                     <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
@@ -869,24 +955,45 @@ export function VesselCreateForm() {
                     </div>
                   </FormSection>
 
-                  {/* ── Cubic capacity (grain_cbm / bale_cbm) ── */}
-                  <FormSection title="Cubic capacity (optional)">
+                  {/* ── Cargo intake capacity (grain_cbm, required) + bale ── */}
+                  <FormSection title="Cargo intake capacity">
                     <p className="text-xs text-asb-gray-500 mb-3 leading-relaxed">
-                      Enter the grain and/or bale cubic capacity of all holds
-                      combined. This is used to verify cargo volume fits: Volume
-                      (cbm) = Qty (MT) × Stowage Factor.
+                      Total cargo intake (grain) capacity of all holds combined —
+                      required. Used to verify cargo volume fits: Volume =
+                      Qty (MT) × Stowage Factor. Choose the unit; stored in CBM.
                     </p>
                     <div className="grid grid-cols-2 max-[768px]:grid-cols-1 gap-4">
                       <div>
-                        <FieldLabel hint="(cbm / m³)">
-                          Grain capacity
-                        </FieldLabel>
+                        <div className="flex items-center justify-between">
+                          <FieldLabel required>
+                            Cargo intake capacity
+                          </FieldLabel>
+                          <Controller
+                            control={form.control}
+                            name="grain_cbm_unit"
+                            render={({ field }) => (
+                              <select
+                                {...field}
+                                value={field.value ?? "CBM"}
+                                className="text-xs border border-asb-gray-200 rounded px-1.5 py-0.5 bg-white text-asb-gray-700"
+                                aria-label="Cargo intake capacity unit"
+                              >
+                                <option value="CBM">CBM (m³)</option>
+                                <option value="CBFT">CBFT (ft³)</option>
+                              </select>
+                            )}
+                          />
+                        </div>
                         <FieldInput
                           type="number"
                           {...form.register("grain_cbm", {
                             setValueAs: parseOptionalNumber,
                           })}
-                          placeholder="e.g. 38 500"
+                          placeholder={
+                            values.grain_cbm_unit === "CBFT"
+                              ? "e.g. 1 359 000"
+                              : "e.g. 38 500"
+                          }
                           error={errors.grain_cbm?.message}
                         />
                         {values.grain_cbm && values.dwt_grain && (
@@ -1713,11 +1820,19 @@ export function VesselCreateForm() {
                   <FormSection title="P&I Insurance">
                     <div className="space-y-4">
                       <div>
-                        <FieldLabel>P&I Club name</FieldLabel>
+                        <FieldLabel hint="Pick an International Group club or type any insurer.">
+                          P&I Club name
+                        </FieldLabel>
                         <FieldInput
                           {...form.register("pi_club")}
+                          list="pi-clubs"
                           placeholder="e.g. UK P&I Club"
                         />
+                        <datalist id="pi-clubs">
+                          {PI_CLUBS.map((c) => (
+                            <option key={c} value={c} />
+                          ))}
+                        </datalist>
                       </div>
                       <Controller
                         control={form.control}

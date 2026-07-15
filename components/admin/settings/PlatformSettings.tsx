@@ -544,6 +544,25 @@ export function PlatformSettings({
                   out. Vessels with an open date use the ±7-day window. Default 14.
                 </span>
               </div>
+              <div className="adm-field">
+                <span className="adm-field__label">Insights open-position lookback (days)</span>
+                <input
+                  className="adm-input"
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  value={market.insightsOpenLookbackDays}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    setMarket((m) => ({ ...m, insightsOpenLookbackDays: e.target.value }))
+                  }
+                />
+                <span style={{ fontSize: 11, color: "#8B95A3", marginTop: 4 }}>
+                  Market Insights only: a vessel whose open date falls up to this many days
+                  before a report week still counts as “open” that week. Independent of the
+                  board’s ±7-day window. Default 14.
+                </span>
+              </div>
             </div>
           </div>
 

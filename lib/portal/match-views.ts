@@ -2,6 +2,7 @@
 // result rows (CargoMatchResult / VesselMatchResult).
 import type { CargoMatchResult } from "@/sdk/app/cargos";
 import type { VesselMatchResult } from "@/lib/schemas/vessel";
+import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 
 // A vessel that matches a cargo (shown in the cargo detail panel).
 export interface MatchVesselView {
@@ -40,7 +41,7 @@ export interface MatchCargoView {
 export function toMatchVessel(r: CargoMatchResult): MatchVesselView {
   return {
     id: r.availability_id,
-    name: r.vessel_name,
+    name: stripVesselNamePrefix(r.vessel_name),
     type: r.vessel_type,
     dwt: r.dwt_grain,
     flag: r.flag,

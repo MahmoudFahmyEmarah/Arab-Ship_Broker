@@ -35,7 +35,9 @@ export default async function NewAvailabilityPage({ params }: PageProps) {
   const appUser = await getAppUserRow<{ role?: string }>(supabase, user.id, "role");
 
   const canAccessVesselPages =
-    appUser?.role === "vessel_owner" || appUser?.role === "broker";
+    appUser?.role === "vessel_owner" ||
+    appUser?.role === "broker" ||
+    appUser?.role === "admin";
 
   if (!canAccessVesselPages) redirect("/dashboard");
 

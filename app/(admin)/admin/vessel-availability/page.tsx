@@ -9,6 +9,7 @@ import {
   VesselAvailabilityTable,
   type AdminVesselAvailRow,
 } from "@/components/admin/vessel/VesselAvailabilityTable";
+import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 
 const STATUS_TABS = ["ALL", "OPEN", "ON SUBS", "FIXED", "INACTIVE"] as const;
 const REVIEW_TABS = ["ALL", "PENDING", "APPROVED", "REJECTED", "FLAGGED"] as const;
@@ -58,7 +59,7 @@ export default async function AdminVesselAvailabilityPage({
       open_port_name: (raw.open_port_name as string) ?? null,
       open_zone: (raw.open_zone as string) ?? null,
       open_date: (raw.open_date as string) ?? null,
-      vessel_name: v?.vessel_name ?? "—",
+      vessel_name: v?.vessel_name ? stripVesselNamePrefix(v.vessel_name) : "—",
       imo_number: v?.imo_number ?? null,
       vessel_type: v?.vessel_type ?? null,
       dwt_grain: v?.dwt_grain ?? null,

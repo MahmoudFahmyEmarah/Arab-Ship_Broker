@@ -7,9 +7,11 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin/require-admin";
-import { SHEET_SPECS, specById } from "@/lib/sync/sheets";
+import { SHEET_SPECS, specById, ZONES } from "@/lib/sync/sheets";
 import { classify } from "@/lib/sync/diff";
 import { previewTable, coerce } from "@/lib/sync/preview";
+import { str, num, intStrip, locode, upper, parseLaycan } from "@/lib/sync/normalize";
+import { FUEL_TYPES } from "@/lib/schemas/vessel";
 import type { Cell, Flag, RawRow } from "@/lib/sync/types";
 
 const SHEET_IDS = new Set<string>(SHEET_SPECS.map((s) => s.id));
@@ -276,6 +278,167 @@ export async function listStaged(
     return { success: true, data: { rows, total: count ?? 0 } };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Could not read staged rows." };
+  }
+}
+
+// ── invalid staged rows → Manual Review "Needs fixing" (per active batch) ────
+// Auto-collects every invalid staged row in the batch currently under review,
+// tagged with its category (sheet). Fixing a row via editStagedRow re-validates
+// it, so it drops out of this list once the errors clear.
+export interface InvalidStagedRow extends StagedRowView {
+  sheet: string;
+}
+
+async function latestReviewBatch(c: Awaited<ReturnType<typeof adminClient>>) {
+  const { data } = await c
+    .from("sync_batch")
+    .select("id, label")
+    .in("status", ["draft", "committing"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data ?? null) as { id: string; label: string | null } | null;
+}
+
+export async function listInvalidStaged(): Promise<Result<{
+  batchId: string | null; batchLabel: string | null; rows: InvalidStagedRow[];
+}>> {
+  try {
+    const c = await adminClient();
+    const batch = await latestReviewBatch(c);
+    if (!batch) return { success: true, data: { batchId: null, batchLabel: null, rows: [] } };
+
+    const { data, error } = await c
+      .from("sync_staged_row")
+      .select("id, sheet, classification, business_key, payload, diff, flags, raw, row_index, committed")
+      .eq("batch_id", batch.id)
+      .eq("classification", "invalid")
+      .eq("committed", false)
+      .order("sheet", { ascending: true })
+      .order("row_index", { ascending: true, nullsFirst: false });
+    if (error) return { success: false, error: error.message };
+
+    const rows = (data ?? []).map((d) => {
+      const row = d as Record<string, unknown>;
+      const raw = (row.raw ?? {}) as Record<string, unknown>;
+      const source: EmailSourceView | null = raw._SRC_FROM || raw._SRC_SUBJECT || raw._SRC_TEXT
+        ? {
+            from: (raw._SRC_FROM as string) ?? null, subject: (raw._SRC_SUBJECT as string) ?? null,
+            date: (raw._SRC_DATE as string) ?? null, text: (raw._SRC_TEXT as string) ?? null,
+            channel: (raw._SRC_CHANNEL as "email" | "whatsapp") ?? "email",
+            name: (raw._SRC_NAME as string) ?? null, msgId: (raw._SRC_MSG_ID as string) ?? null,
+          }
+        : null;
+      const { raw: _drop, ...rest } = row;
+      void _drop;
+      return { ...rest, source } as InvalidStagedRow;
+    });
+    return { success: true, data: { batchId: batch.id, batchLabel: batch.label, rows } };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Could not read invalid rows." };
+  }
+}
+
+export async function countInvalidStagedPending(): Promise<number> {
+  try {
+    const c = await adminClient();
+    const batch = await latestReviewBatch(c);
+    if (!batch) return 0;
+    const { count } = await c
+      .from("sync_staged_row")
+      .select("id", { count: "exact", head: true })
+      .eq("batch_id", batch.id)
+      .eq("classification", "invalid")
+      .eq("committed", false);
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ── post 02_VESSELS open positions into vessel_availability ──────────────────
+// Reads the staged vessels rows' raw cells (which carry the open-position
+// columns the vessel master mapping ignores), parses them with the sync
+// normalizers, and hands a clean array to sync_vessel_positions() which upserts
+// one OPEN posting per vessel (and closes non-open ones).
+export async function syncVesselPositions(
+  batchId: string,
+): Promise<Result<{ posted: number; closed: number; skipped: number }>> {
+  const bad = badBatch(batchId);
+  if (bad) return { success: false, error: bad };
+  try {
+    const c = await adminClient();
+    const { data, error } = await c
+      .from("sync_staged_row")
+      .select("raw")
+      .eq("batch_id", batchId)
+      .eq("sheet", "vessels");
+    if (error) return { success: false, error: error.message };
+
+    const asNum = (v: Cell): number | null => {
+      const n = num(v);
+      return typeof n === "number" ? n : null;
+    };
+    const asInt = (v: Cell): number | null => {
+      const n = intStrip(v);
+      return typeof n === "number" ? n : null;
+    };
+    const fuelSet = new Set<string>(FUEL_TYPES as readonly string[]);
+
+    const positions = (data ?? [])
+      .map((row) => ((row as { raw: Record<string, Cell> }).raw ?? {}))
+      .map((raw) => {
+        const imo = str(raw["IMO"] ?? raw["IMO_NUMBER"] ?? null);
+        const status = str(raw["STATUS"] ?? null);
+        if (!imo || !status) return null;
+        const from = parseLaycan(raw["OPEN_FROM"] ?? null);
+        const to = parseLaycan(raw["OPEN_TO"] ?? null);
+        const oz = upper(raw["OPEN_ZONE"] ?? null);
+        const openZone = oz && ZONES.has(oz) ? oz : null;
+        const fuelRaw = str(raw["FUEL_TYPE"] ?? null);
+        const fuel = fuelRaw && fuelSet.has(fuelRaw) ? fuelRaw : null;
+        let rangeDays: number | null = null;
+        if (from.date && to.date) {
+          const d = Math.round((Date.parse(to.date) - Date.parse(from.date)) / 86_400_000);
+          rangeDays = d >= 0 && d <= 60 ? d : null;
+        }
+        return {
+          imo,
+          status,
+          open_port_locode: locode(raw["OPEN_LOCODE"] ?? null),
+          open_zone: openZone,
+          open_date: from.date,
+          open_date_range_days: rangeDays,
+          service_speed_kn: asNum(raw["SERVICE_SPEED_KN"] ?? null),
+          me_consumption_mt_day: asNum(raw["ME_CONS_SEA_MT"] ?? null),
+          me_consumption_port_mt_day: asNum(raw["ME_CONS_PORT_MT"] ?? null),
+          aux_consumption_port_mt_day: asNum(raw["AUX_CONS_PORT_MT"] ?? null),
+          fuel_type: fuel,
+          brob_mt: asNum(raw["BROB_MT"] ?? null),
+          num_grabs: asInt(raw["NUM_GRABS"] ?? null),
+          grab_capacity_mt: asNum(raw["GRAB_CAPACITY_MT"] ?? null),
+        };
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+
+    if (positions.length === 0)
+      return { success: true, data: { posted: 0, closed: 0, skipped: 0 } };
+
+    const { data: res, error: rErr } = await c.rpc("sync_vessel_positions", {
+      p_positions: positions,
+    });
+    if (rErr) return { success: false, error: rErr.message };
+    revalidatePath("/dashboard");
+    revalidatePath("/");
+    return {
+      success: true,
+      data: res as { posted: number; closed: number; skipped: number },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Could not post open positions.",
+    };
   }
 }
 

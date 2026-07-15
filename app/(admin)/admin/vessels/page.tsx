@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/admin/require-admin";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { RiskLevelBadge } from "@/components/admin/AdminBadge";
 import type { AdminVesselRow, RiskLevel } from "@/lib/admin/types";
+import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 import { cn } from "@/lib/utils";
 
 const RISK_TABS: { label: string; value: RiskLevel | "ALL" }[] = [
@@ -149,7 +150,7 @@ export default async function AdminVesselsPage({
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                       <p className="text-sm font-bold text-asb-navy group-hover:text-asb-blue transition-colors truncate">
-                        {v.vessel_name}
+                        {stripVesselNamePrefix(v.vessel_name)}
                       </p>
                       {v.is_sanctioned && (
                         <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-200 rounded px-1.5 py-0.5">

@@ -5,47 +5,149 @@
 //   • Vessels — IMO-less circular positions → sync by a name+built+dwt composite
 //     key, or by IMO if the admin supplies one.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Check, X, ArrowRight, Ban, PackageSearch, Ship, Mail } from "lucide-react";
+import { Loader2, Check, X, ArrowRight, Ban, PackageSearch, Ship, Mail, Wrench } from "lucide-react";
 import { ENUMS } from "@/lib/sync/preview";
 import {
   listCommodityQueue, resolveCommodityReview, ignoreCommodityReview, countCommodityQueuePending,
   listVesselQueue, resolveVesselReview, ignoreVesselReview, countVesselQueuePending,
   resolveVesselQueuePatchOnly, findVesselQueueMatches, sendVesselQueueTeaser,
-  type CommodityQueueRow, type VesselQueueRow, type MatchView,
+  listInvalidStaged, countInvalidStagedPending,
+  type CommodityQueueRow, type VesselQueueRow, type MatchView, type InvalidStagedRow,
 } from "@/app/(admin)/admin/data-sync/actions";
+import { StagedEditDrawer } from "./StagedEditDrawer";
 import { C, btn } from "./ui";
 
 type Status = "pending" | "mapped" | "ignored";
 
+type Queue = "commodities" | "vessels" | "invalid";
+
 export function ManualReviewView({ onPendingChange }: { onPendingChange?: (n: number) => void }) {
-  const [queue, setQueue] = useState<"commodities" | "vessels">("commodities");
+  const [queue, setQueue] = useState<Queue>("commodities");
+  const [invalidCount, setInvalidCount] = useState(0);
 
   const refreshBadge = useCallback(async () => {
-    const [cc, vc] = await Promise.all([countCommodityQueuePending(), countVesselQueuePending()]);
-    onPendingChange?.(cc + vc);
+    const [cc, vc, ic] = await Promise.all([
+      countCommodityQueuePending(), countVesselQueuePending(), countInvalidStagedPending(),
+    ]);
+    setInvalidCount(ic);
+    onPendingChange?.(cc + vc + ic);
   }, [onPendingChange]);
   useEffect(() => { let c = false; (async () => { await Promise.resolve(); if (!c) await refreshBadge(); })(); return () => { c = true; }; }, [refreshBadge]);
+
+  const tabs: { id: Queue; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: "commodities", label: "Commodities", icon: <PackageSearch size={15} /> },
+    { id: "vessels", label: "Vessels (no IMO)", icon: <Ship size={15} /> },
+    { id: "invalid", label: "Needs fixing", icon: <Wrench size={15} />, badge: invalidCount },
+  ];
 
   return (
     <div style={{ maxWidth: 900 }}>
       <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
-        {(["commodities", "vessels"] as const).map((q) => {
-          const on = q === queue;
+        {tabs.map((t) => {
+          const on = t.id === queue;
           return (
-            <button key={q} onClick={() => setQueue(q)}
+            <button key={t.id} onClick={() => setQueue(t.id)}
               style={{ padding: "8px 15px", borderRadius: 8, border: `1px solid ${on ? C.brass : C.line}`,
                 background: on ? C.brassBg : "#fff", color: on ? C.brassDeep : C.ink2, cursor: "pointer",
                 font: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 500, display: "inline-flex", alignItems: "center", gap: 7 }}>
-              {q === "commodities" ? <PackageSearch size={15} /> : <Ship size={15} />}
-              {q === "commodities" ? "Commodities" : "Vessels (no IMO)"}
+              {t.icon}
+              {t.label}
+              {t.badge ? <span style={{ minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: C.redBg, color: C.red, fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{t.badge}</span> : null}
             </button>
           );
         })}
       </div>
-      {queue === "commodities" ? <CommodityQueue onChange={refreshBadge} /> : <VesselQueue onChange={refreshBadge} />}
+      {queue === "commodities" ? <CommodityQueue onChange={refreshBadge} />
+        : queue === "vessels" ? <VesselQueue onChange={refreshBadge} />
+        : <InvalidQueue onChange={refreshBadge} />}
     </div>
+  );
+}
+
+// ── Invalid staged rows ("Needs fixing"), grouped by category ────────────────
+const SHEET_META: Record<string, { label: string }> = {
+  cargo: { label: "Cargo" },
+  vessels: { label: "Vessels" },
+  ports: { label: "Ports" },
+  companies: { label: "Companies" },
+  commodities: { label: "Commodities" },
+};
+
+function InvalidQueue({ onChange }: { onChange: () => void }) {
+  const [rows, setRows] = useState<InvalidStagedRow[] | null>(null);
+  const [batchLabel, setBatchLabel] = useState<string | null>(null);
+  const [cat, setCat] = useState<string>("all");
+  const [editing, setEditing] = useState<InvalidStagedRow | null>(null);
+
+  const reload = useCallback(async () => {
+    const res = await listInvalidStaged();
+    if (!res.success) { toast.error(res.error); setRows([]); return; }
+    setRows(res.data.rows);
+    setBatchLabel(res.data.batchLabel);
+    onChange();
+  }, [onChange]);
+  useEffect(() => { let c = false; (async () => { await Promise.resolve(); if (!c) await reload(); })(); return () => { c = true; }; }, [reload]);
+
+  // Category chips with per-category counts (only categories that have rows).
+  const cats = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of rows ?? []) counts.set(r.sheet, (counts.get(r.sheet) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [rows]);
+  const shown = (rows ?? []).filter((r) => cat === "all" || r.sheet === cat);
+
+  if (rows === null) return <Loading />;
+  if (rows.length === 0)
+    return <Empty icon={<Wrench size={26} />} text="No invalid rows in the current review batch — everything either syncs cleanly or has already been fixed." />;
+
+  return (
+    <>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, alignItems: "center" }}>
+        {[["all", `All (${rows.length})`] as const, ...cats.map((c) => [c[0], `${SHEET_META[c[0]]?.label ?? c[0]} (${c[1]})`] as const)].map(([id, label]) => {
+          const on = id === cat;
+          return (
+            <button key={id} onClick={() => setCat(id)}
+              style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${on ? C.brass : C.line}`, background: on ? C.brassBg : "#fff", color: on ? C.brassDeep : C.ink2, cursor: "pointer", font: "inherit", fontSize: 12.5, fontWeight: on ? 600 : 500 }}>
+              {label}
+            </button>
+          );
+        })}
+        {batchLabel && <span style={{ marginLeft: "auto", fontSize: 12, color: C.ink3, fontFamily: C.mono }}>{batchLabel}</span>}
+      </div>
+
+      <div style={listStyle}>
+        {shown.map((r, i) => {
+          const errs = r.flags.filter((f) => f.level === "error");
+          return (
+            <div key={r.id} style={rowStyle(i)}>
+              <span style={{ ...iconChip, background: C.redBg, color: C.red }}><Wrench size={16} /></span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.navy }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: C.brassDeep, marginRight: 8 }}>{SHEET_META[r.sheet]?.label ?? r.sheet}</span>
+                  {r.business_key ?? (r.row_index != null ? `Row ${r.row_index}` : "—")}
+                </div>
+                <div style={{ fontSize: 12, color: C.red, marginTop: 2 }}>
+                  {errs.map((f) => `${f.field ? `${f.field}: ` : ""}${f.msg}`).join(" · ") || "Invalid row"}
+                </div>
+              </div>
+              <button onClick={() => setEditing(r)} style={btn("primary")}>Fix <ArrowRight size={14} /></button>
+            </div>
+          );
+        })}
+      </div>
+
+      {editing && (
+        <StagedEditDrawer
+          row={editing}
+          sheetId={editing.sheet}
+          onClose={() => setEditing(null)}
+          onSaved={async () => { setEditing(null); await reload(); }}
+        />
+      )}
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </>
   );
 }
 

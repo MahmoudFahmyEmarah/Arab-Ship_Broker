@@ -59,7 +59,7 @@ function SceneShell({ children }: { children: React.ReactNode }) {
     <div
       style={{
         position: "relative",
-        height: 176,
+        height: 194, // was 176 (design 188 + ½Δ; uniform across all variants)
         overflow: "hidden",
         background: "linear-gradient(180deg,#0d2138 0%,#0a1a2f 62%,#091627 100%)",
       }}
@@ -190,46 +190,56 @@ function BeaconScene() {
   );
 }
 
-/* ---- compass scene (light sea chart + spinning compass rose) -------------- */
+/* ---- compass scene (sea chart + spinning compass rose) --------------------
+   Recoloured to the new ASB colour handoff (navy/blue on a steel-tint chart).
+   Old parchment/brass palette (pre-handoff) kept here for reference, not deleted:
+     scene bg #f3ead4 · chart grid rgba(150,120,60,0.10) · route #2456a6
+     origin port #2f9d5e · waypoint #c69749 · rose outer rgba(198,151,73,0.55)
+     rose bg rgba(255,255,255,0.4) · rose inner rgba(198,151,73,0.4)
+     N label #8a6420 · S/W/E labels #b6a06a · needle N #c0392b · needle S #13314f
+     hub #c69749 · hub border #8a6420 */
 function CompassScene() {
   const label = { position: "absolute" as const, font: "700 10px var(--font-inter, sans-serif)" };
+  // Sizes: final = design + ½·(design − old). scene 176→194 · rose 112→121 ·
+  // needle 41→44 · labels/ports nudged to match. Old sizes kept as comments.
   return (
-    <div style={{ position: "relative", height: 176, overflow: "hidden", background: "#f3ead4" }}>
+    <div style={{ position: "relative", height: 194 /* was 176 */, overflow: "hidden", background: "#E7EEF5" /* was #f3ead4 */ }}>
       {/* chart grid */}
       <div
         style={{
           position: "absolute",
           inset: 0,
+          // was rgba(150,120,60,0.10)
           backgroundImage:
-            "linear-gradient(rgba(150,120,60,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(150,120,60,0.10) 1px, transparent 1px)",
+            "linear-gradient(rgba(24,95,165,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(24,95,165,0.08) 1px, transparent 1px)",
           backgroundSize: "30px 30px",
         }}
       />
-      {/* dashed plotted route */}
-      <svg width="100%" height="100%" viewBox="0 0 460 176" preserveAspectRatio="none" style={{ position: "absolute", inset: 0 }}>
-        <path d="M40 140 Q160 52 250 100 T430 60" fill="none" stroke="#2456a6" strokeWidth="2" strokeDasharray="6 7" opacity="0.7" />
+      {/* dashed plotted route — canvas widened to 496 (+18 each side from 460); route x shifted +18 to stay centred */}
+      <svg width="100%" height="100%" viewBox="0 0 496 194" /* was 0 0 478 194 (orig 460 176) */ preserveAspectRatio="none" style={{ position: "absolute", inset: 0 }}>
+        <path d="M62 155 Q178 62 268 114 T448 72" /* was M53 155 Q169 62 259 114 T439 72 (orig M44…) */ fill="none" stroke="#185FA5" strokeWidth="2" strokeDasharray="6 7" opacity="0.7" /* stroke was #2456a6 */ />
       </svg>
       {/* origin port */}
-      <div style={{ position: "absolute", left: 36, top: 136, width: 9, height: 9, margin: -4, borderRadius: "50%", background: "#2f9d5e" }} />
+      <div style={{ position: "absolute", left: 60 /* was 51 (+18 total from 42 for wider scene) */, top: 148 /* was 136 */, width: 9, height: 9, margin: -4, borderRadius: "50%", background: "#2A9962" /* was #2f9d5e */ }} />
       {/* destination waypoint (pulsing) */}
-      <div style={{ position: "absolute", left: 424, top: 60 }}>
-        <div style={{ position: "absolute", width: 24, height: 24, margin: -12, borderRadius: "50%", border: "1.5px solid #c69749", animation: "asbPulse 2.6s cubic-bezier(0.2,0.7,0.2,1) infinite" }} />
-        <div style={{ position: "absolute", width: 9, height: 9, margin: -4, borderRadius: "50%", background: "#c69749" }} />
+      <div style={{ position: "absolute", left: 442 /* was 433 (+18 total from 424 for wider scene) */, top: 66 /* was 60 */ }}>
+        <div style={{ position: "absolute", width: 24, height: 24, margin: -12, borderRadius: "50%", border: "1.5px solid #185FA5" /* was rgba(198,151,73,0.55) */, animation: "asbPulse 2.6s cubic-bezier(0.2,0.7,0.2,1) infinite" }} />
+        <div style={{ position: "absolute", width: 9, height: 9, margin: -4, borderRadius: "50%", background: "#185FA5" /* was #c69749 */ }} />
       </div>
       {/* compass rose */}
-      <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: 112, height: 112 }}>
-        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "1.5px solid rgba(198,151,73,0.55)", background: "rgba(255,255,255,0.4)" }} />
-        <div style={{ position: "absolute", inset: 15, borderRadius: "50%", border: "1px solid rgba(198,151,73,0.4)" }} />
-        <div style={{ ...label, left: "50%", top: 3, transform: "translateX(-50%)", color: "#8a6420" }}>N</div>
-        <div style={{ ...label, left: "50%", bottom: 3, transform: "translateX(-50%)", color: "#b6a06a" }}>S</div>
-        <div style={{ ...label, left: 5, top: "50%", transform: "translateY(-50%)", color: "#b6a06a" }}>W</div>
-        <div style={{ ...label, right: 5, top: "50%", transform: "translateY(-50%)", color: "#b6a06a" }}>E</div>
+      <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: 121 /* was 112 */, height: 121 /* was 112 */ }}>
+        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "1.5px solid rgba(24,72,107,0.35)" /* was rgba(198,151,73,0.55) */, background: "rgba(255,255,255,0.55)" /* was rgba(255,255,255,0.4) */ }} />
+        <div style={{ position: "absolute", inset: 16.5 /* was 15 */, borderRadius: "50%", border: "1px solid rgba(24,95,165,0.30)" /* was rgba(198,151,73,0.4) */ }} />
+        <div style={{ ...label, left: "50%", top: 4.5 /* was 3 */, transform: "translateX(-50%)", color: "#185FA5" /* was #8a6420 */ }}>N</div>
+        <div style={{ ...label, left: "50%", bottom: 4.5 /* was 3 */, transform: "translateX(-50%)", color: "#6B7A99" /* was #b6a06a */ }}>S</div>
+        <div style={{ ...label, left: 6.5 /* was 5 */, top: "50%", transform: "translateY(-50%)", color: "#6B7A99" /* was #b6a06a */ }}>W</div>
+        <div style={{ ...label, right: 6.5 /* was 5 */, top: "50%", transform: "translateY(-50%)", color: "#6B7A99" /* was #b6a06a */ }}>E</div>
         {/* spinning needle — inset:0 fills the rose so rotate spins about its centre */}
         <div style={{ position: "absolute", inset: 0, animation: "asbSpin 9s linear infinite" }}>
-          <div style={{ position: "absolute", left: "50%", top: 15, bottom: "50%", width: 0, transform: "translateX(-50%)", borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderBottom: "41px solid #c0392b" }} />
-          <div style={{ position: "absolute", left: "50%", top: "50%", bottom: 15, width: 0, transform: "translateX(-50%)", borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: "41px solid #13314f" }} />
+          <div style={{ position: "absolute", left: "50%", top: 16.5 /* was 15 */, bottom: "50%", width: 0, transform: "translateX(-50%)", borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderBottom: "44px solid #C84A4A" /* len was 41; color was #c0392b */ }} />
+          <div style={{ position: "absolute", left: "50%", top: "50%", bottom: 16.5 /* was 15 */, width: 0, transform: "translateX(-50%)", borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: "44px solid #1B3A5C" /* len was 41; color was #13314f */ }} />
         </div>
-        <div style={{ position: "absolute", left: "50%", top: "50%", width: 8, height: 8, margin: -4, borderRadius: "50%", background: "#c69749", border: "1px solid #8a6420" }} />
+        <div style={{ position: "absolute", left: "50%", top: "50%", width: 8, height: 8, margin: -4, borderRadius: "50%", background: "#185FA5" /* was #c69749 */, border: "1px solid #24486B" /* was #8a6420 */ }} />
       </div>
     </div>
   );
@@ -255,8 +265,11 @@ type CardTheme = {
   buttonBg: string;
   buttonColor: string;
   trailer: string;
+  accent: string;      // card border-top + progress-shimmer mid colour
+  shimmerEdge: string; // progress-shimmer transparent edge (rgba …, 0)
 };
 
+// Radar + beacon keep the original dark-navy / brass look (unchanged).
 const DARK_THEME: CardTheme = {
   cardBg: "#0a1a2f",
   cardBorder: "1px solid rgba(255,255,255,0.10)",
@@ -268,19 +281,25 @@ const DARK_THEME: CardTheme = {
   buttonBg: "#c69749",
   buttonColor: "#0a1a2f",
   trailer: "#5f7da0",
+  accent: "#c69749",
+  shimmerEdge: "rgba(198,151,73,0)",
 };
 
+// Compass (light) card — re-themed to the new ASB colour handoff (navy/blue on
+// white). Old parchment/brass values kept inline as comments, not deleted.
 const LIGHT_THEME: CardTheme = {
-  cardBg: "#faf6ee",
-  cardBorder: "1px solid #e8dcc0",
-  shadow: "0 24px 70px rgba(10,26,47,0.30)",
-  eyebrow: "#8a6420",
-  title: "#102a47",
-  body: "#5a6776",
-  track: "rgba(150,120,60,0.18)",
-  buttonBg: "#102a47",
-  buttonColor: "#faf6ee",
-  trailer: "#94865f",
+  cardBg: "#FFFFFF",                          // was "#faf6ee"
+  cardBorder: "1px solid #DDE5F0",            // was "1px solid #e8dcc0"
+  shadow: "0 24px 70px rgba(13,37,69,0.22)",  // was "0 24px 70px rgba(10,26,47,0.30)"
+  eyebrow: "#185FA5",                         // was "#8a6420"
+  title: "#0D2545",                           // was "#102a47"
+  body: "#46566F",                            // was "#5a6776"
+  track: "rgba(24,95,165,0.14)",              // was "rgba(150,120,60,0.18)"
+  buttonBg: "#0D2545",                        // was "#102a47"
+  buttonColor: "#F5F7FA",                     // was "#faf6ee"
+  trailer: "#6B7A99",                         // was "#94865f"
+  accent: "#185FA5",                          // was "#c69749" (brass)
+  shimmerEdge: "rgba(24,95,165,0)",           // was "rgba(198,151,73,0)"
 };
 
 const THEME: Record<ComingSoonVariant, CardTheme> = {
@@ -297,11 +316,11 @@ export function ComingSoon({ variant }: { variant: ComingSoonVariant }) {
       className="asb-cs-card"
       style={{
         position: "relative",
-        width: 460,
+        width: 496, // was 460 (+18px each side → +36px total scene width)
         maxWidth: "92%",
         background: t.cardBg,
         border: t.cardBorder,
-        borderTop: "2px solid #c69749",
+        borderTop: `2px solid ${t.accent}`, // was "2px solid #c69749" (brass, shared); now per-theme (compass → #185FA5)
         borderRadius: 16,
         boxShadow: t.shadow,
         overflow: "hidden",
@@ -311,15 +330,15 @@ export function ComingSoon({ variant }: { variant: ComingSoonVariant }) {
     >
       <Scene variant={variant} />
 
-      <div style={{ padding: "20px 28px 24px", textAlign: "center" }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", color: t.eyebrow, marginBottom: 9 }}>
+      <div style={{ padding: "23px 28px 27px" /* was "20px 28px 24px" */, textAlign: "center" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", color: t.eyebrow, marginBottom: 10.5 /* was 9 */ }}>
           {copy.eyebrow}
         </div>
         <h2
           style={{
             fontFamily: "var(--font-fraunces, Georgia, 'Times New Roman', serif)",
             fontWeight: 500,
-            fontSize: 25,
+            fontSize: 26.5, // was 25
             lineHeight: 1.15,
             letterSpacing: "-0.01em",
             color: t.title,
@@ -328,7 +347,7 @@ export function ComingSoon({ variant }: { variant: ComingSoonVariant }) {
         >
           {copy.title}
         </h2>
-        <p style={{ fontSize: 13.5, lineHeight: 1.6, color: t.body, margin: "0 auto 12px", maxWidth: 340 }}>
+        <p style={{ fontSize: 13.5, lineHeight: 1.6, color: t.body, margin: "0 auto 21px" /* was "0 auto 12px" */, maxWidth: 340 }}>
           {copy.body}
         </p>
 
@@ -338,7 +357,7 @@ export function ComingSoon({ variant }: { variant: ComingSoonVariant }) {
 
         {/* indeterminate brass progress */}
         <div style={{ position: "relative", height: 4, width: 200, margin: "0 auto 20px", background: t.track, borderRadius: 999, overflow: "hidden" }}>
-          <div style={{ position: "absolute", top: 0, bottom: 0, width: "38%", borderRadius: 999, background: "linear-gradient(90deg, rgba(198,151,73,0), #c69749 50%, rgba(198,151,73,0))", animation: "asbShimmer 1.9s cubic-bezier(0.4,0,0.2,1) infinite" }} />
+          <div style={{ position: "absolute", top: 0, bottom: 0, width: "38%", borderRadius: 999, background: `linear-gradient(90deg, ${t.shimmerEdge}, ${t.accent} 50%, ${t.shimmerEdge})` /* was: linear-gradient(90deg, rgba(198,151,73,0), #c69749 50%, rgba(198,151,73,0)) — now per-theme */, animation: "asbShimmer 1.9s cubic-bezier(0.4,0,0.2,1) infinite" }} />
         </div>
 
         <Link
