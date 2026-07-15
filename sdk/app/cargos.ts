@@ -53,6 +53,7 @@ export async function submitCargo(
         freight_idea_usd_mt: payload.freight_idea_usd_mt ?? null,
         commission_pct: payload.commission_pct ?? null,
         commission_ttl_pct: payload.commission_ttl_pct ?? null,
+        bag_weight_kg: payload.bag_weight_kg ?? null,
         demurrage_rate: payload.demurrage_rate ?? null,
         despatch_rate: payload.despatch_rate ?? null,
         broker: payload.broker || null,
@@ -83,6 +84,22 @@ export async function submitCargo(
   }
 
   return { id: typedCargo.id };
+}
+
+export function formatCargoSubmissionError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as {
+      message?: string;
+      details?: string;
+      hint?: string;
+    };
+    const parts = [candidate.message, candidate.details, candidate.hint]
+      .filter((part): part is string => Boolean(part?.trim()))
+      .map((part) => part.trim());
+    if (parts.length > 0) return parts.join(" ");
+  }
+  return "Something went wrong. Please try again.";
 }
 
 export async function updateCargo(

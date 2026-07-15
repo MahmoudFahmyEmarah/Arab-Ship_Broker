@@ -64,9 +64,9 @@ const extendedVesselSchema = z.object({
   vessel_name: z.string().min(2, "Vessel name is required"),
   imo_number: z
     .string()
-    .regex(/^\d{7}$/, "IMO must be exactly 7 digits")
-    .optional()
-    .or(z.literal("")),
+    .trim()
+    .min(1, "IMO number is required")
+    .regex(/^\d{7}$/, "IMO must be exactly 7 digits"),
   // Workbook two-value model is the source of truth (09_VESSEL_FIELD_SPEC /
   // 10_ENUMS / DQ-V03). Stored values are the DB enum canon; "Cargo Ship" is
   // shown in the UI but persisted as "General Cargo" (its synonym) so manual
@@ -535,7 +535,6 @@ export function VesselCreateForm() {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [imoBypass, setImoBypass] = useState(false);
   const submitTriggeredByButtonRef = useRef(false);
 
   const form = useForm<ExtendedVesselValues>({
@@ -632,15 +631,7 @@ export function VesselCreateForm() {
     if (cleanedName !== data.vessel_name) {
       toast.info(`Vessel-name prefix removed — saving as "${cleanedName}".`);
     }
-    // IMO required unless explicitly bypassed (mirrors the Identity-step gate).
-    const imo = data.imo_number?.trim() || undefined;
-    if (!imo && !imoBypass) {
-      setStep(0);
-      toast.error(
-        'IMO number is required. Use "Continue without IMO" only if it genuinely cannot be verified.',
-      );
-      return;
-    }
+    const imo = data.imo_number.trim();
     // Cargo intake capacity is stored in CBM; convert if entered as CBFT.
     const grainCbm =
       data.grain_cbm != null && data.grain_cbm_unit === "CBFT"
@@ -848,7 +839,7 @@ export function VesselCreateForm() {
                     />
                   </div>
                   <div>
-                    <FieldLabel hint="Required — IMO is the vessel's unique identifier for matchmaking, tracking and sanctions screening.">
+                    <FieldLabel required hint="IMO is the vessel's unique identifier for matchmaking, tracking and sanctions screening.">
                       IMO number
                     </FieldLabel>
                     <FieldInput
@@ -857,28 +848,6 @@ export function VesselCreateForm() {
                       maxLength={7}
                       error={errors.imo_number?.message}
                     />
-                    {!values.imo_number && !imoBypass && (
-                      <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded px-3 py-2.5">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-xs text-amber-800 font-medium">
-                            IMO is strongly recommended.
-                          </p>
-                          <p className="text-xs text-amber-700 mt-0.5">
-                            Without it, this vessel cannot be matched or
-                            verified.{" "}
-                            <button
-                              type="button"
-                              onClick={() => setImoBypass(true)}
-                              className="underline font-semibold hover:text-amber-900"
-                            >
-                              Continue without IMO
-                            </button>{" "}
-                            (you can add it later).
-                          </p>
-                        </div>
-                      </div>
-                    )}
                   </div>
                   <div>
                     <FieldLabel hint="Country of registration — pick or type. FOC flags are normal here.">
@@ -2207,7 +2176,7 @@ export function VesselCreateForm() {
               <button
                 type="button"
                 onClick={goNext}
-                disabled={step === 0 && !values.imo_number && !imoBypass}
+                disabled={step === 0 && !values.imo_number?.trim()}
                 className="px-7 py-3 bg-asb-blue text-white font-bold rounded flex items-center gap-2 hover:bg-asb-blue transition-colors disabled:opacity-50"
               >
                 Continue <ArrowRight className="w-4 h-4" />

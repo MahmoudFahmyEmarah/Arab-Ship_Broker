@@ -347,9 +347,9 @@ export const vesselCreateSchema = z
 
     imo_number: z
       .string()
-      .regex(/^\d{7}$/, "IMO must be exactly 7 digits")
-      .optional()
-      .or(z.literal("")),
+      .trim()
+      .min(1, "IMO number is required")
+      .regex(/^\d{7}$/, "IMO must be exactly 7 digits"),
 
     vessel_type: z.enum(["Bulk Carrier", "General Cargo", "Other"]),
 

@@ -6,8 +6,7 @@ import {
   getLatestEdition, getEdition, getArchive, getTrendSeries, formatRange,
   currentIsoWeek, type InsightBucket, type InsightEdition,
 } from "@/lib/market-insights";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { FuelPanelMember, FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
+import { FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
 import { TrendChart, RegimeDonut, SizeBandColumns, LanesTable } from "@/components/market-insights/Charts";
 
 // Session-gated fuel panel reads cookies → must render per request.
@@ -111,12 +110,9 @@ export default async function MarketInsightsPage({
   const p = ed.payload;
 
   // ── Fuel-cost firewall (Pre_Final §11) ──
-  // Resolve the session SERVER-SIDE. Only an authenticated member session
-  // renders the real fuel panel; for everyone else the page emits the locked
-  // teaser, so the FUEL_COST figures are never serialized into the public DOM.
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isMember = Boolean(user);
+  // The locked teaser is shown to everyone for now (to be opened later), so no
+  // session lookup is needed and the FUEL_COST figures are never serialized
+  // into the DOM at all.
 
   // Display labels for the cargo-mix regimes (display only).
   const regimeMix = p.regime_mix.map((b) => ({ ...b, label: regimeDisplayLabel(b.label) }));
@@ -221,10 +217,10 @@ export default async function MarketInsightsPage({
           <RankTable title="Top discharge zones" items={p.disch_zones} />
         </div>
 
-        {/* ── Handysize fuel-cost panel — members see figures, public sees the
-              locked teaser only (no figures in the public DOM). Fuel cost,
-              never a freight/hire quote. ── */}
-        {isMember ? <FuelPanelMember /> : <FuelTeaserPublic />}
+        {/* ── Handysize fuel-cost panel — the locked teaser is shown to
+              everyone, including logged-in members, for now (to be opened
+              later). Fuel cost, never a freight/hire quote. ── */}
+        <FuelTeaserPublic />
 
         {/* ── Narrative ── */}
         {ed.narrative && (
