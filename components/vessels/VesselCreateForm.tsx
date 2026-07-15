@@ -611,14 +611,6 @@ export function VesselCreateForm() {
       );
       if (!valid) return;
     }
-    // IMO is required to leave the Identity step, unless the user has explicitly
-    // chosen "Continue without IMO" (DQ-V02: leave empty only if unverifiable).
-    if (step === 0 && !form.getValues("imo_number")?.trim() && !imoBypass) {
-      toast.error(
-        'IMO number is required. Use "Continue without IMO" only if it genuinely cannot be verified.',
-      );
-      return;
-    }
     navigate(Math.min(step + 1, STEPS.length - 1));
   };
 
