@@ -12,14 +12,21 @@ export type { ZoneCode, ReviewStatus };
 export const VESSEL_TYPES = ["Bulk Carrier", "General Cargo", "Other"] as const;
 export type VesselType = (typeof VESSEL_TYPES)[number];
 
+// Superset of the code set + the workbook 10_ENUMS set (STATUS combine
+// decision): INACTIVE retained; BALLAST/OFF-HIRE added (uppercase to match).
+// Mirrors public.vessel_status_enum.
 export const VESSEL_STATUSES = [
   "OPEN",
   "FIXED",
   "ON SUBS",
   "INACTIVE",
+  "BALLAST",
+  "OFF-HIRE",
 ] as const;
 export type VesselStatus = (typeof VESSEL_STATUSES)[number];
 
+// Union of the code set + the workbook 10_ENUMS set (FUEL_TYPE combine
+// decision), de-duped. Mirrors the vessel_availability_fuel_type_chk constraint.
 export const FUEL_TYPES = [
   "VLSFO",
   "HSFO",
@@ -27,6 +34,9 @@ export const FUEL_TYPES = [
   "MDO",
   "LNG",
   "Biofuel blend",
+  "LSMGO",
+  "HFO 380",
+  "Dual",
 ] as const;
 export type FuelType = (typeof FUEL_TYPES)[number];
 
@@ -45,6 +55,25 @@ export const GRAB_TYPES = [
 export type GrabType = (typeof GRAB_TYPES)[number];
 
 export const CBFT_PER_CBM = 35.3147;
+
+// DQ-V01: a vessel name must never carry an "MV" / "M/V" / "M.V" / "MT" / "M/T"
+// prefix — plain name only, uppercase as received. Strips a single leading
+// prefix and preserves the remainder verbatim. Returns the name unchanged when
+// there is no prefix (e.g. "MAYMON" stays "MAYMON").
+export function stripVesselNamePrefix(name: string): string {
+  return name.replace(/^\s*M[./]?\s?[VT]\b[\s.:\-]*/i, "").trim();
+}
+
+// DQ-V02: a "TBN" ("To Be Nominated" — also TBA / "to be named/announced")
+// entry is a placeholder, not a real vessel. The broker is circulating tonnage
+// without disclosing (or before fixing) the actual ship, so it has no verifiable
+// identity/IMO and must NOT enter the named registry unattended. Detected on the
+// already-prefix-stripped name so "MV TBN (35K)" is caught the same as "TBN (35K)".
+export function isPlaceholderVesselName(name: string): boolean {
+  return /\bTB[NA]\b|\bto\s+be\s+(nominated|named|announced|advised|confirmed)\b/i.test(
+    name,
+  );
+}
 
 export function computeRequiredCbm(
   qty_mt: number | null | undefined,
@@ -327,14 +356,14 @@ export const vesselCreateSchema = z
     dwt_grain: z.coerce
       .number()
       .int()
-      .min(500, "DWT must be 500–15,000 MT")
-      .max(15000, "DWT must be 500–15,000 MT")
+      .min(500, "DWT must be 500–30,000 MT")
+      .max(30000, "DWT must be 500–30,000 MT")
       .optional(),
     dwt_bale: z.coerce
       .number()
       .int()
-      .min(500, "DWT bale must be 500–15,000 MT")
-      .max(15000, "DWT bale must be 500–15,000 MT")
+      .min(500, "DWT bale must be 500–30,000 MT")
+      .max(30000, "DWT bale must be 500–30,000 MT")
       .optional(),
 
     dwcc: z.coerce

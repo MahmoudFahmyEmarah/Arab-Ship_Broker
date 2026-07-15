@@ -111,7 +111,7 @@ function VEDropdown({ label, value, onChange, options, cls = "" }: { label: stri
       <label className="ve-selector__label">{label}</label>
       <div className="ve-selector__control">
         <select value={value} onChange={(e) => onChange(e.target.value)}>
-          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {options.map((o) => <option key={o.value || o.label} value={o.value}>{o.label}</option>)}
         </select>
         <span className="ve-selector__caret">▾</span>
       </div>
@@ -361,10 +361,18 @@ function VoyageBody({ vessel: v, cargo: c, calc, fuel }: { vessel: VesselView; c
 export function PortsDA({ vessels, cargos }: { vessels: VesselView[]; cargos: CargoView[] }) {
   const tier = useViewerTier();
   const ports = React.useMemo(() => {
-    const m = new Map<string, string>();
-    m.set("King Abdullah Port", "SAKAC");
-    cargos.forEach((c) => { if (c.route.polName) m.set(c.route.polName, c.route.polCode); if (c.route.podName) m.set(c.route.podName, c.route.podCode); });
-    return [...m.entries()].map(([name, code]) => ({ name, code }));
+    // Key by LOCODE (the dropdown's value) so the list is unique by code:
+    //  • a port with a null code would give a null option value/key, and
+    //  • two name spellings sharing one code (e.g. "Odessa"/"Odesa" → UAODS)
+    //    would give duplicate option keys.
+    // Both crash React's list reconciliation, so we require a code and dedupe on it.
+    const m = new Map<string, string>(); // code → name
+    m.set("SAKAC", "King Abdullah Port");
+    cargos.forEach((c) => {
+      if (c.route.polCode && c.route.polName) m.set(c.route.polCode, c.route.polName);
+      if (c.route.podCode && c.route.podName) m.set(c.route.podCode, c.route.podName);
+    });
+    return [...m.entries()].map(([code, name]) => ({ name, code }));
   }, [cargos]);
 
   const [vesselId, setVesselId] = React.useState(vessels[0]?.id || "");

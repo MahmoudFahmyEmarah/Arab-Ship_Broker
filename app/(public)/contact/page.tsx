@@ -12,13 +12,12 @@ import {
   Phone,
   Mail,
   Send,
-  Anchor,
-  ArrowRight,
   User,
   Loader2,
   MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
+import { FoundersCarousel } from "@/components/FoundersCarousel";
 
 
 import { Button } from "@/components/ui/button";
@@ -455,80 +454,21 @@ export default function ContactPage() {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7 }}
             viewport={{ once: true }}
-            className="max-w-4xl mx-auto"
           >
-            <div className="relative bg-slate-50 rounded-[2.5rem] shadow-xl border border-slate-200/60 overflow-hidden">
-              <div className="h-2 bg-linear-to-r from-ocean-600 via-foam-400 to-ocean-600" />
-
-              <div className="p-14 max-[1024px]:p-10 max-[768px]:p-8 flex flex-row max-[1024px]:flex-col items-center max-[1024px]:items-start max-[768px]:items-center gap-10">
-                <div className="shrink-0 relative">
-                  <div className="w-40 h-40 max-[768px]:w-32 max-[768px]:h-32 rounded-3xl overflow-hidden shadow-2xl border-4 border-white">
-                    <Image
-                      src="/founder.jpg"
-                      alt="Capt. Mohamed Dawoud"
-                      className="w-full h-full object-cover"
-                      style={{ objectPosition: "60% 30%" }}
-                      width={480}
-                      height={480}
-                      quality={92}
-                    />
-                  </div>
-                  <div className="absolute -bottom-3 -right-3 w-12 h-12 max-[768px]:w-10 max-[768px]:h-10 bg-ocean-600 rounded-2xl flex items-center justify-center shadow-xl border-4 border-white">
-                    <Anchor className="w-5 h-5 max-[768px]:w-4 max-[768px]:h-4 text-white" />
-                  </div>
-                </div>
-
-                <div className="flex-1 text-left max-[1024px]:text-center">
-                  <h3 className="text-3xl max-[768px]:text-2xl font-bold text-ocean-900 tracking-tight mb-2">
-                    Mohamed Dawoud
-                  </h3>
-                  <p className="text-ocean-600 font-bold tracking-wide uppercase text-sm mb-2">
-                    Dry Bulk Broker & Co-Founder
-                  </p>
-                  <p className="text-slate-500 text-sm font-medium mb-6">
-                    Capt., BSc., MSc. &ldquo;Fleet Ops.&rdquo;
-                  </p>
-                  <div className="w-16 h-1 bg-foam-300 rounded-full mb-6 mx-0 max-[1024px]:mx-auto" />
-                  <p className="text-slate-600 text-base leading-relaxed mb-8">
-                    With a Master&apos;s in Fleet Operations, a Master Mariner
-                    License, and over 15 years of combined sea and shore
-                    experience, Capt. Mohamed leads Arab ShipBroker with
-                    hands-on maritime expertise. Reach out directly. He&apos;s
-                    always happy to discuss your shipping needs.
-                  </p>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="border-slate-300 text-ocean-700 hover:bg-ocean-50 hover:border-ocean-200 transition-all rounded-xl h-12 px-8 max-[768px]:w-full group"
-                  >
-                    <a
-                      href="https://www.linkedin.com/in/cpt-mohamed-dawoud"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="mr-3 text-ocean-600"
-                      >
-                        <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-                        <rect width="4" height="12" x="2" y="9" />
-                        <circle cx="4" cy="4" r="2" />
-                      </svg>
-                      Connect on LinkedIn
-                      <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:ml-2 transition-all absolute right-4" />
-                    </a>
-                  </Button>
-                </div>
-              </div>
+            <div className="text-center mb-14 max-[768px]:mb-10">
+              <span className="inline-block px-4 py-1.5 rounded-full bg-ocean-50 text-ocean-600 text-[11px] font-bold tracking-widest uppercase mb-4">
+                Leadership
+              </span>
+              <h2 className="text-3xl max-[768px]:text-2xl font-bold text-ocean-950 tracking-tight mb-3">
+                Meet the Founders
+              </h2>
+              <p className="max-w-2xl mx-auto text-slate-500 text-[15px] leading-relaxed">
+                Forged on ship steel, driven by the scent of cargo, dedicated to
+                connecting MENA maritime markets.
+              </p>
             </div>
+
+            <FoundersCarousel />
           </motion.div>
         </div>
       </section>

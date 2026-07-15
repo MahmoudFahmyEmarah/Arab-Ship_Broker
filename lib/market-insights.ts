@@ -57,7 +57,31 @@ function anon() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-// ── Sample fallback edition (rules-compliant) ──────────────────────────────
+// Issue D: the hardcoded sample must NEVER mask real data in production. It's a
+// dev/preview convenience only — in production, if the DB returns nothing we show
+// an honest empty state (or null), not fabricated figures.
+const ALLOW_SAMPLE = process.env.NODE_ENV !== "production";
+
+// Honest empty edition (all zeros, current week) for the production no-data case.
+function emptyEdition(): InsightEdition {
+  const cur = currentIsoWeek();
+  return {
+    week_id: cur.weekId,
+    range_from: cur.range_from,
+    range_to: cur.range_to,
+    published_at: null,
+    narrative: null,
+    payload: {
+      window: { from: cur.range_from, to: cur.range_to },
+      scope: "Regional dry bulk & break-bulk, sub-66K — AG / R.Sea / E.Med / B.Sea / A.Sea",
+      snapshot: { cargoes_live: 0, open_tonnage: 0, active_lanes: 0, avg_cargo_size_mt: null },
+      regime_mix: [], size_bands: [], top_lanes: [], top_commodities: [], load_zones: [], disch_zones: [],
+      floor: 5,
+    },
+  };
+}
+
+// ── Sample fallback edition (rules-compliant) — DEV/PREVIEW ONLY ────────────
 export const SAMPLE_EDITION: InsightEdition = {
   week_id: "2026-W23",
   range_from: "2026-05-30",
@@ -123,10 +147,10 @@ export async function getLatestEdition(): Promise<InsightEdition> {
       const { data } = await c.rpc("get_latest_market_insights");
       if (data) return data as InsightEdition;
     } catch (err) {
-      console.error("[insights] latest load failed, using sample:", err);
+      console.error("[insights] latest load failed:", err);
     }
   }
-  return SAMPLE_EDITION;
+  return ALLOW_SAMPLE ? SAMPLE_EDITION : emptyEdition();
 }
 
 export async function getEdition(weekId: string): Promise<InsightEdition | null> {
@@ -139,7 +163,7 @@ export async function getEdition(weekId: string): Promise<InsightEdition | null>
       console.error("[insights] edition load failed:", err);
     }
   }
-  return weekId === SAMPLE_EDITION.week_id ? SAMPLE_EDITION : null;
+  return ALLOW_SAMPLE && weekId === SAMPLE_EDITION.week_id ? SAMPLE_EDITION : null;
 }
 
 export async function getArchive(): Promise<ArchiveItem[]> {
@@ -152,6 +176,7 @@ export async function getArchive(): Promise<ArchiveItem[]> {
       console.error("[insights] archive load failed:", err);
     }
   }
+  if (!ALLOW_SAMPLE) return [];
   return [
     { week_id: SAMPLE_EDITION.week_id, range_from: SAMPLE_EDITION.range_from, range_to: SAMPLE_EDITION.range_to, published_at: SAMPLE_EDITION.published_at },
     { week_id: "2026-W22", range_from: "2026-05-23", range_to: "2026-05-29", published_at: "2026-06-01T06:00:00Z" },
@@ -240,14 +265,19 @@ export interface TrendPoint {
   positions: number;
 }
 
-export async function getTrendSeries(): Promise<TrendPoint[]> {
+// `uptoRangeFrom` (the selected edition's range_from) bounds the series so the
+// chart shows the 6 weeks ending at the SELECTED week — pick an earlier week and
+// the trend follows it. Omit it for the latest-6 behaviour.
+export async function getTrendSeries(uptoRangeFrom?: string): Promise<TrendPoint[]> {
   const c = anon();
   if (c) {
     try {
-      const { data } = await c
+      let q = c
         .from("market_insights_editions")
         .select("week_id, range_from, payload")
-        .not("published_at", "is", null)
+        .not("published_at", "is", null);
+      if (uptoRangeFrom) q = q.lte("range_from", uptoRangeFrom);
+      const { data } = await q
         .order("range_from", { ascending: false })
         .limit(6);
       if (Array.isArray(data) && data.length) {
@@ -263,6 +293,7 @@ export async function getTrendSeries(): Promise<TrendPoint[]> {
       console.error("[insights] trend load failed:", err);
     }
   }
+  if (!ALLOW_SAMPLE) return [];
   // Sample fallback mirrors the sample edition so the chart renders in preview.
   return [
     { weekId: "2026-W21", cargoes: 71, positions: 18 },

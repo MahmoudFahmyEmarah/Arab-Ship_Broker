@@ -21,6 +21,7 @@ import { CargoView, VesselView } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CargoListingRow } from "@/lib/schemas/cargo";
 import type { VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
+import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 import type { CargoOpt, VesselOpt } from "./post-types";
 
 export type DataSource = "live" | "sample";
@@ -295,7 +296,7 @@ export async function loadMyVesselsList(): Promise<VesselOpt[]> {
             const v = Array.isArray(row.vessel) ? row.vessel[0] : row.vessel;
             if (v && !seen.has(v.id)) {
               seen.add(v.id);
-              out.push({ id: v.id, name: v.vessel_name, imo: v.imo_number ?? "—" });
+              out.push({ id: v.id, name: stripVesselNamePrefix(v.vessel_name), imo: v.imo_number ?? "—" });
             }
           }
           if (out.length) return out;
@@ -305,7 +306,7 @@ export async function loadMyVesselsList(): Promise<VesselOpt[]> {
       console.error("[portal] my vessels list load failed:", err);
     }
   }
-  return MOCK_VESSELS.map((v) => ({ id: v.vessel_id, name: v.vessel.vessel_name, imo: v.vessel.imo_number ?? "—" }));
+  return MOCK_VESSELS.map((v) => ({ id: v.vessel_id, name: stripVesselNamePrefix(v.vessel.vessel_name), imo: v.vessel.imo_number ?? "—" }));
 }
 
 // ── Real viewer context (subscription tier + role), adopted from the migration ──

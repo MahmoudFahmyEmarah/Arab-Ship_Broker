@@ -98,10 +98,14 @@ export default async function MarketInsightsPage({
   searchParams: Promise<{ week?: string }>;
 }) {
   const { week } = await searchParams;
-  const [edition, archive, trend] = await Promise.all([
-    week ? getEdition(week).then((e) => e ?? getLatestEdition()) : getLatestEdition(),
+  // Resolve the selected edition first so the trend series can end at it (the
+  // chart follows the selected week, not always the latest).
+  const edition = week
+    ? await getEdition(week).then((e) => e ?? getLatestEdition())
+    : await getLatestEdition();
+  const [archive, trend] = await Promise.all([
     getArchive(),
-    getTrendSeries(),
+    getTrendSeries(edition.range_from),
   ]);
   const ed: InsightEdition = edition;
   const p = ed.payload;
@@ -191,7 +195,7 @@ export default async function MarketInsightsPage({
           <SnapshotCard icon={Route} label="Active lanes" value={nf.format(p.snapshot.active_lanes)} sub="zone-to-zone" />
         </div>
 
-        {/* ── Weekly trend — same snapshot figures across stored editions ── */}
+        {/* ── Weekly trend — snapshot figures for the 6 weeks ending at the selected edition ── */}
         <div className="mb-4">
           <TrendChart series={trend} />
         </div>

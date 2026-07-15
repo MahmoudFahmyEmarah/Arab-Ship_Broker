@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { loadViewerContext, loadVesselViews } from "@/lib/portal/data";
-import { isCalculatorLocked } from "@/lib/portal/tier";
+import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { SuezToll, CalculatorLocked } from "@/components/portal/calculators";
 
 export const metadata = { title: "Suez Canal Toll — Arab ShipBroker" };
