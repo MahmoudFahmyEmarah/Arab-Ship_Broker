@@ -33,6 +33,7 @@ import {
   submitCargo,
   updateCargo,
   getCargoSafetyAnswers,
+  formatCargoSubmissionError,
 } from "@/sdk/app/cargos";
 import { getCommodityById } from "@/sdk/app/commodities";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -350,11 +351,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
       router.refresh();
     } catch (err) {
       console.error(err);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong. Please try again.",
-      );
+      toast.error(formatCargoSubmissionError(err));
     } finally {
       setIsSubmitting(false);
     }

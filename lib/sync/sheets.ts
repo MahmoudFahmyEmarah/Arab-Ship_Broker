@@ -5,6 +5,7 @@
 // keyColumn here MUST match fn_sync_key_column() in the Phase 1 migration.
 
 import { LOAD_TERMS } from "@/lib/schemas/cargo";
+import { stripVesselNamePrefix, isPlaceholderVesselName } from "@/lib/schemas/vessel";
 import type { Cell, ColumnSpec, Flag, SheetSpec } from "./types";
 import { intStrip, locode, num, parseLaycan, str, upper } from "./normalize";
 
@@ -25,6 +26,16 @@ export const REF_RE = /^(CM|P|OUT)-\d{3,}$/;
 // they don't trip the ref-format warning.
 export const PROVISIONAL_REF_RE = /^(EM|WA)-[0-9A-F]{6,}$/;
 
+// DQ-V01: strip the "MV"/"M/V"/"MT"/"M/T" motor-vessel prefix at ingestion so a
+// synced name is stored plain (e.g. "M/V MARILOU" → "MARILOU"). No prefix → the
+// name is returned unchanged. Empty result falls through to the required check.
+function vesselName(v: Cell): Cell {
+  const s = str(v);
+  if (s == null) return s;
+  const stripped = stripVesselNamePrefix(s);
+  return stripped === "" ? null : stripped;
+}
+
 // cargo_type sometimes arrives lower/space-variant; normalize to the enum label.
 function cargoType(v: Cell): Cell {
   const s = str(v);
@@ -33,6 +44,19 @@ function cargoType(v: Cell): Cell {
   if (t.startsWith("dry")) return "Dry Bulk";
   if (t.startsWith("break")) return "Break Bulk";
   return s;
+}
+
+// group/cat → imsbc_category_enum. IMSBC rows carry a hazard-group letter
+// (A liquefies / B chemical hazard / C inert); grain, break-bulk (CSS) and
+// multi-parcel rows aren't IMSBC-classified, so "-"/blank → Non_DG. When a row
+// lists more than one group (e.g. Coal "A and B") the most hazardous wins.
+function imsbcCategory(label: Cell): string {
+  const g = String(label ?? "").trim().toUpperCase();
+  if (!g || /^-+$/.test(g)) return "Non_DG";
+  if (/\bA\b/.test(g)) return "Cat_A";
+  if (/\bB\b/.test(g)) return "Cat_B";
+  if (/\bC\b/.test(g)) return "Cat_C";
+  return "Non_DG";
 }
 
 // cargo priority: the workbook uses "--" for "no priority"; drop it to null.
@@ -213,7 +237,7 @@ export const SHEET_SPECS: SheetSpec[] = [
     keyColumn: "imo_number",
     columns: [
       { header: "IMO", aliases: ["IMO_NUMBER"], column: "imo_number", transform: str, required: true },
-      { header: "VESSEL_NAME", aliases: ["NAME"], column: "vessel_name", transform: str, required: true },
+      { header: "VESSEL_NAME", aliases: ["NAME"], column: "vessel_name", transform: vesselName, required: true },
       { header: "VESSEL_TYPE", aliases: ["TYPE"], column: "vessel_type", transform: vesselType, required: true },
       { header: "DWT", aliases: ["DWT_GRAIN"], column: "dwt_grain", transform: intStrip },
       { header: "DWCC", column: "dwcc", transform: intStrip },
@@ -230,6 +254,12 @@ export const SHEET_SPECS: SheetSpec[] = [
       const vt = payload["vessel_type"];
       if (vt && !VESSEL_TYPES.has(String(vt)))
         f.push({ level: "error", field: "vessel_type", msg: `unknown vessel type "${vt}"` });
+      // DQ-V02: a TBN ("To Be Nominated") placeholder is not a verifiable vessel.
+      // Flag it as an error so it routes to Manual Review (categorised as a vessel
+      // row), where a broker supplies the real name before it joins the registry.
+      const name = payload["vessel_name"];
+      if (name && isPlaceholderVesselName(String(name)))
+        f.push({ level: "error", field: "vessel_name", msg: `"${name}" is a TBN/placeholder (To Be Nominated) — needs a real vessel name` });
       return f;
     },
   },
@@ -267,6 +297,13 @@ export const SHEET_SPECS: SheetSpec[] = [
     derive(payload, raw) {
       const regime = upper(raw["regime"] ?? raw["REGIME"] ?? null);
       if (regime === "GRAIN") payload["is_grain"] = true;
+      // commodities.cargo_type and imsbc_category are NOT NULL, but the 05_CLASS
+      // sheet has no such columns — both are implied by regime + group letter.
+      // regime: CSS = break-bulk/unitised stowage; GRAIN / IMSBC / MULTI-PARCEL
+      // are all carried loose in bulk. imsbc_category comes from the group/cat
+      // letter (see imsbcCategory), which is already mapped to category_label.
+      payload["cargo_type"] = regime === "CSS" ? "Break Bulk" : "Dry Bulk";
+      payload["imsbc_category"] = imsbcCategory(payload["category_label"]);
     },
   },
 ];

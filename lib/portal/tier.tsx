@@ -5,8 +5,13 @@
 // the dashboard tier banner, market-partner visibility + discovery gating
 // (limited cargo / masked vessel), and calculator locking.
 import * as React from "react";
+import type { Tier } from "./tier-gate";
 
-export type Tier = "T1" | "T2" | "T3" | "T4";
+// Re-export the type + the server-safe gate helpers so existing client-side
+// imports from "@/lib/portal/tier" keep working. The pure gates themselves live
+// in ./tier-gate so server components can call them (this file is "use client").
+export type { Tier } from "./tier-gate";
+export { isCalculatorLocked, isLimitedTier } from "./tier-gate";
 
 const TierCtx = React.createContext<Tier>("T3");
 
@@ -20,14 +25,4 @@ export function TierProvider({ children, tier = "T3" }: { children: React.ReactN
 
 export function useViewerTier(): Tier {
   return React.useContext(TierCtx);
-}
-
-// Calculators (Voyage Estimator, Ports DA, Suez Toll) are locked for T1/T2.
-export function isCalculatorLocked(tier: Tier): boolean {
-  return tier === "T1" || tier === "T2";
-}
-
-// Discovery firewall: T1/T2 see redacted cargo + masked vessel identity.
-export function isLimitedTier(tier: Tier): boolean {
-  return tier === "T1" || tier === "T2";
 }

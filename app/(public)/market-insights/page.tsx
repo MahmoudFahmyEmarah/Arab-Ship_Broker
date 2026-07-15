@@ -6,8 +6,7 @@ import {
   getLatestEdition, getEdition, getArchive, getTrendSeries, formatRange,
   currentIsoWeek, type InsightBucket, type InsightEdition,
 } from "@/lib/market-insights";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { FuelPanelMember, FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
+import { FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
 import { TrendChart, RegimeDonut, SizeBandColumns, LanesTable } from "@/components/market-insights/Charts";
 
 // Session-gated fuel panel reads cookies → must render per request.
@@ -98,21 +97,22 @@ export default async function MarketInsightsPage({
   searchParams: Promise<{ week?: string }>;
 }) {
   const { week } = await searchParams;
-  const [edition, archive, trend] = await Promise.all([
-    week ? getEdition(week).then((e) => e ?? getLatestEdition()) : getLatestEdition(),
+  // Resolve the selected edition first so the trend series can end at it (the
+  // chart follows the selected week, not always the latest).
+  const edition = week
+    ? await getEdition(week).then((e) => e ?? getLatestEdition())
+    : await getLatestEdition();
+  const [archive, trend] = await Promise.all([
     getArchive(),
-    getTrendSeries(),
+    getTrendSeries(edition.range_from),
   ]);
   const ed: InsightEdition = edition;
   const p = ed.payload;
 
   // ── Fuel-cost firewall (Pre_Final §11) ──
-  // Resolve the session SERVER-SIDE. Only an authenticated member session
-  // renders the real fuel panel; for everyone else the page emits the locked
-  // teaser, so the FUEL_COST figures are never serialized into the public DOM.
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isMember = Boolean(user);
+  // The locked teaser is shown to everyone for now (to be opened later), so no
+  // session lookup is needed and the FUEL_COST figures are never serialized
+  // into the DOM at all.
 
   // Display labels for the cargo-mix regimes (display only).
   const regimeMix = p.regime_mix.map((b) => ({ ...b, label: regimeDisplayLabel(b.label) }));
@@ -191,7 +191,7 @@ export default async function MarketInsightsPage({
           <SnapshotCard icon={Route} label="Active lanes" value={nf.format(p.snapshot.active_lanes)} sub="zone-to-zone" />
         </div>
 
-        {/* ── Weekly trend — same snapshot figures across stored editions ── */}
+        {/* ── Weekly trend — snapshot figures for the 6 weeks ending at the selected edition ── */}
         <div className="mb-4">
           <TrendChart series={trend} />
         </div>
@@ -217,10 +217,10 @@ export default async function MarketInsightsPage({
           <RankTable title="Top discharge zones" items={p.disch_zones} />
         </div>
 
-        {/* ── Handysize fuel-cost panel — members see figures, public sees the
-              locked teaser only (no figures in the public DOM). Fuel cost,
-              never a freight/hire quote. ── */}
-        {isMember ? <FuelPanelMember /> : <FuelTeaserPublic />}
+        {/* ── Handysize fuel-cost panel — the locked teaser is shown to
+              everyone, including logged-in members, for now (to be opened
+              later). Fuel cost, never a freight/hire quote. ── */}
+        <FuelTeaserPublic />
 
         {/* ── Narrative ── */}
         {ed.narrative && (

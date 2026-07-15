@@ -12,6 +12,7 @@ import {
 } from "@/components/admin/AdminBadge";
 import { VesselIntelControls } from "@/components/admin/vessel/VesselIntelControls";
 import type { AdminVesselRow } from "@/lib/admin/types";
+import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 
 type AvailabilityRow = {
   id: string;
@@ -97,7 +98,7 @@ export default async function AdminVesselDetailPage({
       )}
 
       <AdminPageHeader
-        title={v.vessel_name}
+        title={stripVesselNamePrefix(v.vessel_name)}
         subtitle={v.imo_number ? `IMO ${v.imo_number}` : "No IMO number"}
       />
 

@@ -12,6 +12,7 @@ import {
 import {
   MyVesselRow,
   VesselAvailabilityWithVessel,
+  stripVesselNamePrefix,
 } from "@/lib/schemas/vessel";
 import { CargoView, VesselView, CargoScope, VesselStatusView } from "./types";
 
@@ -141,7 +142,7 @@ export function vesselFromAvailability(
     gt: vv.gt ?? null,
     scnrt: vv.scnrt ?? null,
     loaM: vv.max_loa_m ?? null,
-    name: v.vessel_name,
+    name: stripVesselNamePrefix(v.vessel_name),
     imo: v.imo_number ?? "—",
     type: v.vessel_type,
     flag: v.flag ?? "—",
@@ -193,7 +194,7 @@ export function vesselFromMyVessel(row: MyVesselRow): VesselView {
     gt: rr.gross_tonnage ?? null,
     scnrt: rr.scnrt ?? null,
     loaM: row.max_loa_m ?? null,
-    name: row.vessel_name,
+    name: stripVesselNamePrefix(row.vessel_name),
     imo: row.imo_number ?? "—",
     type: row.vessel_type,
     flag: row.flag ?? "—",

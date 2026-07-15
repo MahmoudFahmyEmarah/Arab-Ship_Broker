@@ -23,6 +23,7 @@ import {
 } from "@/components/admin/AdminBadge";
 import { VesselAvailabilityStatusControls } from "@/components/admin/vessel/VesselAvailabilityStatusControls";
 import type { AdminVesselRow } from "@/lib/admin/types";
+import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 
 type AvailabilityDetail = {
   id: string;
@@ -149,7 +150,7 @@ export default async function AdminVesselAvailabilityDetailPage({
       )}
 
       <AdminPageHeader
-        title={`${vessel?.vessel_name ?? "Vessel"} — Open ${va.open_port_name ?? "?"}`}
+        title={`${vessel?.vessel_name ? stripVesselNamePrefix(vessel.vessel_name) : "Vessel"} — Open ${va.open_port_name ?? "?"}`}
         subtitle={`${va.ref ? `${va.ref} · ` : ""}${va.open_date ?? "?"}`}
       />
 
@@ -167,7 +168,7 @@ export default async function AdminVesselAvailabilityDetailPage({
           {vessel && (
             <InfoCard title="Vessel" icon={Ship}>
               <Grid2>
-                <Cell label="Name" value={vessel.vessel_name ?? "—"} />
+                <Cell label="Name" value={vessel.vessel_name ? stripVesselNamePrefix(vessel.vessel_name) : "—"} />
                 <Cell label="IMO" value={vessel.imo_number ?? "—"} />
                 <Cell label="Type" value={vessel.vessel_type ?? "—"} />
                 <Cell

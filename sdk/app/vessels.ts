@@ -106,6 +106,10 @@ export async function submitVesselAvailability(
         aux_consumption_port_mt_day:
           payload.aux_consumption_port_mt_day ?? null,
         fuel_type: payload.fuel_type ?? null,
+        grab_type: payload.grab_type ?? null,
+        grab_capacity_mt: payload.grab_capacity_mt ?? null,
+        num_grabs: payload.num_grabs ?? null,
+        brob_mt: payload.brob_mt ?? null,
         accepts_part_cargo: payload.accepts_part_cargo ?? false,
         notes: payload.notes ?? null,
       },
@@ -312,7 +316,7 @@ export async function createVessel(
 ): Promise<{ id: string }> {
   const payload: Record<string, unknown> = {
     vessel_name: values.vessel_name,
-    imo_number: values.imo_number ?? "",
+    imo_number: values.imo_number,
     vessel_type: values.vessel_type,
     dwt_grain: values.dwt_grain ?? "",
     dwt_bale: values.dwt_bale ?? "",
