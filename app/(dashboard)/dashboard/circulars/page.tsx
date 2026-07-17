@@ -5,7 +5,7 @@ import { Sparkles } from "lucide-react";
 import { CircularParser } from "@/components/circulars/CircularParser";
 
 export const metadata = {
-  title: "Circular Parser — Arab ShipBroker",
+  title: "Circular Parser Arab ShipBroker",
 };
 
 export default async function CircularsPage() {

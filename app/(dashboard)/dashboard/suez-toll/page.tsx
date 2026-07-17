@@ -4,7 +4,7 @@ import { loadViewerContext, loadVesselViews } from "@/lib/portal/data";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { SuezToll, CalculatorLocked } from "@/components/portal/calculators";
 
-export const metadata = { title: "Suez Canal Toll — Arab ShipBroker" };
+export const metadata = { title: "Suez Canal Toll Arab ShipBroker" };
 
 export default async function SuezTollPage() {
   const supabase = await getSupabaseServerClient();

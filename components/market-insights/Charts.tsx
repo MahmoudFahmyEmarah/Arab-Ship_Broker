@@ -27,7 +27,7 @@ function weekShort(weekId: string) {
 //    week labels never clip (the design's fixed bug). 640×150 viewBox. ──
 export function TrendChart({ series }: { series: TrendPoint[] }) {
   if (series.length === 0) return null;
-  const W = 640, H = 150, padL = 44, padR = 44, padT = 24, padB = 26;
+  const W = 640, H = 156, padL = 44, padR = 44, padT = 30, padB = 26;
   const innerW = W - padL - padR, innerH = H - padT - padB;
   const maxV = Math.ceil(Math.max(1, ...series.flatMap((e) => [e.cargoes, e.positions])) * 1.12);
   const x = (i: number) => padL + (series.length === 1 ? innerW / 2 : (i / (series.length - 1)) * innerW);
@@ -39,14 +39,25 @@ export function TrendChart({ series }: { series: TrendPoint[] }) {
     return (
       <g key={key}>
         <path d={path} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-        {pts.map((p, i) => (
-          <g key={i}>
-            <circle cx={p[0]} cy={p[1]} r={4} fill="#fff" stroke={color} strokeWidth={2.5} />
-            <text x={p[0]} y={p[1] - 10} textAnchor="middle" style={{ fontSize: 11.5, fontWeight: 700, fill: "#1B3A5C" }} className="tabular-nums">
-              {series[i][key]}
-            </text>
-          </g>
-        ))}
+        {pts.map((p, i) => {
+          const otherKey = key === "cargoes" ? "positions" : "cargoes";
+          const otherY = y(series[i][otherKey]);
+          const pointsAreClose = Math.abs(p[1] - otherY) < 28;
+          // Close points can cover each other's labels because the second
+          // series is painted on top. Anchor both labels above the upper point
+          // and stack them, keeping both values clear of both markers.
+          const labelY = pointsAreClose
+            ? Math.max(12, Math.min(p[1], otherY) - (key === "positions" ? 24 : 10))
+            : p[1] - 10;
+          return (
+            <g key={i}>
+              <circle cx={p[0]} cy={p[1]} r={4} fill="#fff" stroke={color} strokeWidth={2.5} />
+              <text x={p[0]} y={labelY} textAnchor="middle" style={{ fontSize: 11.5, fontWeight: 600, fill: color }} className="tabular-nums">
+                {nf.format(series[i][key])}
+              </text>
+            </g>
+          );
+        })}
       </g>
     );
   };
@@ -54,7 +65,7 @@ export function TrendChart({ series }: { series: TrendPoint[] }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">Weekly trend</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-500">Weekly trend</div>
         <div className="flex items-center gap-4 text-[11.5px] font-medium text-slate-600">
           <span className="inline-flex items-center gap-1.5"><span className="w-4 h-[3px] rounded bg-[#1B3A5C]" /> Cargoes posted</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-4 h-[3px] rounded bg-[#3FA0DC]" /> Open positions</span>
@@ -80,17 +91,25 @@ export function TrendChart({ series }: { series: TrendPoint[] }) {
 // ── Cargo regime mix — conic-gradient donut + legend with shares ──
 export function RegimeDonut({ items }: { items: InsightBucket[] }) {
   const total = Math.max(1, items.reduce((s, i) => s + i.count, 0));
-  let acc = 0;
-  const stops = items.map((i) => {
-    const start = (acc / total) * 100;
-    acc += i.count;
-    const end = (acc / total) * 100;
-    return `${REGIME_COLORS[i.label] ?? REGIME_COLORS.Other} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
-  });
+  const stops = items.reduce<{ stops: string[]; count: number }>(
+    (result, item) => {
+      const start = (result.count / total) * 100;
+      const nextCount = result.count + item.count;
+      const end = (nextCount / total) * 100;
+      return {
+        count: nextCount,
+        stops: [
+          ...result.stops,
+          `${REGIME_COLORS[item.label] ?? REGIME_COLORS.Other} ${start.toFixed(2)}% ${end.toFixed(2)}%`,
+        ],
+      };
+    },
+    { stops: [], count: 0 },
+  ).stops;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-3.5">Cargo regime mix</div>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-500 mb-3.5">Cargo regime mix</div>
       <div className="flex items-center gap-5">
         <div className="relative w-[104px] h-[104px] rounded-full shrink-0" style={{ background: `conic-gradient(${stops.join(",")})` }}>
           <div className="absolute inset-[19px] rounded-full bg-white" />
@@ -120,11 +139,11 @@ export function SizeBandColumns({ items }: { items: InsightBucket[] }) {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-3.5">Size-band distribution (MT)</div>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-500 mb-3.5">Size-band distribution (MT)</div>
       <div className="flex items-end justify-between gap-3 h-[150px]">
         {cols.map((c) => (
           <div key={c.label} className="flex-1 flex flex-col items-center justify-end h-full min-w-0">
-            <span className="text-[12px] font-bold text-[#1B3A5C] tabular-nums leading-none">{nf.format(c.count)}</span>
+            <span className="text-[12px] font-semibold text-[#1B3A5C] tabular-nums leading-none">{nf.format(c.count)}</span>
             <span className="text-[10px] text-slate-400 tabular-nums leading-none mt-0.5 mb-1">{Math.round((c.count / total) * 100)}%</span>
             <span
               className={`mi-col-bar w-full max-w-[44px] rounded-t-md ${c.label === "Other" ? "bg-slate-300" : "bg-[#185FA5]"}`}
@@ -150,14 +169,14 @@ export function LanesTable({ items }: { items: (InsightBucket & { band?: string 
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">Top lanes</div>
+      <div className="px-4 py-3 border-b border-slate-100 text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-500">Top lanes</div>
       <table className="w-full">
         <thead>
-          <tr className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-slate-400">
-            <th className="text-left px-4 py-1.5 font-bold">Lane</th>
+          <tr className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+            <th className="text-left px-4 py-1.5 font-semibold">Lane</th>
             <th className="w-[30%]" />
-            <th className="text-right px-2 py-1.5 font-bold">Cargoes</th>
-            {hasBands && <th className="text-right px-4 py-1.5 font-bold">Typical band</th>}
+            <th className="text-right px-2 py-1.5 font-semibold">Cargoes</th>
+            {hasBands && <th className="text-right px-4 py-1.5 font-semibold">Typical band</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
@@ -180,7 +199,7 @@ export function LanesTable({ items }: { items: (InsightBucket & { band?: string 
                 {hasBands && (
                   <td className="px-4 py-1.5 text-right">
                     {i.band && (
-                      <span className={`inline-block text-[10px] font-bold tabular-nums rounded-md px-1.5 py-0.5 ${other ? "bg-slate-100 text-slate-400" : "bg-[#E6F1FB] text-[#185FA5]"}`}>
+                      <span className={`inline-block text-[10px] font-semibold tabular-nums rounded-md px-1.5 py-0.5 ${other ? "bg-slate-100 text-slate-400" : "bg-[#E6F1FB] text-[#185FA5]"}`}>
                         {i.band}
                       </span>
                     )}

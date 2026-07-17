@@ -3,7 +3,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ADMIN_PRESETS, OWNER_ONLY, ADMIN_SECTIONS, type AdminPerms } from "@/lib/admin/sections";
 import { PromoteControl, DemoteControl } from "./AdminControls";
 
-export const metadata = { title: "Admins — Arab ShipBroker" };
+export const metadata = { title: "Admins Arab ShipBroker" };
 export const dynamic = "force-dynamic";
 
 type Row = {

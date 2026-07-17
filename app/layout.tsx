@@ -28,7 +28,7 @@ const notoArabic = Noto_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  title: "Arab ShipBroker - Maritime Brokerage for MENA",
+  title: "Arab ShipBroker Maritime Brokerage for MENA",
   description: "Connecting Buyers and Sellers in the MENA Maritime Market",
 };
 

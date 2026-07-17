@@ -4,7 +4,7 @@ import { loadViewerContext, loadVesselViews, loadCargoViews, loadFuelPrices } fr
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { VoyageEstimator, CalculatorLocked } from "@/components/portal/calculators";
 
-export const metadata = { title: "Voyage Cost Estimator — Arab ShipBroker" };
+export const metadata = { title: "Voyage Cost Estimator Arab ShipBroker" };
 
 export default async function VoyageEstimatorPage({
   searchParams,

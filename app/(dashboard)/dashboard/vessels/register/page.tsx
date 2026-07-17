@@ -8,7 +8,7 @@ import { VesselCreateForm } from "@/components/vessels/VesselCreateForm";
 import { ProfileGuard } from "@/components/ProfileGuard";
 
 export const metadata = {
-  title: "Register Vessel — Arab ShipBroker",
+  title: "Register Vessel Arab ShipBroker",
 };
 
 export default async function RegisterVesselPage() {

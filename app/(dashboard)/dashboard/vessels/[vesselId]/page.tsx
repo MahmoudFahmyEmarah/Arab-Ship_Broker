@@ -52,7 +52,7 @@ export async function generateMetadata({
     .eq("id", vesselId)
     .single();
 
-  return { title: data ? `${data.vessel_name} — Arab ShipBroker` : "Vessel" };
+  return { title: data ? `${data.vessel_name} Arab ShipBroker` : "Vessel" };
 }
 
 export default async function VesselDetailPage({

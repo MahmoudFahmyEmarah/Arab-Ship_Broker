@@ -4,7 +4,7 @@ import { loadViewerContext, loadVesselViews, loadCargoViews } from "@/lib/portal
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { PortsDA, CalculatorLocked } from "@/components/portal/calculators";
 
-export const metadata = { title: "Ports DA Calculator — Arab ShipBroker" };
+export const metadata = { title: "Ports DA Calculator Arab ShipBroker" };
 
 export default async function PortsDaPage() {
   const supabase = await getSupabaseServerClient();
