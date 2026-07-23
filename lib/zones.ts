@@ -33,6 +33,10 @@ export const ZONE_CODES = [
   "ECI",
   "ECSA",
   "WCI",
+  "R.SEA.N",
+  "R.SEA.S",
+  "BALTIC",
+  "GLAKES",
   "Unknown",
 ] as const;
 export type ZoneCode = (typeof ZONE_CODES)[number];
@@ -67,6 +71,12 @@ export const ZONES: Record<ZoneCode, ZoneMeta> = {
   "ECI": { code: "ECI", label: "East Coast India", short: "E.C. India", color: "#8C6BA6", centroid: [14.0, 82.0] },
   "ECSA": { code: "ECSA", label: "East Coast South America", short: "E.C. S. America", color: "#B0524E", centroid: [-25.0, -45.0] },
   "WCI": { code: "WCI", label: "West Coast India", short: "W.C. India", color: "#C2566E", centroid: [15.5, 71.6] },
+  // Field spec (09_VESSEL_FIELD_SPEC): Red Sea North & South are SEPARATE zones.
+  // Legacy single R.SEA retained above for existing rows.
+  "R.SEA.N": { code: "R.SEA.N", label: "Red Sea North", short: "Red Sea N", color: "#F2B04A", centroid: [26.0, 35.5] },
+  "R.SEA.S": { code: "R.SEA.S", label: "Red Sea South", short: "Red Sea S", color: "#E08E22", centroid: [15.0, 41.5] },
+  "BALTIC": { code: "BALTIC", label: "Baltic Sea", short: "Baltic", color: "#4E8FB8", centroid: [57.5, 19.5] },
+  "GLAKES": { code: "GLAKES", label: "Great Lakes", short: "Great Lakes", color: "#5B8A72", centroid: [44.5, -82.0] },
   "Unknown": { code: "Unknown", label: "Unknown", short: "Unknown", color: "#8B95A3" },
 };
 
