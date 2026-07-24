@@ -743,6 +743,12 @@ kbd{font-family:var(--asb-font);font-size:10.5px;font-weight:600;background:var(
  * Kept as an override block so re-extracting the vendored CSS above never
  * silently drops it. */
 .led-head{margin:12px 24px 0;padding:12px 20px;border:0.5px solid var(--asb-line);border-radius:16px;top:10px;box-shadow:0 6px 18px rgba(13,37,69,.06);}
+/* Hover contrast fix: the vendored base .led-act:hover was written for the
+ * dark toolbar variant (color:#fff) and outranks the white-header skin by
+ * file order — re-assert readable navy text on the light hover background. */
+.led-head__meta .led-act:hover{background:var(--asb-blue-light);border-color:var(--asb-blue);color:var(--asb-navy);}
+.led-head__meta .led-act--exit:hover{background:var(--asb-blue-light);color:var(--asb-navy);}
+.led-head__meta .led-act--save:hover{background:#0a1d38;border-color:#0a1d38;color:#fff;}
 .led-head__icon{padding-top:1px;}
 .led-head__title{font-size:22px;}
 .led-head__sub{margin-top:3px;font-size:13px;max-width:none;}
