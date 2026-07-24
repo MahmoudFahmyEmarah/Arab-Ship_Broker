@@ -11,8 +11,10 @@ import "./beta-gate.css";
 // the prefix match resolves correctly (e.g. /dashboard/cargo/my before /dashboard/cargo).
 const GATED_ORDER = [
   "/dashboard/cargo/my",
+  "/dashboard/cargo/post",
   "/dashboard/cargo/create",
   "/dashboard/cargo",
+  "/dashboard/vessels/post",
   "/dashboard/vessels/register",
   "/dashboard/vessels/browse",
   "/dashboard/vessels",
