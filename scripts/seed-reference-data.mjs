@@ -167,7 +167,7 @@ const summary = [];
       annex: s(r[2]),
       definition: s(r[3]),
       securing_trigger: s(r[4]),
-      market_aliases: s(r[5]) ? s(r[5]).split(/;/).map((x) => x.trim()).filter(Boolean) : null,
+      market_aliases: s(r[5]) ? s(r[5]).split(/[;,]/).map((x) => x.trim()).filter(Boolean) : null,
       sort_order: i + 1,
     }));
   await upsert("css_categories", "code", out, "css_categories (08)");

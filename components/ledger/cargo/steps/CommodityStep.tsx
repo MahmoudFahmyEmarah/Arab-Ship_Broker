@@ -197,7 +197,7 @@ export function CommodityStep({ state, patch }: StepCtx<CargoState>) {
                 </button>
               ) : null}
             </div>
-            <div className="pp2-cmdx__list">
+            <div className="pp2-cmdx__list" onMouseLeave={() => setFocus(null)}>
               {results.map((c) => (
                 <button
                   type="button"
