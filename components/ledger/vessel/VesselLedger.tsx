@@ -48,7 +48,9 @@ export function VesselLedger() {
           (s) => (s.entryMode === "tbn" ? !!s.tbn?.type : !!s.vessel?.type),
           (s) => (s.entryMode === "tbn" ? !!s.tbn?.flag : !!s.vessel?.flag),
         ],
-        opt: [(s) => !!s.vessel?.built, (s) => !!s.vessel?.classSociety, (s) => !!s.vessel?.verified, (s) => !!s.vessel?.regOwner],
+        // Deviation from the mount config (user feedback 25 Jul): `verified` is
+        // set by ASB, never by the poster — an unfillable predicate caps the %.
+        opt: [(s) => !!s.vessel?.built, (s) => !!s.vessel?.classSociety, (s) => !!s.vessel?.regOwner],
         render: (ctx) => <VesselStep {...ctx} />,
         summary: vesselSummary,
         complete: vesselComplete,
@@ -74,7 +76,8 @@ export function VesselLedger() {
         title: "Availability",
         hint: "Status, open port, dates, zone.",
         mand: [(s) => !!s.availability?.status, (s) => !!s.availability?.openPort?.locode, (s) => !!s.availability?.openFrom],
-        opt: [(s) => !!s.availability?.charterType, (s) => !!s.availability?.wog, (s) => !!s.availability?.direction],
+        // WOG off is a valid answer (firm rates) — a toggle must not drag the %.
+        opt: [(s) => !!s.availability?.charterType, (s) => !!s.availability?.direction],
         render: (ctx) => <AvailabilityStep {...ctx} />,
         summary: avSummary,
         complete: avComplete,
@@ -105,10 +108,11 @@ export function VesselLedger() {
           (s) => (s.gear?.geared ? !!s.gear.craneCount : null),
           (s) => (s.gear?.geared ? !!s.gear.craneSwl : null),
         ],
+        // Grabs / kick-plate are toggles (off = valid answer); grab details only
+        // count once grabs are switched on.
         opt: [
-          (s) => (s.gear?.geared ? !!s.gear.grabs : null),
-          (s) => (s.gear?.geared ? !!s.gear.numGrabs : null),
-          (s) => (s.gear?.geared ? !!s.gear.kickPlate : null),
+          (s) => (s.gear?.geared && s.gear.grabs ? !!s.gear.numGrabs : null),
+          (s) => (s.gear?.geared && s.gear.grabs ? !!s.gear.grabCapacity : null),
         ],
         render: (ctx) => <GearStep {...ctx} />,
         summary: gearSummary,

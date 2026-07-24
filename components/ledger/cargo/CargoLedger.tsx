@@ -42,7 +42,10 @@ export function CargoLedger() {
         title: "Commodity",
         hint: "Name + dry/break-bulk.",
         mand: [(s) => !!s.commodity?.name, (s) => !!s.commodity?.form],
-        opt: [(s) => !!s.commodity?.packaging, (s) => !!s.commodity?.marketName],
+        // Deviation from the mount config (user feedback 25 Jul): marketName is
+        // auto-derived metadata the user can never fill — counting it capped a
+        // fully-entered section at 83%.
+        opt: [(s) => !!s.commodity?.packaging],
         render: (ctx) => <CommodityStep {...ctx} />,
         summary: commoditySummary,
         complete: commodityComplete,
