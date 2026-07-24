@@ -736,3 +736,19 @@ kbd{font-family:var(--asb-font);font-size:10.5px;font-weight:600;background:var(
   .led-sec__title{min-width:0;}
   .led-sec__sum{display:none;}
 }
+
+/* ── ASB portal integration overrides (24 Jul 2026) ─────────────────────────
+ * Compact header card: one-line subtitle, slimmer bar, and the bar's width
+ * aligned with the step cards / side rail below (it was full-container).
+ * Kept as an override block so re-extracting the vendored CSS above never
+ * silently drops it. */
+.led-head{margin:12px 24px 0;padding:12px 20px;border:0.5px solid var(--asb-line);border-radius:16px;top:10px;box-shadow:0 6px 18px rgba(13,37,69,.06);}
+.led-head__icon{padding-top:1px;}
+.led-head__title{font-size:22px;}
+.led-head__sub{margin-top:3px;font-size:13px;max-width:none;}
+.led-body{padding-top:14px;}
+.led-side{top:104px;}
+@media(max-width:600px){
+  .led-head{margin:10px 14px 0;padding:10px 14px;}
+  .led-head__sub{white-space:normal;}
+}

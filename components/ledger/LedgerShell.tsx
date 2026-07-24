@@ -264,7 +264,7 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
     <div className="led pp2" ref={rootRef}>
       <header className="led-head">
         <div className="led-head__id">
-          <span className="led-head__icon">{cfg.icon ? <Icon name={cfg.icon} size={30} /> : null}</span>
+          <span className="led-head__icon">{cfg.icon ? <Icon name={cfg.icon} size={26} /> : null}</span>
           <div>
             <div className="led-head__eyebrow">{cfg.eyebrow}</div>
             <h1 className="led-head__title">{cfg.title}</h1>
