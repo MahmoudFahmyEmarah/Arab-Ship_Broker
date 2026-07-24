@@ -758,3 +758,13 @@ kbd{font-family:var(--asb-font);font-size:10.5px;font-weight:600;background:var(
   .led-head{margin:10px 14px 0;padding:10px 14px;}
   .led-head__sub{white-space:normal;}
 }
+
+/* Dropdown flyouts (SelectTip definition menus, port picker, search menus)
+ * were clipped inside their section: the accordion's collapse animation needs
+ * overflow:hidden on .pp2-step__bodyinner while the 0fr→1fr grid row grows.
+ * Once a step has FINISHED expanding, release the clip so menus overlay the
+ * cards below. The overflow flip is discretely delayed past the .3s grow
+ * animation; on collapse the base rule snaps straight back to hidden so the
+ * closing animation still clips cleanly. */
+.pp2-step.is-active{z-index:5;}
+.pp2-step.is-active .pp2-step__bodyinner{overflow:visible;transition:overflow 0s .32s allow-discrete;}
