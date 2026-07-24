@@ -9,7 +9,7 @@
 
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import type { CircularParseResult, ParsedCargo, ParsedVessel } from "@/lib/circulars/types";
+import { OFF_TOPIC_WARNING, type CircularParseResult, type ParsedCargo, type ParsedVessel } from "@/lib/circulars/types";
 import type { CargoState } from "./cargo/state";
 import type { VesselState } from "./vessel/state";
 import { cargoExToPatch, cargoExRows } from "./cargo/exToPatch";
@@ -47,16 +47,29 @@ const PERSONA: Record<Mode, { name: string; role: string; greet: string; sample:
   cargo: {
     name: "Foreman AI",
     role: "Smart Assistant",
-    greet: "Ahoy, I'm Foreman. Paste a cargo circular below and I'll read it and fill the form for you to check.",
+    greet: "Ahoy, I'm Foreman. Paste a cargo circular below — or attach one — and I'll read it and fill the form for you to check.",
     sample: "12,500 MT +/- 10% BAGGED SUGAR\nLOAD 1SB SANTOS / DISCH 1SB LAGOS\nLAYCAN 10-20 SEP\nFRT IDEA USD 45/MT FIOST, 3.75% TTL COMM",
   },
   vessel: {
     name: "Bosun AI",
     role: "Smart Assistant",
-    greet: "Ahoy, I'm Bosun. Paste a position circular or Q88 text below and I'll read her particulars and fill the form for you to check.",
+    greet: "Ahoy, I'm Bosun. Paste a position circular or Q88 text below — or attach the Q88 as PDF/Excel — and I'll read her particulars and fill the form for you to check.",
     sample: "MV GULF TRADER - IMO 9235945\nGEARED BULK CARRIER 28,000 DWT BLT 2006 PANAMA FLAG\n4 HO / 4 HA - CR 2 X 30 T\nOPEN JEDDAH 05-10 AUG - INT RED SEA / EAST MED",
   },
 };
+
+// Canonical media type by extension (browsers often report '' for .xlsx).
+const FILE_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xls: "application/vnd.ms-excel",
+};
+
+const AttachSVG = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 11.5 L12.5 20 a5.5 5.5 0 0 1 -7.8 -7.8 L13.2 3.7 a3.7 3.7 0 0 1 5.2 5.2 L9.9 17.4 a1.9 1.9 0 0 1 -2.7 -2.7 L15.6 6.3" />
+  </svg>
+);
 
 let msgSeq = 0;
 const nextId = () => "m" + ++msgSeq;
@@ -76,6 +89,7 @@ function AssistantPanel({
     { id: nextId(), role: "bot", kind: "text", text: persona.greet },
   ]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,17 +98,13 @@ function AssistantPanel({
 
   const push = (m: Omit<Message, "id">) => setMessages((list) => [...list, { ...m, id: nextId() }]);
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || busy) return;
-    setInput("");
-    push({ role: "user", kind: "text", text });
+  const runParse = async (body: Record<string, unknown>) => {
     setBusy(true);
     try {
       const res = await fetch("/api/circulars/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         push({
@@ -105,11 +115,18 @@ function AssistantPanel({
               ? "I'm not switched on yet — please fill the form manually for now."
               : res.status === 401
                 ? "Please sign in so I can help."
-                : `I'm unavailable right now (${res.status}) — please try again.`,
+                : res.status === 415 || res.status === 413
+                  ? "I can't read that — please attach the Q88 as PDF or Excel, or paste the text."
+                  : `I'm unavailable right now (${res.status}) — please try again.`,
         });
         return;
       }
       const result = (await res.json()) as CircularParseResult;
+      // Hard scope lock: off-topic input gets the fixed refusal, nothing else.
+      if (result.kind === "unknown" && result.warnings?.some((w) => w.startsWith("OFF_TOPIC"))) {
+        push({ role: "bot", kind: "text", text: OFF_TOPIC_WARNING.replace(/^OFF_TOPIC:\s*/, "") });
+        return;
+      }
       const rows = mode === "cargo" ? cargoExRows(result.extracted) : vesselExRows(result.extracted);
       if (!rows.length) {
         push({ role: "bot", kind: "text", text: "I couldn't pick out any fields from that — try pasting the full circular text." });
@@ -124,6 +141,35 @@ function AssistantPanel({
     } finally {
       setBusy(false);
     }
+  };
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || busy) return;
+    setInput("");
+    push({ role: "user", kind: "text", text });
+    await runParse({ text });
+  };
+
+  const onFile = async (file: File) => {
+    if (busy) return;
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const mediaType = FILE_TYPES[ext];
+    if (!mediaType) {
+      push({ role: "bot", kind: "text", text: "Please attach the Q88 as a PDF or Excel (.pdf, .xlsx, .xls) file." });
+      return;
+    }
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    const base64 = dataUrl.split(",")[1] ?? "";
+    push({ role: "user", kind: "text", text: `📎 ${file.name}` });
+    const extra = input.trim();
+    if (extra) setInput("");
+    await runParse({ fileBase64: base64, fileMediaType: mediaType, ...(extra ? { text: extra } : {}) });
   };
 
   if (!ASSISTANT_ENABLED) return null;
@@ -198,6 +244,27 @@ function AssistantPanel({
         </button>
       </div>
       <div className="pp2-agent__foot">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.xlsx,.xls"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) onFile(f);
+          }}
+        />
+        <button
+          className="pp2-agent__send"
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          aria-label="Attach a Q88 or circular (PDF / Excel)"
+          title="Attach a Q88 or circular (PDF / Excel)"
+        >
+          <AttachSVG />
+        </button>
         <textarea
           ref={inputRef}
           className="pp2-agent__input"
