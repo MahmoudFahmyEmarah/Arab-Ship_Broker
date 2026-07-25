@@ -184,6 +184,8 @@ const summary = [];
   for (const r of rows) {
     const locode = s(r[0])?.replace(/\s+/g, "").toUpperCase();
     if (!locode || !/^[A-Z]{2}[A-Z0-9]{3}$/.test(locode)) { console.warn(`  ! ports: bad LOCODE "${r[0]}" — skipped`); continue; }
+    // "(old code)" rows are workbook documentation of retired codes, not ports.
+    if (/\(old code\)/i.test(s(r[1]) ?? "")) continue;
     if (seen.has(locode)) continue;
     seen.add(locode);
     out.push({

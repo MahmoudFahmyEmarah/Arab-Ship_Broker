@@ -62,19 +62,37 @@ export async function classifyCommodity(supabase: SupabaseClient, name: string):
 
 // ── port search (curated table + full UN/LOCODE reference, merged) ──────────
 
+// Deactivated curated rows are retired codes (old codes / legacy spaced
+// duplicates, see migration 20260725120000). The UN/LOCODE backstop still
+// contains some of them, so suppress backstop hits matching a retired code —
+// otherwise the dedupe would resurface through the reference tier.
+let retiredCache: { at: number; codes: Set<string> } | null = null;
+async function retiredPortCodes(supabase: SupabaseClient): Promise<Set<string>> {
+  if (retiredCache && Date.now() - retiredCache.at < 5 * 60_000) return retiredCache.codes;
+  try {
+    const { data } = await supabase.from("ports").select("locode").eq("is_active", false).limit(500);
+    const codes = new Set((data ?? []).map((r: { locode: string }) => r.locode.replace(/\s+/g, "").toUpperCase()));
+    retiredCache = { at: Date.now(), codes };
+    return codes;
+  } catch {
+    return retiredCache?.codes ?? new Set();
+  }
+}
+
 export async function searchLedgerPorts(supabase: SupabaseClient, query: string): Promise<PortOption[]> {
   const q = query.trim();
   if (q.length < 2) return [];
-  const [tableRes, refRes] = await Promise.all([
+  const [tableRes, refRes, retired] = await Promise.all([
     searchPorts(supabase, q).catch(() => [] as PortOption[]),
     fetch(`/api/ports/search?q=${encodeURIComponent(q)}`)
       .then((r) => r.json())
       .then((d) => (d.results ?? []) as PortOption[])
       .catch(() => [] as PortOption[]),
+    retiredPortCodes(supabase),
   ]);
   const norm = (l: string) => l.replace(/\s+/g, "").toUpperCase();
   const seen = new Set(tableRes.map((p) => norm(p.locode)));
-  return [...tableRes, ...refRes.filter((p) => !seen.has(norm(p.locode)))].slice(0, 8);
+  return [...tableRes, ...refRes.filter((p) => !seen.has(norm(p.locode)) && !retired.has(norm(p.locode)))].slice(0, 8);
 }
 
 // ── vessel registry search ───────────────────────────────────────────────────
