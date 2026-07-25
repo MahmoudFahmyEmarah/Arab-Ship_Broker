@@ -431,25 +431,32 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
             </section>
           ) : null}
 
-          {cfg.reposts?.length ? (
+          {cfg.reposts ? (
             <section className="led-card">
               <div className="led-card__h">Repost a past posting</div>
               <div className="led-card__list">
-                {cfg.reposts.map((r, i) => (
-                  <button
-                    className="led-row"
-                    type="button"
-                    key={i}
-                    onClick={() => {
-                      applyPatch(r.patch, "Loaded for repost");
-                      setCurrentId(null);
-                      setOpen(0);
-                    }}
-                  >
-                    <span className="led-row__main">{r.label}</span>
-                    <span className="led-row__sub">{r.sub ?? "Loads all fields — edit then repost"}</span>
-                  </button>
-                ))}
+                {cfg.reposts.length ? (
+                  cfg.reposts.map((r, i) => (
+                    <button
+                      className="led-row"
+                      type="button"
+                      key={i}
+                      onClick={() => {
+                        applyPatch(r.patch, "Loaded for repost");
+                        setCurrentId(null);
+                        setOpen(0);
+                      }}
+                    >
+                      <span className="led-row__main">{r.label}</span>
+                      <span className="led-row__sub">{r.sub ?? "Loads all fields — edit then repost"}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="led-empty">
+                    Nothing posted from this account yet. Your recent postings will appear here — one click loads
+                    every field, edit the dates, then repost.
+                  </div>
+                )}
               </div>
             </section>
           ) : null}
