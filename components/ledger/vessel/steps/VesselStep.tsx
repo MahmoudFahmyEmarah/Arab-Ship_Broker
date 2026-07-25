@@ -12,7 +12,7 @@ import { validateImoCheckDigit } from "@/lib/schemas/cargo";
 import { searchVesselRegistry, type VesselRegistryHit } from "@/sdk/app/ledger";
 import type { StepCtx } from "../../types";
 import type { LedgerVessel, VesselState } from "../state";
-import { Field, InlineNote, SelectTip, TextInput, fmt } from "../../fields";
+import { CountryPicker, Field, InlineNote, SelectTip, TextInput, fmt } from "../../fields";
 import { Icon, LedgerButton, LedgerInput, SegmentedToggle, StatusBadge } from "../../ds";
 import { LEDGER_ENUMS, SIZE_GATE_DWT as GATE, VTYPE_DEFS } from "../../defs";
 import { OwnershipBlock } from "../OwnershipChain";
@@ -281,7 +281,7 @@ export function VesselStep({ state, patch }: StepCtx<VesselState>) {
               <TextInput value={String(state.vessel.dwt ?? "")} onChange={(x) => patchVessel({ dwt: x.replace(/[^\d]/g, "") })} placeholder="e.g. 8,200" />
             </Field>
             <Field label="Flag" req help="Flag state of registry.">
-              <TextInput value={state.vessel.flag} onChange={(x) => patchVessel({ flag: x })} placeholder="e.g. Panama" />
+              <CountryPicker value={state.vessel.flag} onChange={(x) => patchVessel({ flag: x })} placeholder="e.g. Panama" />
             </Field>
             <Field label="Built">
               <TextInput value={state.vessel.built} maxLength={4} onChange={(x) => patchVessel({ built: x.replace(/\D/g, "").slice(0, 4) })} placeholder="e.g. 2006" />
@@ -313,7 +313,7 @@ export function VesselStep({ state, patch }: StepCtx<VesselState>) {
               <TextInput value={tbn.dwt} onChange={(x) => patchTbn({ dwt: x.replace(/[^\d]/g, "") })} placeholder="e.g. 12,000" />
             </Field>
             <Field label="Flag" req help="Flag state of registry.">
-              <TextInput value={tbn.flag} onChange={(x) => patchTbn({ flag: x })} placeholder="e.g. Panama" />
+              <CountryPicker value={tbn.flag} onChange={(x) => patchTbn({ flag: x })} placeholder="e.g. Panama" />
             </Field>
             <Field label="Built">
               <TextInput value={tbn.built} maxLength={4} onChange={(x) => patchTbn({ built: x.replace(/\D/g, "").slice(0, 4) })} placeholder="e.g. 2010" />

@@ -5,7 +5,8 @@
 // Styled by ledger.css (pp2-* classes) under the .asb-ds page scope.
 
 import * as React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { FLAG_STATES } from "@/lib/geo/countries";
 import { SegmentedToggle } from "./ds";
 
 export type SelectOption = string | { value: string; label: string };
@@ -185,6 +186,61 @@ export function TextInput({
       onChange={(e) => onChange(transform ? transform(e.target.value) : e.target.value)}
       placeholder={placeholder}
     />
+  );
+}
+
+/** Searchable flag-state picker: type to filter the maritime-ordered
+ *  FLAG_STATES registry (Panama/Liberia/… first), pick from the menu, or keep
+ *  free text for an exotic registry. */
+export function CountryPicker({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value?: string | null;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const results = useMemo(() => {
+    const s = (value ?? "").trim().toLowerCase();
+    const list = s ? FLAG_STATES.filter((c) => c.toLowerCase().includes(s)) : [...FLAG_STATES];
+    return list.slice(0, 10);
+  }, [value]);
+  const exact = results.length === 1 && results[0].toLowerCase() === (value ?? "").trim().toLowerCase();
+  return (
+    <div className="pp2-port">
+      <input
+        className="pp2-select"
+        style={{ backgroundImage: "none" }}
+        value={value ?? ""}
+        placeholder={placeholder || "Search flag state…"}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+      />
+      {open && !exact && results.length > 0 && (
+        <div className="pp2-port__menu">
+          {results.map((c) => (
+            <button
+              type="button"
+              className="pp2-port__opt"
+              key={c}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange(c);
+                setOpen(false);
+              }}
+            >
+              <span className="pp2-port__opt-name">{c}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
