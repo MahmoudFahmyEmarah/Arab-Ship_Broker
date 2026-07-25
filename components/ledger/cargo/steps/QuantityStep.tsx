@@ -21,7 +21,7 @@ export function QuantityStep({ state, patch }: StepCtx<CargoState>) {
         </Field>
         <Field label="Tolerance" help="Margin on quantity, at the option-holder's choice.">
           <div className="pp2-split">
-            <NumInput value={cur.molooPct} onChange={(x) => patchQ({ molooPct: x })} unit="%" placeholder="e.g. 10" max={25} />
+            <NumInput value={cur.molooPct} onChange={(x) => patchQ({ molooPct: x })} unit="%" decimal placeholder="e.g. 7.5" max={25} />
             <SelectTip
               value={cur.optionHolder}
               onChange={(x) => patchQ({ optionHolder: x })}
