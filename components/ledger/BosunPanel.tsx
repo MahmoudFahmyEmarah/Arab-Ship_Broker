@@ -10,6 +10,7 @@
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { OFF_TOPIC_WARNING, type CircularParseResult, type ParsedCargo, type ParsedVessel } from "@/lib/circulars/types";
+import { Icon } from "./ds";
 import type { CargoState } from "./cargo/state";
 import type { VesselState } from "./vessel/state";
 import { cargoExToPatch, cargoExRows } from "./cargo/exToPatch";
@@ -23,13 +24,10 @@ const SendSVG = () => (
   </svg>
 );
 
-const BotSVG = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="5" y="8" width="14" height="10" rx="2.5" />
-    <circle cx="10" cy="13" r="1.2" fill="currentColor" stroke="none" />
-    <circle cx="14" cy="13" r="1.2" fill="currentColor" stroke="none" />
-    <path d="M12 8 L12 5 M9.5 5 L14.5 5" />
-  </svg>
+// The assistant wears the page's own identity glyph (ASB DS icon set):
+// Foreman = Cargo on Post Cargo, Bosun = Vessel on Post Vessel.
+const PersonaIcon = ({ mode, size = 20 }: { mode: Mode; size?: number }) => (
+  <Icon name={mode === "cargo" ? "Cargo" : "Vessel"} size={size} />
 );
 
 interface Message {
@@ -178,7 +176,7 @@ function AssistantPanel({
     return (
       <button className="pp2-fab" type="button" onClick={() => setOpen(true)} aria-label={`Open ${persona.name} assistant`}>
         <span className="pp2-fab__ic">
-          <BotSVG />
+          <PersonaIcon mode={mode} />
         </span>
         <span className="pp2-fab__label">
           <b>Ask {persona.name.replace(" AI", "")}</b>
@@ -192,7 +190,7 @@ function AssistantPanel({
     <div className="pp2-agent" role="dialog" aria-label={`${persona.name} assistant`}>
       <div className="pp2-agent__head">
         <span className="pp2-agent__avatar">
-          <BotSVG />
+          <PersonaIcon mode={mode} />
         </span>
         <div className="pp2-agent__id">
           <div className="pp2-agent__name">{persona.name}</div>
