@@ -310,7 +310,10 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
         <main className="led-main">
           <div className="pp2-steps">
             {steps.map((s, i) => {
-              const cmpl = isComplete(s);
+              // Same display rule as the sidebar (progressDone-aware) so the
+              // advisory Performance step is never pre-checked; submit gating
+              // stays on complete() via done/allComplete above.
+              const cmpl = sectionDone(s);
               const active = open === i;
               const summary = cmpl && s.summary ? s.summary(state) : null;
               const cls = ["pp2-step", active && "is-active", cmpl && "is-done"].filter(Boolean).join(" ");
