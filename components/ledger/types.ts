@@ -72,6 +72,9 @@ export interface LedgerConfig<S> {
   /** Optional corner AI assistant (Bosun/Foreman), rendered by the shell. */
   assistant?: (ctx: {
     applyPatch: (p: Partial<S> | ((state: S) => Partial<S>), msg?: string) => void;
+    /** Open the first still-incomplete section (design: jump there after an
+     *  AI apply so the user lands where their input is needed). */
+    revealIncomplete: () => void;
   }) => ReactNode;
 }
 

@@ -182,7 +182,9 @@ export function VesselLedger() {
       router.refresh();
       return result.ref ? `Position ${result.ref} posted for matching` : "Position posted for matching";
     },
-    assistant: ({ applyPatch }) => <BosunVesselPanel onApplyVessel={applyPatch} />,
+    assistant: ({ applyPatch, revealIncomplete }) => (
+      <BosunVesselPanel onApplyVessel={applyPatch} onApplied={revealIncomplete} />
+    ),
   };
 
   return <LedgerShell config={config} />;

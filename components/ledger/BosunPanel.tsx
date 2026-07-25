@@ -75,9 +75,12 @@ const nextId = () => "m" + ++msgSeq;
 function AssistantPanel({
   mode,
   onApply,
+  onApplied,
 }: {
   mode: Mode;
   onApply: (extract: ParsedCargo & ParsedVessel) => void;
+  /** Called after an apply has been committed (jump to the next gap). */
+  onApplied?: () => void;
 }) {
   const persona = PERSONA[mode];
   const [open, setOpen] = useState(false);
@@ -218,6 +221,9 @@ function AssistantPanel({
                 onClick={() => {
                   onApply(m.extract!);
                   push({ role: "bot", kind: "text", text: "Applied. Check each section and adjust anything I misread." });
+                  // After React commits the patch, open the first section
+                  // that still needs the user's input (design behaviour).
+                  setTimeout(() => onApplied?.(), 0);
                 }}
               >
                 Apply to form
@@ -287,17 +293,25 @@ function AssistantPanel({
 
 export function ForemanPanel({
   onApplyCargo,
+  onApplied,
 }: {
   mode: "cargo";
   onApplyCargo: (p: Partial<CargoState> | ((s: CargoState) => Partial<CargoState>), msg?: string) => void;
+  onApplied?: () => void;
 }) {
-  return <AssistantPanel mode="cargo" onApply={(ex) => onApplyCargo((s) => cargoExToPatch(ex, s), "Applied from circular")} />;
+  return (
+    <AssistantPanel mode="cargo" onApply={(ex) => onApplyCargo((s) => cargoExToPatch(ex, s), "Applied from circular")} onApplied={onApplied} />
+  );
 }
 
 export function BosunVesselPanel({
   onApplyVessel,
+  onApplied,
 }: {
   onApplyVessel: (p: Partial<VesselState> | ((s: VesselState) => Partial<VesselState>), msg?: string) => void;
+  onApplied?: () => void;
 }) {
-  return <AssistantPanel mode="vessel" onApply={(ex) => onApplyVessel((s) => vesselExToPatch(ex, s), "Applied from circular")} />;
+  return (
+    <AssistantPanel mode="vessel" onApply={(ex) => onApplyVessel((s) => vesselExToPatch(ex, s), "Applied from circular")} onApplied={onApplied} />
+  );
 }

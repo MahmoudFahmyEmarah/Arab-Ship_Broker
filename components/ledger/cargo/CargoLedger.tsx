@@ -138,7 +138,9 @@ export function CargoLedger() {
       router.refresh();
       return "Cargo posted for matching";
     },
-    assistant: ({ applyPatch }) => <ForemanPanel mode="cargo" onApplyCargo={applyPatch} />,
+    assistant: ({ applyPatch, revealIncomplete }) => (
+      <ForemanPanel mode="cargo" onApplyCargo={applyPatch} onApplied={revealIncomplete} />
+    ),
   };
 
   return <LedgerShell config={config} />;

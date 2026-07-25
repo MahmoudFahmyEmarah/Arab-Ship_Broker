@@ -73,6 +73,10 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
   }, [cfg.storageKey]);
 
   const patch = useCallback((u: Partial<S>) => setState((s) => ({ ...s, ...u })), []);
+  // Always-current state for callbacks that fire outside the render cycle
+  // (e.g. the assistant's post-apply section jump).
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const flash = useCallback((m: string) => {
     setToast(m);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -450,7 +454,16 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
         </aside>
       </div>
 
-      {cfg.assistant ? cfg.assistant({ applyPatch }) : null}
+      {cfg.assistant
+        ? cfg.assistant({
+            applyPatch,
+            revealIncomplete: () => {
+              const s = stateRef.current;
+              const gap = steps.findIndex((st) => (st.complete ? !st.complete(s) : false));
+              setOpen(gap === -1 ? steps.length - 1 : gap);
+            },
+          })
+        : null}
       {toast ? (
         <div className="led-toast" role="status">
           {toast}
