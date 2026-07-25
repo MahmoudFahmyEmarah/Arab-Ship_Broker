@@ -788,3 +788,24 @@ kbd{font-family:var(--asb-font);font-size:10.5px;font-weight:600;background:var(
 .pp2-agent__apply{margin:10px 12px 12px;padding:10px 12px;border:0;border-radius:8px;background:var(--asb-navy);color:#fff;font:600 13px/1 var(--asb-font);cursor:pointer;transition:background var(--t-fast) var(--ease);}
 .pp2-agent__apply:hover{background:#0a1d38;}
 .pp2-agent__body .pp2-agent__chip{align-self:flex-start;}
+
+/* ── trading-zone map picker (Availability step) — dashboard zone shapes as a
+ * lightweight inline SVG; click toggles, synced with the chip list ───────── */
+.pp2-zonemap{margin:4px 0 10px;border:0.5px solid var(--asb-line);border-radius:12px;background:linear-gradient(180deg,#F4F8FC,#EDF3F9);overflow:hidden;}
+.pp2-zonemap svg{display:block;width:100%;height:auto;}
+.pp2-zonemap__grid{stroke:rgba(13,37,69,.06);stroke-width:1;}
+.pp2-zonemap__grid--eq{stroke:rgba(13,37,69,.12);stroke-dasharray:4 5;}
+.pp2-zonemap__poly{fill-opacity:.18;stroke-opacity:.5;stroke-width:1.2;cursor:pointer;transition:fill-opacity .15s var(--ease),stroke-opacity .15s var(--ease);}
+.pp2-zonemap__poly.is-hover{fill-opacity:.34;stroke-opacity:.85;}
+.pp2-zonemap__poly.is-on{fill-opacity:.5;stroke-opacity:1;stroke-width:2;}
+.pp2-zonemap__poly--ghost{pointer-events:none;fill-opacity:.08;stroke-opacity:.25;stroke-dasharray:3 4;}
+.pp2-zonemap__dotg{cursor:pointer;}
+.pp2-zonemap__dothit{fill:transparent;}
+.pp2-zonemap__dot{fill-opacity:.45;stroke-width:1.5;transition:fill-opacity .15s var(--ease);}
+.pp2-zonemap__dotg.is-hover .pp2-zonemap__dot{fill-opacity:.7;}
+.pp2-zonemap__dotg.is-on .pp2-zonemap__dot{fill-opacity:.9;}
+.pp2-zonemap__dotlbl{font:600 11px var(--asb-font);fill:var(--asb-ink-soft);text-anchor:middle;pointer-events:none;}
+.pp2-zonemap__dotg.is-on .pp2-zonemap__dotlbl{fill:var(--asb-navy);}
+.pp2-zonemap__lbl{font:600 11.5px var(--asb-font);fill:var(--asb-ink-soft);text-anchor:middle;pointer-events:none;}
+.pp2-zonemap__lbl.is-on{fill:var(--asb-navy);font-weight:700;}
+.pp2-zonemap__hint{padding:7px 12px;border-top:0.5px solid var(--asb-line);font:500 12px/1.4 var(--asb-font);color:var(--asb-ink-soft);background:var(--asb-white);min-height:30px;}

@@ -10,6 +10,7 @@ import type { VesselState } from "../state";
 import { Field, SelectTip, TextInput, ZoneChips, todayISO } from "../../fields";
 import { LedgerToggle } from "../../ds";
 import { PortPicker } from "../../PortPicker";
+import { ZoneMapPicker } from "../../ZoneMapPicker";
 import { CHARTER_DEFS, LEDGER_ENUMS, STATUS_DEFS, TRADING_ZONES } from "../../defs";
 
 export function AvailabilityStep({ state, patch }: StepCtx<VesselState>) {
@@ -49,7 +50,8 @@ export function AvailabilityStep({ state, patch }: StepCtx<VesselState>) {
           />
         </Field>
       </div>
-      <Field full label="Trading zones" help="Regions she'll trade. Red Sea North & South are separate.">
+      <Field full label="Trading zones" help="Regions she'll trade — pick on the map or the list below (same zones as the market map). Red Sea North & South are separate.">
+        <ZoneMapPicker value={av.zones} onChange={(z) => patchAv({ zones: z })} />
         <ZoneChips zones={TRADING_ZONES.map((z) => z.label)} value={av.zones} onChange={(z) => patchAv({ zones: z })} />
       </Field>
       <Field full label="Next direction / preference" help="Where she would prefer to trade next. Guides matching.">
