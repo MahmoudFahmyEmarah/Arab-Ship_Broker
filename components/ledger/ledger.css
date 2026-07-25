@@ -772,7 +772,10 @@ kbd{font-family:var(--asb-font);font-size:10.5px;font-weight:600;background:var(
 /* ── AI assistant chat (the vendored CSS shipped only the panel chrome —
  * header/footer/input; the message layer had no styles at all) ───────────── */
 .pp2-agent__body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--asb-gray-50);}
-.pp2-agent__msg{max-width:86%;padding:9px 12px;font:400 13px/1.5 var(--asb-font);border-radius:12px;white-space:pre-wrap;word-break:break-word;}
+/* flex:none — messages keep their natural height; without it the scrolling
+ * flex column SHRINKS tall items, which squeezed the extract card and hid its
+ * bottom rows and the Apply button. */
+.pp2-agent__msg{flex:none;max-width:86%;padding:9px 12px;font:400 13px/1.5 var(--asb-font);border-radius:12px;white-space:pre-wrap;word-break:break-word;}
 .pp2-agent__msg--bosun{align-self:flex-start;background:var(--asb-white);color:var(--asb-ink);border:0.5px solid var(--asb-line);border-bottom-left-radius:4px;box-shadow:0 1px 2px rgba(13,37,69,.05);}
 .pp2-agent__msg--user{align-self:flex-end;background:var(--asb-navy);color:#fff;border-bottom-right-radius:4px;}
 /* extract card: a bot message that is a key→value readout + Apply action */
