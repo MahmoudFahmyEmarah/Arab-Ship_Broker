@@ -109,7 +109,7 @@ export function ZoneMapPicker({
         })}
 
         {/* labels for drawn basins */}
-        {TRADING_ZONES.map(({ label, code }) => {
+        {TRADING_ZONES.map(({ code }) => {
           const shape = SHAPE_BY_CODE.get(code);
           if (!shape) return null;
           const [lat, lon] = shape.labelAt;
