@@ -5,11 +5,14 @@
 // live in ./steps/*.
 
 import * as React from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { LedgerShell } from "../LedgerShell";
-import type { LedgerConfig } from "../types";
+import type { LedgerConfig, LedgerRepost } from "../types";
 import { CARGO_STORAGE_KEY, initialCargoState, type CargoState } from "./state";
 import { submitCargoLedger } from "./mapState";
+import { loadCargoReposts } from "./reposts";
 import { CommodityStep, commodityComplete, commoditySummary } from "./steps/CommodityStep";
 import { QuantityStep, qtyComplete, qtySummary } from "./steps/QuantityStep";
 import { PortsStep, portsComplete, portsSummary } from "./steps/PortsStep";
@@ -19,6 +22,18 @@ import { ForemanPanel } from "../BosunPanel";
 
 export function CargoLedger() {
   const router = useRouter();
+  const [reposts, setReposts] = useState<LedgerRepost<CargoState>[]>([]);
+
+  // "Repost a past posting" — the user's recent listings, loaded once.
+  useEffect(() => {
+    let alive = true;
+    loadCargoReposts(getSupabaseBrowserClient())
+      .then((r) => alive && setReposts(r))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const config: LedgerConfig<CargoState> = {
     storageKey: CARGO_STORAGE_KEY,
@@ -117,6 +132,7 @@ export function CargoLedger() {
       { label: "Freight basis: Per MT", patch: (s) => ({ terms: { ...(s.terms || {}), freightBasis: "Per MT" } }) },
       { label: "Commission 3.75%", patch: (s) => ({ terms: { ...(s.terms || {}), commissionPct: "3.75" } }) },
     ],
+    reposts,
     onSubmit: async (state) => {
       await submitCargoLedger(state);
       router.refresh();

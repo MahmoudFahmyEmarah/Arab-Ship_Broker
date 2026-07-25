@@ -5,9 +5,12 @@
 // step bodies live in ./steps/*.
 
 import * as React from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { LedgerShell } from "../LedgerShell";
-import type { LedgerConfig } from "../types";
+import type { LedgerConfig, LedgerRepost } from "../types";
+import { loadVesselReposts } from "./reposts";
 import { validateImoCheckDigit } from "@/lib/schemas/cargo";
 import { SIZE_GATE_DWT } from "../defs";
 import { VESSEL_STORAGE_KEY, initialVesselState, type VesselState } from "./state";
@@ -22,6 +25,18 @@ import { BosunVesselPanel } from "../BosunPanel";
 
 export function VesselLedger() {
   const router = useRouter();
+  const [reposts, setReposts] = useState<LedgerRepost<VesselState>[]>([]);
+
+  // "Repost a past posting" — the user's recent positions, loaded once.
+  useEffect(() => {
+    let alive = true;
+    loadVesselReposts(getSupabaseBrowserClient())
+      .then((r) => alive && setReposts(r))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const config: LedgerConfig<VesselState> = {
     storageKey: VESSEL_STORAGE_KEY,
@@ -161,6 +176,7 @@ export function VesselLedger() {
       { label: "Status: Open", patch: (s) => ({ availability: { ...(s.availability || {}), status: "Open" } }) },
       { label: "Charter: TCT", patch: (s) => ({ availability: { ...(s.availability || {}), charterType: "TCT" } }) },
     ],
+    reposts,
     onSubmit: async (state) => {
       const result = await submitVesselPosition(state);
       router.refresh();

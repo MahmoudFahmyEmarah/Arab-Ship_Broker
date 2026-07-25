@@ -17,7 +17,7 @@ import { Icon, LedgerButton, LedgerInput, SegmentedToggle, StatusBadge } from ".
 import { LEDGER_ENUMS, SIZE_GATE_DWT as GATE, VTYPE_DEFS } from "../../defs";
 import { OwnershipBlock } from "../OwnershipChain";
 
-const hitToVessel = (v: VesselRegistryHit): LedgerVessel => ({
+export const registryHitToVessel = (v: VesselRegistryHit): LedgerVessel => ({
   id: v.id,
   imo: v.imo_number,
   name: v.vessel_name,
@@ -150,7 +150,7 @@ export function VesselStep({ state, patch }: StepCtx<VesselState>) {
   }, [q]);
 
   const chooseFleet = (hit: VesselRegistryHit) => {
-    const v = hitToVessel(hit);
+    const v = registryHitToVessel(hit);
     patch({ vessel: v, vesselImo: v.imo ?? null, arrangement: null, performance: null, gear: null });
   };
   const clearVessel = () => patch({ vessel: null, vesselImo: null, arrangement: null, performance: null, gear: null });
