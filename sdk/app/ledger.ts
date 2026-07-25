@@ -234,6 +234,8 @@ export async function submitCargoLedgerRpc(supabase: SupabaseClient, payload: Ca
 export interface VesselPositionPayload {
   entry_mode: "fleet" | "new" | "tbn";
   vessel_id?: string | null;
+  /** Fleet mode: fills vessels.dwt_grain when the record has none. */
+  dwt_backfill_mt?: number | null;
   vessel?: {
     imo: string;
     name: string;

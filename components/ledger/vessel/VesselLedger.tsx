@@ -73,7 +73,7 @@ export function VesselLedger() {
               ? null
               : s.vessel
                 ? s.vessel.id
-                  ? !!s.vessel.imo
+                  ? null // registry record IS the identity; legacy rows may lack IMO
                   : !!(s.vessel.imo && validateImoCheckDigit(s.vessel.imo))
                 : false,
           (s) => {

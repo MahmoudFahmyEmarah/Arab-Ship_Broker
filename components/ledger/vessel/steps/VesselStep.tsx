@@ -113,6 +113,13 @@ export function VesselCard({
         </InlineNote>
       )}
       {enriched && <InlineNote tone="ok">Cargo arrangement &amp; performance are on file for this vessel - pre-filled in the next steps.</InlineNote>}
+      {patch && v.id && !(Number(v.dwt) > 0) && (
+        <div style={{ marginTop: 12 }}>
+          <Field label="DWT (MT)" req help="Missing from the registry record and required for matching — your figure fills the gap on file.">
+            <TextInput value={String(v.dwt ?? "")} onChange={(x) => patch({ dwt: x.replace(/[^d]/g, "") })} placeholder="e.g. 12,000" />
+          </Field>
+        </div>
+      )}
       <OwnershipBlock v={v} patch={patch} />
     </div>
   );
@@ -358,7 +365,9 @@ export function vesselComplete(s: VesselState): boolean {
   }
   if (!s.vessel) return false;
   const dwt = Number(s.vessel.dwt) || 0;
-  const imoOk = !!s.vessel.imo && (!s.vessel.id ? validateImoCheckDigit(s.vessel.imo) : true);
+  // Registry picks are identified by the registry record itself — 43 legacy
+  // rows have no IMO and must still be postable (platform enriches later).
+  const imoOk = s.vessel.id ? true : !!(s.vessel.imo && validateImoCheckDigit(s.vessel.imo));
   // Flag is marked required on the hand-entry form; registry picks carry
   // whatever the record holds.
   const flagOk = s.vessel.id ? true : !!s.vessel.flag;

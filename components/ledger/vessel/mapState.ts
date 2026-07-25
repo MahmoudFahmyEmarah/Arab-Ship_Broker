@@ -117,7 +117,9 @@ export function mapVesselState(state: VesselState): VesselPositionPayload {
   if (dwt > SIZE_GATE_DWT) throw new Error(`DWT is over the ${SIZE_GATE_DWT.toLocaleString()} niche gate`);
 
   if (v.id) {
-    return { ...base, entry_mode: "fleet", vessel_id: v.id };
+    // dwt travels along so a registry record missing DWT is back-filled
+    // (the RPC only writes it when the stored value is NULL).
+    return { ...base, entry_mode: "fleet", vessel_id: v.id, dwt_backfill_mt: dwt || null };
   }
 
   const imo = (v.imo ?? "").trim();
