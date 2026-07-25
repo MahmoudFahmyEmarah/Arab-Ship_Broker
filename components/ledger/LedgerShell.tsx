@@ -137,13 +137,15 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
     const num = md * Wm + od * Wo;
     return { pct: denom ? Math.round((num / denom) * 100) : 100, mandComplete: md === mt };
   };
-  // The sidebar's checkmarks/ring MUST agree with the submit gate: a section
-  // is "done" per its complete() rule (same as the step badge and the post
-  // button); mandComplete is only the fallback when no complete() is defined.
-  const sectionDone = (s: LedgerStepDef<S>) => (s.complete ? s.complete(state) : secProg(s).mandComplete);
-  const nonReview = steps.filter((s) => s.id !== "review");
-  const doneSecs = nonReview.filter(sectionDone).length;
-  const ringPct = nonReview.length ? Math.round((doneSecs / nonReview.length) * 100) : 0;
+  // The sidebar's checkmarks/ring agree with the submit gate: a section is
+  // "done" per its complete() rule (progressDone overrides for advisory
+  // sections that never block posting but shouldn't show done while empty).
+  // The ring counts EVERY accordion item — including Review — so "N sections"
+  // matches what the user sees and each item carries an equal share.
+  const sectionDone = (s: LedgerStepDef<S>) =>
+    s.progressDone ? s.progressDone(state) : s.complete ? s.complete(state) : secProg(s).mandComplete;
+  const doneSecs = steps.filter(sectionDone).length;
+  const ringPct = steps.length ? Math.round((doneSecs / steps.length) * 100) : 0;
 
   const toggle = (i: number) => setOpen((o) => (o === i ? -1 : i));
 
@@ -352,14 +354,14 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
               <Ring pct={ringPct} />
               <div className="led-quality__meta">
                 <div className="led-quality__lead">
-                  {doneSecs} of {nonReview.length} sections
+                  {doneSecs} of {steps.length} sections
                 </div>
                 <div className="led-quality__sub">{allComplete ? "Ready to post" : "Sections complete"}</div>
               </div>
             </div>
-            {nonReview.length ? (
+            {steps.length ? (
               <ul className="led-todo">
-                {nonReview.map((s) => {
+                {steps.map((s) => {
                   const p = secProg(s);
                   const isDone = sectionDone(s);
                   return (

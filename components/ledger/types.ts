@@ -26,8 +26,12 @@ export interface LedgerStepDef<S> {
   render: (ctx: StepCtx<S>) => ReactNode;
   /** Collapsed-head summary once complete. */
   summary?: (state: S) => string;
-  /** Step completeness gate (drives check mark + submit). Default true. */
+  /** Step completeness gate (drives submit). Default true. */
   complete?: (state: S) => boolean;
+  /** Display-only "done" for the sidebar check/ring when it must differ from
+   *  complete() — e.g. an advisory section that never blocks posting but
+   *  should not show as done while empty. */
+  progressDone?: (state: S) => boolean;
 }
 
 export interface LedgerTemplate<S> {

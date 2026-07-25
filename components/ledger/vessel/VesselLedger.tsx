@@ -141,7 +141,13 @@ export function VesselLedger() {
         ],
         render: (ctx) => <PerformanceStep {...ctx} />,
         summary: perfSummary,
+        // Advisory: never blocks posting (complete stays true for the submit
+        // gate) but only shows done in the sidebar once it carries data.
         complete: perfComplete,
+        progressDone: (s) => {
+          const p = s.performance;
+          return !!(p && (p.serviceSpeed || p.fuelType || p.meConsSea || p.meConsPort || p.auxConsPort || p.brob));
+        },
       },
       {
         id: "gear",
