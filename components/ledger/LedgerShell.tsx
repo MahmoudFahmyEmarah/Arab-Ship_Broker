@@ -262,7 +262,12 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
     return () => el.removeEventListener("keydown", onKey);
   }, [saveDraft]);
 
-  const savedLabel = saved === "saving" ? "Saving…" : "Saved";
+  const savedLabel = saved === "saving" ? "Saving…" : "Autosaved";
+  const savedTitle =
+    "Your draft autosaves to this browser as you type and is restored when you " +
+    "come back to this page. Nothing is posted until you press " +
+    cfg.submitLabel +
+    ". Use Save draft to also pin it in the Saved drafts list.";
 
   return (
     <div className="led pp2" ref={rootRef}>
@@ -285,7 +290,7 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
           <button className="led-act" type="button" onClick={newDraft}>
             New
           </button>
-          <span className={"led-save led-save--" + saved}>
+          <span className={"led-save led-save--" + saved} title={savedTitle}>
             <span className="led-save__dot" />
             {savedLabel}
           </span>
