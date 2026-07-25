@@ -189,7 +189,7 @@ function AssistantPanel({
   return (
     <div className="pp2-agent" role="dialog" aria-label={`${persona.name} assistant`}>
       <div className="pp2-agent__head">
-        <span className="pp2-agent__avatar">
+        <span className="pp2-agent__ava">
           <PersonaIcon mode={mode} />
         </span>
         <div className="pp2-agent__id">
@@ -203,7 +203,7 @@ function AssistantPanel({
       <div className="pp2-agent__body" ref={listRef}>
         {messages.map((m) =>
           m.kind === "extract" ? (
-            <div className="pp2-agent__msg pp2-agent__msg--bosun" key={m.id}>
+            <div className="pp2-agent__msg pp2-agent__msg--bosun pp2-agent__msg--extract" key={m.id}>
               <div className="pp2-agent__extract">
                 {m.rows!.map((r, i) => (
                   <div className="pp2-agent__xrow" key={i}>

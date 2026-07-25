@@ -768,3 +768,20 @@ kbd{font-family:var(--asb-font);font-size:10.5px;font-weight:600;background:var(
  * closing animation still clips cleanly. */
 .pp2-step.is-active{z-index:5;}
 .pp2-step.is-active .pp2-step__bodyinner{overflow:visible;transition:overflow 0s .32s allow-discrete;}
+
+/* ── AI assistant chat (the vendored CSS shipped only the panel chrome —
+ * header/footer/input; the message layer had no styles at all) ───────────── */
+.pp2-agent__body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--asb-gray-50);}
+.pp2-agent__msg{max-width:86%;padding:9px 12px;font:400 13px/1.5 var(--asb-font);border-radius:12px;white-space:pre-wrap;word-break:break-word;}
+.pp2-agent__msg--bosun{align-self:flex-start;background:var(--asb-white);color:var(--asb-ink);border:0.5px solid var(--asb-line);border-bottom-left-radius:4px;box-shadow:0 1px 2px rgba(13,37,69,.05);}
+.pp2-agent__msg--user{align-self:flex-end;background:var(--asb-navy);color:#fff;border-bottom-right-radius:4px;}
+/* extract card: a bot message that is a key→value readout + Apply action */
+.pp2-agent__msg--extract{padding:0;width:94%;max-width:94%;overflow:hidden;display:flex;flex-direction:column;}
+.pp2-agent__extract{display:flex;flex-direction:column;}
+.pp2-agent__xrow{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:7px 12px;border-bottom:0.5px solid var(--asb-line);}
+.pp2-agent__xrow:last-child{border-bottom:0;}
+.pp2-agent__xk{font:600 10.5px/1.6 var(--asb-font);letter-spacing:.08em;text-transform:uppercase;color:var(--asb-gray-500);flex:none;}
+.pp2-agent__xv{font:500 13px/1.45 var(--asb-font);color:var(--asb-navy);text-align:right;min-width:0;}
+.pp2-agent__apply{margin:10px 12px 12px;padding:10px 12px;border:0;border-radius:8px;background:var(--asb-navy);color:#fff;font:600 13px/1 var(--asb-font);cursor:pointer;transition:background var(--t-fast) var(--ease);}
+.pp2-agent__apply:hover{background:#0a1d38;}
+.pp2-agent__body .pp2-agent__chip{align-self:flex-start;}
