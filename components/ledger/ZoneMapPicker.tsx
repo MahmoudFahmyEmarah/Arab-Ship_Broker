@@ -66,6 +66,7 @@ export function ZoneMapPicker({
   // Build / destroy the Leaflet map with the panel.
   useEffect(() => {
     if (!open || !mapEl.current || mapRef.current) return;
+    const layers = layersRef.current;
     let cancelled = false;
     (async () => {
       const L = (await import("leaflet")).default;
@@ -147,7 +148,7 @@ export function ZoneMapPicker({
     })();
     return () => {
       cancelled = true;
-      layersRef.current.clear();
+      layers.clear();
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -167,7 +168,6 @@ export function ZoneMapPicker({
       if (isMarker) (layer as Leaflet.CircleMarker).setRadius(on ? 10 : 8);
     }
   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(applySelection, [selectedCodes]);
 
   return (
