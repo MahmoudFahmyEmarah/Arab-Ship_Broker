@@ -54,7 +54,9 @@ export function CargoLedger() {
         id: "quantity",
         title: "Quantity",
         hint: "Weight/volume + tolerance.",
-        mand: [(s) => !!s.quantity?.qtyMt, (s) => !!s.quantity?.unit],
+        // Volume is a required field (stow-check) — the mount config omitted it
+        // from mand, letting the % hit 100 while the step was incomplete.
+        mand: [(s) => !!s.quantity?.qtyMt, (s) => !!s.quantity?.volume, (s) => !!s.quantity?.unit],
         opt: [(s) => !!s.quantity?.molooPct, (s) => !!s.quantity?.optionHolder],
         render: (ctx) => <QuantityStep {...ctx} />,
         summary: qtySummary,
@@ -64,7 +66,7 @@ export function CargoLedger() {
         id: "ports",
         title: "Load & Discharge",
         hint: "POL, POD, rates.",
-        mand: [(s) => !!s.ports?.pol?.name, (s) => !!s.ports?.pod?.name],
+        mand: [(s) => !!s.ports?.pol?.locode, (s) => !!s.ports?.pod?.locode],
         opt: [(s) => !!s.ports?.loadRate, (s) => !!s.ports?.dischRate, (s) => !!s.ports?.rateMechanism],
         render: (ctx) => <PortsStep {...ctx} />,
         summary: portsSummary,
@@ -74,7 +76,8 @@ export function CargoLedger() {
         id: "terms",
         title: "Laycan & Terms",
         hint: "Laycan, NOR, freight.",
-        mand: [(s) => !!s.terms?.laycanFrom],
+        // termsComplete also validates the laycan window (order + 45-day cap).
+        mand: [(s) => termsComplete(s)],
         opt: [(s) => !!s.terms?.norClause, (s) => !!s.terms?.freight, (s) => !!s.terms?.commissionPct],
         render: (ctx) => <TermsStep {...ctx} />,
         summary: termsSummary,

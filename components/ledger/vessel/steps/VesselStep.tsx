@@ -359,5 +359,8 @@ export function vesselComplete(s: VesselState): boolean {
   if (!s.vessel) return false;
   const dwt = Number(s.vessel.dwt) || 0;
   const imoOk = !!s.vessel.imo && (!s.vessel.id ? validateImoCheckDigit(s.vessel.imo) : true);
-  return !!s.vessel.name && imoOk && dwt > 0 && dwt <= GATE;
+  // Flag is marked required on the hand-entry form; registry picks carry
+  // whatever the record holds.
+  const flagOk = s.vessel.id ? true : !!s.vessel.flag;
+  return !!s.vessel.name && imoOk && flagOk && dwt > 0 && dwt <= GATE;
 }

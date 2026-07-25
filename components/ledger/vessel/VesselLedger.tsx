@@ -8,6 +8,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { LedgerShell } from "../LedgerShell";
 import type { LedgerConfig } from "../types";
+import { validateImoCheckDigit } from "@/lib/schemas/cargo";
+import { SIZE_GATE_DWT } from "../defs";
 import { VESSEL_STORAGE_KEY, initialVesselState, type VesselState } from "./state";
 import { submitVesselPosition } from "./mapState";
 import { VesselStep, vesselComplete, vesselSummary } from "./steps/VesselStep";
@@ -42,11 +44,25 @@ export function VesselLedger() {
         id: "vessel",
         title: "Vessel",
         hint: "Identity, tonnage, ownership.",
+        // Aligned with vesselComplete: IMO must pass the check digit for a
+        // hand-entered vessel (N/A for TBN), DWT must clear the 66k niche
+        // gate, and flag is N/A for registry picks (comes from the record).
         mand: [
-          (s) => (s.entryMode === "tbn" ? !!s.tbn?.type : !!(s.vessel && (s.vessel.name || s.vessel.imo))),
-          (s) => (s.entryMode === "tbn" ? !!s.tbn?.dwt : !!s.vessel?.dwt),
+          (s) => (s.entryMode === "tbn" ? !!s.tbn?.type : !!s.vessel?.name),
+          (s) =>
+            s.entryMode === "tbn"
+              ? null
+              : s.vessel
+                ? s.vessel.id
+                  ? !!s.vessel.imo
+                  : !!(s.vessel.imo && validateImoCheckDigit(s.vessel.imo))
+                : false,
+          (s) => {
+            const dwt = Number(s.entryMode === "tbn" ? s.tbn?.dwt : s.vessel?.dwt) || 0;
+            return dwt > 0 && dwt <= SIZE_GATE_DWT;
+          },
           (s) => (s.entryMode === "tbn" ? !!s.tbn?.type : !!s.vessel?.type),
-          (s) => (s.entryMode === "tbn" ? !!s.tbn?.flag : !!s.vessel?.flag),
+          (s) => (s.entryMode === "tbn" ? !!s.tbn?.flag : s.vessel ? (s.vessel.id ? null : !!s.vessel.flag) : false),
         ],
         // Deviation from the mount config (user feedback 25 Jul): `verified` is
         // set by ASB, never by the poster — an unfillable predicate caps the %.

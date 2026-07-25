@@ -133,8 +133,12 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
     const num = md * Wm + od * Wo;
     return { pct: denom ? Math.round((num / denom) * 100) : 100, mandComplete: md === mt };
   };
+  // The sidebar's checkmarks/ring MUST agree with the submit gate: a section
+  // is "done" per its complete() rule (same as the step badge and the post
+  // button); mandComplete is only the fallback when no complete() is defined.
+  const sectionDone = (s: LedgerStepDef<S>) => (s.complete ? s.complete(state) : secProg(s).mandComplete);
   const nonReview = steps.filter((s) => s.id !== "review");
-  const doneSecs = nonReview.filter((s) => secProg(s).mandComplete).length;
+  const doneSecs = nonReview.filter(sectionDone).length;
   const ringPct = nonReview.length ? Math.round((doneSecs / nonReview.length) * 100) : 0;
 
   const toggle = (i: number) => setOpen((o) => (o === i ? -1 : i));
@@ -348,10 +352,11 @@ export function LedgerShell<S extends object>({ config: cfg }: { config: LedgerC
               <ul className="led-todo">
                 {nonReview.map((s) => {
                   const p = secProg(s);
+                  const isDone = sectionDone(s);
                   return (
                     <li key={s.id}>
-                      <button type="button" className={p.mandComplete ? "is-done" : ""} onClick={() => setOpen(steps.indexOf(s))}>
-                        <span className="led-todo__pipe">{p.mandComplete ? <CheckSVG /> : null}</span>
+                      <button type="button" className={isDone ? "is-done" : ""} onClick={() => setOpen(steps.indexOf(s))}>
+                        <span className="led-todo__pipe">{isDone ? <CheckSVG /> : null}</span>
                         <span className="led-todo__name">{s.title}</span>
                         <span className="led-todo__pct">{p.pct}%</span>
                       </button>
