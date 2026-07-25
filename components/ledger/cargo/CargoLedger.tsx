@@ -36,6 +36,14 @@ export function CargoLedger() {
       if (c?.name) return c.name + (p?.pol ? " · " + p.pol.name + (p.pod ? " → " + p.pod.name : "") : "");
       return "Untitled cargo";
     },
+    // SCORING POLICY (keep in sync with the step bodies — every reported
+    // inconsistency so far was drift between these lists and the rendered
+    // inputs): mand = every *-marked input; opt = EVERY other user-fillable
+    // input in the step body. Excluded by design: toggles whose off-state is
+    // a valid answer (spot, IAC, WOG, grabs, scrubber…), derived/read-only
+    // values (zone from port), and selects that carry a default (freight
+    // basis, volume unit counts via mand). Conditional inputs return null
+    // (excluded) while their controlling field hides them.
     steps: [
       {
         id: "commodity",
@@ -57,7 +65,7 @@ export function CargoLedger() {
         // Volume is a required field (stow-check) — the mount config omitted it
         // from mand, letting the % hit 100 while the step was incomplete.
         mand: [(s) => !!s.quantity?.qtyMt, (s) => !!s.quantity?.volume, (s) => !!s.quantity?.unit],
-        opt: [(s) => !!s.quantity?.molooPct, (s) => !!s.quantity?.optionHolder],
+        opt: [(s) => !!s.quantity?.molooPct, (s) => (s.quantity?.molooPct ? !!s.quantity?.optionHolder : null)],
         render: (ctx) => <QuantityStep {...ctx} />,
         summary: qtySummary,
         complete: qtyComplete,
@@ -67,7 +75,13 @@ export function CargoLedger() {
         title: "Load & Discharge",
         hint: "POL, POD, rates.",
         mand: [(s) => !!s.ports?.pol?.locode, (s) => !!s.ports?.pod?.locode],
-        opt: [(s) => !!s.ports?.loadRate, (s) => !!s.ports?.dischRate, (s) => !!s.ports?.rateMechanism],
+        opt: [
+          (s) => !!s.ports?.loadRate,
+          (s) => !!s.ports?.dischRate,
+          (s) => !!s.ports?.rateMechanism,
+          (s) => !!s.ports?.dayExceptions,
+          (s) => !!s.ports?.turnTime,
+        ],
         render: (ctx) => <PortsStep {...ctx} />,
         summary: portsSummary,
         complete: portsComplete,
@@ -78,7 +92,13 @@ export function CargoLedger() {
         hint: "Laycan, NOR, freight.",
         // termsComplete also validates the laycan window (order + 45-day cap).
         mand: [(s) => termsComplete(s)],
-        opt: [(s) => !!s.terms?.norClause, (s) => !!s.terms?.freight, (s) => !!s.terms?.commissionPct],
+        opt: [
+          (s) => !!s.terms?.laycanTo,
+          (s) => !!s.terms?.norClause,
+          (s) => !!s.terms?.freight,
+          (s) => !!s.terms?.despatch,
+          (s) => !!s.terms?.commissionPct,
+        ],
         render: (ctx) => <TermsStep {...ctx} />,
         summary: termsSummary,
         complete: termsComplete,

@@ -39,6 +39,10 @@ export function VesselLedger() {
       if (s.entryMode === "tbn" && s.tbn?.type) return "TBN · " + s.tbn.type;
       return "Untitled position";
     },
+    // SCORING POLICY — see CargoLedger: mand = *-marked inputs; opt = every
+    // other fillable input; toggles/derived/defaulted fields excluded;
+    // inputs not available in the current mode (TBN vs search vs registry
+    // pick) return null so they never count against the score.
     steps: [
       {
         id: "vessel",
@@ -64,9 +68,18 @@ export function VesselLedger() {
           (s) => (s.entryMode === "tbn" ? !!s.tbn?.type : !!s.vessel?.type),
           (s) => (s.entryMode === "tbn" ? !!s.tbn?.flag : s.vessel ? (s.vessel.id ? null : !!s.vessel.flag) : false),
         ],
-        // Deviation from the mount config (user feedback 25 Jul): `verified` is
-        // set by ASB, never by the poster — an unfillable predicate caps the %.
-        opt: [(s) => !!s.vessel?.built, (s) => !!s.vessel?.classSociety, (s) => !!s.vessel?.regOwner],
+        // Mode-aware optionals (`verified` stays excluded — ASB-set): TBN has
+        // its own particulars form; a registry pick has no editable identity
+        // inputs (only the ownership chain), so those score null there.
+        opt: [
+          (s) => (s.entryMode === "tbn" ? !!s.tbn?.built : s.vessel ? (s.vessel.id ? null : !!s.vessel.built) : false),
+          (s) => (s.entryMode === "tbn" ? !!s.tbn?.loa : s.vessel ? (s.vessel.id ? null : !!s.vessel.loa) : false),
+          (s) => (s.entryMode === "tbn" ? !!s.tbn?.beam : null),
+          (s) => (s.entryMode === "tbn" ? !!s.tbn?.draft : null),
+          (s) => (s.entryMode === "tbn" ? !!s.tbn?.grt : null),
+          (s) => (s.entryMode === "tbn" ? !!s.tbn?.classSociety : null),
+          (s) => (s.entryMode === "tbn" ? null : !!s.vessel?.regOwner),
+        ],
         render: (ctx) => <VesselStep {...ctx} />,
         summary: vesselSummary,
         complete: vesselComplete,
@@ -82,7 +95,7 @@ export function VesselLedger() {
           (s) => !!s.arrangement?.strengthenedHeavy,
           (s) => !!s.arrangement?.logFitted,
         ],
-        opt: [(s) => !!s.arrangement?.config, (s) => !!s.arrangement?.numHatches],
+        opt: [(s) => !!s.arrangement?.config, (s) => !!s.arrangement?.numHatches, (s) => !!s.arrangement?.holdsMayBeEmpty],
         render: (ctx) => <ArrangementStep {...ctx} />,
         summary: arrSummary,
         complete: arrComplete,
@@ -93,7 +106,7 @@ export function VesselLedger() {
         hint: "Status, open port, dates, zone.",
         mand: [(s) => !!s.availability?.status, (s) => !!s.availability?.openPort?.locode, (s) => !!s.availability?.openFrom],
         // WOG off is a valid answer (firm rates) — a toggle must not drag the %.
-        opt: [(s) => !!s.availability?.charterType, (s) => !!s.availability?.direction],
+        opt: [(s) => !!s.availability?.charterType, (s) => !!(s.availability?.zones && s.availability.zones.length > 0), (s) => !!s.availability?.direction],
         render: (ctx) => <AvailabilityStep {...ctx} />,
         summary: avSummary,
         complete: avComplete,
