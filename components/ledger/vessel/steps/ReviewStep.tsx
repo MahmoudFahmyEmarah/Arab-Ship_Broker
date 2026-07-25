@@ -6,7 +6,7 @@
 import * as React from "react";
 import type { StepCtx } from "../../types";
 import type { VesselState } from "../state";
-import { InlineNote, fmt } from "../../fields";
+import { InlineNote, capFirst, fmt } from "../../fields";
 import { StatusBadge } from "../../ds";
 import { SIZE_GATE_DWT as GATE } from "../../defs";
 import { vesselComplete } from "./VesselStep";
@@ -78,7 +78,7 @@ export function ReviewStep({ state }: StepCtx<VesselState>) {
           <ReviewRow label="Configuration" value={arr.config} />
           <ReviewRow label="Holds / Hatches" value={(arr.numHolds || "-") + "H / " + (arr.numHatches || arr.numHolds || "-") + "Ha"} />
           <ReviewRow label="Box-Shaped" value={yn(arr.boxShaped)} />
-          <ReviewRow label="Hatch Type" value={arr.hatchType} />
+          <ReviewRow label="Hatch Type" value={arr.hatchType ? capFirst(arr.hatchType) : null} />
           <ReviewRow label="Heavy-Strengthened" value={yn(arr.strengthenedHeavy)} />
           <ReviewRow label="Log-Fitted" value={yn(arr.logFitted)} />
         </div>

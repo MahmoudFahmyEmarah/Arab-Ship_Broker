@@ -8,7 +8,7 @@ import * as React from "react";
 import { useEffect, useState } from "react";
 import type { StepCtx } from "../../types";
 import type { VesselState } from "../state";
-import { Field, InlineNote, SelectTip, TextInput, YesNo } from "../../fields";
+import { Field, InlineNote, SelectTip, TextInput, YesNo, capFirst } from "../../fields";
 import { CONFIG_DEFS, HATCH_DEFS, LEDGER_ENUMS } from "../../defs";
 
 export function ArrangementStep({ state, patch }: StepCtx<VesselState>) {
@@ -43,7 +43,7 @@ export function ArrangementStep({ state, patch }: StepCtx<VesselState>) {
     cur.config || null,
     cur.numHolds ? cur.numHolds + " holds" : null,
     yn(cur.boxShaped, "box-shaped", "not box-shaped"),
-    cur.hatchType ? cur.hatchType + " hatches" : null,
+    cur.hatchType ? capFirst(cur.hatchType) + " hatches" : null,
     yn(cur.strengthenedHeavy, "heavy-strengthened", "not heavy-strengthened"),
     yn(cur.logFitted, "log-fitted", "not log-fitted"),
   ].filter(Boolean) as string[];
@@ -125,7 +125,7 @@ export function arrSummary(s: VesselState): string {
   const parts = [
     a.config || null,
     a.numHolds ? a.numHolds + " holds" : null,
-    a.hatchType || null,
+    a.hatchType ? capFirst(a.hatchType) : null,
     a.strengthenedHeavy === "Y" ? "heavy-strengthened" : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "Not set";

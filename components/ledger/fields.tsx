@@ -13,6 +13,10 @@ export type SelectOption = string | { value: string; label: string };
 
 const norm = (o: SelectOption) => (typeof o === "string" ? { value: o, label: o } : o);
 
+/** Display-only capitalisation: DB values may be lowercase (e.g. hatch types
+ *  "side-rolling") but every dropdown shows them capitalised. */
+export const capFirst = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
 export function Field({
   label,
   req,
@@ -59,7 +63,7 @@ export function Select({
       {placeholder && <option value="">{placeholder}</option>}
       {options.map(norm).map((o) => (
         <option key={o.value} value={o.value}>
-          {o.label}
+          {capFirst(o.label)}
         </option>
       ))}
     </select>
@@ -93,7 +97,7 @@ export function SelectTip({
       onBlur={() => setOpen(false)}
     >
       <button type="button" className="pp2-select pp2-seltip__btn" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open}>
-        <span className={sel ? "" : "pp2-seltip__ph"}>{sel ? sel.label : placeholder || "Select…"}</span>
+        <span className={sel ? "" : "pp2-seltip__ph"}>{sel ? capFirst(sel.label) : placeholder || "Select…"}</span>
         <span className="pp2-seltip__car" aria-hidden="true">
           ▾
         </span>
@@ -113,7 +117,7 @@ export function SelectTip({
                 setOpen(false);
               }}
             >
-              <span className="pp2-optip__code">{o.label}</span>
+              <span className="pp2-optip__code">{capFirst(o.label)}</span>
               {defs && defs[o.value] && (
                 <span className="pp2-optip__bub" role="tooltip">
                   {defs[o.value]}
