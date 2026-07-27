@@ -802,3 +802,34 @@ kbd{font-family:var(--asb-font);font-size:10.5px;font-weight:600;background:var(
 .pp2-zonemap__map .pp2-zonemap__lbl::before{display:none;}
 .pp2-zonemap__map .pp2-zonemap__tt{font:600 12px var(--asb-font);color:var(--asb-navy);border:0.5px solid var(--asb-line);border-radius:7px;box-shadow:0 6px 18px rgba(13,37,69,.14);}
 .pp2-zonemap__map .leaflet-interactive{cursor:pointer;}
+
+/* ── mobile pass (Phase 1 of the mobile-parity plan, 25 Jul) ─────────────────
+ * The portal shell goes phone-mode at ≤900px: sidebar hidden, fixed 58px
+ * bottom tab bar (+ iOS safe area). Everything floating must clear that bar,
+ * and the ledger chrome tightens for narrow widths. */
+@media(max-width:900px){
+  /* clear the bottom tab bar */
+  .pp2-fab{right:14px;bottom:calc(70px + env(safe-area-inset-bottom,0px));}
+  .pp2-agent{left:10px;right:10px;width:auto;max-width:none;bottom:calc(66px + env(safe-area-inset-bottom,0px));height:min(560px,calc(100dvh - 150px));}
+  .led-toast{bottom:calc(74px + env(safe-area-inset-bottom,0px));max-width:calc(100vw - 28px);text-align:center;}
+}
+@media(max-width:700px){
+  /* header: static (sticky + wrapped would eat the viewport), actions wrap */
+  .led-head{position:static;flex-wrap:wrap;gap:8px 12px;margin:10px 14px 0;padding:12px 14px;}
+  .led-head__meta{flex:1 1 100%;flex-wrap:wrap;justify-content:flex-start;gap:6px;}
+  .led-head__title{font-size:20px;}
+}
+@media(max-width:640px){
+  /* company picker: stack search above the profile */
+  .pp2-split2__bd{grid-template-columns:1fr;min-height:0;}
+  .pp2-split2__left{border-right:0;border-bottom:0.5px solid var(--asb-line);}
+  .pp2-zonemap__map{height:240px;}
+  .pp2-step__head{padding:14px;gap:10px;}
+  .pp2-step__body{padding:6px 14px 16px;}
+  .pp2-toggles{display:flex;flex-wrap:wrap;gap:10px 16px;}
+  .pp2-vcard__stats{gap:8px 14px;}
+  /* definition flyouts must not overflow the viewport */
+  .pp2-tip__bub{max-width:min(280px,76vw);}
+  /* iOS zooms the page when a focused input is under 16px */
+  .led input,.led textarea,.led select,.led .pp2-select{font-size:16px;}
+}
