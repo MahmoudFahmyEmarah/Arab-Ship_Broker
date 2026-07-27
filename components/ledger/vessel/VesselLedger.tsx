@@ -6,8 +6,11 @@
 
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { getVesselRegistryById } from "@/sdk/app/ledger";
+import { saveWorkingState } from "../drafts";
+import { registryHitToVessel } from "./steps/VesselStep";
 import { LedgerShell } from "../LedgerShell";
 import type { LedgerConfig, LedgerRepost } from "../types";
 import { loadVesselReposts } from "./reposts";
@@ -25,6 +28,33 @@ import { BosunVesselPanel } from "../BosunPanel";
 
 export function VesselLedger() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectId = searchParams.get("vessel");
+  // Arriving from a vessel's detail page ("Post position") preselects her:
+  // the registry record is seeded into the working draft before the shell
+  // hydrates from localStorage.
+  const [ready, setReady] = useState(!preselectId);
+  useEffect(() => {
+    if (!preselectId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const hit = await getVesselRegistryById(getSupabaseBrowserClient(), preselectId);
+        if (hit) {
+          const vessel = registryHitToVessel(hit);
+          saveWorkingState<VesselState>(VESSEL_STORAGE_KEY, { entryMode: "search", vessel, vesselImo: vessel.imo ?? null });
+        }
+      } catch {
+        /* fall back to a blank form */
+      } finally {
+        if (alive) setReady(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [preselectId]);
+
   const [reposts, setReposts] = useState<LedgerRepost<VesselState>[]>([]);
 
   // "Repost a past posting" — the user's recent positions, loaded once.
@@ -193,5 +223,6 @@ export function VesselLedger() {
     ),
   };
 
+  if (!ready) return null; // resolving the preselected vessel into the draft
   return <LedgerShell config={config} />;
 }

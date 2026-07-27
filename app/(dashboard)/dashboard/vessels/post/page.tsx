@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ProfileGuard } from "@/components/ProfileGuard";
 import { PostingAsChip } from "@/components/portal/PostingAsChip";
 import { VesselLedger } from "@/components/ledger/vessel/VesselLedger";
@@ -14,7 +15,10 @@ export default function PostVesselLedgerPage() {
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "10px 24px 0" }}>
           <PostingAsChip />
         </div>
-        <VesselLedger />
+        {/* Suspense: VesselLedger reads ?vessel= via useSearchParams */}
+        <Suspense fallback={null}>
+          <VesselLedger />
+        </Suspense>
       </div>
     </ProfileGuard>
   );
