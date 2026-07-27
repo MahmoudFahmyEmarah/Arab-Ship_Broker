@@ -3324,3 +3324,27 @@ button { font: inherit; cursor: pointer; }
   .asb-chip { min-height: 30px; }
   .nav-item { min-height: 40px; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   Mobile phases 2–4 (25 Jul) — portal-wide phone fixes on top of the
+   existing ≤900px shell. Desktop untouched.
+   ════════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  /* Floating agent + demo widgets must clear the fixed 58px bottom tab bar */
+  .bosun-fab { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  .bosun-card {
+    bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 150px);
+  }
+  .asb-tier-demo { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 640px) {
+  /* Market-partner side panel: 42vw is unusable on a phone — full-width sheet */
+  .mp-panel { width: 100vw; }
+  /* iOS zooms the page when a focused input renders under 16px */
+  .asb-portal input:not([type="checkbox"]):not([type="radio"]),
+  .asb-portal select,
+  .asb-portal textarea {
+    font-size: 16px;
+  }
+}
