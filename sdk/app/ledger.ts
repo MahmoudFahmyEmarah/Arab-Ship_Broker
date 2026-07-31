@@ -238,10 +238,36 @@ export interface CargoLedgerPayload {
   notes?: string | null;
 }
 
+// A dropped connection (laptop wake, Wi-Fi blip) surfaces as an instant
+// "TypeError: Failed to fetch" from the browser — seen in the field on the
+// Post button. One short retry bridges the reconnect; if it still fails, the
+// broker gets an actionable message instead of the raw TypeError. The draft
+// is autosaved locally, so nothing is lost either way.
+const NETWORK_ERR = /failed to fetch|network|load failed|fetcherror/i;
+
+async function withNetworkRetry<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (e) {
+    if (!(e instanceof Error) || !NETWORK_ERR.test(e.message)) throw e;
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      return await call();
+    } catch (e2) {
+      if (!(e2 instanceof Error) || !NETWORK_ERR.test(e2.message)) throw e2;
+      throw new Error(
+        "Could not reach the server — check your internet connection and press Post again. Your entries are saved on this device.",
+      );
+    }
+  }
+}
+
 export async function submitCargoLedgerRpc(supabase: SupabaseClient, payload: CargoLedgerPayload) {
-  const { data, error } = await supabase.rpc("create_cargo_listing_v2", { payload });
-  if (error) throw new Error(friendlyRpcError(error.message));
-  return data;
+  return withNetworkRetry(async () => {
+    const { data, error } = await supabase.rpc("create_cargo_listing_v2", { payload });
+    if (error) throw new Error(friendlyRpcError(error.message));
+    return data;
+  });
 }
 
 export interface VesselPositionPayload {
@@ -331,9 +357,11 @@ export async function submitVesselPositionRpc(
   supabase: SupabaseClient,
   payload: VesselPositionPayload,
 ): Promise<VesselPositionResult> {
-  const { data, error } = await supabase.rpc("create_vessel_position", { payload });
-  if (error) throw new Error(friendlyRpcError(error.message));
-  return data as VesselPositionResult;
+  return withNetworkRetry(async () => {
+    const { data, error } = await supabase.rpc("create_vessel_position", { payload });
+    if (error) throw new Error(friendlyRpcError(error.message));
+    return data as VesselPositionResult;
+  });
 }
 
 /** Strip Postgres error prefixes and surface the business message. */
