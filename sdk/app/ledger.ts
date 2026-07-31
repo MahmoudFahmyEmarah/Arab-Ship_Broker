@@ -197,7 +197,20 @@ export async function getCompanyProfile(supabase: SupabaseClient, orgId: string)
 
 // ── submissions (v2 RPCs) ────────────────────────────────────────────────────
 
+export interface CargoParcelPayload {
+  commodity_name: string;
+  cargo_type: "Dry Bulk" | "Break Bulk";
+  qty_mt: number;
+  tolerance_pct?: number | null;
+  tolerance_holder?: string | null;
+  volume_cbm: number;
+  packaging_type?: string | null;
+}
+
 export interface CargoLedgerPayload {
+  /** Multi-parcel posting: one listing per parcel, grouped by cargo_group_id.
+   *  When present, the legacy single-parcel keys below are ignored. */
+  parcels?: CargoParcelPayload[];
   commodity_name: string;
   cargo_type: "Dry Bulk" | "Break Bulk";
   qty_mt: number;

@@ -15,6 +15,7 @@ import {
   type CommodityNameHit,
 } from "@/sdk/app/ledger";
 import type { StepCtx } from "../../types";
+import { ParcelsBlock, extraParcelsComplete } from "../ParcelsBlock";
 import type { CargoState } from "../state";
 import { Field, InlineNote, SelectTip } from "../../fields";
 import { SegmentedToggle, Icon } from "../../ds";
@@ -256,6 +257,7 @@ export function CommodityStep({ state, patch }: StepCtx<CargoState>) {
         ) : null}
         {multiNote}
         {fieldsBlock}
+        <ParcelsBlock state={state} patch={patch} />
       </div>
     );
   }
@@ -315,6 +317,7 @@ export function CommodityStep({ state, patch }: StepCtx<CargoState>) {
       </div>
       {fieldsBlock}
       {multiNote}
+      <ParcelsBlock state={state} patch={patch} />
       <InlineNote>IMSBC group, stowage factor and safety controls are resolved by the platform once you post.</InlineNote>
     </div>
   );
@@ -323,9 +326,10 @@ export function CommodityStep({ state, patch }: StepCtx<CargoState>) {
 export function commoditySummary(s: CargoState): string {
   const c = s.commodity;
   if (!c) return "Not set";
-  return c.name + " · " + (c.form === "break-bulk" ? "break-bulk" : "dry bulk");
+  const extra = s.extraParcels?.length ? " · +" + s.extraParcels.length + " parcel" + (s.extraParcels.length > 1 ? "s" : "") : "";
+  return c.name + " · " + (c.form === "break-bulk" ? "break-bulk" : "dry bulk") + extra;
 }
 
 export function commodityComplete(s: CargoState): boolean {
-  return !!(s.commodity && s.commodity.name && s.commodity.form);
+  return !!(s.commodity && s.commodity.name && s.commodity.form) && extraParcelsComplete(s);
 }

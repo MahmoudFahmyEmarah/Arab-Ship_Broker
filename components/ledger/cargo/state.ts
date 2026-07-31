@@ -23,8 +23,21 @@ export interface CargoCommodity {
   multi?: boolean;
 }
 
+/** One additional parcel (parcel 2..N). Parcel 1 lives in the legacy
+ *  commodity/quantity slots so single-parcel drafts and flows are unchanged. */
+export interface ExtraParcel {
+  commodity?: CargoCommodity | null;
+  qtyMt?: string | number | null;
+  molooPct?: string | null;
+  optionHolder?: string | null;
+  volume?: string | number | null;
+  unit?: "CbM" | "CbFT";
+}
+
 export interface CargoState {
   commodity?: CargoCommodity | null;
+  /** Parcels 2..N of a multi-parcel posting (parcel 1 = commodity+quantity). */
+  extraParcels?: ExtraParcel[];
   quantity?: {
     qtyMt?: string | number | null;
     molooPct?: string | null;

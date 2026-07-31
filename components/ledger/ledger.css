@@ -833,3 +833,11 @@ kbd{font-family:var(--asb-font);font-size:10.5px;font-weight:600;background:var(
   /* iOS zooms the page when a focused input is under 16px */
   .led input,.led textarea,.led select,.led .pp2-select{font-size:16px;}
 }
+
+/* ── multi-parcel cards (Post Cargo, Option C) ───────────────────────────── */
+.pp2-parcels{margin-top:16px;display:flex;flex-direction:column;gap:12px;}
+.pp2-parcel{border:0.5px solid var(--asb-line);border-radius:12px;background:var(--asb-white);padding:14px 16px;box-shadow:0 1px 2px rgba(13,37,69,.04);}
+.pp2-parcel__head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.pp2-parcel__title{font:600 12px/1 var(--asb-font);letter-spacing:.08em;text-transform:uppercase;color:var(--asb-blue);}
+.pp2-parcel__add{align-self:flex-start;font:600 13px/1 var(--asb-font);color:var(--asb-blue);background:var(--asb-white);border:1px dashed var(--asb-blue);border-radius:10px;padding:10px 14px;cursor:pointer;transition:background var(--t-fast) var(--ease);}
+.pp2-parcel__add:hover{background:var(--asb-blue-light);}

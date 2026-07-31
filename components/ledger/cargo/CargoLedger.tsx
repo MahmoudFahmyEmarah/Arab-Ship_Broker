@@ -48,7 +48,8 @@ export function CargoLedger() {
     draftLabel: (s) => {
       const c = s.commodity;
       const p = s.ports;
-      if (c?.name) return c.name + (p?.pol ? " · " + p.pol.name + (p.pod ? " → " + p.pod.name : "") : "");
+      const extra = s.extraParcels?.length ? " +" + s.extraParcels.length : "";
+      if (c?.name) return c.name + extra + (p?.pol ? " · " + p.pol.name + (p.pod ? " → " + p.pod.name : "") : "");
       return "Untitled cargo";
     },
     // SCORING POLICY (keep in sync with the step bodies — every reported
@@ -64,7 +65,15 @@ export function CargoLedger() {
         id: "commodity",
         title: "Commodity",
         hint: "Name + dry/break-bulk.",
-        mand: [(s) => !!s.commodity?.name, (s) => !!s.commodity?.form],
+        mand: [
+          (s) => !!s.commodity?.name,
+          (s) => !!s.commodity?.form,
+          // extra parcels (2..N): N/A until one is added
+          (s) =>
+            s.extraParcels?.length
+              ? s.extraParcels.every((p) => !!p.commodity?.name && !!p.commodity?.form && Number(p.qtyMt) > 0 && Number(p.volume) > 0)
+              : null,
+        ],
         // Deviation from the mount config (user feedback 25 Jul): marketName is
         // auto-derived metadata the user can never fill — counting it capped a
         // fully-entered section at 83%.

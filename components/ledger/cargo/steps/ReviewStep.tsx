@@ -24,7 +24,7 @@ export function ReviewStep({ state }: StepCtx<CargoState>) {
   return (
     <div className="pp2-rev">
       <div className="pp2-rev__card">
-        <div className="pp2-rev__head">{c.name || "Cargo"}</div>
+        <div className="pp2-rev__head">{(state.extraParcels?.length ? "Parcel 1 — " : "") + (c.name || "Cargo")}</div>
         <div className="pp2-rev__grid">
           <RRow label="Cargo type" value={c.form === "break-bulk" ? "Break-bulk" : c.form ? "Dry bulk" : null} />
           <RRow label="Packaging" value={c.packaging} />
@@ -32,6 +32,22 @@ export function ReviewStep({ state }: StepCtx<CargoState>) {
           <RRow label="Volume" value={q.volume ? fmt(q.volume) + " " + (q.unit || "CbM") : null} />
         </div>
       </div>
+      {(state.extraParcels ?? []).map((px, i) => (
+        <div className="pp2-rev__card" key={i}>
+          <div className="pp2-rev__sub">Parcel {i + 2} — {px.commodity?.name || "?"}</div>
+          <div className="pp2-rev__grid">
+            <RRow label="Cargo type" value={px.commodity?.form === "break-bulk" ? "Break-bulk" : px.commodity?.form ? "Dry bulk" : null} />
+            <RRow label="Packaging" value={px.commodity?.packaging} />
+            <RRow label="Quantity" value={px.qtyMt ? fmt(px.qtyMt) + " MT" + (px.molooPct ? " +/- " + px.molooPct + "% " + (px.optionHolder || "") : "") : null} />
+            <RRow label="Volume" value={px.volume ? fmt(px.volume) + " " + (px.unit || "CbM") : null} />
+          </div>
+        </div>
+      ))}
+      {(state.extraParcels?.length ?? 0) > 0 && (
+        <InlineNote>
+          Posts as {(state.extraParcels?.length ?? 0) + 1} grouped listings — one per parcel — sharing this lane, laycan and terms.
+        </InlineNote>
+      )}
       <div className="pp2-rev__card">
         <div className="pp2-rev__sub">Lane &amp; terms</div>
         <div className="pp2-rev__grid">

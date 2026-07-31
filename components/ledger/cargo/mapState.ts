@@ -4,9 +4,9 @@
 import { z } from "zod";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { LOCODE_REGEX } from "@/lib/schemas/cargo";
-import { submitCargoLedgerRpc, type CargoLedgerPayload } from "@/sdk/app/ledger";
+import { submitCargoLedgerRpc, type CargoLedgerPayload, type CargoParcelPayload } from "@/sdk/app/ledger";
 import { LAYCAN_CAP_DAYS } from "../defs";
-import type { CargoState } from "./state";
+import type { CargoState, ExtraParcel } from "./state";
 
 const CBFT_PER_CBM = 35.3147;
 
@@ -42,6 +42,37 @@ const payloadSchema = z
     { message: `Laycan window must be within ${LAYCAN_CAP_DAYS} days` },
   );
 
+const parcelSchema = z.object({
+  commodity_name: z.string().min(2, "Pick a commodity for every parcel"),
+  cargo_type: z.enum(["Dry Bulk", "Break Bulk"]),
+  qty_mt: z.number().int().positive("Every parcel needs a quantity"),
+  tolerance_pct: z.number().min(0).max(25).nullable(),
+  volume_cbm: z.number().positive("Every parcel needs a volume"),
+});
+
+function mapParcel(p: ExtraParcel, index: number): CargoParcelPayload {
+  const c = p.commodity;
+  if (!c?.name || !c.form) throw new Error(`Parcel ${index + 1}: pick a commodity and its cargo type`);
+  const volume = num(p.volume);
+  const volumeCbm = volume != null ? (p.unit === "CbFT" ? volume / CBFT_PER_CBM : volume) : null;
+  const core = {
+    commodity_name: c.name,
+    cargo_type: (c.form === "break-bulk" ? "Break Bulk" : "Dry Bulk") as "Dry Bulk" | "Break Bulk",
+    qty_mt: num(p.qtyMt) ?? 0,
+    tolerance_pct: num(p.molooPct),
+    volume_cbm: volumeCbm != null ? Math.round(volumeCbm * 100) / 100 : 0,
+  };
+  const parsed = parcelSchema.safeParse(core);
+  if (!parsed.success) {
+    throw new Error(`Parcel ${index + 1}: ${parsed.error.issues[0]?.message ?? "incomplete"}`);
+  }
+  return {
+    ...parsed.data,
+    tolerance_holder: p.molooPct ? (p.optionHolder ?? "MOLOO") : null,
+    packaging_type: c.packaging ?? null,
+  };
+}
+
 export function mapCargoState(state: CargoState): CargoLedgerPayload {
   const c = state.commodity;
   const q = state.quantity;
@@ -70,8 +101,19 @@ export function mapCargoState(state: CargoState): CargoLedgerPayload {
     throw new Error(parsed.error.issues[0]?.message ?? "Please complete the required fields");
   }
 
+  // Multi-parcel: parcel 1 = the legacy commodity/quantity slots, then the
+  // extras. Each posts as its own listing, grouped by the RPC.
+  const extras = state.extraParcels ?? [];
+  const parcels: CargoParcelPayload[] | undefined = extras.length
+    ? [
+        mapParcel({ commodity: c, qtyMt: q?.qtyMt, molooPct: q?.molooPct, optionHolder: q?.optionHolder, volume: q?.volume, unit: q?.unit }, 0),
+        ...extras.map((p, i) => mapParcel(p, i + 1)),
+      ]
+    : undefined;
+
   return {
     ...parsed.data,
+    ...(parcels ? { parcels } : {}),
     load_rate: p?.loadRate || null,
     disch_rate: p?.dischRate || null,
     rate_mechanism: p?.rateMechanism || null,
