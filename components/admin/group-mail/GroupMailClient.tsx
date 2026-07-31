@@ -603,43 +603,60 @@ function SettingsView({ config, secrets, onSaved }: {
   const [smtpPw, setSmtpPw] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
-  const save = async () => {
-    setBusy("save");
+  // Persist the form (config + any entered secrets). The Test buttons run
+  // this first, so testing always exercises what is on screen — never a stale
+  // or empty stored config.
+  const persist = async (): Promise<boolean> => {
+    // light normalisation: hosts pasted with a scheme/port still work
+    const host = (v: string | null) => (v ?? "").trim().replace(/^https?:\/\//i, "").replace(/[/:].*$/, "") || null;
     const r = await saveGroupMailConfig({
       ...cfg,
+      cpanel_host: host(cfg.cpanel_host),
+      smtp_host: host(cfg.smtp_host),
+      cpanel_user: cfg.cpanel_user?.trim() || null,
+      smtp_user: cfg.smtp_user?.trim() || null,
+      mailman_base: cfg.mailman_base?.trim().replace(/\/$/, "") || null,
       test_recipients: typeof cfg.test_recipients === "string"
         ? String(cfg.test_recipients).split(/,|;/).map((s) => s.trim()).filter(Boolean)
         : cfg.test_recipients,
     });
-    let secretErr: string | null = null;
+    if (!r.success) { toast.error(r.error); return false; }
     if (cpToken.trim()) {
       const s = await saveGroupMailSecret("cpanel_token", cpToken);
-      if (!s.success) secretErr = s.error; else setCpToken("");
+      if (!s.success) { toast.error(s.error); return false; }
+      setCpToken("");
     }
     if (smtpPw.trim()) {
       const s = await saveGroupMailSecret("smtp_password", smtpPw);
-      if (!s.success) secretErr = s.error; else setSmtpPw("");
+      if (!s.success) { toast.error(s.error); return false; }
+      setSmtpPw("");
     }
-    setBusy(null);
-    if (!r.success) { toast.error(r.error); return; }
-    if (secretErr) { toast.error(secretErr); return; }
-    toast.success("Settings saved.");
     await onSaved();
+    return true;
+  };
+
+  const save = async () => {
+    setBusy("save");
+    const ok = await persist();
+    setBusy(null);
+    if (ok) toast.success("Settings saved.");
   };
 
   const testCp = async () => {
     setBusy("cp");
+    if (!(await persist())) { setBusy(null); return; }
     const r = await testCpanelConnection();
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
-    toast.success(`cPanel OK — ${r.data.lists} mailing list${r.data.lists === 1 ? "" : "s"} found.`);
+    toast.success(`Saved & connected — ${r.data.lists} mailing list${r.data.lists === 1 ? "" : "s"} found on cPanel.`);
   };
   const testSmtp = async () => {
     setBusy("smtp");
+    if (!(await persist())) { setBusy(null); return; }
     const r = await testSmtpConnection();
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
-    toast.success("SMTP OK — login accepted.");
+    toast.success("Saved & connected — SMTP login accepted.");
   };
 
   const set = (p: Partial<GroupMailConfig>) => setCfg((prev) => ({ ...prev, ...p }));
@@ -669,7 +686,7 @@ function SettingsView({ config, secrets, onSaved }: {
             placeholder="https://server353-4.web-hosting.com/mailman" style={INPUT} />
         </Field>
         <button onClick={testCp} disabled={!!busy} style={btn("ghost")}>
-          {busy === "cp" ? <Loader2 size={14} style={spin} /> : <Check size={14} />} Test cPanel connection
+          {busy === "cp" ? <Loader2 size={14} style={spin} /> : <Check size={14} />} Save &amp; test cPanel connection
         </button>
       </div>
 
@@ -696,7 +713,7 @@ function SettingsView({ config, secrets, onSaved }: {
             placeholder={secrets.smtp_password ? "•••••• (enter to replace)" : "mailbox password"} style={INPUT} />
         </Field>
         <button onClick={testSmtp} disabled={!!busy} style={btn("ghost")}>
-          {busy === "smtp" ? <Loader2 size={14} style={spin} /> : <Check size={14} />} Test SMTP login
+          {busy === "smtp" ? <Loader2 size={14} style={spin} /> : <Check size={14} />} Save &amp; test SMTP login
         </button>
       </div>
 
