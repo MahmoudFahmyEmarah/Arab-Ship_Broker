@@ -25,5 +25,6 @@ export const btn = (kind: "primary" | "ghost" | "dark" | "danger"): React.CSSPro
 export const cell = (v: unknown): string => {
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "boolean") return v ? "yes" : "no";
+  if (Array.isArray(v)) return v.length ? v.join(", ") : "—";
   return String(v);
 };

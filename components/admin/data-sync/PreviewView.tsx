@@ -8,13 +8,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  Search, Loader2, Pencil, Trash2, Check, X, RotateCcw, History, ChevronLeft, ChevronRight, Database,
+  Search, Loader2, Pencil, Trash2, Check, X, RotateCcw, History, ChevronLeft, ChevronRight, Database, Plus,
 } from "lucide-react";
 import {
   PREVIEW_TABLES, previewTable, coerce, type PreviewCol, type PreviewTable,
 } from "@/lib/sync/preview";
 import {
-  listRecords, editRecord, bulkEditRecords, deleteRecord, undoEdit, listEditAudit,
+  listRecords, editRecord, bulkEditRecords, deleteRecord, bulkDeleteRecords, insertRecord, undoEdit, listEditAudit,
   type PreviewRow, type EditAuditRow,
 } from "@/app/(admin)/admin/data-sync/actions";
 import { C, btn, cell } from "./ui";
@@ -33,8 +33,10 @@ export function PreviewView() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<PreviewRow | null>(null);
+  const [adding, setAdding] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   // debounce the search box
@@ -89,6 +91,18 @@ export function PreviewView() {
     await load();
   };
 
+  const doBulkDelete = async () => {
+    const keys = Array.from(selected);
+    if (!confirm(`Delete ${keys.length} selected record${keys.length > 1 ? "s" : ""} from ${t.table}? The whole group is recoverable from Recent edits in one click.`)) return;
+    setBulkDeleting(true);
+    const r = await bulkDeleteRecords(tableId, keys);
+    setBulkDeleting(false);
+    if (!r.success) { toast.error(r.error); return; }
+    toast.success(`Deleted ${r.data.deleted} record${r.data.deleted > 1 ? "s" : ""} — undo the whole group from Recent edits.`);
+    setSelected(new Set());
+    await load();
+  };
+
   return (
     <div>
       {/* table selector */}
@@ -119,6 +133,11 @@ export function PreviewView() {
               font: "inherit", fontSize: 13.5, color: C.ink, background: "#fff" }} />
         </div>
         <div style={{ fontSize: 12.5, color: C.ink3, fontFamily: C.mono }}>→ {t.table}</div>
+        {t.insertable !== false && (
+          <button onClick={() => setAdding(true)} style={{ ...btn("primary"), marginLeft: "auto" }}>
+            <Plus size={15} /> Add record
+          </button>
+        )}
       </div>
 
       {/* bulk action bar */}
@@ -127,6 +146,9 @@ export function PreviewView() {
           background: C.brassBg, border: `1px solid ${C.brass}`, borderRadius: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: C.brassDeep }}>{selected.size} selected</span>
           <button onClick={() => setBulkOpen(true)} style={btn("dark")}><Pencil size={14} /> Edit a field on all</button>
+          <button onClick={doBulkDelete} disabled={bulkDeleting} style={btn("danger")}>
+            {bulkDeleting ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={14} />} Delete selected
+          </button>
           <button onClick={() => setSelected(new Set())} style={{ ...btn("ghost"), marginLeft: "auto" }}>Clear</button>
         </div>
       )}
@@ -196,6 +218,10 @@ export function PreviewView() {
         <EditDrawer table={t} row={editing} onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await load(); }} />
       )}
+      {adding && (
+        <AddDrawer table={t} onClose={() => setAdding(false)}
+          onSaved={async () => { setAdding(false); await load(); }} />
+      )}
       {bulkOpen && (
         <BulkDrawer table={t} keys={Array.from(selected)} onClose={() => setBulkOpen(false)}
           onDone={async () => { setBulkOpen(false); setSelected(new Set()); await load(); }} />
@@ -222,11 +248,19 @@ function FieldInput({ col, value, onChange }: { col: PreviewCol; value: unknown;
     );
   }
   if (col.type === "enum") {
+    const v = value == null ? "" : String(value);
     return (
-      <select value={value == null ? "" : String(value)} onChange={(e) => onChange(e.target.value)} style={base}>
-        {col.nullable && <option value="">—</option>}
+      <select value={v} onChange={(e) => onChange(e.target.value)} style={base}>
+        {(col.nullable || v === "") && <option value="">{col.nullable ? "—" : "Select…"}</option>}
         {col.options?.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
+    );
+  }
+  if (col.type === "list") {
+    const display = Array.isArray(value) ? value.join(", ") : value == null ? "" : String(value);
+    return (
+      <input type="text" value={display} placeholder="comma-separated"
+        onChange={(e) => onChange(e.target.value)} style={base} />
     );
   }
   const inputType = col.type === "int" || col.type === "num" ? "number" : col.type === "date" ? "date" : "text";
@@ -279,6 +313,65 @@ function EditDrawer({ table, row, onClose, onSaved }: {
       <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
         <button onClick={save} disabled={saving} style={btn("primary")}>
           {saving ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={15} />} Save changes
+        </button>
+        <button onClick={onClose} style={btn("ghost")}>Cancel</button>
+      </div>
+    </Drawer>
+  );
+}
+
+// ── add-record drawer (key + every editable column; audited, undoable) ──────
+function AddDrawer({ table, onClose, onSaved }: {
+  table: PreviewTable; onClose: () => void; onSaved: () => void;
+}) {
+  const keyCol = table.columns.find((c) => c.col === table.keyCol);
+  const fields = table.columns.filter((c) => c.col !== table.keyCol && c.editable !== false);
+  const [draft, setDraft] = useState<Record<string, unknown>>(() => {
+    const d: Record<string, unknown> = { [table.keyCol]: "" };
+    for (const c of fields) d[c.col] = c.def ?? (c.type === "bool" ? false : "");
+    return d;
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const key = String(draft[table.keyCol] ?? "").trim();
+    if (!key) { toast.error(`${keyCol?.label ?? table.keyCol} is required.`); return; }
+    const row: Record<string, unknown> = { [table.keyCol]: key };
+    for (const c of fields) {
+      const v = coerce(c.type, draft[c.col]);
+      if (c.required && (v === null || v === "")) { toast.error(`${c.label} is required.`); return; }
+      if (v !== null || c.nullable) row[c.col] = v;
+    }
+    setSaving(true);
+    const r = await insertRecord(table.id, row);
+    setSaving(false);
+    if (!r.success) { toast.error(r.error); return; }
+    toast.success(`Added ${key} to ${table.table} — undo from Recent edits.`);
+    onSaved();
+  };
+
+  const req = (yes?: boolean) => yes && <span style={{ color: C.red }}> *</span>;
+
+  return (
+    <Drawer title={`Add ${table.label.replace(/s$/, "").toLowerCase()}`} subtitle={`→ ${table.table}`} onClose={onClose}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 5, gridColumn: "1 / -1" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: C.ink2 }}>{keyCol?.label ?? table.keyCol}{req(true)}</span>
+          <input value={String(draft[table.keyCol] ?? "")}
+            onChange={(e) => setDraft((d) => ({ ...d, [table.keyCol]: e.target.value }))}
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: `1px solid ${C.line}`,
+              font: "inherit", fontSize: 13.5, fontFamily: C.mono, color: C.navy, background: "#fff" }} />
+        </label>
+        {fields.map((c) => (
+          <label key={c.col} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: C.ink2 }}>{c.label}{req(c.required)}</span>
+            <FieldInput col={c} value={draft[c.col]} onChange={(v) => setDraft((d) => ({ ...d, [c.col]: v }))} />
+          </label>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+        <button onClick={save} disabled={saving} style={btn("primary")}>
+          {saving ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={15} />} Add record
         </button>
         <button onClick={onClose} style={btn("ghost")}>Cancel</button>
       </div>
@@ -351,7 +444,12 @@ function HistoryDrawer({ onClose, onUndone }: { onClose: () => void; onUndone: (
     const res = r.group_id ? await undoEdit({ groupId: r.group_id }) : await undoEdit({ auditId: r.id });
     setBusy(null);
     if (!res.success) { toast.error(res.error); return; }
-    toast.success(`Reverted · ${res.data.restored} restored · ${res.data.reinserted} re-inserted`);
+    const parts = [
+      res.data.restored ? `${res.data.restored} restored` : null,
+      res.data.reinserted ? `${res.data.reinserted} re-inserted` : null,
+      res.data.removed ? `${res.data.removed} removed` : null,
+    ].filter(Boolean).join(" · ");
+    toast.success(`Reverted · ${parts || "done"}`);
     await reload();
     onUndone();
   };
@@ -367,8 +465,9 @@ function HistoryDrawer({ onClose, onUndone }: { onClose: () => void; onUndone: (
           {rows.map((r, i) => (
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 2px", borderTop: i ? `1px solid ${C.line}` : "none" }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", padding: "2px 6px", borderRadius: 3,
-                color: r.op === "delete" ? C.red : C.amber, background: r.op === "delete" ? C.redBg : C.amberBg }}>
-                {r.op === "delete" ? "DEL" : "UPD"}
+                color: r.op === "delete" ? C.red : r.op === "insert" ? C.green : C.amber,
+                background: r.op === "delete" ? C.redBg : r.op === "insert" ? C.greenBg : C.amberBg }}>
+                {r.op === "delete" ? "DEL" : r.op === "insert" ? "ADD" : "UPD"}
               </span>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 13, color: C.navy, fontWeight: 600, fontFamily: C.mono }}>
