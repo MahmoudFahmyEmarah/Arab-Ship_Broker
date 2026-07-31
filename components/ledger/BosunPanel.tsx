@@ -16,7 +16,9 @@ import type { VesselState } from "./vessel/state";
 import { cargoExToPatch, cargoExRows } from "./cargo/exToPatch";
 import { vesselExToPatch, vesselExRows } from "./vessel/exToPatch";
 
-const ASSISTANT_ENABLED = process.env.NEXT_PUBLIC_ASSISTANT_ENABLED === "true";
+// On by default — deployments don't need the env var (a missing flag on Vercel
+// silently hid the assistant). Set NEXT_PUBLIC_ASSISTANT_ENABLED=false to kill.
+const ASSISTANT_ENABLED = process.env.NEXT_PUBLIC_ASSISTANT_ENABLED !== "false";
 
 const SendSVG = () => (
   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
