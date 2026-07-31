@@ -18,7 +18,16 @@ export const LEDGER_ENUMS = {
   volumeUnit: ["CbM", "CbFT"],
   optionHolder: ["MOLOO", "MOLCHOPT"],
   rateMechanism: ["Per day (MT/day)", "Per hatch / day", "Per working hatch / day", "CQD", "Total days"],
-  dayExceptions: ["WWD FHEX", "WWD SHINC", "WWD SHEX", "FHEX", "SHINC", "SHEX EIU", "CQD"],
+  // Extended beyond workbook 10_ENUMS (owner request, 31 Jul 2026) to the full
+  // standard laytime day-type set — Friday-based (Gulf/Red Sea) and
+  // Sunday-based variants each with INC/EX/EIU/UU forms. Review list:
+  // docs/ledger-preset-values.md.
+  dayExceptions: [
+    "WWD FHINC", "WWD FHEX", "WWD SHINC", "WWD SHEX",
+    "FHINC", "FHEX", "FHEX EIU", "FHEX UU",
+    "SHINC", "SHEX", "SHEX EIU", "SHEX UU",
+    "SSHINC", "SSHEX", "CQD",
+  ],
   reversible: ["Non-reversible", "Reversible", "Average"],
   freightBasis: ["Per MT", "Lumpsum"],
   despatch: ["Half demurrage", "No despatch", "Free of despatch"],
@@ -72,12 +81,20 @@ export const LAYCAN_CAP_DAYS = 45;
 
 // ── definition flyouts — cargo ───────────────────────────────────────────────
 export const DAY_DEFS: Record<string, string> = {
+  "WWD FHINC": "Weather working days, Fridays and holidays included.",
   "WWD FHEX": "Weather working days, Fridays and holidays excepted. Common across the Gulf and Red Sea.",
   "WWD SHINC": "Weather working days, Sundays and holidays included.",
   "WWD SHEX": "Weather working days, Sundays and holidays excepted.",
+  FHINC: "Fridays and holidays included. Every day counts where Friday is the rest day.",
   FHEX: "Fridays and holidays excepted.",
+  "FHEX EIU": "Fridays and holidays excepted, even if used for cargo work.",
+  "FHEX UU": "Fridays and holidays excepted, unless used — time actually worked counts.",
   SHINC: "Sundays and holidays included. Every calendar day counts.",
-  "SHEX EIU": "Sundays and holidays excepted, even if used.",
+  SHEX: "Sundays and holidays excepted.",
+  "SHEX EIU": "Sundays and holidays excepted, even if used for cargo work.",
+  "SHEX UU": "Sundays and holidays excepted, unless used — time actually worked counts.",
+  SSHINC: "Saturdays, Sundays and holidays included.",
+  SSHEX: "Saturdays, Sundays and holidays excepted.",
   CQD: "Customary quick despatch. No fixed laytime; cargo is worked as fast as the port customarily allows.",
 };
 
@@ -164,4 +181,5 @@ export const FUEL_DEFS: Record<string, string> = {
   LSMGO: "Low Sulphur Marine Gas Oil, max 0.10% sulphur. Distillate burned inside ECAs.",
   "HFO 380": "Heavy Fuel Oil at 380 cSt. High-sulphur residual; needs a scrubber to burn legally.",
   MGO: "Marine Gas Oil. A clean distillate, dearer than the residual fuels.",
+  Dual: "Dual-fuel plant. Burns conventional fuel or an alternative such as LNG or methanol.",
 };
