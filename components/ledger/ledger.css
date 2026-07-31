@@ -400,6 +400,12 @@
 .pp2-seltip__car{flex:none;color:var(--asb-gray-400);font-size:11px;line-height:1;transition:transform .18s var(--ease);}
 .pp2-seltip.is-open .pp2-seltip__car{transform:rotate(180deg);color:var(--asb-navy);}
 .pp2-seltip__menu{position:absolute;z-index:45;top:calc(100% + 5px);left:0;right:0;background:var(--asb-white);border:0.5px solid var(--asb-line);border-radius:10px;box-shadow:0 14px 34px rgba(13,37,69,.18);padding:5px;overflow:visible;}
+/* Long lists (>9 options): the option column scrolls and the hover definition
+   docks to a strip at the foot of the menu — a scroll container would clip the
+   floating per-option bubbles. */
+.pp2-seltip__menu--scroll{display:flex;flex-direction:column;padding:0;overflow:hidden;}
+.pp2-seltip__list{overflow-y:auto;max-height:264px;padding:5px;overscroll-behavior:contain;}
+.pp2-seltip__def{flex:none;margin:0 5px 5px;background:var(--asb-navy);color:#fff;font-weight:400;font-size:12.5px;line-height:1.45;letter-spacing:0;padding:9px 11px;border-radius:8px;text-wrap:pretty;}
 .pp2-optip{position:relative;display:flex;align-items:center;width:100%;text-align:left;padding:9px 11px;border:0;background:none;border-radius:7px;font:600 15px/1 var(--asb-font);color:var(--asb-ink);cursor:pointer;letter-spacing:.02em;transition:background .12s var(--ease);}
 .pp2-optip:hover,.pp2-optip:focus-visible{background:var(--asb-blue-light);outline:none;}
 .pp2-optip.is-sel{color:var(--asb-navy);}

@@ -88,8 +88,14 @@ export function SelectTip({
   side?: "right";
 }) {
   const [open, setOpen] = useState(false);
+  const [hover, setHover] = useState<string | null>(null);
   const opts = options.map(norm);
   const sel = opts.find((o) => o.value === value);
+  // Long lists scroll inside the menu; a scroll container would clip the
+  // floating per-option bubbles, so their definition docks to a strip at the
+  // bottom of the menu instead. Short lists keep the floating flyouts.
+  const scrolly = opts.length > 9;
+  const dockedDef = defs ? defs[hover ?? ""] ?? defs[value ?? ""] : undefined;
   return (
     <div
       className={"pp2-seltip" + (open ? " is-open" : "") + (side === "right" ? " pp2-seltip--right" : "")}
@@ -103,28 +109,37 @@ export function SelectTip({
         </span>
       </button>
       {open && (
-        <div className="pp2-seltip__menu" role="listbox">
-          {opts.map((o) => (
-            <button
-              type="button"
-              key={o.value}
-              role="option"
-              aria-selected={o.value === value}
-              className={"pp2-optip" + (o.value === value ? " is-sel" : "")}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                onChange(o.value);
-                setOpen(false);
-              }}
-            >
-              <span className="pp2-optip__code">{capFirst(o.label)}</span>
-              {defs && defs[o.value] && (
-                <span className="pp2-optip__bub" role="tooltip">
-                  {defs[o.value]}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className={"pp2-seltip__menu" + (scrolly ? " pp2-seltip__menu--scroll" : "")} role="listbox">
+          <div className={scrolly ? "pp2-seltip__list" : undefined} onMouseLeave={scrolly ? () => setHover(null) : undefined}>
+            {opts.map((o) => (
+              <button
+                type="button"
+                key={o.value}
+                role="option"
+                aria-selected={o.value === value}
+                className={"pp2-optip" + (o.value === value ? " is-sel" : "")}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={scrolly ? () => setHover(o.value) : undefined}
+                onFocus={scrolly ? () => setHover(o.value) : undefined}
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="pp2-optip__code">{capFirst(o.label)}</span>
+                {!scrolly && defs && defs[o.value] && (
+                  <span className="pp2-optip__bub" role="tooltip">
+                    {defs[o.value]}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          {scrolly && dockedDef && (
+            <div className="pp2-seltip__def" role="tooltip">
+              {dockedDef}
+            </div>
+          )}
         </div>
       )}
     </div>
