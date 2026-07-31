@@ -107,6 +107,12 @@ export const ADMIN_ICONS: Record<string, React.ReactNode> = {
       <path d="M8 5 q3 0 3 2 t-3 2" />
     </svg>
   ),
+  mail: (
+    <svg {...base} strokeLinejoin="round" strokeLinecap="round">
+      <rect x="1.5" y="3" width="11" height="8" rx="1" />
+      <path d="M2 4 L7 8 L12 4" />
+    </svg>
+  ),
   shield: (
     <svg {...base} strokeLinejoin="round" strokeLinecap="round">
       <path d="M7 1.5 L12 3 v4 c0 3 -2 5 -5 6 -3 -1 -5 -3 -5 -6 V3 Z" />
