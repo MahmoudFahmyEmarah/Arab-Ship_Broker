@@ -121,20 +121,47 @@ async function smtpAuth(c: ReturnType<typeof getSupabaseAdminClient>): Promise<S
   return { host: cfg.smtp_host, port: cfg.smtp_port || 465, user: cfg.smtp_user, password, fromName: cfg.from_name };
 }
 
-export async function testCpanelConnection(): Promise<Result<{ lists: number }>> {
+// Tests take the on-screen form values (candidate) so the admin can verify
+// BEFORE saving — a failed experiment never overwrites a working config.
+// Blank secret fields fall back to the stored Vault secret; nothing persists.
+
+const normHost = (v?: string | null) =>
+  (v ?? "").trim().replace(/^https?:\/\//i, "").replace(/[/:].*$/, "") || null;
+
+export async function testCpanelConnection(
+  candidate?: { host?: string | null; user?: string | null; token?: string | null },
+): Promise<Result<{ lists: number }>> {
   try {
     const { c } = await adminWrite();
-    const lists = await cpListLists(await cpanelAuth(c));
+    const cfg = await readConfig(c);
+    const host = normHost(candidate?.host) ?? cfg.cpanel_host;
+    const user = candidate?.user?.trim() || cfg.cpanel_user;
+    if (!host || !user) return { success: false, error: "Enter the cPanel host and username." };
+    const token = candidate?.token?.trim() || (await readSecret(c, "cpanel_token"));
+    if (!token) return { success: false, error: "Enter the cPanel API token (or save one first)." };
+    const lists = await cpListLists({ host, user, token });
     return { success: true, data: { lists: lists.length } };
   } catch (e) {
     return fail(e, "cPanel connection failed.");
   }
 }
 
-export async function testSmtpConnection(): Promise<Result> {
+export async function testSmtpConnection(
+  candidate?: { host?: string | null; port?: number | null; user?: string | null; password?: string | null },
+): Promise<Result> {
   try {
     const { c } = await adminWrite();
-    await verifySmtp(await smtpAuth(c));
+    const cfg = await readConfig(c);
+    const host = normHost(candidate?.host) ?? cfg.smtp_host;
+    const user = candidate?.user?.trim() || cfg.smtp_user;
+    if (!host || !user) return { success: false, error: "Enter the SMTP host and mailbox." };
+    const password = candidate?.password?.trim() || (await readSecret(c, "smtp_password"));
+    if (!password) return { success: false, error: "Enter the mailbox password (or save one first)." };
+    await verifySmtp({
+      host, user, password,
+      port: candidate?.port || cfg.smtp_port || 465,
+      fromName: cfg.from_name,
+    });
     return { success: true };
   } catch (e) {
     return fail(e, "SMTP connection failed.");
@@ -299,6 +326,23 @@ function validCampaign(input: CampaignInput): string | null {
   return null;
 }
 
+/** AI review of the body — returns a suggestion; the admin applies it explicitly. */
+export async function reviewCircularBody(
+  body: string, mode: "proofread" | "rephrase",
+): Promise<Result<{ text: string }>> {
+  if (!body.trim()) return { success: false, error: "Write the body first." };
+  if (body.length > 8000) return { success: false, error: "The body is too long for review (8,000 characters max)." };
+  if (mode !== "proofread" && mode !== "rephrase") return { success: false, error: "Unknown review mode." };
+  try {
+    const { c } = await adminWrite();
+    const { polishCircularBody } = await import("@/lib/groupmail/polish");
+    const text = await polishCircularBody(c, body, mode);
+    return { success: true, data: { text } };
+  } catch (e) {
+    return fail(e, "The AI reviewer is not available right now.");
+  }
+}
+
 export async function previewCircular(input: CampaignInput): Promise<Result<{ html: string; subject: string }>> {
   const bad = validCampaign(input);
   if (bad) return { success: false, error: bad };
@@ -405,6 +449,42 @@ export async function finishCircular(campaignId: string): Promise<Result<Campaig
     return { success: true, data: data as CampaignRow };
   } catch (e) {
     return fail(e, "Could not finalise the campaign.");
+  }
+}
+
+/** Full detail of a past circular — the branded mail as sent + failure list. */
+export async function getCircularDetail(campaignId: string): Promise<Result<{
+  row: CampaignRow;
+  html: string;
+  body: string;
+  failures: { email: string; error?: string }[];
+}>> {
+  try {
+    const { c } = await adminWrite();
+    const { data, error } = await c
+      .from("groupmail_campaign")
+      .select("id, list_email, mode, subject, title, body, links, badge, recipients_total, sent_ok, sent_fail, failures, status, created_at, finished_at")
+      .eq("id", campaignId)
+      .single();
+    if (error || !data) return { success: false, error: "Circular not found." };
+    const row = data as CampaignRow & {
+      title: string | null; body: string; links: { label: string; url: string }[] | null;
+      badge: string | null; failures: { email: string; error?: string }[] | null;
+    };
+    const sentAt = new Date(row.created_at).toLocaleString("en-GB", {
+      timeZone: "Africa/Cairo", day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    }) + " (Cairo)";
+    const { html } = buildCircularEmail(
+      {
+        list_email: row.list_email, subject: row.subject, title: row.title ?? "",
+        body: row.body, links: row.links ?? [], badge: row.badge ?? "Circulation",
+      },
+      sentAt,
+    );
+    return { success: true, data: { row, html, body: row.body, failures: row.failures ?? [] } };
+  } catch (e) {
+    return fail(e, "Could not load the circular.");
   }
 }
 

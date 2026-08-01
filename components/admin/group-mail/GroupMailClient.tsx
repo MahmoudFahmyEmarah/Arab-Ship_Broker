@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Loader2, Mail, Plus, Trash2, Check, X, Users, Settings2, Send, Eye,
-  RefreshCw, Pencil, KeyRound, History as HistoryIcon, ShieldCheck,
+  RefreshCw, Pencil, KeyRound, History as HistoryIcon, ShieldCheck, Wand2, SpellCheck,
 } from "lucide-react";
 import {
   getGroupMailState, saveGroupMailConfig, saveGroupMailSecret,
@@ -17,6 +17,7 @@ import {
   listMailingLists, createMailingList, deleteMailingList, updateMailingList, saveListPassword,
   getListMembers, addListMembers, removeListMembers, replaceListMember,
   previewCircular, startCircular, sendCircularBatch, finishCircular, listCircularHistory,
+  reviewCircularBody, getCircularDetail,
 } from "@/app/(admin)/admin/group-mail/actions";
 import type {
   GroupMailConfig, GroupMailSecretStatus, MailingListRow, ListMember, CampaignInput, CampaignRow, CampaignLink,
@@ -64,7 +65,7 @@ export function GroupMailClient() {
 
   return (
     <div style={{ color: C.ink }}>
-      <div style={{ display: "flex", gap: 2, borderBottom: `1px solid ${C.line}`, marginBottom: 20 }}>
+      <div className="gm-tabs" style={{ display: "flex", gap: 2, borderBottom: `1px solid ${C.line}`, marginBottom: 20 }}>
         {([
           { id: "lists", label: "Mailing Lists", icon: <Users size={14} /> },
           { id: "compose", label: "Compose", icon: <Mail size={14} /> },
@@ -102,7 +103,22 @@ export function GroupMailClient() {
         <SettingsView config={config} secrets={secrets} onSaved={reloadState} />
       )}
 
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .gm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .gm-grid21{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+        .gm-scroll{overflow-x:auto}
+        .gm-scroll table{min-width:560px}
+        .gm-preview{height:720px}
+        @media (max-width: 760px){
+          .gm-tabs{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+          .gm-tabs button{white-space:nowrap;flex:none}
+          .gm-grid2,.gm-grid21{grid-template-columns:1fr}
+          .gm-pane{min-width:0 !important;flex-basis:100% !important}
+          .gm-preview{height:480px}
+          .gm-scroll table{min-width:520px}
+        }
+      `}</style>
     </div>
   );
 }
@@ -139,7 +155,7 @@ function ListsView({ lists, loading, onReload, secrets, onSecretsChanged }: {
         <button onClick={() => setCreating(true)} style={btn("primary")}><Plus size={15} /> New list</button>
       </div>
 
-      <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+      <div className="gm-scroll" style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
           <thead><tr>
             <th style={TH}>List address</th><th style={TH}>Access</th><th style={TH}>Admin password</th>
@@ -351,7 +367,7 @@ function MembersDrawer({ list, hasPassword, onClose, onSecretsChanged }: {
             </button>
           </div>
 
-          <div style={{ border: `1px solid ${C.line}`, borderRadius: 9, overflow: "hidden", marginBottom: 16 }}>
+          <div className="gm-scroll" style={{ border: `1px solid ${C.line}`, borderRadius: 9, marginBottom: 16 }}>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
               <thead><tr><th style={TH}>Email</th><th style={TH}>Name</th><th style={{ ...TH, width: 110, textAlign: "right" }}></th></tr></thead>
               <tbody>
@@ -412,6 +428,16 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ total: number; done: number; ok: number; fail: number } | null>(null);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+
+  const runReview = async (mode: "proofread" | "rephrase") => {
+    setBusy(mode);
+    const r = await reviewCircularBody(input.body, mode);
+    setBusy(null);
+    if (!r.success) { toast.error(r.error); return; }
+    if (r.data.text.trim() === input.body.trim()) { toast.success("Nothing to change — the text already reads well."); return; }
+    setSuggestion(r.data.text);
+  };
 
   useEffect(() => {
     if (input.list_email || !lists.length) return;
@@ -464,14 +490,14 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
   return (
     <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
       {/* form */}
-      <div style={{ flex: "1 1 420px", minWidth: 360, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px" }}>
+      <div className="gm-pane" style={{ flex: "1 1 420px", minWidth: 360, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px" }}>
         <Field label="Mailing list">
           <select value={input.list_email} onChange={(e) => patch({ list_email: e.target.value })} style={INPUT}>
             {lists.length === 0 && <option value="">— no lists —</option>}
             {lists.map((l) => <option key={l.list} value={l.list}>{l.list}</option>)}
           </select>
         </Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="gm-grid2">
           <Field label="Badge (header pill)">
             <input value={input.badge} onChange={(e) => patch({ badge: e.target.value })} style={INPUT} />
           </Field>
@@ -486,6 +512,34 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
           <textarea value={input.body} onChange={(e) => patch({ body: e.target.value })} rows={10}
             style={{ ...INPUT, resize: "vertical", lineHeight: 1.6 }} placeholder={"Dear members,\n\nPlease find below this week's open cargoes…"} />
         </Field>
+        {/* AI review — suggestion only; nothing changes until Apply */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: -6, marginBottom: 14 }}>
+          <button onClick={() => runReview("proofread")} disabled={!!busy || !input.body.trim()} style={{ ...btn("ghost"), padding: "6px 12px", fontSize: 12.5 }}>
+            {busy === "proofread" ? <Loader2 size={13} style={spin} /> : <SpellCheck size={13} />} Fix grammar
+          </button>
+          <button onClick={() => runReview("rephrase")} disabled={!!busy || !input.body.trim()} style={{ ...btn("ghost"), padding: "6px 12px", fontSize: 12.5 }}>
+            {busy === "rephrase" ? <Loader2 size={13} style={spin} /> : <Wand2 size={13} />} Polish tone
+          </button>
+          <span style={{ fontSize: 11.5, color: C.ink3, alignSelf: "center" }}>AI keeps facts, figures and terms untouched — you approve before it applies.</span>
+        </div>
+        {suggestion && (
+          <div style={{ border: `1px solid ${C.brass}`, background: C.brassBg, borderRadius: 9, padding: "12px 14px", marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: C.brassDeep, marginBottom: 8 }}>
+              AI suggestion — review, then apply or discard
+            </div>
+            <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6, color: C.ink, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 7, padding: "10px 12px", maxHeight: 260, overflowY: "auto" }}>
+              {suggestion}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={() => { patch({ body: suggestion }); setSuggestion(null); toast.success("Applied — your original was replaced."); }} style={{ ...btn("dark"), padding: "6px 13px", fontSize: 12.5 }}>
+                <Check size={13} /> Apply
+              </button>
+              <button onClick={() => setSuggestion(null)} style={{ ...btn("ghost"), padding: "6px 13px", fontSize: 12.5 }}>
+                <X size={13} /> Keep mine
+              </button>
+            </div>
+          </div>
+        )}
         <Field label="Links (become buttons under the body)">
           {input.links.map((l, i) => (
             <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -528,11 +582,11 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
       </div>
 
       {/* preview */}
-      <div style={{ flex: "1 1 460px", minWidth: 380 }}>
+      <div className="gm-pane" style={{ flex: "1 1 460px", minWidth: 380 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: C.ink3, marginBottom: 8 }}>Preview</div>
         {preview ? (
-          <iframe title="Email preview" srcDoc={preview}
-            style={{ width: "100%", height: 720, border: `1px solid ${C.line}`, borderRadius: 10, background: "#eef2f7" }} />
+          <iframe title="Email preview" srcDoc={preview} className="gm-preview"
+            style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, background: "#eef2f7" }} />
         ) : (
           <div style={{ border: `1px dashed ${C.line}`, borderRadius: 10, padding: "60px 24px", textAlign: "center", color: C.ink3, fontSize: 13.5, background: "#fff" }}>
             Fill the form and press <strong>Preview</strong> to see the branded circular exactly as members receive it.
@@ -546,6 +600,7 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
 // ── History ─────────────────────────────────────────────────────────────────
 function HistoryView() {
   const [rows, setRows] = useState<CampaignRow[] | null>(null);
+  const [detail, setDetail] = useState<CampaignRow | null>(null);
   useEffect(() => {
     let x = false;
     (async () => {
@@ -558,19 +613,21 @@ function HistoryView() {
     return () => { x = true; };
   }, []);
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+    <>
+    <div className="gm-scroll" style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead><tr>
           <th style={TH}>Sent</th><th style={TH}>Mode</th><th style={TH}>Subject</th><th style={TH}>List</th>
-          <th style={TH}>Recipients</th><th style={TH}>Result</th>
+          <th style={TH}>Recipients</th><th style={TH}>Result</th><th style={{ ...TH, width: 70 }}></th>
         </tr></thead>
         <tbody>
           {rows === null ? (
-            <tr><td colSpan={6} style={{ padding: 40, textAlign: "center", color: C.ink3 }}><Loader2 size={20} style={spin} /></td></tr>
+            <tr><td colSpan={7} style={{ padding: 40, textAlign: "center", color: C.ink3 }}><Loader2 size={20} style={spin} /></td></tr>
           ) : rows.length === 0 ? (
-            <tr><td colSpan={6} style={{ padding: "40px 20px", textAlign: "center", color: C.ink3, fontSize: 14 }}>No circulars sent yet.</td></tr>
+            <tr><td colSpan={7} style={{ padding: "40px 20px", textAlign: "center", color: C.ink3, fontSize: 14 }}>No circulars sent yet.</td></tr>
           ) : rows.map((r) => (
-            <tr key={r.id}>
+            <tr key={r.id} onClick={() => setDetail(r)} style={{ cursor: "pointer" }}
+              title="View the mail as sent">
               <td style={{ ...TD, whiteSpace: "nowrap" }}>{new Date(r.created_at).toLocaleString()}</td>
               <td style={TD}>
                 <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", padding: "2px 7px", borderRadius: 3,
@@ -586,11 +643,60 @@ function HistoryView() {
                 {r.sent_fail > 0 && <span style={{ color: C.red }}> · {r.sent_fail} failed</span>}
                 {r.status === "sending" && <span style={{ color: C.amber }}> · in progress</span>}
               </td>
+              <td style={{ ...TD, textAlign: "right" }}>
+                <span style={{ ...btn("ghost"), padding: "5px 10px", fontSize: 12 }}><Eye size={13} /> View</span>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+    {detail && <CircularDetailDrawer row={detail} onClose={() => setDetail(null)} />}
+    </>
+  );
+}
+
+// The mail exactly as members received it, rebuilt from the stored campaign.
+function CircularDetailDrawer({ row, onClose }: { row: CampaignRow; onClose: () => void }) {
+  const [data, setData] = useState<{ html: string; failures: { email: string; error?: string }[] } | null>(null);
+  useEffect(() => {
+    let x = false;
+    (async () => {
+      await Promise.resolve();
+      if (x) return;
+      const r = await getCircularDetail(row.id);
+      if (x) return;
+      if (!r.success) { toast.error(r.error); onClose(); return; }
+      setData({ html: r.data.html, failures: r.data.failures });
+    })();
+    return () => { x = true; };
+  }, [row.id, onClose]);
+  return (
+    <Drawer title={row.subject} subtitle={`${row.mode} · ${row.list_email} · ${new Date(row.created_at).toLocaleString()}`} onClose={onClose} wide>
+      {data === null ? (
+        <div style={{ padding: 40, textAlign: "center", color: C.ink3 }}><Loader2 size={20} style={spin} /></div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 16, fontSize: 13, color: C.ink2, marginBottom: 12 }}>
+            <span>{row.recipients_total} recipient{row.recipients_total === 1 ? "" : "s"}</span>
+            <span style={{ color: C.green }}>{row.sent_ok} delivered</span>
+            {row.sent_fail > 0 && <span style={{ color: C.red }}>{row.sent_fail} failed</span>}
+          </div>
+          {data.failures.length > 0 && (
+            <div style={{ border: `1px solid ${C.redBg}`, background: "#fdf6f6", borderRadius: 8, padding: "10px 13px", marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: C.red, marginBottom: 6 }}>Failed addresses</div>
+              {data.failures.map((f, i) => (
+                <div key={i} style={{ fontSize: 12.5, fontFamily: C.mono, color: C.ink, marginBottom: 3 }}>
+                  {f.email}{f.error ? <span style={{ color: C.ink3 }}> — {f.error}</span> : null}
+                </div>
+              ))}
+            </div>
+          )}
+          <iframe title="Sent circular" srcDoc={data.html}
+            style={{ width: "100%", height: 620, border: `1px solid ${C.line}`, borderRadius: 10, background: "#eef2f7" }} />
+        </>
+      )}
+    </Drawer>
   );
 }
 
@@ -603,9 +709,9 @@ function SettingsView({ config, secrets, onSaved }: {
   const [smtpPw, setSmtpPw] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
-  // Persist the form (config + any entered secrets). The Test buttons run
-  // this first, so testing always exercises what is on screen — never a stale
-  // or empty stored config.
+  // Persist the form (config + any entered secrets). Only the Save button
+  // writes — the Test buttons pass the on-screen values to the server without
+  // saving, so a failed experiment never overwrites a working config.
   const persist = async (): Promise<boolean> => {
     // light normalisation: hosts pasted with a scheme/port still work
     const host = (v: string | null) => (v ?? "").trim().replace(/^https?:\/\//i, "").replace(/[/:].*$/, "") || null;
@@ -644,19 +750,21 @@ function SettingsView({ config, secrets, onSaved }: {
 
   const testCp = async () => {
     setBusy("cp");
-    if (!(await persist())) { setBusy(null); return; }
-    const r = await testCpanelConnection();
+    const r = await testCpanelConnection({
+      host: cfg.cpanel_host, user: cfg.cpanel_user, token: cpToken || undefined,
+    });
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
-    toast.success(`Saved & connected — ${r.data.lists} mailing list${r.data.lists === 1 ? "" : "s"} found on cPanel.`);
+    toast.success(`cPanel OK — ${r.data.lists} mailing list${r.data.lists === 1 ? "" : "s"} found. Press Save settings to keep these values.`);
   };
   const testSmtp = async () => {
     setBusy("smtp");
-    if (!(await persist())) { setBusy(null); return; }
-    const r = await testSmtpConnection();
+    const r = await testSmtpConnection({
+      host: cfg.smtp_host, port: cfg.smtp_port, user: cfg.smtp_user, password: smtpPw || undefined,
+    });
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
-    toast.success("Saved & connected — SMTP login accepted.");
+    toast.success("SMTP OK — login accepted. Press Save settings to keep these values.");
   };
 
   const set = (p: Partial<GroupMailConfig>) => setCfg((prev) => ({ ...prev, ...p }));
@@ -669,7 +777,7 @@ function SettingsView({ config, secrets, onSaved }: {
     <div style={{ maxWidth: 780 }}>
       <div style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
         <div style={SECTION}>cPanel (Namecheap hosting) — list management</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="gm-grid2">
           <Field label="cPanel host">
             <input value={cfg.cpanel_host ?? ""} onChange={(e) => set({ cpanel_host: e.target.value })} placeholder="server353-4.web-hosting.com" style={INPUT} />
           </Field>
@@ -686,13 +794,13 @@ function SettingsView({ config, secrets, onSaved }: {
             placeholder="https://server353-4.web-hosting.com/mailman" style={INPUT} />
         </Field>
         <button onClick={testCp} disabled={!!busy} style={btn("ghost")}>
-          {busy === "cp" ? <Loader2 size={14} style={spin} /> : <Check size={14} />} Save &amp; test cPanel connection
+          {busy === "cp" ? <Loader2 size={14} style={spin} /> : <Check size={14} />} Test cPanel connection
         </button>
       </div>
 
       <div style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
         <div style={SECTION}>SMTP — the mailbox circulars are sent from</div>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+        <div className="gm-grid21">
           <Field label="SMTP host">
             <input value={cfg.smtp_host ?? ""} onChange={(e) => set({ smtp_host: e.target.value })} placeholder="server353-4.web-hosting.com" style={INPUT} />
           </Field>
@@ -700,7 +808,7 @@ function SettingsView({ config, secrets, onSaved }: {
             <input type="number" value={cfg.smtp_port} onChange={(e) => set({ smtp_port: Number(e.target.value) || 465 })} style={INPUT} />
           </Field>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="gm-grid2">
           <Field label="Mailbox (full address — also the From)">
             <input value={cfg.smtp_user ?? ""} onChange={(e) => set({ smtp_user: e.target.value })} placeholder="circ@arabshipbroker.com" style={INPUT} />
           </Field>
@@ -713,7 +821,7 @@ function SettingsView({ config, secrets, onSaved }: {
             placeholder={secrets.smtp_password ? "•••••• (enter to replace)" : "mailbox password"} style={INPUT} />
         </Field>
         <button onClick={testSmtp} disabled={!!busy} style={btn("ghost")}>
-          {busy === "smtp" ? <Loader2 size={14} style={spin} /> : <Check size={14} />} Save &amp; test SMTP login
+          {busy === "smtp" ? <Loader2 size={14} style={spin} /> : <Check size={14} />} Test SMTP login
         </button>
       </div>
 
