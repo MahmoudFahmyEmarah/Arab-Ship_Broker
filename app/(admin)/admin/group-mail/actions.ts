@@ -10,6 +10,7 @@ import { requireAdmin } from "@/lib/admin/require-admin";
 import { cpListLists, cpAddList, cpDeleteList, cpUpdateList, type CpanelAuth } from "@/lib/groupmail/cpanel";
 import { mailmanListMembers, mailmanAddMembers, mailmanRemoveMembers, type MailmanAuth } from "@/lib/groupmail/mailman";
 import { buildCircularEmail } from "@/lib/groupmail/template";
+import { EMAIL_LOGO_B64 } from "@/lib/groupmail/logo";
 import { sendToRecipients, verifySmtp, type SmtpAuth } from "@/lib/groupmail/send";
 import type {
   GroupMailConfig, GroupMailSecretStatus, MailingListRow, ListMember,
@@ -343,12 +344,15 @@ export async function reviewCircularBody(
   }
 }
 
+// Browser previews can't resolve cid: images — inline the logo as a data URI.
+const PREVIEW_LOGO = `data:image/png;base64,${EMAIL_LOGO_B64}`;
+
 export async function previewCircular(input: CampaignInput): Promise<Result<{ html: string; subject: string }>> {
   const bad = validCampaign(input);
   if (bad) return { success: false, error: bad };
   try {
     await adminWrite();
-    const { html, subject } = buildCircularEmail(input, stamp());
+    const { html, subject } = buildCircularEmail(input, stamp(), PREVIEW_LOGO);
     return { success: true, data: { html, subject } };
   } catch (e) {
     return fail(e, "Could not build the preview.");
@@ -481,6 +485,7 @@ export async function getCircularDetail(campaignId: string): Promise<Result<{
         body: row.body, links: row.links ?? [], badge: row.badge ?? "Circulation",
       },
       sentAt,
+      PREVIEW_LOGO,
     );
     return { success: true, data: { row, html, body: row.body, failures: row.failures ?? [] } };
   } catch (e) {

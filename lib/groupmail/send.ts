@@ -5,6 +5,7 @@
 // plus a per-address success/failure record.
 
 import nodemailer from "nodemailer";
+import { EMAIL_LOGO_B64, EMAIL_LOGO_CID } from "./logo";
 
 export interface SmtpAuth {
   host: string;
@@ -51,6 +52,13 @@ export async function sendToRecipients(
         subject: mail.subject,
         html: mail.html,
         text: mail.text,
+        // the brand mark rides along inline — renders without any image hosting
+        attachments: [{
+          filename: "asb-logo.png",
+          content: Buffer.from(EMAIL_LOGO_B64, "base64"),
+          contentType: "image/png",
+          cid: EMAIL_LOGO_CID,
+        }],
       });
       results.push({ email, ok: true });
     } catch (e) {

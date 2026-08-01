@@ -110,13 +110,23 @@ export function GroupMailClient() {
         .gm-scroll{overflow-x:auto}
         .gm-scroll table{min-width:560px}
         .gm-preview{height:720px}
+        .gm-cards{display:none}
         @media (max-width: 760px){
           .gm-tabs{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
-          .gm-tabs button{white-space:nowrap;flex:none}
+          .gm-tabs button{white-space:nowrap;flex:none;padding:8px 11px !important;font-size:13px !important}
           .gm-grid2,.gm-grid21{grid-template-columns:1fr}
           .gm-pane{min-width:0 !important;flex-basis:100% !important}
           .gm-preview{height:480px}
-          .gm-scroll table{min-width:520px}
+          .gm-card{padding:14px !important}
+          .gm-toolbar{flex-wrap:wrap}
+          .gm-toolbar-desc{flex:1 1 100%}
+          /* tables become stacked cards on phones */
+          .gm-table{display:none}
+          .gm-cards{display:flex;flex-direction:column;gap:10px}
+          .gm-linkrow{flex-wrap:wrap}
+          .gm-linkrow input:first-of-type{flex:1 1 100% !important}
+          .gm-actions{gap:8px}
+          .gm-actions button{flex:1 1 46%;justify-content:center;margin-left:0 !important}
         }
       `}</style>
     </div>
@@ -145,8 +155,8 @@ function ListsView({ lists, loading, onReload, secrets, onSecretsChanged }: {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-        <div style={{ fontSize: 13.5, color: C.ink2 }}>
+      <div className="gm-toolbar" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <div className="gm-toolbar-desc" style={{ fontSize: 13.5, color: C.ink2 }}>
           Lists live on the Namecheap hosting (cPanel → Mailing Lists); members are managed on the list itself.
         </div>
         <button onClick={onReload} disabled={loading} style={{ ...btn("ghost"), marginLeft: "auto" }}>
@@ -155,7 +165,38 @@ function ListsView({ lists, loading, onReload, secrets, onSecretsChanged }: {
         <button onClick={() => setCreating(true)} style={btn("primary")}><Plus size={15} /> New list</button>
       </div>
 
-      <div className="gm-scroll" style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
+      {/* phone: one card per list */}
+      <div className="gm-cards">
+        {lists === null || loading ? (
+          <div style={{ padding: 30, textAlign: "center", color: C.ink3 }}><Loader2 size={20} style={spin} /></div>
+        ) : lists.length === 0 ? (
+          <div style={{ padding: "30px 16px", textAlign: "center", color: C.ink3, fontSize: 14, border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
+            No mailing lists yet — create the first one.
+          </div>
+        ) : lists.map((l) => {
+          const hasPw = secrets?.lists.includes(l.list);
+          return (
+            <div key={l.list} style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff", padding: "13px 14px" }}>
+              <div style={{ fontFamily: C.mono, fontWeight: 600, color: C.navy, fontSize: 13.5, wordBreak: "break-all" }}>{l.list}</div>
+              <div style={{ display: "flex", gap: 12, fontSize: 12.5, color: C.ink2, margin: "6px 0 10px" }}>
+                <span>{l.accesstype ?? "—"}</span>
+                {hasPw
+                  ? <span style={{ color: C.green, display: "inline-flex", alignItems: "center", gap: 4 }}><ShieldCheck size={13} /> password saved</span>
+                  : <span style={{ color: C.amber }}>password not saved</span>}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setManaging(l)} style={{ ...btn("ghost"), padding: "7px 11px", flex: 1, justifyContent: "center" }}><Users size={13} /> Members</button>
+                <button onClick={() => setConfiguring(l)} style={{ ...btn("ghost"), padding: "7px 11px", flex: 1, justifyContent: "center" }}><Pencil size={13} /> Config</button>
+                <button onClick={() => doDelete(l)} disabled={busy === l.list} style={{ ...btn("danger"), padding: "7px 11px" }}>
+                  {busy === l.list ? <Loader2 size={13} style={spin} /> : <Trash2 size={13} />}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="gm-scroll gm-table" style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
           <thead><tr>
             <th style={TH}>List address</th><th style={TH}>Access</th><th style={TH}>Admin password</th>
@@ -367,7 +408,39 @@ function MembersDrawer({ list, hasPassword, onClose, onSecretsChanged }: {
             </button>
           </div>
 
-          <div className="gm-scroll" style={{ border: `1px solid ${C.line}`, borderRadius: 9, marginBottom: 16 }}>
+          {/* phone: one card per member */}
+          <div className="gm-cards" style={{ marginBottom: 16 }}>
+            {members === null ? (
+              <div style={{ padding: 24, textAlign: "center", color: C.ink3 }}><Loader2 size={18} style={spin} /></div>
+            ) : members.length === 0 ? (
+              <div style={{ padding: "22px 14px", textAlign: "center", color: C.ink3, fontSize: 13.5, border: `1px solid ${C.line}`, borderRadius: 9 }}>No members yet.</div>
+            ) : members.map((m) => (
+              <div key={m.email} style={{ border: `1px solid ${C.line}`, borderRadius: 9, padding: "11px 12px" }}>
+                {editing === m.email ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input value={editValue} onChange={(e) => setEditValue(e.target.value)} style={{ ...INPUT, padding: "7px 9px", fontSize: 12.5 }} />
+                    <button onClick={() => doReplace(m.email)} disabled={busy === m.email} style={{ ...btn("primary"), padding: "6px 10px" }}>
+                      {busy === m.email ? <Loader2 size={12} style={spin} /> : <Check size={12} />}
+                    </button>
+                    <button onClick={() => setEditing(null)} style={{ ...btn("ghost"), padding: "6px 10px" }}><X size={12} /></button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontFamily: C.mono, fontSize: 12.5, color: C.navy, fontWeight: 600, wordBreak: "break-all" }}>{m.email}</div>
+                      {m.name && <div style={{ fontSize: 12, color: C.ink3, marginTop: 2 }}>{m.name}</div>}
+                    </div>
+                    <button title="Change address" onClick={() => { setEditing(m.email); setEditValue(m.email); }} style={{ ...btn("ghost"), padding: "6px 9px" }}><Pencil size={12} /></button>
+                    <button title="Remove" onClick={() => doRemove(m.email)} disabled={busy === m.email} style={{ ...btn("danger"), padding: "6px 9px" }}>
+                      {busy === m.email ? <Loader2 size={12} style={spin} /> : <Trash2 size={12} />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="gm-scroll gm-table" style={{ border: `1px solid ${C.line}`, borderRadius: 9, marginBottom: 16 }}>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
               <thead><tr><th style={TH}>Email</th><th style={TH}>Name</th><th style={{ ...TH, width: 110, textAlign: "right" }}></th></tr></thead>
               <tbody>
@@ -490,7 +563,7 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
   return (
     <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
       {/* form */}
-      <div className="gm-pane" style={{ flex: "1 1 420px", minWidth: 360, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px" }}>
+      <div className="gm-pane gm-card" style={{ flex: "1 1 420px", minWidth: 360, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px" }}>
         <Field label="Mailing list">
           <select value={input.list_email} onChange={(e) => patch({ list_email: e.target.value })} style={INPUT}>
             {lists.length === 0 && <option value="">— no lists —</option>}
@@ -542,7 +615,7 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
         )}
         <Field label="Links (become buttons under the body)">
           {input.links.map((l, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <div key={i} className="gm-linkrow" style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input value={l.label} onChange={(e) => patchLink(i, { label: e.target.value })} placeholder="Open the cargo board" style={{ ...INPUT, flex: "0 0 40%" }} />
               <input value={l.url} onChange={(e) => patchLink(i, { url: e.target.value })} placeholder="https://…" style={INPUT} />
               <button onClick={() => setInput((p) => ({ ...p, links: p.links.filter((_, x) => x !== i) }))} style={{ ...btn("ghost"), padding: "6px 10px" }}><X size={13} /></button>
@@ -557,7 +630,7 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
           <Field label="Test addresses (comma-separated)">
             <input value={testTo} onChange={(e) => setTestTo(e.target.value)} style={INPUT} placeholder="cap.mdawod@hotmail.com" />
           </Field>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div className="gm-actions" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button onClick={doPreview} disabled={!!busy} style={btn("ghost")}>
               {busy === "preview" ? <Loader2 size={14} style={spin} /> : <Eye size={14} />} Preview
             </button>
@@ -612,9 +685,39 @@ function HistoryView() {
     })();
     return () => { x = true; };
   }, []);
+  const modeChip = (mode: "test" | "broadcast") => (
+    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", padding: "2px 7px", borderRadius: 3,
+      color: mode === "broadcast" ? C.brassDeep : C.ink2, background: mode === "broadcast" ? C.brassBg : C.sunken }}>
+      {mode.toUpperCase()}
+    </span>
+  );
   return (
     <>
-    <div className="gm-scroll" style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
+    {/* phone: one card per circular, tap to view */}
+    <div className="gm-cards">
+      {rows === null ? (
+        <div style={{ padding: 30, textAlign: "center", color: C.ink3 }}><Loader2 size={20} style={spin} /></div>
+      ) : rows.length === 0 ? (
+        <div style={{ padding: "30px 16px", textAlign: "center", color: C.ink3, fontSize: 14, border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>No circulars sent yet.</div>
+      ) : rows.map((r) => (
+        <button key={r.id} onClick={() => setDetail(r)}
+          style={{ textAlign: "left", font: "inherit", cursor: "pointer", border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff", padding: "12px 14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {modeChip(r.mode)}
+            <span style={{ fontSize: 12, color: C.ink3 }}>{new Date(r.created_at).toLocaleString()}</span>
+            <Eye size={14} color={C.ink3} style={{ marginLeft: "auto" }} />
+          </div>
+          <div style={{ fontWeight: 600, color: C.navy, fontSize: 13.5, margin: "6px 0 4px" }}>{r.subject}</div>
+          <div style={{ fontSize: 12, color: C.ink2 }}>
+            <span style={{ fontFamily: C.mono }}>{r.list_email}</span> · {r.recipients_total} recipient{r.recipients_total === 1 ? "" : "s"} ·{" "}
+            <span style={{ color: C.green }}>{r.sent_ok} ok</span>
+            {r.sent_fail > 0 && <span style={{ color: C.red }}> · {r.sent_fail} failed</span>}
+            {r.status === "sending" && <span style={{ color: C.amber }}> · in progress</span>}
+          </div>
+        </button>
+      ))}
+    </div>
+    <div className="gm-scroll gm-table" style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead><tr>
           <th style={TH}>Sent</th><th style={TH}>Mode</th><th style={TH}>Subject</th><th style={TH}>List</th>
@@ -775,7 +878,7 @@ function SettingsView({ config, secrets, onSaved }: {
 
   return (
     <div style={{ maxWidth: 780 }}>
-      <div style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
+      <div className="gm-card" style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
         <div style={SECTION}>cPanel (Namecheap hosting) — list management</div>
         <div className="gm-grid2">
           <Field label="cPanel host">
@@ -798,7 +901,7 @@ function SettingsView({ config, secrets, onSaved }: {
         </button>
       </div>
 
-      <div style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
+      <div className="gm-card" style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
         <div style={SECTION}>SMTP — the mailbox circulars are sent from</div>
         <div className="gm-grid21">
           <Field label="SMTP host">
@@ -825,7 +928,7 @@ function SettingsView({ config, secrets, onSaved }: {
         </button>
       </div>
 
-      <div style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
+      <div className="gm-card" style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
         <div style={SECTION}>Testing</div>
         <Field label="Default test addresses (comma-separated)">
           <input value={Array.isArray(cfg.test_recipients) ? cfg.test_recipients.join(", ") : (cfg.test_recipients ?? "")}
