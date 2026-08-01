@@ -10,6 +10,8 @@ const BRAND = {
   navy: "#0D2240",
   accent: "#0E7490",
   site: "arabshipbroker.com",
+  // Absolute URL — email clients need it; the asset ships in /public.
+  logo: "https://arabshipbroker.com/email-logo.png",
 };
 
 const esc = (s: string) =>
@@ -49,10 +51,13 @@ export function buildCircularEmail(input: CampaignInput, stampedAt: string): { s
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
         <!-- Header -->
-        <tr><td style="background:${BRAND.navy};padding:22px 28px;">
+        <tr><td style="background:${BRAND.navy};padding:18px 28px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.2px;">⚓&nbsp; ${BRAND.name}</td>
-            <td align="right"><span style="display:inline-block;background:rgba(94,234,212,.12);border:1px solid rgba(94,234,212,.4);color:#5eead4;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px;">${esc(badge)}</span></td>
+            <td width="46" style="vertical-align:middle;">
+              <img src="${BRAND.logo}" width="38" height="38" alt="⚓" style="display:block;background:#ffffff;border-radius:9px;padding:3px;" />
+            </td>
+            <td style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.2px;padding-left:12px;vertical-align:middle;">${BRAND.name}</td>
+            <td align="right" style="vertical-align:middle;"><span style="display:inline-block;background:rgba(94,234,212,.12);border:1px solid rgba(94,234,212,.4);color:#5eead4;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px;">${esc(badge)}</span></td>
           </tr></table>
         </td></tr>
         <!-- Title -->

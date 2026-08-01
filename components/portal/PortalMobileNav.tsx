@@ -7,7 +7,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconDashboard, IconCargo, IconVessel, IconMap, IconUser } from "./icons";
+import { IconDashboard, IconCargo, IconVessel, IconMap, IconUser, IconShield } from "./icons";
 import type { PortalRole } from "./PortalSidebar";
 
 type Tab = { href: string; label: string; icon: (active: boolean) => React.ReactNode };
@@ -44,6 +44,11 @@ export function PortalMobileNav({
       icon: (a) => <IconMap size={20} color={c(a)} />,
     },
     { href: `${basePath}/account`, label: "Account", icon: (a) => <IconUser size={20} color={c(a)} /> },
+    // Admins get the console on the phone bar too — the console's own top
+    // scroller (admin shell ≤760px) takes over from there.
+    ...(role === "admin"
+      ? [{ href: "/admin/dashboard", label: "Admin", icon: (a: boolean) => <IconShield size={20} color={c(a)} /> }]
+      : []),
   ];
 
   const isActive = (href: string) =>
