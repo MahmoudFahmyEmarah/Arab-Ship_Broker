@@ -316,7 +316,7 @@ export async function createVessel(
 ): Promise<{ id: string }> {
   const payload: Record<string, unknown> = {
     vessel_name: values.vessel_name,
-    imo_number: values.imo_number ?? "",
+    imo_number: values.imo_number,
     vessel_type: values.vessel_type,
     dwt_grain: values.dwt_grain ?? "",
     dwt_bale: values.dwt_bale ?? "",

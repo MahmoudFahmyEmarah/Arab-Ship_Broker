@@ -263,7 +263,7 @@ export default async function PortActivityPage({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-5 pt-5 border-t border-asb-gray-100">
+        <div className="grid grid-cols-2 max-[640px]:grid-cols-1 gap-4 mt-5 pt-5 border-t border-asb-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded bg-asb-blue-light flex items-center justify-center shrink-0">
               <Package className="w-4 h-4 text-asb-blue" />

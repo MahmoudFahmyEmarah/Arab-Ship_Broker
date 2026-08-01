@@ -1,20 +1,22 @@
 import Link from "next/link";
 import {
-  Activity, Ship, Boxes, Route, Lock, ArrowRight, ShieldCheck, CalendarDays,
+  Lock, ArrowRight, ShieldCheck,
 } from "lucide-react";
+import {
+  IconCalendar, IconCargo, IconInsights, IconLanes, IconSizeBand, IconVessel,
+} from "@/components/portal/icons";
 import {
   getLatestEdition, getEdition, getArchive, getTrendSeries, formatRange,
   currentIsoWeek, type InsightBucket, type InsightEdition,
 } from "@/lib/market-insights";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { FuelPanelMember, FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
+import { FuelTeaserPublic } from "@/components/market-insights/FuelPanel";
 import { TrendChart, RegimeDonut, SizeBandColumns, LanesTable } from "@/components/market-insights/Charts";
 
 // Session-gated fuel panel reads cookies → must render per request.
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Market Insights — Arab ShipBroker",
+  title: "Market Insights Arab ShipBroker",
   description:
     "Weekly regional dry bulk & break-bulk activity intelligence (AG / R.Sea / E.Med / B.Sea / A.Sea, sub-66K). Aggregated data only.",
 };
@@ -41,10 +43,10 @@ function SnapshotCard({ icon: Icon, label, value, sub }: { icon: React.ElementTy
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <div className="flex items-center gap-2 text-slate-500 mb-3">
-        <Icon className="w-4 h-4 text-ocean-600" />
-        <span className="text-[11px] font-bold uppercase tracking-[0.1em]">{label}</span>
+        <Icon size={15} className="text-ocean-600" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.1em]">{label}</span>
       </div>
-      <div className="text-3xl font-bold text-ocean-950 tabular-nums tracking-tight">{value}</div>
+      <div className="text-[34px] leading-none font-semibold text-ocean-950 tabular-nums tracking-tight">{value}</div>
       {sub && <div className="text-xs text-slate-400 mt-1">{sub}</div>}
     </div>
   );
@@ -71,7 +73,7 @@ function BarList({ items, accent = "ocean" }: { items: InsightBucket[]; accent?:
 function RankTable({ title, items }: { title: string; items: InsightBucket[] }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-      <div className="px-5 py-3 border-b border-slate-100 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">{title}</div>
+      <div className="px-5 py-3 border-b border-slate-100 text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-500">{title}</div>
       <div className="divide-y divide-slate-50">
         {items.map((i, idx) => (
           <div key={i.label} className="flex items-center gap-3 px-5 py-2.5">
@@ -111,12 +113,9 @@ export default async function MarketInsightsPage({
   const p = ed.payload;
 
   // ── Fuel-cost firewall (Pre_Final §11) ──
-  // Resolve the session SERVER-SIDE. Only an authenticated member session
-  // renders the real fuel panel; for everyone else the page emits the locked
-  // teaser, so the FUEL_COST figures are never serialized into the public DOM.
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isMember = Boolean(user);
+  // The locked teaser is shown to everyone for now (to be opened later), so no
+  // session lookup is needed and the FUEL_COST figures are never serialized
+  // into the DOM at all.
 
   // Display labels for the cargo-mix regimes (display only).
   const regimeMix = p.regime_mix.map((b) => ({ ...b, label: regimeDisplayLabel(b.label) }));
@@ -135,15 +134,15 @@ export default async function MarketInsightsPage({
     : null;
 
   return (
-    <div className="bg-slate-50 min-h-screen">
+    <div className="bg-slate-50 min-h-screen font-[family-name:var(--asb-font)]">
       <div className="container pt-24 max-lg:pt-20 pb-12">
         {/* ── Header ── */}
         <div className="mb-4">
-          <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-ocean-600 mb-2">
-            <Activity className="w-3.5 h-3.5" /> Market Insights
+          <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ocean-600 mb-2">
+            <IconInsights size={14} /> Market Insights
             {ed.sample && <span className="ml-1 text-[9px] text-slate-400 normal-case tracking-normal font-medium">(sample)</span>}
           </div>
-          <h1 className="text-[22px] max-sm:text-xl font-bold text-ocean-950 tracking-tight">
+          <h1 className="text-[21px] max-sm:text-xl font-semibold text-ocean-950 tracking-[-0.01em]">
             {weekLabel(ed.week_id)} · {formatRange(ed.range_from, ed.range_to)}
           </h1>
           <p className="text-[13px] text-slate-500 mt-1.5 max-w-2xl">
@@ -154,7 +153,7 @@ export default async function MarketInsightsPage({
 
         {/* ── Editions strip (top) — in-progress week + published editions ── */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-5">
-          <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <IconCalendar size={14} className="text-slate-400 shrink-0" />
           {inProgress && (
             <div
               aria-disabled
@@ -163,7 +162,7 @@ export default async function MarketInsightsPage({
             >
               <span className="flex items-center gap-1.5 text-xs font-semibold leading-none">
                 {weekLabel(inProgress.week_id)}
-                <span className="text-[8.5px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-300/70 rounded px-1 py-0.5">In progress</span>
+                <span className="text-[8.5px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-300/70 rounded px-1 py-0.5">In progress</span>
               </span>
               <span className="text-[10px] leading-none">{formatRange(inProgress.range_from, inProgress.range_to).replace(/ \d{4}$/, "")}</span>
             </div>
@@ -179,7 +178,7 @@ export default async function MarketInsightsPage({
               >
                 <span className="flex items-center gap-1.5 text-xs font-semibold leading-none">
                   {weekLabel(a.week_id)}
-                  {latest && <span className="text-[8.5px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-300/70 rounded px-1 py-0.5">Latest</span>}
+                  {latest && <span className="text-[8.5px] font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-300/70 rounded px-1 py-0.5">Latest</span>}
                 </span>
                 <span className="text-[10px] leading-none text-slate-400">{formatRange(a.range_from, a.range_to).replace(/ \d{4}$/, "")}</span>
               </Link>
@@ -189,10 +188,10 @@ export default async function MarketInsightsPage({
 
         {/* ── Snapshot cards (design labels) ── */}
         <div className="grid grid-cols-4 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-3 mb-5">
-          <SnapshotCard icon={Activity} label="Cargoes posted" value={nf.format(p.snapshot.cargoes_live)} sub="approved & circulating" />
-          <SnapshotCard icon={Ship} label="Open positions" value={nf.format(p.snapshot.open_tonnage)} sub="in region" />
-          <SnapshotCard icon={Boxes} label="Typical size band (MT)" value={typicalBand} sub="most common band" />
-          <SnapshotCard icon={Route} label="Active lanes" value={nf.format(p.snapshot.active_lanes)} sub="zone-to-zone" />
+          <SnapshotCard icon={IconCargo} label="Cargoes posted" value={nf.format(p.snapshot.cargoes_live)} sub="approved & circulating" />
+          <SnapshotCard icon={IconVessel} label="Open positions" value={nf.format(p.snapshot.open_tonnage)} sub="in region" />
+          <SnapshotCard icon={IconSizeBand} label="Typical size band (MT)" value={typicalBand} sub="most common band" />
+          <SnapshotCard icon={IconLanes} label="Active lanes" value={nf.format(p.snapshot.active_lanes)} sub="zone-to-zone" />
         </div>
 
         {/* ── Weekly trend — snapshot figures for the 6 weeks ending at the selected edition ── */}
@@ -210,7 +209,7 @@ export default async function MarketInsightsPage({
         <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-4 mb-4">
           <LanesTable items={p.top_lanes} />
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">Top commodities</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-500 mb-4">Top commodities</div>
             <BarList items={p.top_commodities} />
           </div>
         </div>
@@ -221,15 +220,15 @@ export default async function MarketInsightsPage({
           <RankTable title="Top discharge zones" items={p.disch_zones} />
         </div>
 
-        {/* ── Handysize fuel-cost panel — members see figures, public sees the
-              locked teaser only (no figures in the public DOM). Fuel cost,
-              never a freight/hire quote. ── */}
-        {isMember ? <FuelPanelMember /> : <FuelTeaserPublic />}
+        {/* ── Handysize fuel-cost panel — the locked teaser is shown to
+              everyone, including logged-in members, for now (to be opened
+              later). Fuel cost, never a freight/hire quote. ── */}
+        <FuelTeaserPublic />
 
         {/* ── Narrative ── */}
         {ed.narrative && (
           <div className="rounded-2xl border border-ocean-100 bg-ocean-50/50 p-6 mb-6">
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-ocean-600 mb-2">The market read</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-ocean-600 mb-2">The market read</div>
             <p className="text-[15px] leading-relaxed text-ocean-950/85">{ed.narrative}</p>
           </div>
         )}
@@ -249,7 +248,7 @@ export default async function MarketInsightsPage({
             style={{ background: "radial-gradient(circle, rgba(16,163,188,0.28) 0%, transparent 70%)" }}
           />
           <div className="relative max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-foam-300 mb-4">
+            <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foam-300 mb-4">
               <ShieldCheck className="w-3.5 h-3.5" /> This is a fraction of what members see
             </div>
             <h2 className="text-3xl max-sm:text-2xl font-extrabold tracking-tight text-white leading-tight mb-3">
@@ -274,7 +273,7 @@ export default async function MarketInsightsPage({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-[15px] text-white">{m.title}</span>
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-foam-300/80 border border-foam-300/30 rounded px-1.5 py-0.5">Members</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-foam-300/80 border border-foam-300/30 rounded px-1.5 py-0.5">Members</span>
                   </div>
                   <div className="text-[13px] text-ocean-100/75 mt-1 leading-relaxed">{m.blurb}</div>
                 </div>
@@ -285,7 +284,7 @@ export default async function MarketInsightsPage({
           <div className="relative flex items-center gap-3 flex-wrap">
             <Link
               href="/auth/signup"
-              className="inline-flex items-center gap-2 h-12 px-8 rounded-xl bg-white text-ocean-950 font-bold text-sm hover:bg-slate-50 transition-all hover:-translate-y-0.5 shadow-[0_4px_20px_rgba(0,0,0,0.25)]"
+              className="inline-flex items-center gap-2 h-12 px-8 rounded-xl bg-white text-ocean-950 font-semibold text-sm hover:bg-slate-50 transition-all hover:-translate-y-0.5 shadow-[0_4px_20px_rgba(0,0,0,0.25)]"
             >
               Get Access <ArrowRight className="w-4 h-4" />
             </Link>

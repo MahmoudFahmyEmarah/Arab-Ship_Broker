@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "Cookie Policy — Arab ShipBroker" };
+export const metadata = { title: "Cookie Policy Arab ShipBroker" };
 
 const ROWS = [
   ["sb-…-auth-token", "Cookie", "Strictly necessary", "Keeps you signed in (Supabase session). Set at login; removed at sign-out."],

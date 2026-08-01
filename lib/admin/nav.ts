@@ -34,6 +34,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { id: "users", label: "All users", href: "/admin/users", icon: "users" },
       { id: "orgmembers", label: "Companies", href: "/admin/org-members", icon: "building" },
+      { id: "groupmail", label: "Group Mail", href: "/admin/group-mail", icon: "mail", superOnly: true },
     ],
   },
   {

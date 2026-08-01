@@ -52,7 +52,7 @@ export async function generateMetadata({
     .eq("id", vesselId)
     .single();
 
-  return { title: data ? `${data.vessel_name} — Arab ShipBroker` : "Vessel" };
+  return { title: data ? `${data.vessel_name} Arab ShipBroker` : "Vessel" };
 }
 
 export default async function VesselDetailPage({
@@ -430,7 +430,7 @@ export default async function VesselDetailPage({
                 </p>
                 {isClaimed && (
                   <Link
-                    href={`/dashboard/vessels/${vesselId}/availability/new`}
+                    href={`/dashboard/vessels/post?vessel=${vesselId}`}
                     className="mt-3 inline-flex items-center gap-1.5 text-xs text-asb-blue hover:text-asb-blue font-semibold"
                   >
                     <Plus className="w-3.5 h-3.5" /> Post new position
@@ -518,7 +518,7 @@ export default async function VesselDetailPage({
 
                 {isClaimed && (
                   <Link
-                    href={`/dashboard/vessels/${vesselId}/availability/new`}
+                    href={`/dashboard/vessels/post?vessel=${vesselId}`}
                     className="mt-1 flex items-center justify-center gap-1.5 w-full py-2 rounded border border-dashed border-asb-blue text-xs font-semibold text-asb-blue hover:bg-asb-blue-light transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" /> Post new position

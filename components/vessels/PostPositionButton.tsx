@@ -22,7 +22,7 @@ export function PostPositionButton({
       type="button"
       onClick={() => {
         if (!disabled) {
-          router.push(`/dashboard/vessels/${vesselId}/availability/new`);
+          router.push(`/dashboard/vessels/post?vessel=${vesselId}`);
         }
       }}
       disabled={disabled}

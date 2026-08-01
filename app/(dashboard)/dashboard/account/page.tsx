@@ -6,7 +6,7 @@ import { createServerClient } from "@supabase/ssr";
 import { SettingsBoard } from "@/components/portal/SettingsBoard";
 
 export const metadata = {
-  title: "Account Settings — Arab ShipBroker",
+  title: "Account Settings Arab ShipBroker",
 };
 
 export default async function AccountSettingsPage() {

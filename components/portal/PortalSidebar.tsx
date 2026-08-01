@@ -130,13 +130,13 @@ export function PortalSidebar({
     ...(isCargo
       ? [
           { href: `${basePath}/cargo/my`, label: "My Cargo", glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} /> },
-          { href: `${basePath}/cargo/create`, label: "Post Cargo", action: true, glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} plus /> },
+          { href: `${basePath}/cargo/post`, label: "Post Cargo", action: true, glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} plus /> },
         ]
       : []),
     ...(isVessel
       ? [
           { href: `${basePath}/vessels`, label: "My Vessels", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> },
-          { href: `${basePath}/vessels/register`, label: "Post Position", action: true, glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} plus /> },
+          { href: `${basePath}/vessels/post`, label: "Post Position", action: true, glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} plus /> },
         ]
       : []),
     { section: "Discover" },

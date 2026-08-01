@@ -33,6 +33,48 @@ export function IconDashboard({ size = 16, color, className }: IconProps) {
   );
 }
 
+export function IconInsights({ size = 16, color, className }: IconProps) {
+  return (
+    <svg {...base(size, color, className)}>
+      <polyline points="2.5,13.5 7,13.5 9.5,6.5 13.5,18.5 16,10.5 17.5,13.5 21.5,13.5" />
+    </svg>
+  );
+}
+
+export function IconCalendar({ size = 16, color, className }: IconProps) {
+  return (
+    <svg {...base(size, color, className)}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="1.5" />
+      <line x1="8" y1="3" x2="8" y2="7" />
+      <line x1="16" y1="3" x2="16" y2="7" />
+      <line x1="3.5" y1="10" x2="20.5" y2="10" />
+      <line x1="7.5" y1="14.5" x2="10.5" y2="14.5" />
+      <line x1="13.5" y1="14.5" x2="16.5" y2="14.5" />
+    </svg>
+  );
+}
+
+export function IconSizeBand({ size = 16, color, className }: IconProps) {
+  return (
+    <svg {...base(size, color, className)}>
+      <line x1="4" y1="5.5" x2="20" y2="5.5" />
+      <line x1="4" y1="18.5" x2="20" y2="18.5" opacity="0.45" />
+      <line x1="4" y1="12" x2="13" y2="12" opacity="0.45" />
+      <rect x="15.5" y="9.5" width="5" height="5" rx="0.5" fill={color || "currentColor"} stroke="none" />
+    </svg>
+  );
+}
+
+export function IconLanes({ size = 16, color, className }: IconProps) {
+  return (
+    <svg {...base(size, color, className)}>
+      <circle cx="5.5" cy="18" r="2.5" />
+      <circle cx="18.5" cy="6" r="2.5" />
+      <path d="M 7.5 16 Q 12 11.5 16.5 8" strokeDasharray="2.6 2.6" />
+    </svg>
+  );
+}
+
 export function IconCargo({
   size = 16,
   color,

@@ -1,0 +1,69 @@
+-- Port dedupe (user-reported: 'Marm' returned three Marmara Adasi rows).
+-- The ports table accumulated three kinds of redundancy:
+--   1. legacy spaced-LOCODE twins of clean rows (EG ALY vs EGALY, …)
+--   2. "(old code)" alias rows the workbook carries as documentation only
+--   3. same port under different codes (workbook-internal duplicates)
+-- Resolution authority, in order: 24-Jul UNIFIED workbook canonical code,
+-- then the official UN/LOCODE reference as tiebreak. Losers are DEACTIVATED
+-- (not deleted): existing listings keep their FK rows; searchPorts filters
+-- is_active so they vanish from suggestions. Generated from
+-- .port-dedupe-plan.json; full reasoning:
+  -- UA ILK   Chornomorsk                    → legacy spaced duplicate of UAILK
+  -- UA YUZ   Pivdennyi                      → legacy spaced duplicate of UAYUZ
+  -- UA IZM   Izmail                         → legacy spaced duplicate of UAIZM
+  -- BG VAR   Varna                          → legacy spaced duplicate of BGVAR
+  -- TRMRA    Marmara Adasi (old code)       → workbook alias row (old code)
+  -- TR MRA   Marmara Adasi                  → legacy spaced duplicate of TRMRA
+  -- SY LTK   Lattakia                       → legacy spaced duplicate of SYLTK
+  -- GR KLM   Kalamaki                       → legacy spaced duplicate of GRKLM
+  -- GR FLS   Eleusis                        → legacy spaced duplicate of GRFLS
+  -- IT RAN   Ravenna                        → legacy spaced duplicate of ITRAN
+  -- TN BIZ   Bizerte                        → legacy spaced duplicate of TNBIZ
+  -- MA CAS   Casablanca                     → legacy spaced duplicate of MACAS
+  -- GH TEM   Tema                           → legacy spaced duplicate of GHTEM
+  -- LY BEN   Benghazi                       → workbook canonical is LYBGN
+  -- SA KAC   King Abdullah Port             → legacy spaced duplicate of SAKAC
+  -- TR ERE   Eregli (Kdz)                   → legacy spaced duplicate of TRERE
+  -- GEBAT    Batumi                         → official UN/LOCODE is GEBUS
+  -- TRGLE    Gemlik                         → official UN/LOCODE is TRGEM
+  -- SYTTS    Tartous (old code)             → workbook alias row (old code)
+  -- GRSKH    Thessaloniki                   → official UN/LOCODE is GRSKG
+  -- GRTHS    Thessaloniki                   → official UN/LOCODE is GRSKG
+  -- GRTGI    Tsingeli                       → official UN/LOCODE is GRTSI
+  -- ALDUR    Durres                         → official UN/LOCODE is ALDRZ
+  -- ITBAR    Barletta                       → official UN/LOCODE is ITBLT
+  -- ITORT    Ortona                         → official UN/LOCODE is ITOTN
+  -- MANAD    Nador                          → official UN/LOCODE is MANDR
+  -- DZTNS    Tenes                          → official UN/LOCODE is DZTEN
+  -- LYTRP    Tripoli LY                     → official UN/LOCODE is LYTIP
+  -- TRHRK    Hereke                         → official UN/LOCODE is TRHER
+  -- TRANT    Antalya                        → official UN/LOCODE is TRAYT
+  -- ESSGN    Sagunto                        → official UN/LOCODE is ESSAG
+  -- ESMAL    Malaga                         → official UN/LOCODE is ESAGP
+  -- INKAN    Kandla                         → official UN/LOCODE is INIXY
+  -- SOBER    Berbera                        → official UN/LOCODE is SOBBO
+  -- TRTRC    Trabzon                        → official UN/LOCODE is TRTZX
+  -- GBLIVP   Liverpool                      → workbook canonical is GBLIV
+  -- RO CND   Constanta                      → legacy spaced duplicate of ROCND
+  -- RU NOI   Novorossiysk                   → legacy spaced duplicate of RUNOI
+  -- UA ODS   Odessa                         → legacy spaced duplicate of UAODS
+  -- TR MER   Mersin                         → legacy spaced duplicate of TRMER
+  -- TR ISK   Iskenderun                     → legacy spaced duplicate of TRISK
+  -- EG ALY   Alexandria                     → legacy spaced duplicate of EGALY
+  -- EG DAM   Damietta                       → legacy spaced duplicate of EGDAM
+  -- EG PSD   Port Said                      → legacy spaced duplicate of EGPSD
+  -- JO AQB   Aqaba                          → workbook canonical is JOAQJ
+  -- AE JEA   Jebel Ali                      → workbook canonical is AEDXB
+  -- OMSOR    Sohar                          → official UN/LOCODE is OMSOH
+  -- AEFUJ    Fujairah                       → official UN/LOCODE is AEFJR
+--
+-- AMBIGUOUS — left active, flagged to the business (workbook lists several
+-- codes and the official reference cannot break the tie):
+--   eleusis|greece → GRFLS, GRELE
+--   safaga|egypt → EGSGA, EGSFW, EGSFG
+--   marina di carrara|italy → ITCAA, ITCAR
+--   termini imerese|italy → ITTER, ITTMI
+
+UPDATE public.ports
+SET is_active = false
+WHERE locode IN ('UA ILK', 'UA YUZ', 'UA IZM', 'BG VAR', 'TRMRA', 'TR MRA', 'SY LTK', 'GR KLM', 'GR FLS', 'IT RAN', 'TN BIZ', 'MA CAS', 'GH TEM', 'LY BEN', 'SA KAC', 'TR ERE', 'GEBAT', 'TRGLE', 'SYTTS', 'GRSKH', 'GRTHS', 'GRTGI', 'ALDUR', 'ITBAR', 'ITORT', 'MANAD', 'DZTNS', 'LYTRP', 'TRHRK', 'TRANT', 'ESSGN', 'ESMAL', 'INKAN', 'SOBER', 'TRTRC', 'GBLIVP', 'RO CND', 'RU NOI', 'UA ODS', 'TR MER', 'TR ISK', 'EG ALY', 'EG DAM', 'EG PSD', 'JO AQB', 'AE JEA', 'OMSOR', 'AEFUJ');

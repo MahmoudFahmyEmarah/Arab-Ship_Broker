@@ -509,6 +509,31 @@ export async function listRecords(
   }
 }
 
+// Translate raw Postgres error codes into messages an admin can act on.
+function friendlyDbError(err: { code?: string; message: string }, verb: string): string {
+  switch (err.code) {
+    case "23503":
+      return `Cannot ${verb} — other records still reference this one. Retire it instead (set Active to no).`;
+    case "23505":
+      return err.message.includes("already exists")
+        ? err.message
+        : `A record with this key already exists.`;
+    case "23502":
+      return `A required field is missing: ${err.message}`;
+    case "22P02":
+      return `A value has the wrong format for its column: ${err.message}`;
+    default:
+      return err.message;
+  }
+}
+
+// Only columns the Preview registry exposes as editable may reach the DB —
+// the RPC's own column filter is the backstop, this is the front gate.
+function pickEditable(t: NonNullable<ReturnType<typeof previewTable>>, patch: Record<string, unknown>) {
+  const allowed = new Set(t.columns.filter((c) => c.editable !== false).map((c) => c.col));
+  return Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.has(k)));
+}
+
 // ── single audited edit ─────────────────────────────────────────────────────
 export async function editRecord(
   tableId: string,
@@ -518,18 +543,52 @@ export async function editRecord(
   const t = previewTable(tableId);
   if (!t) return { success: false, error: `Unknown table "${tableId}".` };
   if (!key) return { success: false, error: "Missing record key." };
-  if (!isPlainObject(patch) || Object.keys(patch).length === 0)
-    return { success: false, error: "Nothing to save." };
+  if (!isPlainObject(patch)) return { success: false, error: "Nothing to save." };
+  const clean = pickEditable(t, patch);
+  if (Object.keys(clean).length === 0) return { success: false, error: "Nothing to save." };
   try {
     const { c, actor } = await adminWrite();
     const { data, error } = await c.rpc("edit_live_record", {
-      p_table: t.table, p_key: key, p_patch: patch, p_actor: actor,
+      p_table: t.table, p_key: key, p_patch: clean, p_actor: actor,
     });
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: friendlyDbError(error, "save") };
     revalidatePath("/admin/data-sync");
     return { success: true, data: { auditId: (data as { audit_id: string }).audit_id } };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Edit failed." };
+  }
+}
+
+// ── audited insert (Add record; undo removes it again) ──────────────────────
+export async function insertRecord(
+  tableId: string,
+  row: Record<string, unknown>,
+): Promise<Result<{ auditId: string; key: string }>> {
+  const t = previewTable(tableId);
+  if (!t) return { success: false, error: `Unknown table "${tableId}".` };
+  if (t.insertable === false)
+    return { success: false, error: `${t.label} are created by their own flows — adding here is disabled.` };
+  if (!isPlainObject(row)) return { success: false, error: "Nothing to add." };
+  const key = String(row[t.keyCol] ?? "").trim();
+  if (!key) return { success: false, error: `${t.keyCol} is required.` };
+  // required-field gate (mirrors NOT NULL columns without defaults)
+  for (const col of t.columns) {
+    if (col.required && (row[col.col] === null || row[col.col] === undefined || row[col.col] === ""))
+      return { success: false, error: `${col.label} is required.` };
+  }
+  // key + registry columns only — nothing else reaches the RPC
+  const allowed = new Set([t.keyCol, ...t.columns.map((c) => c.col)]);
+  const clean = Object.fromEntries(Object.entries(row).filter(([k, v]) => allowed.has(k) && v !== undefined));
+  try {
+    const { c, actor } = await adminWrite();
+    const { data, error } = await c.rpc("insert_live_record", {
+      p_table: t.table, p_row: clean, p_actor: actor,
+    });
+    if (error) return { success: false, error: friendlyDbError(error, "add") };
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { auditId: (data as { audit_id: string }).audit_id, key } };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Add failed." };
   }
 }
 
@@ -543,19 +602,43 @@ export async function bulkEditRecords(
   if (!t) return { success: false, error: `Unknown table "${tableId}".` };
   if (!Array.isArray(keys) || keys.length === 0) return { success: false, error: "Select at least one row." };
   if (keys.length > MAX_BULK) return { success: false, error: `Bulk edits are capped at ${MAX_BULK} rows.` };
-  if (!isPlainObject(patch) || Object.keys(patch).length === 0)
-    return { success: false, error: "Choose a field and value to apply." };
+  if (!isPlainObject(patch)) return { success: false, error: "Choose a field and value to apply." };
+  const clean = pickEditable(t, patch);
+  if (Object.keys(clean).length === 0) return { success: false, error: "Choose a field and value to apply." };
   try {
     const { c, actor } = await adminWrite();
     const { data, error } = await c.rpc("bulk_update_live_records", {
-      p_table: t.table, p_keys: keys, p_patch: patch, p_actor: actor,
+      p_table: t.table, p_keys: keys, p_patch: clean, p_actor: actor,
     });
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: friendlyDbError(error, "apply") };
     revalidatePath("/admin/data-sync");
     const d = data as { updated: number; group_id: string };
     return { success: true, data: { updated: d.updated, groupId: d.group_id } };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Bulk edit failed." };
+  }
+}
+
+// ── delete many selected records as one undoable group ──────────────────────
+export async function bulkDeleteRecords(
+  tableId: string,
+  keys: string[],
+): Promise<Result<{ deleted: number; groupId: string }>> {
+  const t = previewTable(tableId);
+  if (!t) return { success: false, error: `Unknown table "${tableId}".` };
+  if (!Array.isArray(keys) || keys.length === 0) return { success: false, error: "Select at least one row." };
+  if (keys.length > MAX_BULK) return { success: false, error: `Bulk deletes are capped at ${MAX_BULK} rows.` };
+  try {
+    const { c, actor } = await adminWrite();
+    const { data, error } = await c.rpc("bulk_delete_live_records", {
+      p_table: t.table, p_keys: keys, p_actor: actor,
+    });
+    if (error) return { success: false, error: friendlyDbError(error, "delete") };
+    revalidatePath("/admin/data-sync");
+    const d = data as { deleted: number; group_id: string };
+    return { success: true, data: { deleted: d.deleted, groupId: d.group_id } };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Bulk delete failed." };
   }
 }
 
@@ -567,7 +650,7 @@ export async function deleteRecord(tableId: string, key: string): Promise<Result
   try {
     const { c, actor } = await adminWrite();
     const { error } = await c.rpc("delete_live_record", { p_table: t.table, p_key: key, p_actor: actor });
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: friendlyDbError(error, "delete") };
     revalidatePath("/admin/data-sync");
     return { success: true };
   } catch (e) {
@@ -578,7 +661,7 @@ export async function deleteRecord(tableId: string, key: string): Promise<Result
 // ── undo an edit or a whole bulk group ──────────────────────────────────────
 export async function undoEdit(
   ref: { auditId?: string; groupId?: string },
-): Promise<Result<{ restored: number; reinserted: number }>> {
+): Promise<Result<{ restored: number; reinserted: number; removed?: number }>> {
   const { auditId, groupId } = ref;
   if (auditId && !UUID_RE.test(auditId)) return { success: false, error: "Invalid edit id." };
   if (groupId && !UUID_RE.test(groupId)) return { success: false, error: "Invalid group id." };
@@ -588,9 +671,9 @@ export async function undoEdit(
     const { data, error } = await c.rpc("undo_record_edits", {
       p_audit_id: auditId ?? null, p_group_id: groupId ?? null, p_actor: actor,
     });
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: friendlyDbError(error, "undo") };
     revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { restored: number; reinserted: number } };
+    return { success: true, data: data as { restored: number; reinserted: number; removed?: number } };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Undo failed." };
   }
@@ -600,7 +683,7 @@ export interface EditAuditRow {
   id: string;
   table_name: string;
   business_key: string;
-  op: "update" | "delete";
+  op: "insert" | "update" | "delete";
   group_id: string | null;
   edited_at: string;
   undone: boolean;

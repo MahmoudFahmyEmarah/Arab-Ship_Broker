@@ -3,7 +3,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { OrgMemberRequests } from "@/components/admin/OrgMemberRequests";
 import { listPendingRequests } from "./actions";
 
-export const metadata = { title: "Company Members — Admin" };
+export const metadata = { title: "Company Members Admin" };
 
 export default async function AdminOrgMembersPage() {
   await requireAdmin({ section: "orgmembers" });

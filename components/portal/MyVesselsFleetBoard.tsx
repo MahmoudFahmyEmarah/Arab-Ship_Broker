@@ -76,8 +76,8 @@ function toFleetVM(v: VesselView, portCoords?: Record<string, PortGeo>): FleetVM
 export function MyVesselsFleetBoard({
   views,
   portCoords,
-  postHref = "/dashboard/vessels/register",
-  addHref = "/dashboard/vessels/register",
+  postHref = "/dashboard/vessels/post",
+  addHref = "/dashboard/vessels/post",
 }: {
   views: VesselView[];
   source?: "live" | "sample";

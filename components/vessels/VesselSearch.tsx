@@ -231,7 +231,7 @@ export function VesselSearch({ selected, onChange, error }: VesselSearchProps) {
           <p className="text-xs text-asb-gray-400">
             Vessel not found?{" "}
             <Link
-              href="/dashboard/vessels/register"
+              href="/dashboard/vessels/post"
               className="text-asb-blue font-semibold hover:text-asb-blue"
             >
               Register it now
