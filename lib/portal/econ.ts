@@ -131,6 +131,9 @@ export interface VoyageOpts {
   insurance?: number;
   stevedoring?: number;
   podPDAManual?: number;
+  /** Measured ECDIS distances (port_routes) — take precedence over the
+   *  built-in table; null/absent falls back exactly as before. */
+  measured?: { laden?: number | null; ballast?: number | null };
 }
 
 export function calcVoyage(vessel: VesselView, cargo: CargoView, opts: VoyageOpts = {}) {
@@ -141,8 +144,10 @@ export function calcVoyage(vessel: VesselView, cargo: CargoView, opts: VoyageOpt
   const lsmgoPort = f(vessel.fuel.lsmgoPort);
   const qty = num(cargo.qtyMt);
 
-  const ladenNMauto = lookupNM(cargo.route.polCode, cargo.route.podCode);
-  const ballastNMauto = lookupNM(vessel.openPortLocode, cargo.route.polCode);
+  const ladenMeasured = opts.measured?.laden ?? null;
+  const ballastMeasured = opts.measured?.ballast ?? null;
+  const ladenNMauto = ladenMeasured ?? lookupNM(cargo.route.polCode, cargo.route.podCode);
+  const ballastNMauto = ballastMeasured ?? lookupNM(vessel.openPortLocode, cargo.route.polCode);
   const ladenNM = ladenNMauto ?? 1500;
   const ballastNM = ballastNMauto ?? 900;
   const ladenDays = ladenNM / (speedLaden * 24);
@@ -190,8 +195,8 @@ export function calcVoyage(vessel: VesselView, cargo: CargoView, opts: VoyageOpt
   const tce = totalDays > 0 ? (netFreight - grossExpenses) / totalDays : 0;
 
   const legs: VoyageLeg[] = [
-    { name: "Ballast leg", from: vessel.openPort, to: cargo.route.polName, nm: ballastNM, days: ballastDays, vlsfo: ballastVLSFO, lsmgo: 0, nmAuto: ballastNMauto != null, note: ballastNMauto != null ? "Auto from distance table." : "Manual — distance not in Phase-1 table." },
-    { name: "Laden leg", from: cargo.route.polName, to: cargo.route.podName, nm: ladenNM, days: ladenDays, vlsfo: ladenVLSFO, lsmgo: 0, nmAuto: ladenNMauto != null, note: ladenNMauto != null ? "Auto from distance table." : "Manual entry required." },
+    { name: "Ballast leg", from: vessel.openPort, to: cargo.route.polName, nm: ballastNM, days: ballastDays, vlsfo: ballastVLSFO, lsmgo: 0, nmAuto: ballastNMauto != null, note: ballastMeasured != null ? "Measured ECDIS route." : ballastNMauto != null ? "Auto from distance table." : "Manual — distance not in Phase-1 table." },
+    { name: "Laden leg", from: cargo.route.polName, to: cargo.route.podName, nm: ladenNM, days: ladenDays, vlsfo: ladenVLSFO, lsmgo: 0, nmAuto: ladenNMauto != null, note: ladenMeasured != null ? "Measured ECDIS route." : ladenNMauto != null ? "Auto from distance table." : "Manual entry required." },
     { name: "Suez transit", from: suez ? "Port Said" : "—", to: suez ? "Suez" : "—", nm: suezNM, days: suezDays, vlsfo: suezVLSFO, lsmgo: 0, suez, note: suez ? "Cost → see Suez Canal Toll." : "Not required for this route." },
     { name: "Port: Loading", from: cargo.route.polName, to: "—", nm: null, days: loadDays, vlsfo: 0, lsmgo: loadLSMGO, note: "Qty ÷ load rate." },
     { name: "Port: Discharging", from: cargo.route.podName, to: "—", nm: null, days: dischDays, vlsfo: 0, lsmgo: dischLSMGO, note: "Qty ÷ discharge rate." },

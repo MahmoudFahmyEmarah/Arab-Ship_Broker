@@ -23,6 +23,8 @@ import {
   type FuelPrices,
 } from "@/lib/portal/econ";
 import "@/lib/portal/voyage-estimator.css";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { getRouteNm } from "@/sdk/app/routes";
 
 const KAP_SAR_USD = 3.75;
 
@@ -170,11 +172,35 @@ export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initia
   const tier = useViewerTier();
   const [vesselId, setVesselId] = React.useState(initialVesselId || vessels[0]?.id || "");
   const [cargoId, setCargoId] = React.useState(initialCargoId || cargos[0]?.id || "");
-  if (isCalculatorLocked(tier)) return <Locked title="Voyage Cost Estimator" />;
 
   const vessel = vessels.find((v) => v.id === vesselId) ?? null;
   const cargo = cargos.find((c) => c.id === cargoId) ?? null;
-  const calc = vessel && cargo ? calcVoyage(vessel, cargo, { fuel }) : null;
+
+  // Measured ECDIS distances (port_routes) for the selected legs. Keyed to the
+  // exact pair so a stale fetch never applies to a new selection; any missing
+  // pair or failed lookup stays null and calcVoyage falls back to its table.
+  const routeKey = `${cargo?.route?.polCode ?? ""}|${cargo?.route?.podCode ?? ""}|${vessel?.openPortLocode ?? ""}`;
+  const [measured, setMeasured] = React.useState<{ key: string; laden: number | null; ballast: number | null }>({ key: "", laden: null, ballast: null });
+  React.useEffect(() => {
+    const pol = cargo?.route?.polCode, pod = cargo?.route?.podCode, open = vessel?.openPortLocode;
+    const key = routeKey;
+    let cancelled = false;
+    (async () => {
+      await Promise.resolve();
+      if (cancelled || (!pol && !pod)) return;
+      const sb = getSupabaseBrowserClient();
+      const [laden, ballast] = await Promise.all([getRouteNm(sb, pol, pod), getRouteNm(sb, open, pol)]);
+      if (!cancelled) setMeasured({ key, laden, ballast });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeKey]);
+
+  if (isCalculatorLocked(tier)) return <Locked title="Voyage Cost Estimator" />;
+
+  const calc = vessel && cargo
+    ? calcVoyage(vessel, cargo, { fuel, measured: measured.key === routeKey ? measured : undefined })
+    : null;
 
   const headerAside = (
     <div className="ve-head-fuel" title="Prices match the bunker ticker and feed this voyage's bunker cost.">

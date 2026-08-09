@@ -45,9 +45,10 @@ export function TrendChart({ series }: { series: TrendPoint[] }) {
           const pointsAreClose = Math.abs(p[1] - otherY) < 28;
           // Close points can cover each other's labels because the second
           // series is painted on top. Anchor both labels above the upper point
-          // and stack them, keeping both values clear of both markers.
+          // and stack them — the navy "Cargoes posted" value always on top,
+          // the blue "Open positions" value beneath it (owner-specified order).
           const labelY = pointsAreClose
-            ? Math.max(12, Math.min(p[1], otherY) - (key === "positions" ? 24 : 10))
+            ? Math.max(12, Math.min(p[1], otherY) - (key === "cargoes" ? 24 : 10))
             : p[1] - 10;
           return (
             <g key={i}>

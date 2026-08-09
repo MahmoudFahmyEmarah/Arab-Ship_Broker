@@ -18,6 +18,7 @@ import { CARGO_FACETS, VESSEL_FACETS, passesFacets, type Selections } from "@/li
 import { VoyOpexPanel } from "./VoyOpexPanel";
 import { useViewerTier } from "@/lib/portal/tier";
 import { routeGeometry } from "@/lib/portal/routeGeometry";
+import { getPortRoute } from "@/sdk/app/routes";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
 import { ZONE_SHAPES } from "@/lib/portal/zone-shapes";
 import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
@@ -212,6 +213,7 @@ function useMapBase(): ["light" | "dark", (b: "light" | "dark") => void] {
 const G = {
   cargo: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /></svg>,
   vessel: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 L20 19 H4 Z" /></svg>,
+  ship: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="9.5" width="3" height="3" /><rect x="5" y="6" width="1.6" height="3.8" /><path d="M 1.5 14 L 17 14 Q 21 14 22.5 11 L 22.5 16 Q 22 17.5 19 17.5 L 4 17.5 Q 2 17.5 1.5 16 Z" /><path d="M 1.5 19.5 Q 4 18.5 6.5 19.5 T 11.5 19.5 T 16.5 19.5 T 22.5 19.5" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" /></svg>,
   zones: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><polygon points="3,7 9,4 15,7 21,4 21,17 15,20 9,17 3,20" /></svg>,
   sun: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5" /></svg>,
   moon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>,
@@ -341,6 +343,21 @@ export default function MarketMap({
   const clearPairing = React.useCallback(() => { setPairAnchor(null); setPairDone(null); }, []);
   const [cargoOn, setCargoOn] = React.useState(true);
   const [vesselsOn, setVesselsOn] = React.useState(true);
+  // Animated ship on the focused route — persisted map option.
+  const [routeShipOn, setRouteShipOn] = React.useState(true);
+  React.useEffect(() => {
+    let x = false;
+    (async () => {
+      await Promise.resolve();
+      if (!x && localStorage.getItem("asb:routeShip") === "off") setRouteShipOn(false);
+    })();
+    return () => { x = true; };
+  }, []);
+  const toggleRouteShip = () => setRouteShipOn((v) => {
+    try { localStorage.setItem("asb:routeShip", v ? "off" : "on"); } catch { /* private mode */ }
+    return !v;
+  });
+  const shipAnimRef = React.useRef<number | null>(null);
   const [zonesOn, setZonesOn] = React.useState(true);
   const [base, setBase] = useMapBase();
   const [popup, setPopup] = React.useState<Popup | null>(null);
@@ -666,6 +683,7 @@ export default function MarketMap({
     const map = mapRef.current;
     const route = routeRef.current;
     if (!map || !route || !ready) return;
+    if (shipAnimRef.current != null) { cancelAnimationFrame(shipAnimRef.current); shipAnimRef.current = null; }
     route.clearLayers();
     const c = cargos.find((x) => x.id === focusedCargoId);
     if (!c) return;
@@ -673,8 +691,77 @@ export default function MarketMap({
     const pod = coordFor(c.route?.podCode);
     if (!pol || !pod) return;
 
-    // Sea-following route: exact stored geometry (ECDIS) if the pair is in the
-    // table, else a land-avoiding corridor/arc estimate. Never a straight chord.
+    // Draws the track (halo + line + end dots + NM chip) and optionally refits.
+    const draw = (line: [number, number][], exact: boolean, nm: number | null, fit: boolean) => {
+      if (shipAnimRef.current != null) { cancelAnimationFrame(shipAnimRef.current); shipAnimRef.current = null; }
+      route.clearLayers();
+      // 1) soft halo casing for legibility on any basemap
+      L.polyline(line, { color: base === "dark" ? "#0B1B30" : "#FFFFFF", weight: 6, opacity: 0.6, lineJoin: "round", lineCap: "round", interactive: false }).addTo(route);
+      // 2) the sailed track — high-contrast orange so it reads on any water;
+      //    SOLID when exact (ECDIS), DASHED when estimated
+      L.polyline(line, { color: "#F97316", weight: 2.6, opacity: 0.95, lineJoin: "round", lineCap: "round", dashArray: exact ? undefined : "7 6", interactive: false }).addTo(route);
+      // 3) POL (green) / POD (red) end dots
+      L.circleMarker(pol, { radius: 6, color: "#97C459", fill: false, weight: 1.8, interactive: false }).addTo(route);
+      L.circleMarker(pod, { radius: 6, color: "#E24B4A", fill: false, weight: 1.8, interactive: false }).addTo(route);
+      // 4) distance chip at the track midpoint (ECDIS vs est. tag)
+      if (nm != null) {
+        const mid = line[Math.floor(line.length / 2)];
+        L.marker(mid, {
+          interactive: false,
+          zIndexOffset: 100000, // sit flat on top of cargo/vessel + cluster-count markers
+          icon: L.divIcon({
+            className: "route-tag-wrap",
+            html: `<span class="route-tag${exact ? " is-exact" : ""}">${nm.toLocaleString()} NM<i>${exact ? "ECDIS" : "est."}</i></span>`,
+            iconSize: [0, 0],
+          }),
+        }).addTo(route);
+      }
+      // 5) fit the WHOLE curved track (corridors swing wide of the chord)
+      if (fit) map.fitBounds(L.latLngBounds(line), { padding: [70, 70], maxZoom: 7, animate: true });
+      // 6) animated ship tracing the route (map option; off = nothing drawn)
+      if (routeShipOn && line.length >= 2) {
+        const cum: number[] = [0];
+        for (let i = 1; i < line.length; i++) {
+          const k = Math.cos((((line[i - 1][0] + line[i][0]) / 2) * Math.PI) / 180);
+          cum.push(cum[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], (line[i][1] - line[i - 1][1]) * k));
+        }
+        const total = cum[cum.length - 1];
+        if (total > 0) {
+          // the platform's own vessel icon (side view), flipped to face the
+          // direction of travel; wave line in white for contrast on the sea
+          const ship = L.marker(line[0], {
+            interactive: false,
+            zIndexOffset: 99000,
+            icon: L.divIcon({
+              className: "route-ship-wrap",
+              html: `<div class="route-ship"><svg viewBox="0 0 24 24" width="30" height="30"><rect x="4" y="9.5" width="3" height="3" fill="#185FA5"/><rect x="5" y="6" width="1.6" height="3.8" fill="#185FA5"/><path d="M 1.5 14 L 17 14 Q 21 14 22.5 11 L 22.5 16 Q 22 17.5 19 17.5 L 4 17.5 Q 2 17.5 1.5 16 Z" fill="#185FA5" stroke="#FFFFFF" stroke-width="0.9"/><rect x="19" y="13" width="1.6" height="1" fill="#fff" opacity="0.85" rx="0.2"/><path d="M 1.5 19.5 Q 4 18.5 6.5 19.5 T 11.5 19.5 T 16.5 19.5 T 22.5 19.5" stroke="#185FA5" stroke-width="1.1" fill="none" stroke-linecap="round"/></svg></div>`,
+              iconSize: [30, 30],
+              iconAnchor: [15, 15],
+            }),
+          }).addTo(route);
+          // one full transit every ~10–25s, paced by route length
+          const durMs = Math.min(25000, Math.max(10000, total * 500));
+          const t0 = performance.now();
+          const step = (now: number) => {
+            const t = (((now - t0) % durMs) / durMs) * total;
+            let i = 1;
+            while (i < cum.length - 1 && cum[i] < t) i++;
+            const f = (t - cum[i - 1]) / Math.max(cum[i] - cum[i - 1], 1e-9);
+            const [la1, lo1] = line[i - 1], [la2, lo2] = line[i];
+            const la = la1 + (la2 - la1) * f, lo = lo1 + (lo2 - lo1) * f;
+            ship.setLatLng([la, lo]);
+            // the icon's bow faces right (east) — mirror it when sailing west
+            const el = ship.getElement()?.firstElementChild as HTMLElement | null;
+            if (el) el.style.transform = lo2 < lo1 ? "scaleX(-1)" : "";
+            shipAnimRef.current = requestAnimationFrame(step);
+          };
+          shipAnimRef.current = requestAnimationFrame(step);
+        }
+      }
+    };
+
+    // Instant draw: exact bundled geometry if this pair is in the client table,
+    // else a land-avoiding corridor/arc estimate. Never a straight chord.
     const geo =
       routeGeometry({
         polCode: c.route?.polCode,
@@ -684,32 +771,25 @@ export default function MarketMap({
         polZone: c.route?.polZone,
         podZone: c.route?.podZone,
       }) ?? { pts: [pol, pod], nm: null, exact: false, source: "arc" as const };
-    const line = geo.pts.length >= 2 ? geo.pts : [pol, pod];
+    draw(geo.pts.length >= 2 ? (geo.pts as [number, number][]) : [pol, pod], geo.exact, geo.nm, true);
 
-    // 1) soft halo casing for legibility on any basemap
-    L.polyline(line, { color: base === "dark" ? "#0B1B30" : "#FFFFFF", weight: 5.5, opacity: 0.55, lineJoin: "round", lineCap: "round", interactive: false }).addTo(route);
-    // 2) the sailed track — SOLID when exact (ECDIS), DASHED when estimated
-    L.polyline(line, { color: "#185FA5", weight: 2.2, opacity: 0.95, lineJoin: "round", lineCap: "round", dashArray: geo.exact ? undefined : "7 6", interactive: false }).addTo(route);
-    // 3) POL (green) / POD (red) end dots
-    L.circleMarker(pol, { radius: 6, color: "#97C459", fill: false, weight: 1.8, interactive: false }).addTo(route);
-    L.circleMarker(pod, { radius: 6, color: "#E24B4A", fill: false, weight: 1.8, interactive: false }).addTo(route);
-    // 4) distance chip at the track midpoint (ECDIS vs est. tag)
-    if (geo.nm != null) {
-      const mid = line[Math.floor(line.length / 2)];
-      L.marker(mid, {
-        interactive: false,
-        zIndexOffset: 100000, // sit flat on top of cargo/vessel + cluster-count markers
-        icon: L.divIcon({
-          className: "route-tag-wrap",
-          html: `<span class="route-tag${geo.exact ? " is-exact" : ""}">${geo.nm.toLocaleString()} NM<i>${geo.exact ? "ECDIS" : "est."}</i></span>`,
-          iconSize: [0, 0],
-        }),
-      }).addTo(route);
+    // Async upgrade: the measured ECDIS route from the DB (438 pairs and
+    // growing). Any miss or failure leaves the estimated line untouched.
+    let cancelled = false;
+    if (!geo.exact && c.route?.polCode && c.route?.podCode) {
+      (async () => {
+        const measured = await getPortRoute(getSupabaseBrowserClient(), c.route?.polCode, c.route?.podCode);
+        if (cancelled || !measured || measured.waypoints.length < 2) return;
+        const pts = measured.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]);
+        draw(pts, true, Math.round(measured.totalNm), true);
+      })();
     }
-    // 5) fit the WHOLE curved track (corridors swing wide of the chord)
-    map.fitBounds(L.latLngBounds(line as [number, number][]), { padding: [70, 70], maxZoom: 7, animate: true });
+    return () => {
+      cancelled = true;
+      if (shipAnimRef.current != null) { cancelAnimationFrame(shipAnimRef.current); shipAnimRef.current = null; }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedCargoId, ready, base]);
+  }, [focusedCargoId, ready, base, routeShipOn]);
 
   // Focused vessel → flyTo
   React.useEffect(() => {
@@ -772,6 +852,10 @@ export default function MarketMap({
           <div className={`layer-pill ${zonesOn ? "on" : "off"}`} onClick={() => setZonesOn((v) => !v)}>
             <span className="pill-hex" /> Zones
           </div>
+          <div className={`layer-pill ${routeShipOn ? "on" : "off"}`} onClick={toggleRouteShip}
+            title="Animate a ship along the focused cargo's route">
+            <span className="pill-dot" style={{ background: "#F97316" }} /> Ship
+          </div>
         </div>
 
         {popup && point && (
@@ -795,6 +879,9 @@ export default function MarketMap({
         <BarIcon on={zonesOn} onClick={() => setZonesOn((v) => !v)} title="Trading zones">
           {G.zones}
           {zonesOn && <span className="bar-badge bar-badge--zone" />}
+        </BarIcon>
+        <BarIcon on={routeShipOn} onClick={toggleRouteShip} title="Animated ship on the focused route">
+          {G.ship}
         </BarIcon>
         <div className="bar-divider" />
         <BarIcon on={filtersOpen} onClick={() => setFiltersOpen((o) => !o)} title="Filters">
