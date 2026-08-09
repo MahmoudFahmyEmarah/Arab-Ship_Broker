@@ -12,6 +12,11 @@ const BRAND = {
   site: "arabshipbroker.com",
 };
 
+// The logo travels INSIDE the mail as an inline attachment (cid:) — no
+// external hosting, so it renders in every client. Browser previews pass a
+// data: URI instead (cid only resolves inside an email).
+export const DEFAULT_LOGO_SRC = "cid:asb-logo";
+
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -25,7 +30,11 @@ function paragraphs(body: string): string {
     .join("");
 }
 
-export function buildCircularEmail(input: CampaignInput, stampedAt: string): { subject: string; html: string; text: string } {
+export function buildCircularEmail(
+  input: CampaignInput,
+  stampedAt: string,
+  logoSrc: string = DEFAULT_LOGO_SRC,
+): { subject: string; html: string; text: string } {
   const subject = input.subject.trim();
   const badge = input.badge.trim() || "Circulation";
   const year = new Date().getFullYear();
@@ -49,10 +58,13 @@ export function buildCircularEmail(input: CampaignInput, stampedAt: string): { s
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
         <!-- Header -->
-        <tr><td style="background:${BRAND.navy};padding:22px 28px;">
+        <tr><td style="background:${BRAND.navy};padding:18px 28px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.2px;">⚓&nbsp; ${BRAND.name}</td>
-            <td align="right"><span style="display:inline-block;background:rgba(94,234,212,.12);border:1px solid rgba(94,234,212,.4);color:#5eead4;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px;">${esc(badge)}</span></td>
+            <td width="46" style="vertical-align:middle;">
+              <img src="${logoSrc}" width="38" height="38" alt="⚓" style="display:block;background:#ffffff;border-radius:9px;padding:3px;" />
+            </td>
+            <td style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.2px;padding-left:12px;vertical-align:middle;">${BRAND.name}</td>
+            <td align="right" style="vertical-align:middle;"><span style="display:inline-block;background:rgba(94,234,212,.12);border:1px solid rgba(94,234,212,.4);color:#5eead4;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px;">${esc(badge)}</span></td>
           </tr></table>
         </td></tr>
         <!-- Title -->

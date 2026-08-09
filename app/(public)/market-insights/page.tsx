@@ -121,9 +121,11 @@ export default async function MarketInsightsPage({
   const regimeMix = p.regime_mix.map((b) => ({ ...b, label: regimeDisplayLabel(b.label) }));
 
   // Typical size band = the modal band of the week (design snapshot card).
+  // Below the ≥5 privacy floor every bucket folds into "Other" and the average
+  // is withheld — show an honest em-dash instead of a cryptic "n/a".
   const typicalBand =
     [...p.size_bands].filter((b) => b.label !== "Other").sort((a, b) => b.count - a.count)[0]?.label
-    ?? (p.snapshot.avg_cargo_size_mt != null ? `~${nf.format(p.snapshot.avg_cargo_size_mt)}` : "n/a");
+    ?? (p.snapshot.avg_cargo_size_mt != null ? `~${nf.format(p.snapshot.avg_cargo_size_mt)}` : null);
 
   // Editions strip (Pre_Final §11): the current in-progress ISO week shows as a
   // disabled chip so nobody wonders where this week's report is; published
@@ -190,7 +192,8 @@ export default async function MarketInsightsPage({
         <div className="grid grid-cols-4 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-3 mb-5">
           <SnapshotCard icon={IconCargo} label="Cargoes posted" value={nf.format(p.snapshot.cargoes_live)} sub="approved & circulating" />
           <SnapshotCard icon={IconVessel} label="Open positions" value={nf.format(p.snapshot.open_tonnage)} sub="in region" />
-          <SnapshotCard icon={IconSizeBand} label="Typical size band (MT)" value={typicalBand} sub="most common band" />
+          <SnapshotCard icon={IconSizeBand} label="Typical size band (MT)" value={typicalBand ?? "—"}
+            sub={typicalBand ? "most common band" : "shown once 5+ cargoes post in a week"} />
           <SnapshotCard icon={IconLanes} label="Active lanes" value={nf.format(p.snapshot.active_lanes)} sub="zone-to-zone" />
         </div>
 
