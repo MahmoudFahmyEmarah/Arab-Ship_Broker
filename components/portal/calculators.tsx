@@ -180,7 +180,9 @@ export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initia
   // exact pair so a stale fetch never applies to a new selection; any missing
   // pair or failed lookup stays null and calcVoyage falls back to its table.
   const routeKey = `${cargo?.route?.polCode ?? ""}|${cargo?.route?.podCode ?? ""}|${vessel?.openPortLocode ?? ""}`;
-  const [measured, setMeasured] = React.useState<{ key: string; laden: number | null; ballast: number | null }>({ key: "", laden: null, ballast: null });
+  const [measured, setMeasured] = React.useState<{
+    key: string; laden: number | null; ballast: number | null; ladenEcdis: boolean; ballastEcdis: boolean;
+  }>({ key: "", laden: null, ballast: null, ladenEcdis: false, ballastEcdis: false });
   React.useEffect(() => {
     const pol = cargo?.route?.polCode, pod = cargo?.route?.podCode, open = vessel?.openPortLocode;
     const key = routeKey;
@@ -190,7 +192,11 @@ export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initia
       if (cancelled || (!pol && !pod)) return;
       const sb = getSupabaseBrowserClient();
       const [laden, ballast] = await Promise.all([getRouteNm(sb, pol, pod), getRouteNm(sb, open, pol)]);
-      if (!cancelled) setMeasured({ key, laden, ballast });
+      if (!cancelled) setMeasured({
+        key,
+        laden: laden?.nm ?? null, ballast: ballast?.nm ?? null,
+        ladenEcdis: !!laden?.ecdis, ballastEcdis: !!ballast?.ecdis,
+      });
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

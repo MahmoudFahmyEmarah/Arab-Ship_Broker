@@ -750,9 +750,18 @@ export default function MarketMap({
             const [la1, lo1] = line[i - 1], [la2, lo2] = line[i];
             const la = la1 + (la2 - la1) * f, lo = lo1 + (lo2 - lo1) * f;
             ship.setLatLng([la, lo]);
-            // the icon's bow faces right (east) — mirror it when sailing west
+            // Bow leads the track: rotate to the leg's true bearing. The icon's
+            // bow faces east, so eastward headings rotate directly; westward
+            // headings mirror first (scaleX) so the deck stays upright, then
+            // rotate the mirrored bow onto the bearing.
+            const k = Math.cos((la * Math.PI) / 180);
+            let brg = (Math.atan2((lo2 - lo1) * k, la2 - la1) * 180) / Math.PI; // 0=N, clockwise
+            if (brg < 0) brg += 360;
             const el = ship.getElement()?.firstElementChild as HTMLElement | null;
-            if (el) el.style.transform = lo2 < lo1 ? "scaleX(-1)" : "";
+            if (el)
+              el.style.transform = brg <= 180
+                ? `rotate(${(brg - 90).toFixed(1)}deg)`
+                : `scaleX(-1) rotate(${(270 - brg).toFixed(1)}deg)`;
             shipAnimRef.current = requestAnimationFrame(step);
           };
           shipAnimRef.current = requestAnimationFrame(step);
@@ -760,8 +769,10 @@ export default function MarketMap({
       }
     };
 
-    // Instant draw: exact bundled geometry if this pair is in the client table,
-    // else a land-avoiding corridor/arc estimate. Never a straight chord.
+    // Resolve the best route ONCE, then draw ONCE — no estimated line that
+    // gets replaced moments later. Bundled exact geometry draws immediately;
+    // otherwise the stored route is awaited (typically <300ms) and only if
+    // the DB has nothing does the corridor/arc estimate render.
     const geo =
       routeGeometry({
         polCode: c.route?.polCode,
@@ -771,18 +782,28 @@ export default function MarketMap({
         polZone: c.route?.polZone,
         podZone: c.route?.podZone,
       }) ?? { pts: [pol, pod], nm: null, exact: false, source: "arc" as const };
-    draw(geo.pts.length >= 2 ? (geo.pts as [number, number][]) : [pol, pod], geo.exact, geo.nm, true);
+    const estLine = geo.pts.length >= 2 ? (geo.pts as [number, number][]) : [pol, pod];
 
-    // Async upgrade: the measured ECDIS route from the DB (438 pairs and
-    // growing). Any miss or failure leaves the estimated line untouched.
     let cancelled = false;
-    if (!geo.exact && c.route?.polCode && c.route?.podCode) {
+    if (geo.exact) {
+      draw(estLine, true, geo.nm, true);
+    } else if (c.route?.polCode && c.route?.podCode) {
       (async () => {
-        const measured = await getPortRoute(getSupabaseBrowserClient(), c.route?.polCode, c.route?.podCode);
-        if (cancelled || !measured || measured.waypoints.length < 2) return;
-        const pts = measured.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]);
-        draw(pts, true, Math.round(measured.totalNm), true);
+        const stored = await getPortRoute(getSupabaseBrowserClient(), c.route?.polCode, c.route?.podCode);
+        if (cancelled) return;
+        if (stored && stored.waypoints.length >= 2) {
+          // stored geometry — solid "ECDIS" for measured, dashed for computed
+          const pts = stored.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]);
+          draw(pts, stored.source.toUpperCase().startsWith("ECDIS"), Math.round(stored.totalNm), true);
+        } else if (stored) {
+          // distance-only row — corridor geometry with the calibrated distance
+          draw(estLine, false, Math.round(stored.totalNm), true);
+        } else {
+          draw(estLine, false, geo.nm, true);
+        }
       })();
+    } else {
+      draw(estLine, false, geo.nm, true);
     }
     return () => {
       cancelled = true;

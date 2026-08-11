@@ -37,12 +37,13 @@ export async function getPortRoute(
   }
 }
 
-/** Just the distance, for the voyage estimator. */
+/** Distance + pedigree, for the voyage estimator's leg notes. */
 export async function getRouteNm(
   supabase: SupabaseClient,
   a?: string | null,
   b?: string | null,
-): Promise<number | null> {
+): Promise<{ nm: number; ecdis: boolean } | null> {
   const r = await getPortRoute(supabase, a, b);
-  return r?.totalNm ?? null;
+  if (!r) return null;
+  return { nm: r.totalNm, ecdis: r.source.toUpperCase().startsWith("ECDIS") };
 }

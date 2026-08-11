@@ -59,9 +59,42 @@ workbook figure kept, flagged `verified = false`:
 
 Worth a look at the original voyage plans when convenient.
 
+## Computed layer — full coverage (10 Aug 2026)
+
+Every remaining pair now has a distance, computed over the open Eurostat
+MARNET maritime network (EUPL-1.2, bundled with the app) spliced with the
+platform's hand-built strait graph (Bosphorus/Dardanelles, Levant, Red Sea,
+Danube) and with the Corinth Canal blocked (closed to bulkers). Figures are
+calibrated per corridor against the ECDIS ground truth.
+
+**Validation (40 ECDIS routes held out, computed cold):**
+
+| | median | p75 | p90 | max |
+|---|---|---|---|---|
+| calibrated error | **1.4%** | 5.0% | 8.8% | 16.8%* |
+
+*\*the max is Salerno→Mersin, where the computed figure (947 NM) matches the
+route's own ECDIS geometry (946.5 NM) — the workbook's typed 1,139 NM is the
+outlier. Same story strengthens trust in the computed layer.*
+
+**Stored:** 38,065 computed rows (`method = MARNET-COMPUTED`,
+`verified = false`) alongside the 438 ECDIS rows → **38,503 routes = every
+pair of the 278 active ports**. Computed rows never overwrite measured ones
+(insert-ignore on the pair key). Live cargo lanes got simplified geometry
+too; matrix pairs are distance-only.
+
+**Pedigree is always visible:** the estimator's leg note reads *"Measured
+ECDIS route."* vs *"Computed sea route (calibrated)."*; the map draws
+measured routes solid ("ECDIS") and computed ones dashed ("est.").
+
+Re-run after adding ports or new ECDIS exports:
+`node --experimental-strip-types scripts/compute-sea-routes.mjs --validate |
+--fill-lanes | --fill-matrix`.
+
 ## Growing the coverage
 
 Drop new BVS8 exports into `ArabShipBroker MASTER Port Routes/` (any of the
 naming styles) and re-run the importer — new pairs are added, existing ones
-refreshed. The two distance-only pairs and the ~50 unmeasured lanes are the
-natural next exports.
+refreshed; a fresh ECDIS export automatically outranks the computed figure
+for its pair (delete the computed row first or re-import, which replaces
+imported pairs wholesale).
