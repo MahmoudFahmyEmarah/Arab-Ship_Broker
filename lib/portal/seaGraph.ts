@@ -12,7 +12,7 @@
 export type LL = [number, number];
 
 // ── Nodes (lat, lon), all open water / strait approaches ───────────────────
-const N: Record<string, LL> = {
+export const SEA_NODES: Record<string, LL> = {
   // Danube mouth (inland river ports route to the sea via Sulina)
   SULINA: [45.05, 29.95],
   // Black Sea
@@ -57,7 +57,7 @@ const N: Record<string, LL> = {
 };
 
 // ── Edges (water passages) ─────────────────────────────────────────────────
-const E: [string, string][] = [
+export const SEA_EDGES: [string, string][] = [
   // Danube → Black Sea
   ["SULINA", "BS_SULINA"],
   // Black Sea mesh
@@ -103,6 +103,10 @@ const E: [string, string][] = [
   ["ATL_CAS", "ATL_AGADIR"], ["ATL_AGADIR", "WAF_DAKAR"], ["WAF_DAKAR", "WAF_GULF"],
   ["BISCAY", "ENGLISH_CH"], ["ENGLISH_CH", "NSEA"],
 ];
+
+// Internal aliases (tables are exported for the offline route-compute script).
+const N = SEA_NODES;
+const E = SEA_EDGES;
 
 const R = 3440.065; // earth radius in NM
 function nm(a: LL, b: LL): number {
