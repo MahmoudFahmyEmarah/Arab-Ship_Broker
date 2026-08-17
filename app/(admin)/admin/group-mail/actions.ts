@@ -9,8 +9,10 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { cpListLists, cpAddList, cpDeleteList, cpUpdateList, type CpanelAuth } from "@/lib/groupmail/cpanel";
 import { mailmanListMembers, mailmanAddMembers, mailmanRemoveMembers, type MailmanAuth } from "@/lib/groupmail/mailman";
-import { buildCircularEmail } from "@/lib/groupmail/template";
+import { buildCircularEmail, officeStamp } from "@/lib/groupmail/template";
+import { dispatchDue } from "@/lib/groupmail/dispatch";
 import { EMAIL_LOGO_B64 } from "@/lib/groupmail/logo";
+import type { Office } from "@/lib/groupmail/types";
 import { sendToRecipients, verifySmtp, type SmtpAuth } from "@/lib/groupmail/send";
 import type {
   GroupMailConfig, GroupMailSecretStatus, MailingListRow, ListMember,
@@ -311,13 +313,6 @@ export async function replaceListMember(
 
 // ── compose · preview · send ────────────────────────────────────────────────
 
-function stamp(): string {
-  return new Date().toLocaleString("en-GB", {
-    timeZone: "Africa/Cairo", day: "2-digit", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  }) + " (Cairo)";
-}
-
 function validCampaign(input: CampaignInput): string | null {
   if (!input.subject.trim()) return "Subject is required.";
   if (!input.body.trim()) return "Write the body of the mail.";
@@ -351,8 +346,11 @@ export async function previewCircular(input: CampaignInput): Promise<Result<{ ht
   const bad = validCampaign(input);
   if (bad) return { success: false, error: bad };
   try {
-    await adminWrite();
-    const { html, subject } = buildCircularEmail(input, stamp(), PREVIEW_LOGO);
+    const { c } = await adminWrite();
+    const cfg = await readConfig(c);
+    const { html, subject } = buildCircularEmail(
+      input, officeStamp(input.office), PREVIEW_LOGO, cfg.smtp_user ?? undefined,
+    );
     return { success: true, data: { html, subject } };
   } catch (e) {
     return fail(e, "Could not build the preview.");
@@ -367,11 +365,37 @@ export async function previewCircular(input: CampaignInput): Promise<Result<{ ht
  */
 export async function startCircular(
   input: CampaignInput, mode: "test" | "broadcast", testRecipients?: string[],
-): Promise<Result<{ campaignId: string; recipients: string[] }>> {
+  schedule?: { at: string; tz: string },
+): Promise<Result<{ campaignId: string; recipients: string[]; scheduled: boolean }>> {
   const bad = validCampaign(input);
   if (bad) return { success: false, error: bad };
   try {
     const { c, actor } = await adminWrite();
+
+    // Scheduled: store everything and let the dispatcher resolve members and
+    // send when the time comes — membership is read at SEND time, not now.
+    if (schedule) {
+      const at = new Date(schedule.at);
+      if (Number.isNaN(at.getTime())) return { success: false, error: "Invalid schedule time." };
+      if (at.getTime() < Date.now() - 60_000) return { success: false, error: "The scheduled time is in the past." };
+      if (at.getTime() > Date.now() + 90 * 86_400_000) return { success: false, error: "Schedule at most 90 days ahead." };
+      await smtpAuth(c); // fail fast if SMTP is not configured
+      if (mode === "broadcast") await mailmanAuth(c, input.list_email); // list password must exist
+      const { data, error } = await c
+        .from("groupmail_campaign")
+        .insert({
+          list_email: input.list_email, mode, subject: input.subject.trim(),
+          title: input.title.trim() || null, body: input.body, links: input.links.filter((l) => l.label && l.url),
+          badge: input.badge.trim() || "Circulation", stamp_office: input.office,
+          status: "scheduled", scheduled_at: at.toISOString(), schedule_tz: schedule.tz,
+          recipients_total: 0, sent_by: actor,
+        })
+        .select("id")
+        .single();
+      if (error) return { success: false, error: error.message };
+      return { success: true, data: { campaignId: (data as { id: string }).id, recipients: [], scheduled: true } };
+    }
+
     let recipients: string[];
     if (mode === "test") {
       recipients = (testRecipients ?? []).map((s) => s.trim().toLowerCase()).filter((s) => EMAIL_RE.test(s));
@@ -388,15 +412,44 @@ export async function startCircular(
       .insert({
         list_email: input.list_email, mode, subject: input.subject.trim(),
         title: input.title.trim() || null, body: input.body, links: input.links.filter((l) => l.label && l.url),
-        badge: input.badge.trim() || "Circulation",
+        badge: input.badge.trim() || "Circulation", stamp_office: input.office,
         recipients_total: recipients.length, sent_by: actor,
       })
       .select("id")
       .single();
     if (error) return { success: false, error: error.message };
-    return { success: true, data: { campaignId: (data as { id: string }).id, recipients } };
+    return { success: true, data: { campaignId: (data as { id: string }).id, recipients, scheduled: false } };
   } catch (e) {
     return fail(e, "Could not start the send.");
+  }
+}
+
+/** Cancel a circular that is still waiting for its scheduled time. */
+export async function cancelScheduledCircular(campaignId: string): Promise<Result> {
+  try {
+    const { c } = await adminWrite();
+    const { data, error } = await c
+      .from("groupmail_campaign")
+      .update({ status: "canceled", finished_at: new Date().toISOString() })
+      .eq("id", campaignId)
+      .eq("status", "scheduled")
+      .select("id");
+    if (error) return { success: false, error: error.message };
+    if (!data?.length) return { success: false, error: "This circular is no longer scheduled (already sending or finished)." };
+    return { success: true };
+  } catch (e) {
+    return fail(e, "Could not cancel.");
+  }
+}
+
+/** Manual dispatcher tick — same code path pg_cron drives in production. */
+export async function runDispatcherNow(): Promise<Result<{ note: string; sent: number; failed: number }>> {
+  try {
+    const { c } = await adminWrite();
+    const r = await dispatchDue(c);
+    return { success: true, data: { note: r.note, sent: r.sent, failed: r.failed } };
+  } catch (e) {
+    return fail(e, "Dispatcher run failed.");
   }
 }
 
@@ -409,24 +462,28 @@ export async function sendCircularBatch(
     const { c } = await adminWrite();
     const { data: camp, error: cErr } = await c
       .from("groupmail_campaign")
-      .select("id, list_email, subject, title, body, links, badge, sent_ok, sent_fail, failures, status")
+      .select("id, list_email, subject, title, body, links, badge, stamp_office, sent_ok, sent_fail, failures, status")
       .eq("id", campaignId)
       .single();
     if (cErr || !camp) return { success: false, error: "Campaign not found." };
     const row = camp as {
       list_email: string; subject: string; title: string | null; body: string;
-      links: { label: string; url: string }[] | null; badge: string | null;
+      links: { label: string; url: string }[] | null; badge: string | null; stamp_office: string | null;
       sent_ok: number; sent_fail: number; failures: { email: string; error?: string }[] | null; status: string;
     };
     if (row.status !== "sending") return { success: false, error: "This campaign is already finished." };
+    const office = (row.stamp_office as Office) ?? "Cairo";
+    const cfg = await readConfig(c);
     const mail = buildCircularEmail(
       {
         list_email: row.list_email, subject: row.subject, title: row.title ?? "",
-        body: row.body, links: row.links ?? [], badge: row.badge ?? "Circulation",
+        body: row.body, links: row.links ?? [], badge: row.badge ?? "Circulation", office,
       },
-      stamp(),
+      officeStamp(office),
+      undefined,
+      cfg.smtp_user ?? undefined,
     );
-    const results = await sendToRecipients(await smtpAuth(c), emails, mail);
+    const results = await sendToRecipients(await smtpAuth(c), emails, { ...mail, replyTo: cfg.smtp_user ?? undefined });
     const ok = results.filter((r) => r.ok).length;
     const failures = results.filter((r) => !r.ok).map((r) => ({ email: r.email, error: r.error }));
     await c.from("groupmail_campaign").update({
@@ -447,7 +504,7 @@ export async function finishCircular(campaignId: string): Promise<Result<Campaig
       .from("groupmail_campaign")
       .update({ status: "done", finished_at: new Date().toISOString() })
       .eq("id", campaignId)
-      .select("id, list_email, mode, subject, recipients_total, sent_ok, sent_fail, status, created_at, finished_at")
+      .select("id, list_email, mode, subject, recipients_total, sent_ok, sent_fail, status, created_at, finished_at, scheduled_at, schedule_tz, stamp_office")
       .single();
     if (error) return { success: false, error: error.message };
     return { success: true, data: data as CampaignRow };
@@ -467,7 +524,7 @@ export async function getCircularDetail(campaignId: string): Promise<Result<{
     const { c } = await adminWrite();
     const { data, error } = await c
       .from("groupmail_campaign")
-      .select("id, list_email, mode, subject, title, body, links, badge, recipients_total, sent_ok, sent_fail, failures, status, created_at, finished_at")
+      .select("id, list_email, mode, subject, title, body, links, badge, stamp_office, recipients_total, sent_ok, sent_fail, failures, status, created_at, finished_at, scheduled_at, schedule_tz")
       .eq("id", campaignId)
       .single();
     if (error || !data) return { success: false, error: "Circular not found." };
@@ -475,17 +532,18 @@ export async function getCircularDetail(campaignId: string): Promise<Result<{
       title: string | null; body: string; links: { label: string; url: string }[] | null;
       badge: string | null; failures: { email: string; error?: string }[] | null;
     };
-    const sentAt = new Date(row.created_at).toLocaleString("en-GB", {
-      timeZone: "Africa/Cairo", day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    }) + " (Cairo)";
+    const office = (row.stamp_office as Office) ?? "Cairo";
+    // stamp with the send moment (scheduled sends stamp when they fire)
+    const when = new Date(row.finished_at ?? row.scheduled_at ?? row.created_at);
+    const cfg = await readConfig(c);
     const { html } = buildCircularEmail(
       {
         list_email: row.list_email, subject: row.subject, title: row.title ?? "",
-        body: row.body, links: row.links ?? [], badge: row.badge ?? "Circulation",
+        body: row.body, links: row.links ?? [], badge: row.badge ?? "Circulation", office,
       },
-      sentAt,
+      officeStamp(office, when),
       PREVIEW_LOGO,
+      cfg.smtp_user ?? undefined,
     );
     return { success: true, data: { row, html, body: row.body, failures: row.failures ?? [] } };
   } catch (e) {
@@ -498,7 +556,7 @@ export async function listCircularHistory(limit = 20): Promise<Result<CampaignRo
     const { c } = await adminWrite();
     const { data, error } = await c
       .from("groupmail_campaign")
-      .select("id, list_email, mode, subject, recipients_total, sent_ok, sent_fail, status, created_at, finished_at")
+      .select("id, list_email, mode, subject, recipients_total, sent_ok, sent_fail, status, created_at, finished_at, scheduled_at, schedule_tz, stamp_office")
       .order("created_at", { ascending: false })
       .limit(Math.min(Math.max(limit, 1), 50));
     if (error) return { success: false, error: error.message };

@@ -3,7 +3,16 @@
 // anchor mark, badge pill, title block, body card, link buttons, footer.
 // Table-based with inline styles + plain-text fallback for deliverability.
 
-import type { CampaignInput } from "./types";
+import { OFFICES, type CampaignInput, type Office } from "./types";
+
+/** "15 Aug 2026, 14:55 (Dubai)" — send-time stamp in the signature office's zone. */
+export function officeStamp(office: Office, when: Date = new Date()): string {
+  const tz = OFFICES[office] ?? OFFICES.Cairo;
+  return when.toLocaleString("en-GB", {
+    timeZone: tz, day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  }) + ` (${office})`;
+}
 
 const BRAND = {
   name: "Arab ShipBroker",
@@ -34,6 +43,7 @@ export function buildCircularEmail(
   input: CampaignInput,
   stampedAt: string,
   logoSrc: string = DEFAULT_LOGO_SRC,
+  replyTo: string = "circ@arabshipbroker.com",
 ): { subject: string; html: string; text: string } {
   const subject = input.subject.trim();
   const badge = input.badge.trim() || "Circulation";
@@ -79,10 +89,36 @@ export function buildCircularEmail(
         </td></tr>
         ${links.length ? `<!-- Links -->
         <tr><td style="padding:20px 28px 14px;">${linkButtons}</td></tr>` : ""}
+        <!-- Signature -->
+        <tr><td style="padding:${links.length ? "8px" : "22px"} 28px 24px;">
+          <div style="font-size:14px;line-height:1.75;color:#0f172a;">
+            Sincerest Regards,<br>
+            <span style="font-weight:700;color:${BRAND.navy};">As Brokers Only</span><br>
+            <a href="mailto:${esc(replyTo)}" style="color:${BRAND.accent};text-decoration:none;">${esc(replyTo)}</a><br>
+            <a href="https://www.${BRAND.site}" style="color:${BRAND.accent};text-decoration:none;">www.${BRAND.site}</a>
+          </div>
+        </td></tr>
         <!-- Footer -->
-        <tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 28px;font-size:12px;color:#94a3b8;line-height:1.6;">
-          You are receiving this circular as a member of ${esc(input.list_email)}.
-          Reply to this email to reach the ${BRAND.name} desk.
+        <tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 28px;">
+          <div style="font-size:12px;color:#475569;line-height:1.65;">
+            <strong style="color:${BRAND.navy};">${BRAND.name}</strong>
+            <span style="color:#94a3b8;">(Brand under legal establishment)</span><br>
+            Represented by Mohamed Dawoud (Founder)<br>
+            Office: Regus Business Centre, W51 Plot 242/243, 5th Settlement, New Cairo, Egypt<br>
+            <span style="color:#94a3b8;">(Company registration in progress)</span>
+          </div>
+          <div style="font-size:12px;color:#94a3b8;line-height:1.6;margin-top:10px;">
+            You are receiving this circular as a member of ${esc(input.list_email)}.
+            For replies and inquiries, please write to
+            <a href="mailto:${esc(replyTo)}" style="color:${BRAND.accent};text-decoration:none;font-weight:600;">${esc(replyTo)}</a>.
+          </div>
+          <div style="font-size:10.5px;color:#a3aebc;line-height:1.55;margin-top:12px;border-top:1px solid #e9eef4;padding-top:10px;">
+            This email (including attachments) is confidential, privileged, and intended solely for the
+            named recipient(s). If you are not the intended recipient, you are hereby notified that any
+            use, dissemination, distribution, copying, or retention of this communication is strictly
+            prohibited and may be unlawful. Please notify the sender immediately and permanently delete
+            all copies.
+          </div>
         </td></tr>
       </table>
       <div style="font-size:11px;color:#94a3b8;margin-top:16px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">&copy; ${year} ${BRAND.name} &middot; MENA maritime brokerage &middot; ${BRAND.site}</div>
@@ -99,7 +135,20 @@ export function buildCircularEmail(
     "",
     ...links.map((l) => `${l.label}: ${l.url}`),
     "",
+    "Sincerest Regards,",
+    "As Brokers Only",
+    replyTo,
+    `www.${BRAND.site}`,
+    "",
+    `${BRAND.name} (Brand under legal establishment)`,
+    "Represented by Mohamed Dawoud (Founder)",
+    "Office: Regus Business Centre, W51 Plot 242/243, 5th Settlement, New Cairo, Egypt",
+    "(Company registration in progress)",
+    "",
     `You are receiving this circular as a member of ${input.list_email}.`,
+    `For replies and inquiries, please write to ${replyTo}.`,
+    "",
+    "This email (including attachments) is confidential, privileged, and intended solely for the named recipient(s). If you are not the intended recipient, you are hereby notified that any use, dissemination, distribution, copying, or retention of this communication is strictly prohibited and may be unlawful. Please notify the sender immediately and permanently delete all copies.",
     `© ${year} ${BRAND.name} · ${BRAND.site}`,
   ].join("\n");
 
