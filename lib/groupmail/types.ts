@@ -36,6 +36,37 @@ export interface CampaignLink {
   url: string;
 }
 
+/** The two signature offices — the header date line renders in this zone. */
+export const OFFICES = {
+  Cairo: "Africa/Cairo",
+  Dubai: "Asia/Dubai",
+} as const;
+export type Office = keyof typeof OFFICES;
+
+/** Schedule-time zones — the region's main capitals (label → IANA zone).
+ *  Scheduling stores the resolved UTC instant; the label is display-only. */
+export const SCHEDULE_ZONES: Record<string, string> = {
+  Cairo: "Africa/Cairo",
+  Dubai: "Asia/Dubai",
+  Riyadh: "Asia/Riyadh",
+  Jeddah: "Asia/Riyadh",
+  Doha: "Asia/Qatar",
+  Kuwait: "Asia/Kuwait",
+  Muscat: "Asia/Muscat",
+  Baghdad: "Asia/Baghdad",
+  Amman: "Asia/Amman",
+  Beirut: "Asia/Beirut",
+  Istanbul: "Europe/Istanbul",
+  Athens: "Europe/Athens",
+  Tripoli: "Africa/Tripoli",
+  Tunis: "Africa/Tunis",
+  Algiers: "Africa/Algiers",
+  Casablanca: "Africa/Casablanca",
+  London: "Europe/London",
+  Mumbai: "Asia/Kolkata",
+  Singapore: "Asia/Singapore",
+};
+
 export interface CampaignInput {
   list_email: string;
   badge: string;       // header pill, e.g. "Circulation"
@@ -43,6 +74,7 @@ export interface CampaignInput {
   title: string;       // headline inside the mail
   body: string;        // plain text; blank line = new paragraph
   links: CampaignLink[];
+  office: Office;      // signature office for the date line
 }
 
 export interface CampaignRow {
@@ -53,7 +85,10 @@ export interface CampaignRow {
   recipients_total: number;
   sent_ok: number;
   sent_fail: number;
-  status: "sending" | "done" | "failed";
+  status: "scheduled" | "sending" | "done" | "failed" | "canceled";
   created_at: string;
   finished_at: string | null;
+  scheduled_at: string | null;
+  schedule_tz: string | null;
+  stamp_office: string | null;
 }

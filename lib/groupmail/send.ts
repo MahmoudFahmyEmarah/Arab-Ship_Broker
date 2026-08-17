@@ -40,7 +40,7 @@ export interface SendResult {
 export async function sendToRecipients(
   a: SmtpAuth,
   recipients: string[],
-  mail: { subject: string; html: string; text: string },
+  mail: { subject: string; html: string; text: string; replyTo?: string },
 ): Promise<SendResult[]> {
   const transport = makeTransport(a);
   const results: SendResult[] = [];
@@ -49,6 +49,7 @@ export async function sendToRecipients(
       await transport.sendMail({
         from: { name: a.fromName, address: a.user },
         to: email,
+        replyTo: mail.replyTo ?? a.user,
         subject: mail.subject,
         html: mail.html,
         text: mail.text,

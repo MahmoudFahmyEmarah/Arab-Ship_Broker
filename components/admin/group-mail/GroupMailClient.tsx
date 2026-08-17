@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Loader2, Mail, Plus, Trash2, Check, X, Users, Settings2, Send, Eye,
-  RefreshCw, Pencil, KeyRound, History as HistoryIcon, ShieldCheck, Wand2, SpellCheck,
+  RefreshCw, Pencil, KeyRound, History as HistoryIcon, ShieldCheck, Wand2, SpellCheck, Clock,
 } from "lucide-react";
 import {
   getGroupMailState, saveGroupMailConfig, saveGroupMailSecret,
@@ -17,11 +17,48 @@ import {
   listMailingLists, createMailingList, deleteMailingList, updateMailingList, saveListPassword,
   getListMembers, addListMembers, removeListMembers, replaceListMember,
   previewCircular, startCircular, sendCircularBatch, finishCircular, listCircularHistory,
-  reviewCircularBody, getCircularDetail,
+  reviewCircularBody, getCircularDetail, cancelScheduledCircular, runDispatcherNow,
 } from "@/app/(admin)/admin/group-mail/actions";
 import type {
   GroupMailConfig, GroupMailSecretStatus, MailingListRow, ListMember, CampaignInput, CampaignRow, CampaignLink,
 } from "@/lib/groupmail/types";
+import { OFFICES, SCHEDULE_ZONES, type Office } from "@/lib/groupmail/types";
+
+// "Riyadh (UTC+3)" — live offset per zone, computed once at module load (a
+// render-time Date would trip the purity lint; offsets only shift overnight).
+function utcOffsetLabel(tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
+      .formatToParts(new Date());
+    return (parts.find((p) => p.type === "timeZoneName")?.value ?? "").replace("GMT", "UTC") || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+const SCHED_ZONE_OPTS = Object.entries(SCHEDULE_ZONES).map(([label, tz]) => ({
+  label, tz, off: utcOffsetLabel(tz),
+}));
+
+// Wall-clock time in a timezone → UTC instant. Two-pass offset resolution
+// handles DST correctly for the practical range we schedule in.
+function wallTimeToUtc(dateStr: string, timeStr: string, tz: string): Date | null {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const [h, mi] = timeStr.split(":").map(Number);
+  if (![y, mo, d, h, mi].every(Number.isFinite)) return null;
+  const wallAsUtc = Date.UTC(y, mo - 1, d, h, mi);
+  const tzOffsetAt = (utcMs: number) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    }).formatToParts(new Date(utcMs));
+    const g = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const asUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"), g("second"));
+    return asUtc - utcMs; // how far local wall time sits ahead of UTC
+  };
+  let utc = wallAsUtc - tzOffsetAt(wallAsUtc);
+  utc = wallAsUtc - tzOffsetAt(utc); // second pass fixes DST-boundary guesses
+  return new Date(utc);
+}
 import { C, btn } from "../data-sync/ui";
 
 const BATCH = 10;
@@ -110,6 +147,7 @@ export function GroupMailClient() {
         .gm-scroll{overflow-x:auto}
         .gm-scroll table{min-width:560px}
         .gm-preview{height:720px}
+        .gm-detail-frame{height:620px}
         .gm-cards{display:none}
         @media (max-width: 760px){
           .gm-tabs{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
@@ -117,6 +155,7 @@ export function GroupMailClient() {
           .gm-grid2,.gm-grid21{grid-template-columns:1fr}
           .gm-pane{min-width:0 !important;flex-basis:100% !important}
           .gm-preview{height:480px}
+          .gm-detail-frame{height:62vh}
           .gm-card{padding:14px !important}
           .gm-toolbar{flex-wrap:wrap}
           .gm-toolbar-desc{flex:1 1 100%}
@@ -495,9 +534,13 @@ function MembersDrawer({ list, hasPassword, onClose, onSecretsChanged }: {
 // ── Compose ─────────────────────────────────────────────────────────────────
 function ComposeView({ lists, config }: { lists: MailingListRow[]; config: GroupMailConfig | null }) {
   const [input, setInput] = useState<CampaignInput>({
-    list_email: "", badge: "Circulation", subject: "", title: "", body: "", links: [],
+    list_email: "", badge: "Circulation", subject: "", title: "", body: "", links: [], office: "Cairo",
   });
   const [testTo, setTestTo] = useState("");
+  const [scheduleOn, setScheduleOn] = useState(false);
+  const [schedDate, setSchedDate] = useState("");
+  const [schedTime, setSchedTime] = useState("09:00");
+  const [schedZone, setSchedZone] = useState("Cairo");
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ total: number; done: number; ok: number; fail: number } | null>(null);
@@ -539,6 +582,19 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
   };
 
   const runSend = async (mode: "test" | "broadcast") => {
+    // Scheduled path: store the circular; the dispatcher sends it at the time.
+    if (scheduleOn) {
+      const at = schedDate ? wallTimeToUtc(schedDate, schedTime, SCHEDULE_ZONES[schedZone] ?? "Africa/Cairo") : null;
+      if (!at) { toast.error("Pick a schedule date and time."); return; }
+      if (at.getTime() < Date.now()) { toast.error(`${schedTime} ${schedZone} time on ${schedDate} is already in the past.`); return; }
+      if (mode === "broadcast" && !confirm(`Schedule "${input.subject}" to broadcast to every member of ${input.list_email} at ${schedTime} on ${schedDate} (${schedZone} time)?`)) return;
+      setBusy(mode);
+      const r = await startCircular(input, mode, undefined, { at: at.toISOString(), tz: schedZone });
+      setBusy(null);
+      if (!r.success) { toast.error(r.error); return; }
+      toast.success(`Scheduled — sends ${schedDate} at ${schedTime} (${schedZone} time)${mode === "test" ? " to the saved test addresses" : ""}. Manage it from History.`);
+      return;
+    }
     if (mode === "broadcast" && !confirm(`Broadcast "${input.subject}" to every member of ${input.list_email}?\n\nEach member receives an individual branded email.`)) return;
     setBusy(mode);
     const start = await startCircular(input, mode, mode === "test" ? testTo.split(/,|;|\n/) : undefined);
@@ -578,6 +634,16 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
             <input value={input.subject} onChange={(e) => patch({ subject: e.target.value })} style={INPUT} placeholder="Weekly cargo circular — 01 Aug" />
           </Field>
         </div>
+        <Field label="Signature office — the mail's date line shows this office's local time">
+          <div style={{ display: "flex", gap: 8 }}>
+            {(Object.keys(OFFICES) as Office[]).map((o) => (
+              <button key={o} onClick={() => patch({ office: o })}
+                style={{ ...btn(input.office === o ? "dark" : "ghost"), flex: 1, justifyContent: "center" }}>
+                {o}
+              </button>
+            ))}
+          </div>
+        </Field>
         <Field label="Title (headline inside the mail — defaults to the subject)">
           <input value={input.title} onChange={(e) => patch({ title: e.target.value })} style={INPUT} />
         </Field>
@@ -630,15 +696,43 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
           <Field label="Test addresses (comma-separated)">
             <input value={testTo} onChange={(e) => setTestTo(e.target.value)} style={INPUT} placeholder="cap.mdawod@hotmail.com" />
           </Field>
+
+          {/* schedule instead of sending now — prepare at 2 AM, send at 09:00 */}
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: C.ink2, cursor: "pointer", marginBottom: 12, userSelect: "none" }}>
+            <input type="checkbox" checked={scheduleOn} onChange={(e) => setScheduleOn(e.target.checked)} />
+            Schedule for later — send during working hours
+          </label>
+          {scheduleOn && (
+            <div className="gm-grid2" style={{ marginBottom: 14 }}>
+              <Field label="Send date">
+                <input type="date" value={schedDate} onChange={(e) => setSchedDate(e.target.value)} style={INPUT} />
+              </Field>
+              <Field label={`Send time (${schedZone} local time)`}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input type="time" value={schedTime} onChange={(e) => setSchedTime(e.target.value)} style={INPUT} />
+                  <select value={schedZone} onChange={(e) => setSchedZone(e.target.value)} style={{ ...INPUT, width: 170 }}>
+                    {SCHED_ZONE_OPTS.map((z) => <option key={z.label} value={z.label}>{z.label} ({z.off})</option>)}
+                  </select>
+                </div>
+              </Field>
+            </div>
+          )}
+          {scheduleOn && (
+            <div style={{ fontSize: 12, color: C.ink3, marginBottom: 12 }}>
+              Scheduled test sends go to the <strong>saved</strong> test addresses in Settings; membership for a
+              scheduled broadcast is read at send time. The scheduler fires within 10 minutes of the chosen time.
+            </div>
+          )}
+
           <div className="gm-actions" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button onClick={doPreview} disabled={!!busy} style={btn("ghost")}>
               {busy === "preview" ? <Loader2 size={14} style={spin} /> : <Eye size={14} />} Preview
             </button>
             <button onClick={() => runSend("test")} disabled={!!busy} style={btn("dark")}>
-              {busy === "test" ? <Loader2 size={14} style={spin} /> : <Send size={14} />} Send test
+              {busy === "test" ? <Loader2 size={14} style={spin} /> : scheduleOn ? <Clock size={14} /> : <Send size={14} />} {scheduleOn ? "Schedule test" : "Send test"}
             </button>
-            <button onClick={() => runSend("broadcast")} disabled={!!busy} style={{ ...btn("primary"), marginLeft: "auto" }}>
-              {busy === "broadcast" ? <Loader2 size={14} style={spin} /> : <Mail size={14} />} Broadcast to list
+            <button onClick={() => runSend("broadcast")} disabled={!!busy} style={btn("primary")}>
+              {busy === "broadcast" ? <Loader2 size={14} style={spin} /> : scheduleOn ? <Clock size={14} /> : <Mail size={14} />} {scheduleOn ? "Schedule broadcast" : "Broadcast to list"}
             </button>
           </div>
           {progress && (
@@ -674,25 +768,78 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
 function HistoryView() {
   const [rows, setRows] = useState<CampaignRow[] | null>(null);
   const [detail, setDetail] = useState<CampaignRow | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    const r = await listCircularHistory(30);
+    setRows(r.success ? r.data : []);
+    if (!r.success) toast.error(r.error);
+  }, []);
   useEffect(() => {
     let x = false;
-    (async () => {
-      await Promise.resolve();
-      if (x) return;
-      const r = await listCircularHistory(30);
-      if (!x) setRows(r.success ? r.data : []);
-      if (!r.success) toast.error(r.error);
-    })();
+    (async () => { await Promise.resolve(); if (!x) await load(); })();
     return () => { x = true; };
-  }, []);
+  }, [load]);
+
+  const doCancel = async (r: CampaignRow) => {
+    if (!confirm(`Cancel the scheduled circular "${r.subject}"?`)) return;
+    setBusy(r.id);
+    const res = await cancelScheduledCircular(r.id);
+    setBusy(null);
+    if (!res.success) { toast.error(res.error); return; }
+    toast.success("Canceled.");
+    await load();
+  };
+  const doRunNow = async () => {
+    setBusy("run");
+    const res = await runDispatcherNow();
+    setBusy(null);
+    if (!res.success) { toast.error(res.error); return; }
+    toast.success(`Scheduler tick: ${res.data.note}${res.data.sent ? ` · ${res.data.sent} sent` : ""}${res.data.failed ? ` · ${res.data.failed} failed` : ""}`);
+    await load();
+  };
+  const hasDue = (rows ?? []).some(
+    (r) => r.status === "scheduled" || (r.status === "sending" && r.scheduled_at != null),
+  );
+
+  const scheduleLine = (r: CampaignRow) =>
+    r.scheduled_at
+      ? `${new Date(r.scheduled_at).toLocaleString()}${r.schedule_tz ? ` · set for ${r.schedule_tz} time` : ""}`
+      : null;
   const modeChip = (mode: "test" | "broadcast") => (
     <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", padding: "2px 7px", borderRadius: 3,
       color: mode === "broadcast" ? C.brassDeep : C.ink2, background: mode === "broadcast" ? C.brassBg : C.sunken }}>
       {mode.toUpperCase()}
     </span>
   );
+  const resultCell = (r: CampaignRow) =>
+    r.status === "scheduled" ? (
+      <span style={{ color: C.amber, display: "inline-flex", alignItems: "center", gap: 4 }}><Clock size={12} /> {scheduleLine(r)}</span>
+    ) : r.status === "canceled" ? (
+      <span style={{ color: C.ink3 }}>canceled</span>
+    ) : (
+      <>
+        <span style={{ color: C.green }}>{r.sent_ok} ok</span>
+        {r.sent_fail > 0 && <span style={{ color: C.red }}> · {r.sent_fail} failed</span>}
+        {r.status === "sending" && <span style={{ color: C.amber }}> · in progress</span>}
+      </>
+    );
+
   return (
     <>
+    {/* toolbar: refresh + manual scheduler tick (same path pg_cron drives) */}
+    <div className="gm-toolbar" style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+      <span className="gm-toolbar-desc" style={{ fontSize: 12.5, color: C.ink3 }}>
+        Scheduled circulars send automatically within 10 minutes of their time.
+      </span>
+      <button onClick={load} style={{ ...btn("ghost"), marginLeft: "auto", padding: "6px 11px" }}>
+        <RefreshCw size={13} /> Refresh
+      </button>
+      {hasDue && (
+        <button onClick={doRunNow} disabled={busy === "run"} style={{ ...btn("primary"), padding: "6px 12px" }}>
+          {busy === "run" ? <Loader2 size={13} style={spin} /> : <Send size={13} />} Send due now
+        </button>
+      )}
+    </div>
     {/* phone: one card per circular, tap to view */}
     <div className="gm-cards">
       {rows === null ? (
@@ -700,21 +847,25 @@ function HistoryView() {
       ) : rows.length === 0 ? (
         <div style={{ padding: "30px 16px", textAlign: "center", color: C.ink3, fontSize: 14, border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>No circulars sent yet.</div>
       ) : rows.map((r) => (
-        <button key={r.id} onClick={() => setDetail(r)}
-          style={{ textAlign: "left", font: "inherit", cursor: "pointer", border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff", padding: "12px 14px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {modeChip(r.mode)}
-            <span style={{ fontSize: 12, color: C.ink3 }}>{new Date(r.created_at).toLocaleString()}</span>
-            <Eye size={14} color={C.ink3} style={{ marginLeft: "auto" }} />
-          </div>
-          <div style={{ fontWeight: 600, color: C.navy, fontSize: 13.5, margin: "6px 0 4px" }}>{r.subject}</div>
-          <div style={{ fontSize: 12, color: C.ink2 }}>
-            <span style={{ fontFamily: C.mono }}>{r.list_email}</span> · {r.recipients_total} recipient{r.recipients_total === 1 ? "" : "s"} ·{" "}
-            <span style={{ color: C.green }}>{r.sent_ok} ok</span>
-            {r.sent_fail > 0 && <span style={{ color: C.red }}> · {r.sent_fail} failed</span>}
-            {r.status === "sending" && <span style={{ color: C.amber }}> · in progress</span>}
-          </div>
-        </button>
+        <div key={r.id} style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff", padding: "12px 14px" }}>
+          <button onClick={() => setDetail(r)} style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {modeChip(r.mode)}
+              <span style={{ fontSize: 12, color: C.ink3 }}>{new Date(r.created_at).toLocaleString()}</span>
+              <Eye size={14} color={C.ink3} style={{ marginLeft: "auto" }} />
+            </div>
+            <div style={{ fontWeight: 600, color: C.navy, fontSize: 13.5, margin: "6px 0 4px" }}>{r.subject}</div>
+            <div style={{ fontSize: 12, color: C.ink2 }}>
+              <span style={{ fontFamily: C.mono }}>{r.list_email}</span>
+              {r.status !== "scheduled" && r.status !== "canceled" && <> · {r.recipients_total} recipient{r.recipients_total === 1 ? "" : "s"}</>} · {resultCell(r)}
+            </div>
+          </button>
+          {r.status === "scheduled" && (
+            <button onClick={() => doCancel(r)} disabled={busy === r.id} style={{ ...btn("danger"), padding: "6px 11px", marginTop: 10 }}>
+              {busy === r.id ? <Loader2 size={13} style={spin} /> : <X size={13} />} Cancel schedule
+            </button>
+          )}
+        </div>
       ))}
     </div>
     <div className="gm-scroll gm-table" style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
@@ -740,13 +891,15 @@ function HistoryView() {
               </td>
               <td style={{ ...TD, fontWeight: 600, color: C.navy }}>{r.subject}</td>
               <td style={{ ...TD, fontFamily: C.mono, fontSize: 12 }}>{r.list_email}</td>
-              <td style={TD}>{r.recipients_total}</td>
-              <td style={TD}>
-                <span style={{ color: C.green }}>{r.sent_ok} ok</span>
-                {r.sent_fail > 0 && <span style={{ color: C.red }}> · {r.sent_fail} failed</span>}
-                {r.status === "sending" && <span style={{ color: C.amber }}> · in progress</span>}
-              </td>
-              <td style={{ ...TD, textAlign: "right" }}>
+              <td style={TD}>{r.status === "scheduled" || r.status === "canceled" ? "—" : r.recipients_total}</td>
+              <td style={TD}>{resultCell(r)}</td>
+              <td style={{ ...TD, textAlign: "right", whiteSpace: "nowrap" }}>
+                {r.status === "scheduled" && (
+                  <button onClick={(e) => { e.stopPropagation(); doCancel(r); }} disabled={busy === r.id}
+                    style={{ ...btn("danger"), padding: "5px 9px", fontSize: 12, marginRight: 6 }}>
+                    {busy === r.id ? <Loader2 size={12} style={spin} /> : <X size={12} />}
+                  </button>
+                )}
                 <span style={{ ...btn("ghost"), padding: "5px 10px", fontSize: 12 }}><Eye size={13} /> View</span>
               </td>
             </tr>
@@ -795,8 +948,8 @@ function CircularDetailDrawer({ row, onClose }: { row: CampaignRow; onClose: () 
               ))}
             </div>
           )}
-          <iframe title="Sent circular" srcDoc={data.html}
-            style={{ width: "100%", height: 620, border: `1px solid ${C.line}`, borderRadius: 10, background: "#eef2f7" }} />
+          <iframe title="Sent circular" srcDoc={data.html} className="gm-detail-frame"
+            style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, background: "#eef2f7" }} />
         </>
       )}
     </Drawer>
