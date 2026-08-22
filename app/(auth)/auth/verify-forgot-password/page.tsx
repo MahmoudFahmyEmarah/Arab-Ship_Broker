@@ -34,6 +34,7 @@ function VerifyForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const lastResendAt = useRef(0);
 
   useEffect(() => {
     if (!email) {
@@ -90,7 +91,17 @@ function VerifyForm() {
       router.push("/auth/reset-password");
     } catch (error) {
       console.error("Verification error:", error);
-      toast.error("Invalid or expired verification code.");
+      const msg = error instanceof Error ? error.message : "";
+      // A newer code invalidates every earlier one — the usual cause of a
+      // fresh-looking code failing is reading an older email.
+      if (/expired or is invalid/i.test(msg)) {
+        toast.error(
+          "This code is no longer valid — it may have been replaced by a newer one. Press Resend, then use the code from the NEWEST email.",
+          { duration: 8000 },
+        );
+      } else {
+        toast.error("Invalid or expired verification code.");
+      }
       setCode(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } finally {
@@ -100,11 +111,20 @@ function VerifyForm() {
 
   const handleResendCode = async () => {
     if (!email) return;
+    // Cooldown: each resend kills all earlier codes — rapid resends only
+    // create more dead emails to trip over.
+    const now = Date.now();
+    if (now - lastResendAt.current < 60_000) {
+      const wait = Math.ceil((60_000 - (now - lastResendAt.current)) / 1000);
+      toast.info(`A code was just sent — wait ${wait}s before requesting another. Only the newest email works.`);
+      return;
+    }
     setIsResending(true);
     try {
       const supabase = getSupabaseBrowserClient();
       await sendForgotPasswordEmail(supabase, email);
-      toast.success("Verification code resent! Check your email.");
+      lastResendAt.current = now;
+      toast.success("New code sent — use the code from the NEWEST email (older codes stop working).", { duration: 8000 });
     } catch {
       toast.error("Failed to resend code. Please try again.");
     } finally {

@@ -80,12 +80,14 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (
-      searchParams.get("error") === "account_suspended" &&
-      !hasShownSuspendedToast.current
-    ) {
+    if (hasShownSuspendedToast.current) return;
+    const err = searchParams.get("error");
+    if (err === "account_suspended") {
       hasShownSuspendedToast.current = true;
       toast.error("Your account is suspended. Please contact support.");
+    } else if (err === "session_expired") {
+      hasShownSuspendedToast.current = true;
+      toast.info("You were signed out after 30 minutes of inactivity. Please log in again.");
     }
   }, [searchParams]);
 
@@ -129,9 +131,7 @@ export default function LoginPage() {
 
       if (error instanceof EmailNotVerifiedError) {
         toast.error(
-          error.otpSent
-            ? "Your email is not verified yet. We sent a new OTP to your inbox."
-            : "Your email is not verified yet. Please request a new OTP on the verification page.",
+          "Your email is not verified yet. Enter the code from your email — or press Resend on the next page for a fresh one.",
         );
         router.push(
           `/auth/verify-email?email=${encodeURIComponent(error.email)}`,

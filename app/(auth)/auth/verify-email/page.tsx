@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ function EmailVerifyLogic() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email");
+  const lastResendAt = useRef(0);
 
   useEffect(() => {
     if (!email) {
@@ -36,12 +37,30 @@ function EmailVerifyLogic() {
       router.push("/auth/login");
     } catch (error) {
       console.error("Verification error:", error);
-      toast.error("Invalid or expired verification code.");
+      const msg = error instanceof Error ? error.message : "";
+      // Requesting a new code invalidates all earlier ones — the commonest
+      // cause of a "fresh" code failing is reading an older email.
+      if (/expired or is invalid/i.test(msg)) {
+        toast.error(
+          "This code is no longer valid — it may have been replaced by a newer one. Press Resend, then use the code from the NEWEST email.",
+          { duration: 8000 },
+        );
+      } else {
+        toast.error("Invalid or expired verification code.");
+      }
       throw error;
     }
   };
 
   const handleResend = async () => {
+    // Cooldown: each resend invalidates every earlier code, so rapid resends
+    // just create more dead emails for the user to trip over.
+    const now = Date.now();
+    if (now - lastResendAt.current < 60_000) {
+      const wait = Math.ceil((60_000 - (now - lastResendAt.current)) / 1000);
+      toast.info(`A code was just sent — wait ${wait}s before requesting another. Only the newest email works.`);
+      return;
+    }
     const supabase = getSupabaseBrowserClient();
     try {
       const { error } = await supabase.auth.resend({
@@ -49,7 +68,8 @@ function EmailVerifyLogic() {
         email: email,
       });
       if (error) throw error;
-      toast.success("Verification code resent! Check your email.");
+      lastResendAt.current = now;
+      toast.success("New code sent — use the code from the NEWEST email (older codes stop working).", { duration: 8000 });
     } catch (error) {
       console.error("Resend error:", error);
       toast.error("Failed to resend code. Please try again.");

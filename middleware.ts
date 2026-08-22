@@ -55,6 +55,29 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // ── Inactivity timeout: sessions expire after 30 minutes without a page
+  // visit. Every authenticated request rolls the window forward; a request
+  // arriving after the window is signed out server-side (the refresh token is
+  // revoked, so the session cannot be silently renewed) and bounced to login.
+  const IDLE_LIMIT_MS = 30 * 60 * 1000;
+  const LAST_ACTIVE_COOKIE = "asb-last-active";
+  if (user) {
+    const lastActive = Number(request.cookies.get(LAST_ACTIVE_COOKIE)?.value ?? NaN);
+    if (Number.isFinite(lastActive) && Date.now() - lastActive > IDLE_LIMIT_MS) {
+      await supabase.auth.signOut();
+      const res = redirectWithSupabaseCookies("/auth/login?error=session_expired");
+      res.cookies.delete(LAST_ACTIVE_COOKIE);
+      return res;
+    }
+    supabaseResponse.cookies.set(LAST_ACTIVE_COOKIE, String(Date.now()), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24,
+    });
+  }
+
   const isPublicRoute =
     pathname === "/" ||
     pathname.startsWith("/services") ||
