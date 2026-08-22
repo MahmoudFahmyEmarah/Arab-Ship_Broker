@@ -49,7 +49,9 @@ function MatchModeSwitch({ mode, setMode }: { mode: "cargo" | "vessel"; setMode:
   );
 }
 
-function DashMatchCard({ m, mode }: { m: DashMatch; mode: "cargo" | "vessel" }) {
+function DashMatchCard({ m, mode, focused, onClick }: {
+  m: DashMatch; mode: "cargo" | "vessel"; focused?: boolean; onClick?: () => void;
+}) {
   const cargo = {
     main: <><span className="dm-name">{m.commodity}</span><span className="dm-sep">·</span><span className="dm-fig">{m.qtyMt} MT</span></>,
     sub: <><span className="dm-route">{m.pol} → {m.pod}</span><span className="dm-zone">{m.polZone}→{m.podZone}</span></>,
@@ -62,7 +64,9 @@ function DashMatchCard({ m, mode }: { m: DashMatch; mode: "cargo" | "vessel" }) 
   const matched = mode === "cargo" ? vessel : cargo;
   const badge = m.quality === "Strong" ? "in" : m.quality === "Good" ? "blue" : "review";
   return (
-    <div className="dash-match">
+    <div className={`dash-match${focused ? " is-focused" : ""}`} onClick={onClick}
+      style={onClick ? { cursor: "pointer" } : undefined}
+      title="Show this cargo's route on the map">
       <div className="dash-match__top">
         <div className="dm-main">{anchor.main}</div>
         <span className={`asb-badge ${badge}`}>{m.quality}</span>
@@ -383,7 +387,17 @@ export function DashboardBoard({
             {topMatches.length === 0 ? (
               <div className="dash-empty">No matches in the current filter.</div>
             ) : (
-              topMatches.map((m, i) => <DashMatchCard key={i} m={m} mode={mode} />)
+              topMatches.map((m, i) => (
+                <DashMatchCard key={i} m={m} mode={mode}
+                  focused={focusedCargo === m.cargoId}
+                  onClick={() => {
+                    // A match is a cargo↔vessel pair — focusing the cargo draws
+                    // its route on the map (the request behind the click).
+                    setFocusedCargo((id) => (id === m.cargoId ? null : m.cargoId));
+                    setFocusedVessel(null);
+                  }}
+                />
+              ))
             )}
           </DashboardPanel>
         </div>

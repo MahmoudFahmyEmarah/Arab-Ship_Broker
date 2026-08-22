@@ -1645,6 +1645,8 @@ button { font: inherit; cursor: pointer; }
 }
 
 /* ── Top-matches card — self-identifying, symmetric (anchor ↔ matched) ── */
+.dash-match.is-focused { outline: 2px solid var(--asb-blue); outline-offset: -2px; }
+.dash-match:hover { border-color: var(--asb-blue); }
 .dash-match {
   background: #fff;
   border: 0.5px solid #DDE5F0;

@@ -81,6 +81,8 @@ export function fitLabel(c: CargoView, v: VesselView): FitBand {
 }
 
 export interface DashMatch {
+  cargoId: string;
+  vesselId: string;
   commodity: string;
   qtyMt: string;
   pol: string;
@@ -122,6 +124,8 @@ export function buildTopMatches(
     let tce = 0;
     try { tce = Math.round(calcVoyage(best, c).costs.tce); } catch { tce = 0; }
     out.push({
+      cargoId: c.id,
+      vesselId: best.id,
       commodity: c.commodity || c.cargo,
       qtyMt: c.qtyMt,
       pol: c.route?.polName || c.route?.polCode || "—",
