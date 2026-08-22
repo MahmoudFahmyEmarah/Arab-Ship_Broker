@@ -7,13 +7,16 @@
 // drag/tap affordance so dragging the sheet never scrolls the page behind it.
 import * as React from "react";
 
-// Shared sheet state: on phones the list starts PEEKED so the map is the
-// surface ("almost full map, everything on it"); records are one tap away.
+// Shared sheet state: on phones the MARKET boards start PEEKED so the map is
+// the surface ("almost full map, everything on it"); records are one tap away.
+// The DASHBOARD passes startPeeked=false — it is an overview page, so the
+// cargo/tonnage/matches panels must be visible on arrival, map behind them.
 // Desktop ignores this entirely (the sheet CSS only exists <=900px).
-export function useSheetPeek(): [boolean, () => void] {
+export function useSheetPeek(startPeeked = true): [boolean, () => void] {
   const [peek, setPeek] = React.useState(false);
   React.useEffect(() => {
-    if (window.matchMedia?.("(max-width: 900px)").matches) setPeek(true);
+    if (startPeeked && window.matchMedia?.("(max-width: 900px)").matches) setPeek(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return [peek, React.useCallback(() => setPeek((p) => !p), [])];
 }

@@ -201,7 +201,7 @@ function KeyModal({ cred, onClose, onSaved }: {
       subtitle="The secret is encrypted in Vault — it is never stored in plaintext.">
       <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
         <div><label style={lab}>Label</label><input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Anthropic — production" style={field} /></div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
           <div>
             <label style={lab}>Vendor</label>
             <select value={vendor} onChange={(e) => {
@@ -308,7 +308,7 @@ function EmailCard() {
         subtitle="IMAP connection the email source reads circulars from. Password stored in Vault." />
       {cfg === undefined ? <Loading /> : (
         <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff", padding: 18 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
             <div>
               <label style={lab}>Provider</label>
               <select value={provider} onChange={(e) => setProvider(e.target.value)} style={field}>

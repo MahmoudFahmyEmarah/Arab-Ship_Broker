@@ -164,7 +164,8 @@ export function DashboardBoard({
   matchVessels?: VesselView[];
 }) {
   const [mode, setMode] = React.useState<"cargo" | "vessel">("cargo");
-  const [sheetPeek, toggleSheetPeek] = useSheetPeek();
+  // Dashboard = overview: panels sheet OPEN on phone arrival (map behind it)
+  const [sheetPeek, toggleSheetPeek] = useSheetPeek(false);
   const [focusedCargo, setFocusedCargo] = React.useState<string | null>(null);
   const [focusedVessel, setFocusedVessel] = React.useState<string | null>(null);
 

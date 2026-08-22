@@ -189,7 +189,7 @@ export function WhatsappSettingsCard() {
           </div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 6 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, marginBottom: 6 }}>
           <div><label style={lab}>Phone-number ID</label><input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="from Meta → WhatsApp → API setup" style={field} /></div>
           <div><label style={lab}>Business (WABA) ID <span style={{ color: C.ink3, fontWeight: 400 }}>(optional)</span></label><input value={businessId} onChange={(e) => setBusinessId(e.target.value)} style={field} /></div>
           <div><label style={lab}>Access token {cfg?.has_token && <span style={{ color: C.ink3, fontWeight: 400 }}>(stored — blank keeps it)</span>}</label><input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" style={field} /></div>
@@ -206,7 +206,7 @@ export function WhatsappSettingsCard() {
 
       {/* shared: reply behaviour */}
       <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
           <div>
             <label style={lab}>Platform URL (in replies)</label>
             <input value={platformUrl} onChange={(e) => setPlatformUrl(e.target.value)} style={field} />

@@ -1304,3 +1304,16 @@
   transform: translateX(-50%);
   justify-content: center;
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   Mobile (≤900px) — map chrome sized for phones. Desktop untouched.
+   ════════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  /* The centered brand pill fights the zone chips for the top strip */
+  .asb-map .map-title { display: none; }
+  /* Control bars: smaller touch tiles, tighter stacks */
+  .asb-map .bar-icon { width: 31px; height: 31px; border-radius: 7px; }
+  .asb-map .bar-icon svg { transform: scale(0.9); }
+  /* Zone quick-chips: keep to one thumbable row */
+  .asb-map .filter-chip { padding: 2px 8px; font-size: 10.5px; }
+}

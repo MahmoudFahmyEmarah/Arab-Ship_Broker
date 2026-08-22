@@ -1312,3 +1312,15 @@ a.adm-stat:hover { border-color: #C8D0DC; box-shadow: 0 2px 8px rgba(13, 34, 64,
   .adm-side__item.is-on { border-left: none; border-bottom-color: var(--adm-accent); }
   .adm-page { padding: 14px; }
 }
+
+/* ── Mobile: tables scroll INSIDE their card instead of zooming the
+   whole console out (phones honour min table widths otherwise) ──── */
+@media (max-width: 760px) {
+  .adm-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Table sizes to its content and pans; narrow tables still fill the card */
+  .adm-table table { width: max-content; min-width: 100%; max-width: none; }
+  /* Comfortable touch rows */
+  .adm-table th, .adm-table td { padding: 10px 10px; }
+  /* Header action rows wrap instead of overflowing */
+  .adm-page__head, .adm-toolbar { flex-wrap: wrap; row-gap: 6px; }
+}

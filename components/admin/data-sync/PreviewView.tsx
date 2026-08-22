@@ -302,7 +302,7 @@ function EditDrawer({ table, row, onClose, onSaved }: {
 
   return (
     <Drawer title={`Edit ${row.key}`} subtitle={`→ ${table.table}`} onClose={onClose}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
         {editable.map((c) => (
           <label key={c.col} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: C.ink2 }}>{c.label}</span>
@@ -354,7 +354,7 @@ function AddDrawer({ table, onClose, onSaved }: {
 
   return (
     <Drawer title={`Add ${table.label.replace(/s$/, "").toLowerCase()}`} subtitle={`→ ${table.table}`} onClose={onClose}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 5, gridColumn: "1 / -1" }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: C.ink2 }}>{keyCol?.label ?? table.keyCol}{req(true)}</span>
           <input value={String(draft[table.keyCol] ?? "")}
