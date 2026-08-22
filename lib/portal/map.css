@@ -506,6 +506,11 @@
   animation: vessel-pulse 1.5s ease infinite;
   pointer-events: none;
 }
+/* Focused vessel — the brand ship icon replaces the course triangle */
+.vessel-ship-wrap svg { filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.45)); }
+.vessel-ship-wrap.is-selected::before { width: 42px; height: 42px; }
+.asb-map .vessel-ship-wrap .v-label,
+.asb-map[data-zoom="far"] .vessel-ship-wrap .v-label { display: block; opacity: 1; }
 @keyframes vessel-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50%       { transform: scale(1.4); opacity: 0.4; }

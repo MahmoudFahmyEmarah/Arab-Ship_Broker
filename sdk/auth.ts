@@ -24,22 +24,6 @@ function isUnverifiedEmailMessage(message: string | undefined) {
   );
 }
 
-async function resendSignupOtp(
-  supabase: SupabaseClient,
-  email: string,
-): Promise<boolean> {
-  const { error } = await supabase.auth.resend({
-    type: "signup",
-    email,
-  });
-
-  if (error) {
-    console.warn("Failed to resend verification OTP:", error.message);
-    return false;
-  }
-
-  return true;
-}
 
 export async function createUser(
   supabaseAdmin: SupabaseClient,
@@ -172,10 +156,14 @@ export async function login(
     password: params.password,
   });
 
+  // Deliberately NO auto-resend here: every new code Supabase issues
+  // invalidates all earlier ones, so a silent resend on a login attempt
+  // kills the code the user is about to type from their inbox ("Token has
+  // expired or is invalid" on a fresh-looking email). The verify page has an
+  // explicit Resend button when a new code is actually wanted.
   if (error) {
     if (isUnverifiedEmailMessage(error.message)) {
-      const otpSent = await resendSignupOtp(supabase, params.email);
-      throw new EmailNotVerifiedError(params.email, otpSent);
+      throw new EmailNotVerifiedError(params.email, false);
     }
     throw error;
   }
@@ -184,9 +172,8 @@ export async function login(
   const isEmailVerified = Boolean(data.user?.email_confirmed_at);
 
   if (!isEmailVerified) {
-    const otpSent = await resendSignupOtp(supabase, userEmail);
     await supabase.auth.signOut({ scope: "local" });
-    throw new EmailNotVerifiedError(userEmail, otpSent);
+    throw new EmailNotVerifiedError(userEmail, false);
   }
 
   return data;
