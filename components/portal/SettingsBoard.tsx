@@ -370,7 +370,7 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, gridAutoRows: "min-content" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, gridAutoRows: "min-content" }}>
           {tab === "account" && (
             <>
               <div className="settings-card">

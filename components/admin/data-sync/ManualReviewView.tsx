@@ -352,7 +352,7 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
   return (
     <ModalShell innerRef={ref} onClose={onClose} title={row.vessel_name} subtitle="Review, correct and sync this open-position vessel">
       {/* editable extraction */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
         <div style={{ gridColumn: "1 / -1" }}><label style={lab}>Vessel name</label><input value={name} onChange={(e) => setName(e.target.value)} style={field} /></div>
         <div>
           <label style={lab}>Type</label>
@@ -474,7 +474,7 @@ function CommodityModal({ row, onClose, onDone }: { row: CommodityQueueRow; onCl
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div><label style={label}>Canonical name</label><input value={canonical} onChange={(e) => setCanonical(e.target.value)} style={field} /></div>
         <div><label style={label}>Category label <span style={{ color: C.ink3, fontWeight: 400 }}>(optional)</span></label><input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Grains, Fertilisers" style={field} /></div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
           <div><label style={label}>Cargo type</label><select value={cargoType} onChange={(e) => setCargoType(e.target.value)} style={field}>{ENUMS.cargoType.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
           <div><label style={label}>IMSBC category</label><select value={imsbc} onChange={(e) => changeImsbc(e.target.value)} style={field}>{ENUMS.imsbc.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
         </div>

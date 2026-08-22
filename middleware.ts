@@ -120,6 +120,10 @@ export async function middleware(request: NextRequest) {
   const userRole = normalizeRole(appUser?.role);
 
   if (isAuthRoute) {
+    // Password recovery: verifying the OTP creates a session, and the user
+    // then NEEDS /auth/reset-password to set the new password — bouncing
+    // them to the dashboard here would strand the whole recovery flow.
+    if (pathname.startsWith("/auth/reset-password")) return supabaseResponse;
     // Admins are brokers-who-administer: land them in the portal (same UI),
     // with the Admin tools available in the portal sidebar.
     return redirectWithSupabaseCookies("/dashboard");

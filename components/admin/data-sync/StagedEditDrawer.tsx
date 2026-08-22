@@ -57,7 +57,7 @@ export function StagedEditDrawer({ row, sheetId, onClose, onSaved }: {
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.ink2, padding: 4 }} aria-label="Close"><X size={18} /></button>
         </div>
         <div style={{ padding: "18px 20px", overflowY: "auto", flex: 1 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
             {editable.map((c) => (
               <label key={c.col} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: C.ink2 }}>{c.label}</span>

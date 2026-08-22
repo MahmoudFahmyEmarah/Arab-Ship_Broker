@@ -259,3 +259,31 @@
 .mvb-fmap__fs:hover { background: rgba(0,0,0,0.05); }
 .mvb-fmap.base-dark .mvb-fmap__fs { color: rgba(255,255,255,0.8); border-color: rgba(255,255,255,0.15); }
 .mvb-fmap.base-dark .mvb-fmap__fs:hover { background: rgba(255,255,255,0.08); }
+
+/* ════════════════════════════════════════════════════════════════════
+   Mobile (≤900px) — My Vessels fleet board on phones. Desktop untouched.
+   ════════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  /* Header: wrap; drop the registry hint (the buttons say it) */
+  .mvb__topbar { flex-wrap: wrap; gap: 8px; padding: 12px 12px 8px; align-items: center; }
+  .mvb__addhint { display: none; }
+  .mvb__btn { padding: 8px 12px; font-size: 12px; white-space: nowrap; }
+
+  /* Filters: one swipeable row (same pattern as the dashboard filter bar) */
+  .mvb__filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 0 12px 10px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mvb__filters::-webkit-scrollbar { display: none; }
+  .mvb__tier-lbl { margin-left: 0 !important; }
+
+  /* Body: stack — cards full width, map (when shown) a fixed block below */
+  .mvb__body { flex-direction: column; }
+  .mvb__scroll { flex: 1 1 auto; padding: 12px; }
+  .mvb__scroll.has-map { flex: 1 1 auto; }
+  .mvb__mappane { flex: 0 0 46dvh; height: 46dvh; padding: 0 10px 10px; }
+  .mvb__grid, .mvb__grid.cols-2 { grid-template-columns: 1fr; gap: 10px; }
+}

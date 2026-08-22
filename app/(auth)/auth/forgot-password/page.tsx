@@ -58,10 +58,19 @@ export default function ForgotPasswordPage() {
       await sendForgotPasswordEmail(supabase, data.email);
 
       toast.success("Reset code dispatched! Check your email.");
-      router.push(`/auth/verify-email?email=${encodeURIComponent(data.email)}`);
+      // Recovery codes MUST be verified on the recovery page (type "recovery")
+      // — the signup verify page checks type "signup" and rejects them.
+      router.push(`/auth/verify-forgot-password?email=${encodeURIComponent(data.email)}`);
     } catch (error) {
       console.error("Forgot password error:", error);
-      toast.error("Failed to send reset email. Please try again.");
+      const e = error as { code?: string; status?: number };
+      if (e?.code === "over_email_send_rate_limit" || e?.status === 429) {
+        toast.error(
+          "Email limit reached — please wait about an hour, then request ONE new code. Each new request cancels the previous code.",
+        );
+      } else {
+        toast.error("Failed to send reset email. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
