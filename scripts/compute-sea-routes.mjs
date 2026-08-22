@@ -82,15 +82,28 @@ async function buildGraph() {
     adj[a].push([b, d]);
     adj[b].push([a, d]);
   };
+  // MARNET carries some LONG shortcut edges whose straight chord crosses land
+  // (e.g. Cape St Vincent → Biscay, 494 NM, clipping NW Iberia). Those are
+  // fine as abstract hops but wrong as drawable lines AND understate the
+  // around-the-coast distance — drop them where the chord runs inland.
+  // Legitimate narrow waterways the 50m landmask cannot see are exempted.
+  let dropped = 0;
   for (const f of net.features) {
     const cs = f.geometry.coordinates;
     for (let i = 1; i < cs.length; i++) {
       if (inCorinth(cs[i - 1][1], cs[i - 1][0]) || inCorinth(cs[i][1], cs[i][0])) continue;
-      const a = idFor(cs[i - 1][0], cs[i - 1][1]);
-      const b = idFor(cs[i][0], cs[i][1]);
+      const [lo1, la1] = cs[i - 1], [lo2, la2] = cs[i];
+      const len = gcNm(la1, lo1, la2, lo2);
+      if (len > 25 && !exempt((la1 + la2) / 2, (lo1 + lo2) / 2) && segmentInlandNm(la1, lo1, la2, lo2) > MAX_INLAND_NM) {
+        dropped++;
+        continue;
+      }
+      const a = idFor(lo1, la1);
+      const b = idFor(lo2, la2);
       if (a !== b) link(a, b);
     }
   }
+  if (dropped) console.log(`dropped ${dropped} land-crossing MARNET edges`);
   const marnetCount = nodes.length;
 
   // Splice the app's hand-built strait-accurate graph (Med/Black Sea/Levant/
@@ -104,8 +117,20 @@ async function buildGraph() {
     adj.push([]);
     seaId.set(name, id);
   }
+  // The hand-built graph's own long hops get the SAME land check — its
+  // Atlantic edges (e.g. Cape St Vincent → Biscay, 494 NM) clip NW Iberia.
+  let droppedSea = 0;
+  const linkChecked = (a, b) => {
+    const [la1, lo1] = nodes[a], [la2, lo2] = nodes[b];
+    const len = gcNm(la1, lo1, la2, lo2);
+    if (len > 25 && !exempt((la1 + la2) / 2, (lo1 + lo2) / 2) && segmentInlandNm(la1, lo1, la2, lo2) > MAX_INLAND_NM) {
+      droppedSea++;
+      return;
+    }
+    link(a, b);
+  };
   for (const [a, b] of sea.SEA_EDGES) {
-    if (seaId.has(a) && seaId.has(b)) link(seaId.get(a), seaId.get(b));
+    if (seaId.has(a) && seaId.has(b)) linkChecked(seaId.get(a), seaId.get(b));
   }
   // cross-links: each regional node ↔ its 2 nearest MARNET nodes within 90 NM
   for (const id of seaId.values()) {
@@ -115,20 +140,131 @@ async function buildGraph() {
       if (d <= 90) cand.push([i, d]);
     }
     cand.sort((x, y) => x[1] - y[1]);
-    for (const [i] of cand.slice(0, 2)) link(id, i);
+    for (const [i] of cand.slice(0, 2)) linkChecked(id, i);
   }
+  if (droppedSea) console.log(`dropped ${droppedSea} land-crossing regional edges`);
   return { nodes, adj };
 }
 
-// ── min-heap Dijkstra with temporary endpoint connectors ────────────────────
+// ── land mask (Natural Earth 50m) — connectors must stay on water ───────────
+// Straight endpoint hops with no water check can leap across a peninsula
+// (Avilés→Med straight over Iberia) and Dijkstra takes the shortcut. Each
+// candidate connector is sampled every ~8 km; more than ~20 km continuously
+// inland disqualifies it (short hits are chart noise in narrow straits).
+const LAND_PATH = process.env.LAND_GEOJSON ||
+  "C:/Users/mahmo/AppData/Local/Temp/claude/d--ASB-Projects-Arab-Shipborker-Arabshipbroker/d7e6c54f-575c-4f8a-8b22-fea9a15ea1f5/scratchpad/land50.geojson";
+const LAND_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_land.geojson";
+let RINGS = null;
+async function loadLand() {
+  if (RINGS) return;
+  if (!fs.existsSync(LAND_PATH)) {
+    console.log("downloading land polygons…");
+    const body = await fetch(LAND_URL).then((r) => { if (!r.ok) throw new Error("land download failed"); return r.text(); });
+    fs.writeFileSync(LAND_PATH, body);
+  }
+  const land = JSON.parse(fs.readFileSync(LAND_PATH, "utf8"));
+  RINGS = [];
+  for (const f of land.features) {
+    const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for (const poly of polys) {
+      const outer = poly[0];
+      let minX = 180, maxX = -180, minY = 90, maxY = -90;
+      for (const [x, y] of outer) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+      RINGS.push({ outer, holes: poly.slice(1), minX, maxX, minY, maxY });
+    }
+  }
+}
+function inRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function onLand(lat, lon) {
+  for (const r of RINGS) {
+    if (lon < r.minX || lon > r.maxX || lat < r.minY || lat > r.maxY) continue;
+    if (inRing(lon, lat, r.outer)) {
+      for (const h of r.holes) if (inRing(lon, lat, h)) return false;
+      return true;
+    }
+  }
+  return false;
+}
+function segmentInlandNm(aLat, aLon, bLat, bLon) {
+  const total = gcNm(aLat, aLon, bLat, bLon);
+  const steps = Math.max(2, Math.ceil(total / 4.3)); // ~8 km sampling
+  let worst = 0, run = 0;
+  for (let s = 1; s < steps; s++) {
+    const f = s / steps;
+    if (onLand(aLat + (bLat - aLat) * f, aLon + (bLon - aLon) * f)) {
+      run += total / steps;
+      if (run > worst) worst = run;
+    } else run = 0;
+  }
+  return worst;
+}
+const MAX_INLAND_NM = 11; // ≈ 20 km — tolerates strait/canal chart noise only
+
+// Narrow waterways the 50m landmask cannot see — legitimate transits.
+const EXEMPT = [
+  { latMin: 29.7, latMax: 31.4, lonMin: 32.0, lonMax: 32.7 },     // Suez Canal
+  { latMin: 39.9, latMax: 41.5, lonMin: 26.0, lonMax: 30.0 },     // Turkish straits
+  { latMin: 53.7, latMax: 54.5, lonMin: 8.8, lonMax: 10.3 },      // Kiel Canal
+  { latMin: 41.0, latMax: 52.0, lonMin: -93.0, lonMax: -55.0 },   // Great Lakes + St Lawrence
+  { latMin: -35.5, latMax: -31.0, lonMin: -61.5, lonMax: -56.5 }, // Paraná / La Plata
+  { latMin: 28.5, latMax: 30.8, lonMin: -91.5, lonMax: -88.5 },   // Mississippi delta
+];
+const exempt = (lat, lon) =>
+  EXEMPT.some((b) => lat >= b.latMin && lat <= b.latMax && lon >= b.lonMin && lon <= b.lonMax);
+
+// Longest continuous inland run of a whole path, skipping exempt waterways —
+// the final guard: geometry that fails this is stored distance-only. The run
+// carries ACROSS waypoints (a chain of short land-crossing segments is as
+// wrong as one long one), so it is sampled continuously like the audit.
+function pathInlandNm(pts) {
+  let worst = 0, run = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [aLat, aLon] = pts[i - 1], [bLat, bLon] = pts[i];
+    const total = gcNm(aLat, aLon, bLat, bLon);
+    const steps = Math.max(1, Math.ceil(total / 4.3)); // ~8 km sampling
+    for (let s = 1; s <= steps; s++) {
+      const f = s / steps;
+      const lat = aLat + (bLat - aLat) * f, lon = aLon + (bLon - aLon) * f;
+      if (!exempt(lat, lon) && onLand(lat, lon)) {
+        run += total / steps;
+        if (run > worst) worst = run;
+      } else run = 0;
+    }
+  }
+  return worst;
+}
+
+// ── min-heap Dijkstra with land-aware endpoint connectors ───────────────────
+const connectorCache = new Map();
 function nearestNodes(graph, lat, lon, k = 6, maxNm = 400) {
+  const key = lat.toFixed(3) + "," + lon.toFixed(3);
+  const hit = connectorCache.get(key);
+  if (hit) return hit;
   const cand = [];
   for (let i = 0; i < graph.nodes.length; i++) {
     const d = gcNm(lat, lon, graph.nodes[i][0], graph.nodes[i][1]);
     if (d <= maxNm) cand.push([i, d]);
   }
   cand.sort((x, y) => x[1] - y[1]);
-  return cand.slice(0, k);
+  // keep the k nearest WATER-ONLY connectors (scan up to 40 candidates);
+  // if none stays wet, fall back to the nearest few so a route still exists.
+  const clean = [];
+  for (const [i, d] of cand.slice(0, 40)) {
+    if (segmentInlandNm(lat, lon, graph.nodes[i][0], graph.nodes[i][1]) <= MAX_INLAND_NM) {
+      clean.push([i, d]);
+      if (clean.length >= k) break;
+    }
+  }
+  const out = clean.length ? clean : cand.slice(0, 2);
+  connectorCache.set(key, out);
+  return out;
 }
 
 function route(graph, aLat, aLon, bLat, bLon) {
@@ -189,14 +325,38 @@ function route(graph, aLat, aLon, bLat, bLon) {
   return { nm: best, pts };
 }
 
-// simplify a polyline to ≤ maxPts by uniform arc-length sampling (keep ends)
-function simplify(pts, maxPts = 60) {
-  if (pts.length <= maxPts) return pts;
-  const out = [pts[0]];
-  const step = (pts.length - 1) / (maxPts - 1);
-  for (let i = 1; i < maxPts - 1; i++) out.push(pts[Math.round(i * step)]);
-  out.push(pts[pts.length - 1]);
-  return out;
+// Shape-preserving simplification (Douglas–Peucker). Uniform sampling is NOT
+// safe here — deleting coastal waypoints straightens the line across land.
+// Distances in degree-space with longitude scaled by cos(mid-latitude);
+// epsilon 0.01° ≈ 1 km keeps strait/coast fidelity.
+function simplify(pts, epsilon = 0.01) {
+  if (pts.length <= 2) return pts;
+  const midLat = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+  const kx = Math.cos((midLat * Math.PI) / 180);
+  const perp = (p, a, b) => {
+    const ax = a[1] * kx, ay = a[0], bx = b[1] * kx, by = b[0], px = p[1] * kx, py = p[0];
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return Math.hypot(px - ax, py - ay);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  };
+  const keep = new Array(pts.length).fill(false);
+  keep[0] = keep[pts.length - 1] = true;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [i0, i1] = stack.pop();
+    let maxD = 0, maxI = -1;
+    for (let i = i0 + 1; i < i1; i++) {
+      const d = perp(pts[i], pts[i0], pts[i1]);
+      if (d > maxD) { maxD = d; maxI = i; }
+    }
+    if (maxD > epsilon && maxI > 0) {
+      keep[maxI] = true;
+      stack.push([i0, maxI], [maxI, i1]);
+    }
+  }
+  return pts.filter((_, i) => keep[i]);
 }
 
 // deterministic shuffle (LCG, fixed seed) for a reproducible holdout
@@ -222,6 +382,7 @@ const pct = (xs, p) => {
 
 // ── main ────────────────────────────────────────────────────────────────────
 (async () => {
+  await loadLand();
   console.log("building MARNET graph…");
   const graph = await buildGraph();
   console.log(`graph: ${graph.nodes.length} nodes`);
@@ -340,7 +501,7 @@ const pct = (xs, p) => {
     }
     console.log(`live lanes missing a route: ${lanes.size}`);
     const rows = [], geo = new Map();
-    let failed = [];
+    let failed = [], geoRejected = [];
     for (const [key, [a, b]] of lanes) {
       const pa = coordFor(a), pb = coordFor(b);
       if (!pa || !pb) { failed.push(`${a}-${b} (no coords)`); continue; }
@@ -348,7 +509,13 @@ const pct = (xs, p) => {
       if (!r) { failed.push(`${a}-${b} (unroutable)`); continue; }
       const nm = +(r.nm * factorForZones(pa.zone ?? zoneOf.get(a), pb.zone ?? zoneOf.get(b))).toFixed(1);
       rows.push({ pol_locode: a, pod_locode: b, total_nm: nm, computed_nm: +r.nm.toFixed(1), waypoint_count: 0, source: "MARNET network (calibrated)", method: "MARNET-COMPUTED", verified: false });
-      geo.set(key, simplify(r.pts));
+      // Final guard: never store a drawable track that runs inland (outside
+      // exempt canals/rivers). The distance row stays; the map falls back to
+      // its dashed corridor estimate instead of drawing a wrong line.
+      const pts = simplify(r.pts);
+      const inland = pathInlandNm(pts);
+      if (inland > 15) { geoRejected.push(`${a}-${b} (${Math.round(inland * 1.852)} km inland)`); continue; }
+      geo.set(key, pts);
     }
     await insertRoutes(rows);
     // waypoints for the inserted rows
@@ -366,7 +533,8 @@ const pct = (xs, p) => {
       const pts = geo.get(ins.pair_key);
       if (pts) await rest(`port_routes?id=eq.${ins.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ waypoint_count: pts.length }) });
     }
-    console.log(`inserted ${rows.length} computed lane routes (+geometry) · failed: ${failed.length} ${JSON.stringify(failed.slice(0, 10))}`);
+    console.log(`inserted ${rows.length} computed lane routes · geometry withheld (land-crossing): ${geoRejected.length} ${JSON.stringify(geoRejected)}`);
+    console.log(`failed: ${failed.length} ${JSON.stringify(failed.slice(0, 10))}`);
     return;
   }
 
