@@ -68,7 +68,18 @@ export default function NewPasswordPage() {
       router.push("/auth/login");
     } catch (error) {
       console.error("New password error:", error);
-      toast.error("Failed to update password. Session may have expired.");
+      // Surface the REAL reason — the generic "session expired" guess hid
+      // actionable errors like "same as old password".
+      const e = error as { code?: string; message?: string };
+      if (e?.code === "same_password" || /different from the old password/i.test(e?.message ?? "")) {
+        toast.error("Your new password must be DIFFERENT from your current one. Pick a password you haven't used here before.", { duration: 7000 });
+      } else if (/weak|at least|characters/i.test(e?.message ?? "")) {
+        toast.error(e?.message ?? "Password too weak — use at least 8 characters.");
+      } else if (/session|expired|missing/i.test(e?.message ?? "")) {
+        toast.error("Your recovery session expired. Please request a new code and try again.");
+      } else {
+        toast.error(e?.message || "Failed to update password. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
