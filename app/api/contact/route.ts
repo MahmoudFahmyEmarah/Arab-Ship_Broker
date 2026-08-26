@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
-// Public contact form handler. Does two things, server-side:
+// Public contact form handler. Does three things, server-side:
 //   1. Persists the submission to public.contact_messages (admins read it in
 //      the admin console → Contact Messages).
-//   2. Best-effort branded email notification via Resend to CONTACT_NOTIFY_EMAIL
-//      — the email never blocks the submission; if it fails we still return ok
-//      and the message is safely stored.
+//   2. Branded team notification through the SAME cPanel SMTP account Group
+//      Mail uses (groupmail_config + Vault password), sent From
+//      info@arabshipbroker.com to the whole team list, Reply-To the sender.
+//   3. Branded auto-reply to the sender confirming we received the message.
+// Emails are best-effort — they never block the submission; the message is
+// safely stored either way.
 export const runtime = "nodejs";
+
+// Team members notified of every enquiry. From-address is the public identity;
+// the SMTP login (circ@…) stays the authenticated envelope sender.
+const CONTACT_FROM = "info@arabshipbroker.com";
+const TEAM_RECIPIENTS = [
+  "info@arabshipbroker.com",
+  "circ@arabshipbroker.com",
+  "mahmoud.emara1@gmail.com",
+  "cap.mdawod@hotmail.com",
+  "ahmed.abdullah@arabshipbroker.com",
+  "cpt.dawoud@arabshipbroker.com",
+  "mahmoud.emarah@arabshipbroker.com",
+];
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -110,6 +127,69 @@ function buildContactEmail(f: ContactFields): { subject: string; html: string; t
   return { subject, html, text };
 }
 
+// Auto-reply to the sender — same 600px navy-header design as the platform's
+// transactional emails (anchor glyph, badge pill, accent label).
+function buildAutoReply(f: ContactFields): { subject: string; html: string; text: string } {
+  const subject = `We received your message — ${BRAND.name}`;
+  const year = new Date().getFullYear();
+  const html = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light">
+<title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:#eef2f7;-webkit-text-size-adjust:100%;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">Thank you ${esc(f.name)} — our team is on it and will reach back to you as soon as possible.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <tr><td style="background:${BRAND.navy};padding:22px 28px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.2px;">⚓&nbsp; ${BRAND.name}</td>
+            <td align="right"><span style="display:inline-block;background:rgba(94,234,212,.12);border:1px solid rgba(94,234,212,.4);color:#5eead4;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px;">Message Received</span></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:28px 28px 8px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:${BRAND.accent};">Thank You</div>
+          <div style="font-size:21px;font-weight:700;color:#0f172a;margin-top:6px;line-height:1.3;">Dear ${esc(f.name)}, we got your message</div>
+        </td></tr>
+        <tr><td style="padding:8px 28px 4px;font-size:14px;line-height:1.7;color:#334155;">
+          Thank you for contacting ${BRAND.name}. Your message has reached our team
+          and we are working on it — we will get back to you as soon as possible.
+        </td></tr>
+        <tr><td style="padding:18px 28px 4px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px;">Your message</div>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 18px;font-size:13px;line-height:1.65;color:#475569;">${esc(f.message).replace(/\n/g, "<br>")}</div>
+        </td></tr>
+        <tr><td style="padding:20px 28px 26px;font-size:13px;line-height:1.7;color:#64748b;">
+          For anything urgent, write to
+          <a href="mailto:${CONTACT_FROM}" style="color:${BRAND.accent};text-decoration:none;">${CONTACT_FROM}</a>.
+        </td></tr>
+        <tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 28px;font-size:12px;color:#94a3b8;line-height:1.6;">
+          ${BRAND.name} · MENA maritime brokerage · ${BRAND.site}<br>
+          This is an automatic confirmation of your enquiry submitted at ${esc(f.submittedAt)}.
+        </td></tr>
+      </table>
+      <div style="font-size:11px;color:#94a3b8;margin-top:16px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">&copy; ${year} ${BRAND.name}</div>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  const text = [
+    `Dear ${f.name},`,
+    "",
+    `Thank you for contacting ${BRAND.name}. Your message has reached our team`,
+    "and we are working on it — we will get back to you as soon as possible.",
+    "",
+    "Your message:",
+    f.message,
+    "",
+    `For anything urgent, write to ${CONTACT_FROM}.`,
+    `— ${BRAND.name} · ${BRAND.site}`,
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
   try {
@@ -142,27 +222,72 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  // 2 · Branded email notification (best-effort).
-  const resendKey = process.env.RESEND_API_KEY;
-  const notify = process.env.CONTACT_NOTIFY_EMAIL;
-  const from = process.env.RESEND_FROM || "Arab ShipBroker <onboarding@resend.dev>";
-  if (resendKey && notify) {
-    try {
+  // 2+3 · Team notification + sender auto-reply through the Group Mail SMTP
+  // account (cPanel). Best-effort: failures are logged, never surfaced — the
+  // message is already stored and visible in Admin → Contact Messages.
+  try {
+    const { data: cfg } = await supabase
+      .from("groupmail_config")
+      .select("smtp_host, smtp_port, smtp_user, from_name")
+      .eq("id", 1)
+      .maybeSingle();
+    const { data: smtpPass } = await supabase.rpc("groupmail_get_secret", { p_key: "smtp_password" });
+    if (!cfg?.smtp_host || !cfg?.smtp_user || !smtpPass) {
+      console.error("[contact] SMTP not configured (groupmail_config/Vault) — notification skipped");
+    } else {
+      const transport = nodemailer.createTransport({
+        host: cfg.smtp_host,
+        port: cfg.smtp_port || 465,
+        secure: (cfg.smtp_port || 465) === 465,
+        auth: { user: cfg.smtp_user, pass: smtpPass as string },
+        connectionTimeout: 20_000,
+        socketTimeout: 30_000,
+      });
       const submittedAt = new Date().toLocaleString("en-GB", {
         timeZone: "Africa/Cairo",
         day: "2-digit", month: "short", year: "numeric",
         hour: "2-digit", minute: "2-digit",
       }) + " (Cairo)";
-      const { subject, html, text } = buildContactEmail({ name, email, phone, how, message, submittedAt });
-      const r = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: notify, reply_to: email, subject, html, text }),
-      });
-      if (!r.ok) console.error("[contact] resend send failed:", r.status, await r.text());
-    } catch (err) {
-      console.error("[contact] email notification error:", err);
+      const fields: ContactFields = { name, email, phone, how, message, submittedAt };
+
+      // team notification — From the public identity, envelope stays on the
+      // authenticated mailbox so cPanel accepts the send; Reply-To = sender
+      const notify = buildContactEmail(fields);
+      try {
+        await transport.sendMail({
+          from: { name: BRAND.name, address: CONTACT_FROM },
+          sender: cfg.smtp_user,
+          envelope: { from: cfg.smtp_user, to: TEAM_RECIPIENTS },
+          to: TEAM_RECIPIENTS,
+          replyTo: email,
+          subject: notify.subject,
+          html: notify.html,
+          text: notify.text,
+        });
+      } catch (err) {
+        console.error("[contact] team notification failed:", err);
+      }
+
+      // auto-reply to the sender
+      const reply = buildAutoReply(fields);
+      try {
+        await transport.sendMail({
+          from: { name: BRAND.name, address: CONTACT_FROM },
+          sender: cfg.smtp_user,
+          envelope: { from: cfg.smtp_user, to: [email] },
+          to: email,
+          replyTo: CONTACT_FROM,
+          subject: reply.subject,
+          html: reply.html,
+          text: reply.text,
+        });
+      } catch (err) {
+        console.error("[contact] auto-reply failed:", err);
+      }
+      transport.close();
     }
+  } catch (err) {
+    console.error("[contact] email layer error:", err);
   }
 
   return NextResponse.json({ ok: true });
