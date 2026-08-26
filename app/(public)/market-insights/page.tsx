@@ -1,7 +1,8 @@
 import Link from "next/link";
 import {
-  Lock, ArrowRight, ShieldCheck,
+  ArrowRight, ShieldCheck,
 } from "lucide-react";
+import { Shackle } from "@/components/icons";
 import {
   IconCalendar, IconCargo, IconInsights, IconLanes, IconSizeBand, IconVessel,
 } from "@/components/portal/icons";
@@ -271,7 +272,7 @@ export default async function MarketInsightsPage({
                 className="group flex items-start gap-3.5 rounded-2xl bg-white/[0.06] border border-white/12 p-4 transition-all duration-200 hover:bg-white/[0.1] hover:border-foam-400/40 hover:-translate-y-0.5"
               >
                 <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-foam-400/15 border border-foam-400/25 shrink-0 transition-colors group-hover:bg-foam-400/25">
-                  <Lock className="w-4 h-4 text-foam-300" />
+                  <Shackle width={16} height={16} className="w-4 h-4 text-foam-300" />
                 </span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">

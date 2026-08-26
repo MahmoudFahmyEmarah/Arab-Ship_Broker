@@ -996,3 +996,31 @@ body { font-family: var(--asb-font); }
 .bt-cta__link:hover { text-decoration: underline; }
 .bt-cta__arrow { font-size: 11px; }
 @media (max-width: 640px) { .bunker-ticker { font-size: 10.5px; } .bt-updated { display: none; } .bt-demo__txt { display: none; } .bt-cta__txt { display: none; } }
+
+/* ── Matching mark (How It Works · step 02) ──────────────────────────
+   Resting state = treatment B (overlap + knockout). Hovering the step
+   tile (.group) plays treatment F — the two glyphs converge into the
+   overlap (700ms, once per hover). Motion is a bonus, never the
+   explanation: reduced-motion users simply keep B.
+   Sized above the generic w-9 icon slot so the pair carries the same
+   optical weight as its single-glyph neighbours. */
+.asb-matchmark {
+  width: 58px !important;
+  height: 32px !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .group:hover .asb-matchmark .mm-cargo {
+    animation: mm-converge-left 0.7s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  .group:hover .asb-matchmark .mm-vessel {
+    animation: mm-converge-right 0.7s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+}
+@keyframes mm-converge-left {
+  from { transform: translateX(-11px); }
+  to { transform: translateX(0); }
+}
+@keyframes mm-converge-right {
+  from { transform: translateX(11px); }
+  to { transform: translateX(0); }
+}

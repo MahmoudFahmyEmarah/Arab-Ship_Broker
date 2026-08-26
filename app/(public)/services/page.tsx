@@ -4,47 +4,47 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
-  Ship,
-  FileSearch,
-  TrendingUp,
-  Package,
-  Anchor,
-  Globe,
   ChevronDown,
   ArrowRight,
   Phone,
 } from "lucide-react";
 
+import { Vessel, Cargo, BrandLogo, DocAudit, Globe, TrendUp } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+// S&P carries the FULL brand mark; it flips white when the tile darkens.
+function SpBrandLogo({ className }: { className?: string }) {
+  return <BrandLogo className={className} hoverInvert />;
+}
+
 const services = [
   {
-    icon: Ship,
+    icon: Vessel,
     title: "Dry-Bulk Brokerage",
     description:
       "Comprehensive brokerage services for dry-bulk commodities including grains, coal, iron ore, and fertilizers with competitive rates and reliable execution.",
   },
   {
-    icon: Package,
+    icon: Cargo,
     title: "Break-Bulk Brokerage",
     description:
       "Specialized handling break-bulk cargo including steel products, machinery, and project cargo with expert vessel selection coordination.",
   },
   {
-    icon: Anchor,
+    icon: SpBrandLogo,
     title: "S&P Services (<30K DWT)",
     description:
       "Vessel sales and purchase advisory for smaller tonnage vessels with comprehensive market analysis and transaction support.",
   },
   {
-    icon: FileSearch,
+    icon: DocAudit,
     title: "Pre-Hire Inspections",
     description:
       "Thorough vessel inspections before fixture to ensure compliance, safety, and operational readiness with detailed reporting.",
   },
   {
-    icon: TrendingUp,
+    icon: TrendUp,
     title: "Market Analysis - still under progress",
     description:
       "Real-time market intelligence, freight rate analysis, and strategic advisory services to optimize your shipping decisions.",
