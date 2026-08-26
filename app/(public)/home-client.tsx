@@ -5,21 +5,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, useScroll, useTransform } from "framer-motion";
 import {
-  Ship,
   ArrowRight,
-  BarChart3,
-  Globe,
-  Anchor,
   Waves,
-  Navigation,
-  Users,
-  TrendingUp,
   Phone,
   FlaskConical,
-  Sparkles,
 } from "lucide-react";
 
-import { Lock, Shield, Clock } from "@/components/icons";
+import { Clock, Vessel, Voyage, Swivel, Shackle, ShieldLine, Globe, TrendUp, CargoVesselPair, MarketBars } from "@/components/icons";
 import { FoundersCarousel } from "@/components/FoundersCarousel";
 import { ScrollZoomBackground } from "@/components/ScrollZoomBackground";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -28,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 const features = [
   {
-    icon: Ship,
+    icon: Vessel,
     title: "Expert Dry-Bulk Brokerage",
     description:
       "Specialized brokerage for dry-bulk and break-bulk commodities. Every deal backed by hands-on shipboard experience and a deep MENA operator network.",
@@ -37,7 +29,7 @@ const features = [
       "bg-ocean-50 text-ocean-600 group-hover:bg-ocean-600 group-hover:text-white",
   },
   {
-    icon: BarChart3,
+    icon: MarketBars,
     title: "Live Market Intelligence",
     description:
       "Real-time freight rate signals across the Red Sea, Arabian Gulf, and East Mediterranean, so you negotiate from a position of knowledge, not guesswork.",
@@ -62,33 +54,33 @@ const steps = [
     title: "Submit Your Requirements",
     description:
       "Post your cargo or vessel availability in minutes. Our guided form ensures every matchmaking field is captured precisely.",
-    icon: Navigation,
+    icon: Voyage,
   },
   {
     number: "02",
     title: "Intelligent Matching",
     description:
       "Our engine cross-references zone, capacity, laycan, vessel type, and special requirements, filtering the entire register to surface only valid matches.",
-    icon: Users,
+    icon: CargoVesselPair,
   },
   {
     number: "03",
     title: "Close the Fixture",
     description:
       "We handle charter party negotiations and pre-hire inspections so your deal closes cleanly and profitably.",
-    icon: TrendingUp,
+    icon: TrendUp,
   },
 ];
 
 const trustSignals = [
   {
-    icon: Lock,
+    icon: Shackle,
     title: "Your details stay yours",
     description:
       "Sender identity and contact information are protected at the database layer, not just hidden on screen. Broker A never sees Broker B. Nothing is shared with third parties, ever.",
   },
   {
-    icon: Shield,
+    icon: ShieldLine,
     title: "Sanctions screened",
     description:
       "Every vessel in the register is screened against international sanctions lists. Flagged and sanctioned tonnage is blocked from match results.",
@@ -318,7 +310,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
               transition={{ delay: 0.15, duration: 0.4 }}
               className="inline-flex items-center gap-2.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-full px-5 py-2 mb-8 shadow-lg"
             >
-              <Anchor className="w-3.5 h-3.5 text-foam-400" />
+              <Image src="/logo.png" alt="" width={24} height={24} className="w-6 h-6 brightness-0 invert" />
               <span className="text-[12px] font-bold text-white/90 tracking-[0.12em] uppercase">
                 MENA Dry-Bulk Brokerage Platform
               </span>
@@ -376,7 +368,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                 className="inline-flex items-center justify-center gap-2 h-13 px-8 text-[14.5px] font-bold bg-white/8 text-white border border-white/15 hover:bg-white/12 backdrop-blur-md rounded-xl transition-all hover:-translate-y-0.5 group"
               >
                 Our Services
-                <Ship className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                <Vessel width={16} height={16} className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </motion.div>
           </motion.div>
@@ -694,7 +686,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                 </p>
 
                 <p className="text-foam-400/70 text-sm font-medium mb-9 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
+                  <Swivel width={16} height={16} className="w-4 h-4" />
                   Priority access for early adopters
                 </p>
 

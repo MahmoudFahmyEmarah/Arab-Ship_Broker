@@ -11,7 +11,6 @@ import { toast } from "sonner";
 import {
   Eye,
   EyeOff,
-  Mail,
   Lock,
   LockKeyhole,
   User,
@@ -19,6 +18,7 @@ import {
   Loader2,
   Info,
 } from "lucide-react";
+import { Mail } from "@/components/icons";
 
 import { IconCargo, IconVessel } from "@/components/portal/icons";
 import { signupAction } from "./actions";

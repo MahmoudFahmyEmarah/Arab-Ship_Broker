@@ -7,7 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, ArrowRight, Loader2, Key } from "lucide-react";
+import { ArrowRight, Loader2, Key } from "lucide-react";
+import { Mail } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,9 +97,9 @@ export default function ForgotPasswordPage() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="mx-auto w-12 h-12 bg-ocean-50 text-ocean-600 rounded flex items-center justify-center mb-4 shadow-sm border border-slate-200"
+              className="mx-auto w-12 h-12 text-ocean-600 flex items-center justify-center mb-4"
             >
-              <Key className="w-6 h-6" />
+              <Key className="w-9 h-9" />
             </motion.div>
             <h1 className="text-3xl font-bold text-ocean-900 tracking-tight mb-2">
               Recover Password

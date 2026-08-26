@@ -13,10 +13,10 @@ import {
   Menu,
   X,
   ArrowRight,
-  LogIn,
   LayoutDashboard,
   Anchor,
 } from "lucide-react";
+import { SignIn } from "@/components/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import type { User } from "@supabase/supabase-js";
 
@@ -281,7 +281,7 @@ export function Navbar() {
                         : "text-slate-500 hover:text-slate-900",
                     )}
                   >
-                    <LogIn className="w-4 h-4" />
+                    <SignIn width={16} height={16} className="w-4 h-4" />
                     Sign in
                   </Link>
                   <Link
@@ -414,7 +414,7 @@ export function Navbar() {
                       href="/auth/login"
                       className="flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors"
                     >
-                      <LogIn className="w-4 h-4" />
+                      <SignIn width={16} height={16} className="w-4 h-4" />
                       Sign in
                     </Link>
                     <Link

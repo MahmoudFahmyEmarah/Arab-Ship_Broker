@@ -13,12 +13,11 @@ import { normalizeRole } from "@/lib/role";
 import {
   Eye,
   EyeOff,
-  Mail,
   Lock,
-  Ship,
   ArrowRight,
   Loader2,
 } from "lucide-react";
+import { Vessel, Mail } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,9 +202,9 @@ export default function LoginPage() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="mx-auto w-12 h-12 bg-ocean-50 text-ocean-600 rounded flex items-center justify-center mb-4 shadow-sm border border-slate-200"
+              className="mx-auto w-12 h-12 text-ocean-600 flex items-center justify-center mb-4"
             >
-              <Ship className="w-6 h-6" />
+              <Vessel className="w-9 h-9" />
             </motion.div>
             <h1 className="text-3xl font-bold text-ocean-900 tracking-tight mb-2">
               Welcome Back
