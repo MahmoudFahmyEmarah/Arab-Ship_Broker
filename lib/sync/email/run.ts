@@ -23,6 +23,51 @@ const BATCH_TIMEOUT_MS = 90_000;   // hard cap per batch call (stalled requests 
 const MAX_BATCH_EMAILS = 10;       // emails per LLM call (output-token safety)
 const MAX_BATCH_CHARS = 120_000;   // ~30k input tokens per call, well under model limits
 
+// Long digests (many circulars stacked in one email) used to be TRUNCATED at
+// the classifier's per-email cap — every order past the cut was silently lost.
+// Instead, split a long email into overlapping parts BEFORE batching; each part
+// is classified in full and the overlap plus downstream dedup (provisional-ref
+// hash for cargo, composite key for vessels) collapses anything extracted twice.
+const PART_CHARS = 8_000;          // max chars per part (classifier cap is 8,800)
+const PART_OVERLAP = 600;          // re-shown at each cut so no order is split blind
+const MAX_PARTS = 6;               // hard cost bound (~48k chars ≈ any real digest)
+
+export function splitLongEmail(e: EmailMsg): EmailMsg[] {
+  if (e.text.length <= PART_CHARS) return [e];
+  const parts: EmailMsg[] = [];
+  let start = 0;
+  while (start < e.text.length && parts.length < MAX_PARTS) {
+    let end = Math.min(start + PART_CHARS, e.text.length);
+    if (end < e.text.length) {
+      const nl = e.text.lastIndexOf("\n", end);
+      if (nl > start + PART_CHARS / 2) end = nl;   // prefer a line boundary
+    }
+    const i = parts.length + 1;
+    parts.push({ ...e, id: `${e.id}#p${i}`, subject: `${e.subject} (part ${i})`, text: e.text.slice(start, end) });
+    if (end >= e.text.length) break;
+    start = end - PART_OVERLAP;
+  }
+  return parts;
+}
+
+// Overlap/dedup keys — the same commercial facts extracted twice are one item.
+const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+function cargoKey(c: CargoRecord): string {
+  return [c.commodity, c.qty_min_mt, c.qty_max_mt, c.load_port, c.load_zone, c.disch_port, c.disch_zone, c.laycan_from, c.laycan_to].map(norm).join("|");
+}
+function vesselKey(v: VesselRecord): string {
+  return [v.imo || v.vessel_name, v.dwt, v.open_port, v.open_date].map(norm).join("|");
+}
+function dedupBy<T>(items: T[], key: (x: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((x) => {
+    const k = key(x);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Hard timeout: a stalled network request never rejects on its own, so race it
@@ -40,7 +85,7 @@ function batchEmails(emails: EmailMsg[]): EmailMsg[][] {
   let cur: EmailMsg[] = [];
   let curChars = 0;
   for (const e of emails) {
-    const len = Math.min(e.text.length, 6000) + 200;
+    const len = Math.min(e.text.length, PART_CHARS + PART_OVERLAP) + 200;
     if (cur.length > 0 && (cur.length >= MAX_BATCH_EMAILS || curChars + len > MAX_BATCH_CHARS)) {
       batches.push(cur); cur = []; curChars = 0;
     }
@@ -85,8 +130,10 @@ async function classifyAll(
 ): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[] }> {
   const { model, vendor, modelName } = await getActiveModel(supabase);
   const graph = buildClassifierGraph(new LangChainClassifier(model));
-  const batches = batchEmails(emails);
-  emit({ type: "log", msg: `classifying ${emails.length} email(s) with ${vendor} · ${modelName} — ${batches.length} batch(es) of up to ${MAX_BATCH_EMAILS}, ${CONCURRENCY} in parallel` });
+  const expanded = emails.flatMap(splitLongEmail);
+  const batches = batchEmails(expanded);
+  const nSplit = expanded.length - emails.length;
+  emit({ type: "log", msg: `classifying ${emails.length} email(s)${nSplit > 0 ? ` (+${nSplit} long-digest part(s))` : ""} with ${vendor} · ${modelName} — ${batches.length} batch(es) of up to ${MAX_BATCH_EMAILS}, ${CONCURRENCY} in parallel` });
 
   const cargo: CargoRecord[] = [];
   const vessels: VesselRecord[] = [];
@@ -99,13 +146,19 @@ async function classifyAll(
       cargo.push(...res.cargo);
       vessels.push(...res.vessels);
       doneEmails += batch.length; doneBatches += 1;
-      emit({ type: "log", msg: `[${doneEmails}/${emails.length}] batch ${doneBatches}/${batches.length} → ${res.cargo.length} cargo, ${res.vessels.length} vessel` });
+      emit({ type: "log", msg: `[${doneEmails}/${expanded.length}] batch ${doneBatches}/${batches.length} → ${res.cargo.length} cargo, ${res.vessels.length} vessel` });
     } catch (e) {
       doneEmails += batch.length; doneBatches += 1;
-      emit({ type: "log", msg: `[${doneEmails}/${emails.length}] ✗ batch ${doneBatches}/${batches.length} skipped (${batch.length} email(s)) — ${e instanceof Error ? e.message : "error"}` });
+      emit({ type: "log", msg: `[${doneEmails}/${expanded.length}] ✗ batch ${doneBatches}/${batches.length} skipped (${batch.length} email(s)) — ${e instanceof Error ? e.message : "error"}` });
     }
   });
-  return { cargo, vessels };
+  // Collapse duplicates from part overlaps (and identical orders circulated in
+  // several emails of the same run — one listing either way).
+  const uCargo = dedupBy(cargo, cargoKey);
+  const uVessels = dedupBy(vessels, vesselKey);
+  const dropped = cargo.length - uCargo.length + vessels.length - uVessels.length;
+  if (dropped > 0) emit({ type: "log", msg: `deduplicated ${dropped} repeated extraction(s) across email parts` });
+  return { cargo: uCargo, vessels: uVessels };
 }
 
 async function stageAndFinish(

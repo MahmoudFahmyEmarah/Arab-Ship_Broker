@@ -113,6 +113,7 @@ export function normalizeCargo(rec: CargoRecord, currentYear = new Date().getFul
     : grainHeuristic(rec.commodity);
   const r: CargoRecord = { ...rec, asb_regime: regime };
   r.commodity = clip(r.commodity, 60);
+  r.packaging = clip(r.packaging, 30);
   r.load_port = clip(r.load_port, 40);
   r.disch_port = clip(r.disch_port, 60);
   r.broker = clip(r.broker, 50);

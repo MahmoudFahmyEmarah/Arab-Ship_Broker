@@ -109,6 +109,10 @@ export const SHEET_SPECS: SheetSpec[] = [
       { header: "BATCH", aliases: ["BATCH_ID"], column: "batch_id", transform: str },
       { header: "CARGO_TYPE", aliases: ["TYPE"], column: "cargo_type", transform: cargoType, required: true },
       { header: "COMMODITY", aliases: ["COMMODITY_NAME"], column: "commodity_name", transform: str, required: true },
+      // Filled by the staging resolver (lib/sync/commodity.ts), not by sources:
+      // packaging split out of the raw commodity phrase + the catalog link.
+      { header: "PACKAGING", aliases: ["PACKAGING_TYPE"], column: "packaging_type", transform: str },
+      { header: "COMMODITY_ID", column: "commodity_id", transform: str },
       { header: "QTY_MIN_MT", aliases: ["QTY_MIN"], column: "qty_min_mt", transform: intStrip, required: true },
       { header: "QTY_MAX_MT", aliases: ["QTY_MAX"], column: "qty_max_mt", transform: intStrip, required: true },
       { header: "STOWAGE_FACTOR", aliases: ["SF"], column: "stowage_factor", transform: num },

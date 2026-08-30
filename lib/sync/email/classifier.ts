@@ -7,12 +7,18 @@ import { z } from "zod";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { Classifier, ClassifyResult, EmailMsg } from "./types";
 
-const PER_EMAIL_CHARS = 6000; // cap each email's text inside a batch
+// Cap each email's text inside a batch. Long digests are pre-split into
+// overlapping parts by run.ts BEFORE batching, so this cap must stay above the
+// part size (8000 + overlap) — it is a safety net, not a truncation point.
+const PER_EMAIL_CHARS = 8800;
 
 const CargoItem = z.object({
   ref: z.string().nullable().optional().describe("broker reference if present, e.g. CM-123"),
   cargo_type: z.enum(["Dry Bulk", "Break Bulk"]).nullable().optional().describe("bulk = loose in holds; break bulk = bagged/bundled/palletised/unitised"),
-  commodity: z.string().nullable().optional(),
+  commodity: z.string().nullable().optional()
+    .describe("the commodity ITSELF, without packaging words — 'Brucite Ore in big bags' → 'Brucite Ore'; 'bagged urea' → 'Urea'; 'wheat in bulk' → 'Wheat'"),
+  packaging: z.string().nullable().optional()
+    .describe("how the cargo is packed, split out of the description: 'bags', 'big bags', 'bulk', 'bundles', 'drums', 'pallets'…; null if not stated"),
   qty_min_mt: z.number().nullable().optional().describe("min quantity in metric tonnes, number only"),
   qty_max_mt: z.number().nullable().optional(),
   load_port: z.string().nullable().optional(),
@@ -76,6 +82,12 @@ function batchSysPrompt(count: number): string {
     "For EACH email, in ONE pass: classify it (cargo / vessel / mixed / irrelevant) and extract EVERY distinct cargo order and vessel position.",
     "Return exactly one result object per email, tagged with its index i. Irrelevant email → empty arrays.",
     "",
+    "COMPLETENESS — the single most important rule:",
+    "• One email is often a DIGEST of many circulars: numbered lists, one order per line/paragraph, several forwarded circulars stacked with separators (---, ***, '***CIRCULAR***', 'ORDER 1/2/3', repeated signatures, 'Fwd:'/'FW:' headers inside the body).",
+    "• Scan every email TO ITS LAST LINE and return one item per distinct order/position. If the text lists 9 cargo orders, return 9 cargo items — never stop after the first few, never merge different orders into one item.",
+    "• The same email may carry cargo orders AND open vessel positions together → category 'mixed', with BOTH arrays filled.",
+    "• Two orders are distinct if any commercial fact differs (commodity, quantity, ports, laycan, rates). A repeated identical order in the same email is ONE item.",
+    "",
     "FIELD RULES (follow exactly):",
     "• QUANTITY: always fill BOTH qty_min_mt and qty_max_mt (numbers, strip commas/'k'/'mts'). 'N +/- X%' → min=round(N*(1-X/100)), max=round(N*(1+X/100)); 'A/B' or 'A-B' → A and B; single figure → both equal.",
     `• LAYCAN: ISO YYYY-MM-DD, or 'SPOT'/'PPT' for prompt/spot. Day/month with no year → use ${year}.`,
@@ -100,10 +112,12 @@ function batchSysPrompt(count: number): string {
     "• MULTI-PARCEL: two or more different commodities in one enquiry (e.g. 'corn + wheat', 'cement + steel').",
     "",
     "WORKED EXAMPLES:",
-    "• '8000 MT harmless cargo in bundles SF 1.1 1SPB Tangier/1SPB Alexandria, firm, 1000 MTS SSHEX bends' → {cargo_type:'Break Bulk', commodity:'harmless cargo in bundles', qty_min_mt:8000, qty_max_mt:8000, load_port:'Tangier', disch_port:'Alexandria', laytime_structure:'1000 MTS SSHEX bends', load_terms:null, asb_regime:'CSS', notes:'firm; SF 1.1'}",
-    "• '25,000 mts +-10% wheat WOG Pivdennyi/1SB Egypt Med, 8000 SSHEX / 4000 SSHEX, 2.5%' → {cargo_type:'Dry Bulk', commodity:'wheat', qty_min_mt:22500, qty_max_mt:27500, load_port:'Pivdennyi', disch_port:'Egypt Med', load_rate:'8000 SSHEX', disch_rate:'4000 SSHEX', laytime_structure:'8000 SSHEX / 4000 SSHEX', load_terms:null, commission_pct:2.5, asb_regime:'GRAIN', notes:'WOG'}",
-    "• '5,500 mts bagged urea ex ADABIYA / Dar Es Salaam or Mombasa 2000/1250' → {cargo_type:'Break Bulk', commodity:'bagged urea', qty_min_mt:5500, qty_max_mt:5500, load_port:'Adabiya', disch_port:'Dar Es Salaam or Mombasa', load_rate:'2000', disch_rate:'1250', laytime_structure:'2000/1250', load_terms:null, asb_regime:'IMSBC'}",
+    "• '8000 MT harmless cargo in bundles SF 1.1 1SPB Tangier/1SPB Alexandria, firm, 1000 MTS SSHEX bends' → {cargo_type:'Break Bulk', commodity:'Harmless Cargo', packaging:'bundles', qty_min_mt:8000, qty_max_mt:8000, load_port:'Tangier', disch_port:'Alexandria', laytime_structure:'1000 MTS SSHEX bends', load_terms:null, asb_regime:'CSS', notes:'firm; SF 1.1'}",
+    "• '25,000 mts +-10% wheat WOG Pivdennyi/1SB Egypt Med, 8000 SSHEX / 4000 SSHEX, 2.5%' → {cargo_type:'Dry Bulk', commodity:'Wheat', packaging:'bulk', qty_min_mt:22500, qty_max_mt:27500, load_port:'Pivdennyi', disch_port:'Egypt Med', load_rate:'8000 SSHEX', disch_rate:'4000 SSHEX', laytime_structure:'8000 SSHEX / 4000 SSHEX', load_terms:null, commission_pct:2.5, asb_regime:'GRAIN', notes:'WOG'}",
+    "• '5,500 mts bagged urea ex ADABIYA / Dar Es Salaam or Mombasa 2000/1250' → {cargo_type:'Break Bulk', commodity:'Urea', packaging:'bags', qty_min_mt:5500, qty_max_mt:5500, load_port:'Adabiya', disch_port:'Dar Es Salaam or Mombasa', load_rate:'2000', disch_rate:'1250', laytime_structure:'2000/1250', load_terms:null, asb_regime:'IMSBC'}",
+    "• 'Brucite ore in big bags 1500 mts F.East/C.Med' → {cargo_type:'Break Bulk', commodity:'Brucite Ore', packaging:'big bags', qty_min_mt:1500, qty_max_mt:1500, load_zone:'F.EAST', disch_zone:'C.MED', asb_regime:'IMSBC'}",
     "• 'Our vessel is open at Mostaganem port Algeria 17k dwt bulk carrier. We need cargo for Black Sea or Turkey' → vessel {vessel_name:null, vessel_type:'Bulk Carrier', dwt:17000, open_port:'Mostaganem', open_country:'Algeria', open_zone:'W.MED', direction:'Black Sea or Turkey', dest_zones:['B.SEA','E.MED']}",
+    "• A digest like 'PLS PROPOSE SUITABLE TONNAGE FOR: 1) 5000 mt wheat Constanta/Alexandria 10-15 Sep … 2) 12000 mt urea in bags Damietta/Mersin 12-18 Sep … MV KAPITAN open Izmir 09 Sep 8500 dwt gearless' → category 'mixed', cargo:[wheat item, urea item], vessels:[KAPITAN item] — every numbered order becomes its own item.",
     "",
     "Leave any field null when not stated — never invent values (but ALWAYS derive open_zone/dest_zones from named places using the ZONES glossary).",
   ].join("\n");
