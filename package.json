@@ -25,6 +25,7 @@
     "@whiskeysockets/baileys": "^6.7.23",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "flag-icons": "^7.5.0",
     "framer-motion": "^12.38.0",
     "imapflow": "^1.4.3",
     "leaflet": "^1.9.4",

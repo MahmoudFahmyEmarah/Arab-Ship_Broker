@@ -36,6 +36,7 @@ interface NavDef {
   action?: boolean;
   section?: string;
   disabled?: boolean;
+  comingSoon?: boolean;
 }
 
 // Module-scope (stable) nav item — `activeHref`/`collapsed` are passed in so the
@@ -46,16 +47,19 @@ function NavItem({
   glyph,
   action,
   disabled,
+  comingSoon,
   activeHref,
   collapsed,
 }: NavDef & { activeHref?: string; collapsed: boolean }) {
   const active = href === activeHref;
-  if (disabled) {
-    // Tier-gated (T3+) — shown but not navigable, with an explanatory tooltip.
+  if (disabled || comingSoon) {
+    // Not navigable: either tier-gated (T3+) or held behind Coming Soon.
+    const tip = comingSoon ? "Coming soon" : "Available from Subscriber tier (T3+)";
+    const tag = comingSoon ? "SOON" : "T3+";
     return (
       <div
         className="nav-item"
-        title="Available from Subscriber tier (T3+)"
+        title={tip}
         style={{ opacity: 0.45, cursor: "not-allowed", ...(collapsed ? { justifyContent: "center", padding: "10px 0" } : null) }}
         aria-disabled="true"
       >
@@ -63,7 +67,7 @@ function NavItem({
         {!collapsed && (
           <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
             {label}
-            <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--asb-gray-500)", border: "0.5px solid var(--asb-gray-300, #cdd5e0)", borderRadius: 3, padding: "0 3px" }}>T3+</span>
+            <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--asb-gray-500)", border: "0.5px solid var(--asb-gray-300, #cdd5e0)", borderRadius: 3, padding: "0 3px" }}>{tag}</span>
           </span>
         )}
       </div>
@@ -143,9 +147,9 @@ export function PortalSidebar({
     ...(isCargo ? [{ href: `${basePath}/cargo`, label: "Cargo Market", glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} /> }] : []),
     ...(isVessel ? [{ href: `${basePath}/vessels/browse`, label: "Tonnage Market", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> }] : []),
     { section: "Economic Calculators" },
-    { href: `${basePath}/voyage-estimator`, label: "Voyage Cost Estimator", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
-    { href: `${basePath}/ports-da`, label: "Ports DA Calculator", disabled: econLocked, glyph: (a: boolean) => <IconPortDA className="nav-icon" size={16} color={c(a)} /> },
-    { href: `${basePath}/suez-toll`, label: "Suez Canal Toll", disabled: econLocked, glyph: (a: boolean) => <IconSuezToll className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/voyage-estimator`, label: "Voyage Cost Estimator", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/ports-da`, label: "Ports DA Calculator", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconPortDA className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/suez-toll`, label: "Suez Canal Toll", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconSuezToll className="nav-icon" size={16} color={c(a)} /> },
     ...(role === "admin"
       ? [
           { section: "Admin" } as const,

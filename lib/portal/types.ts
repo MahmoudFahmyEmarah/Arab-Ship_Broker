@@ -31,6 +31,8 @@ export interface CargoView {
   laycanFrom: string;
   laycanTo: string;
   laycanDays: number | null;
+  // Freshness clock — ISO timestamp of when the listing was posted/confirmed
+  postedAt?: string | null;
   loadTerms: string | null;
   loadRate: number | null;
   dischRate: number | null;
@@ -88,6 +90,8 @@ export interface VesselView {
   openDate: string;
   openDateUrgency: "red" | "amber" | "green";
   openDateDays: number | null;
+  // Freshness clock — ISO timestamp of when the position was posted/confirmed
+  postedAt?: string | null;
   status: VesselStatusView;
   matches: number;
   fuel: {

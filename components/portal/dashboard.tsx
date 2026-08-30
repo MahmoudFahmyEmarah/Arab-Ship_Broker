@@ -4,10 +4,24 @@
 // (asb/pages.jsx: DashboardPanel, DashCargoRow, DashVesselRow).
 import * as React from "react";
 import { CargoView, VesselView } from "@/lib/portal/types";
+import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
+import { flagCode } from "@/lib/portal/flags";
+import "flag-icons/css/flag-icons.min.css";
+
+// Human tooltip for the posted-age tag ("Posted 3 days ago")
+function postedTooltip(postedAt: string | null | undefined, futureDate?: string | null): string {
+  const l = postedAgeLabel(postedAt);
+  if (!l) return "";
+  const base = l === "<1d" ? "Posted today" : "Posted " + l.replace("d", " day(s)") + " ago";
+  const f = futureDate ? Date.parse(futureDate) : NaN;
+  const ahead = Number.isFinite(f) && f >= new Date().setHours(0, 0, 0, 0);
+  return ahead ? base + " — stays listed while its laycan/open date is still ahead" : base;
+}
 import {
   formatQtyVol,
   formatLaycanRange,
   cargoTypeLabel,
+  formatShortDate,
 } from "@/lib/portal/format";
 import { IconCaret } from "./icons";
 import { CargoCard } from "./CargoCard";
@@ -29,24 +43,37 @@ export function DashCargoRow({
   return (
     <div className={`dash-row strip-${c.scope}${focused ? " is-focused" : ""}`} onClick={onClick}>
       {c.matches > 0 && <span className="dash-row__badge">{c.matches}</span>}
-      <div className="dash-row__r1">
+      {postedAgeLabel(c.postedAt) && (
+        <span className="dash-row__age mono" title={postedTooltip(c.postedAt, c.laycanTo || null)}>{postedAgeLabel(c.postedAt)}</span>
+      )}
+      {/* Compact: type rides beside the commodity name (one line saved) */}
+      <div className="dash-row__r1 is-left">
         <span className="dash-row__name">{c.cargo}</span>
-        <span className="dash-row__ref mono">{c.refId}</span>
-      </div>
-      <div className="dash-row__r2">
-        {/* IN/OUT/PARTIAL status is internal guidance only — not shown to members. */}
         <span className="asb-badge tiny cargo-type">{typeLabel}</span>
       </div>
       <div className="dash-row__r3">
-        <span className="dash-row__route mono">
-          <strong>{c.route.polCode}</strong> → <strong>{c.route.podCode}</strong>
-        </span>
-        <span className="dash-row__zones">
-          {c.route.polZone} → {c.route.podZone}
-        </span>
+        {/* POL → POD first; when a listing carries no port codes (e.g. range
+            positions from circulars) show the zones AS the route — never a
+            dangling arrow with empty codes. */}
+        {c.route.polCode && c.route.podCode ? (
+          <>
+            <span className="dash-row__route mono">
+              <strong>{c.route.polCode}</strong> → <strong>{c.route.podCode}</strong>
+            </span>
+            <span className="dash-row__zones">
+              {c.route.polZone} → {c.route.podZone}
+            </span>
+          </>
+        ) : (
+          <span className="dash-row__route mono">
+            <strong>{c.route.polZone || "—"}</strong> → <strong>{c.route.podZone || "—"}</strong>
+          </span>
+        )}
         <span className="dash-row__sep">·</span>
         {c.spot ? <span className="cc-spot">SPOT</span> : <span className="dash-row__lay">{laycanStr}</span>}
-        <span className="dash-row__sep">·</span>
+      </div>
+      {/* Line 3 — commercials (line 2 ends at the laycan date) */}
+      <div className="dash-row__r3">
         <span className="dash-row__qty">
           {weight}
           <span className="dash-row__vol" style={sfMissing ? { color: "#8B95A3" } : undefined}>
@@ -84,9 +111,12 @@ export function DashVesselRow({
   onClick?: () => void;
 }) {
   const urg = v.openDateUrgency || "green";
+  const fc = flagCode(v.flag);
+  const flagName = v.flag && v.flag !== "—" ? v.flag : null;
   return (
     <div className={`dash-row dash-row--inline${focused ? " is-focused" : ""}`} onClick={onClick}>
-      {/* Status + match count sit LEFT-aligned right after the name (09 §2). */}
+      {/* Status + match count sit LEFT-aligned right after the name (09 §2);
+          the flag state (icon + name) fills the upper-right slot. */}
       <div className="dash-row__r1 is-left">
         <span className="dash-row__name">{v.name}</span>
         <span className={`asb-badge ${v.status === "open" ? "open" : v.status === "review" ? "review" : "fixed"}`}>
@@ -97,16 +127,33 @@ export function DashVesselRow({
             {v.matches}
           </span>
         )}
+        {flagName && (
+          <span className="dash-row__flag" title={`Flag state: ${flagName}`}>
+            {fc && <span className={`fi fi-${fc}`} aria-hidden />}
+            <span className="dash-row__flag-name">{flagName}</span>
+          </span>
+        )}
       </div>
-      <div className="dash-row__r2">
-        {v.type} · <strong>{v.dwt} DWT</strong> · {v.geared ? "Geared" : "Gearless"}
-      </div>
+      {/* Same top-right posted-age tag as the cargo rows */}
+      {postedAgeLabel(v.postedAt) && (
+        <span
+          className="dash-row__age mono"
+          title={postedTooltip(v.postedAt, v.openDate !== "—" ? v.openDate : null)}
+        >
+          {postedAgeLabel(v.postedAt)}
+        </span>
+      )}
+      {/* Line 2 — spec + open position, ending at the open date */}
       <div className="dash-row__r3">
+        {v.type} · <strong>{v.dwt} DWT</strong> · {v.geared ? "Geared" : "Gearless"}
+        <span className="dash-row__sep">·</span>
         <span className={`asb-dot ${urg} ${urg === "red" ? "pulse" : ""}`} />
         <strong>{v.openPort}</strong>
         <span className="dash-row__sep">·</span>
-        <span>{v.openDate}</span>
-        <span className="dash-row__sep">·</span>
+        <span>{formatShortDate(v.openDate)}</span>
+      </div>
+      {/* Line 3 — performance */}
+      <div className="dash-row__r3">
         <span>M/E {v.fuel.vlsfoSea} MT/d</span>
       </div>
     </div>
@@ -129,6 +176,7 @@ export function DashboardPanel<T extends { id: string }>({
   focusedId,
   onSelect,
   defaultOpen = true,
+  defaultView = "list",
   headerAccessory,
   children,
 }: {
@@ -139,11 +187,12 @@ export function DashboardPanel<T extends { id: string }>({
   focusedId?: string | null;
   onSelect?: (item: T) => void;
   defaultOpen?: boolean;
+  defaultView?: "list" | "card";
   headerAccessory?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
-  const [view, setView] = React.useState<"list" | "card">("list");
+  const [view, setView] = React.useState<"list" | "card">(defaultView);
   const [filterId, setFilterId] = React.useState<string | null>(null);
 
   const isDataPanel = Array.isArray(data) && Array.isArray(statDefs);

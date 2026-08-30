@@ -4,6 +4,9 @@
 // (Rules-engine tooltips + voyage deep-link deferred; structure/classes intact.)
 import * as React from "react";
 import { VesselView } from "@/lib/portal/types";
+import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
+import { flagCode } from "@/lib/portal/flags";
+import "flag-icons/css/flag-icons.min.css";
 import { FieldRow, urgencyDot } from "./ui";
 
 export function VesselCard({
@@ -53,8 +56,9 @@ export function VesselCard({
             {name}
           </div>
           <div style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-gray-500)", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
-            <span className="mono">{imo}</span> · {v.flag} · {v.type}
+            <span className="mono">{imo}</span> · {flagCode(v.flag) && <><span className={`fi fi-${flagCode(v.flag)}`} style={{ fontSize: 11, borderRadius: 2, marginRight: 4, boxShadow: "0 0 0 0.5px rgba(13,37,69,.18)" }} aria-hidden /></>}{v.flag} · {v.type}
             {v.built ? ` · Built ${v.built}` : ""}
+            {postedAgeLabel(v.postedAt) ? <> · <span title={postedAgeLabel(v.postedAt) === "<1d" ? "Posted today" : `Posted ${postedAgeLabel(v.postedAt)?.replace("d", " day(s)")} ago`}>{postedAgeLabel(v.postedAt)} ago</span></> : null}
           </div>
         </div>
       </div>

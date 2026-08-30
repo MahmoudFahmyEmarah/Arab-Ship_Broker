@@ -308,11 +308,13 @@ export function IconCaret({
   className,
   direction = "down",
 }: IconProps & { direction?: "down" | "up" | "left" | "right" }) {
+  // CSS rotate needs explicit units — unitless values are ignored entirely
+  // (the caret would never visually flip on collapse/expand).
   const transform = {
-    down: "rotate(0)",
-    up: "rotate(180)",
-    left: "rotate(90)",
-    right: "rotate(-90)",
+    down: "rotate(0deg)",
+    up: "rotate(180deg)",
+    left: "rotate(90deg)",
+    right: "rotate(-90deg)",
   }[direction];
   return (
     <svg {...base(size, color, className)} style={{ transform, transition: "transform 150ms" }}>

@@ -14,6 +14,7 @@ import { DashboardPanel } from "./dashboard";
 import type { PortGeo } from "@/lib/portal/port-coords";
 import { CargoDetailPanel, VesselDetailPanel } from "./DetailPanels";
 import {
+  PostedFilter,
   FilterMenu,
   CheckList,
   RangeMenu,
@@ -26,6 +27,7 @@ import {
   CLASS_OPTS,
   type SizeRange,
 } from "./filters";
+import { useMarketVisibility, withinPostedWindow } from "@/lib/portal/useMarketVisibility";
 import { IconPlus, IconBell, IconMap } from "./icons";
 
 // Top matches: ONE matching module (lib/portal/matching) — same gates as the map pairing.
@@ -164,6 +166,59 @@ export function DashboardBoard({
   matchVessels?: VesselView[];
 }) {
   const [mode, setMode] = React.useState<"cargo" | "vessel">("cargo");
+  // Layout: split (panels beside the map) or wide (full-width map, card
+  // sections below). Persisted per browser.
+  const [wideMap, setWideMap] = React.useState(false);
+  React.useEffect(() => {
+    try { if (localStorage.getItem("asb:dashLayout") === "wide") setWideMap(true); } catch {}
+  }, []);
+  const toggleWide = () => setWideMap((w) => {
+    try { localStorage.setItem("asb:dashLayout", w ? "split" : "wide"); } catch {}
+    return !w;
+  });
+  // Wide layout: map height as % of the visible body (100 = full screen,
+  // scroll down for the card sections). Draggable + persisted.
+  const [wideMapH, setWideMapH] = React.useState(100);
+  React.useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem("asb:dashMapH"));
+      if (Number.isFinite(v) && v >= 35 && v <= 100) setWideMapH(v);
+    } catch {}
+  }, []);
+  const wideScrollRef = React.useRef<HTMLDivElement>(null);
+  const widePanelsRef = React.useRef<HTMLDivElement>(null);
+  const isDraggingH = React.useRef(false);
+  const onWideDividerMouseDown = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingH.current = true;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev: MouseEvent) => {
+      if (!isDraggingH.current || !wideScrollRef.current) return;
+      const el = wideScrollRef.current;
+      const rect = el.getBoundingClientRect();
+      // Divider tracks the pointer: map height = pointer y within the body,
+      // plus whatever has already been scrolled out of view above it.
+      const pct = ((ev.clientY - rect.top + el.scrollTop - 12) / el.clientHeight) * 100;
+      setWideMapH(Math.max(35, Math.min(100, pct)));
+    };
+    const onUp = () => {
+      isDraggingH.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setWideMapH((v) => {
+        try { localStorage.setItem("asb:dashMapH", String(Math.round(v))); } catch {}
+        return v;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+  const scrollToPanels = React.useCallback(() => {
+    widePanelsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
   // Dashboard = overview: panels sheet OPEN on phone arrival (map behind it)
   const [sheetPeek, toggleSheetPeek] = useSheetPeek(false);
   const [focusedCargo, setFocusedCargo] = React.useState<string | null>(null);
@@ -204,6 +259,10 @@ export function DashboardBoard({
   const [fSize, setFSize] = React.useState<SizeRange>(null);
   const [fTime, setFTime] = React.useState<number | null>(null);
   const [fGear, setFGear] = React.useState("any");
+  // Market freshness: the live window by default; tiered archive on request.
+  const marketVis = useMarketVisibility();
+  const [fPosted, setFPosted] = React.useState<number | null>(null);
+  const postedDays = fPosted ?? marketVis.freshDays;
 
   const ZONE_OPTS = React.useMemo(
     () =>
@@ -238,9 +297,10 @@ export function DashboardBoard({
         if (fSize.max != null && q > fSize.max) return false;
       }
       if (fTime != null && !(c.laycanDays != null && c.laycanDays <= fTime)) return false;
+      if (!withinPostedWindow(c.postedAt, c.laycanTo || null, postedDays, marketVis.laycanException)) return false;
       return true;
     },
-    [fCargoType, fZones, fClass, fSize, fTime],
+    [fCargoType, fZones, fClass, fSize, fTime, postedDays, marketVis.laycanException],
   );
   const vesselPasses = React.useCallback(
     (v: VesselView) => {
@@ -258,13 +318,15 @@ export function DashboardBoard({
       if (fTime != null && !(v.openDateDays != null && v.openDateDays <= fTime)) return false;
       if (fGear === "geared" && !v.geared) return false;
       if (fGear === "gearless" && v.geared) return false;
+      if (!withinPostedWindow(v.postedAt, v.openDate !== "—" ? v.openDate : null, postedDays, marketVis.laycanException)) return false;
       return true;
     },
-    [fVesselType, fZones, fClass, fSize, fTime, fGear],
+    [fVesselType, fZones, fClass, fSize, fTime, fGear, postedDays, marketVis.laycanException],
   );
 
-  const filteredCargos = React.useMemo(() => cargos.filter(cargoPasses), [cargos, cargoPasses]);
-  const filteredVessels = React.useMemo(() => vessels.filter(vesselPasses), [vessels, vesselPasses]);
+  const byPostedDesc = React.useCallback((a: { postedAt?: string | null }, b2: { postedAt?: string | null }) => Date.parse(b2.postedAt ?? "0") - Date.parse(a.postedAt ?? "0"), []);
+  const filteredCargos = React.useMemo(() => cargos.filter(cargoPasses).sort(byPostedDesc), [cargos, cargoPasses, byPostedDesc]);
+  const filteredVessels = React.useMemo(() => vessels.filter(vesselPasses).sort(byPostedDesc), [vessels, vesselPasses, byPostedDesc]);
 
   // Match universe — the market to pair the displayed listings against. Defaults
   // to the displayed arrays (admin / discovery view) when the page doesn't pass
@@ -315,15 +377,34 @@ export function DashboardBoard({
           </div>
           <div className="row" style={{ gap: 8 }}>
             <SourcePill source={source} />
+            <button
+              type="button"
+              className="asb-btn ghost"
+              onClick={toggleWide}
+              title={wideMap ? "Split view — panels beside the map" : "Wide chart — full-width map, card sections below"}
+              aria-label="Toggle dashboard layout"
+              style={{ padding: "5px 8px" }}
+            >
+              {wideMap ? (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="8" height="16" rx="1.5" /><rect x="14" y="4" width="7" height="16" rx="1.5" /></svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="9" rx="1.5" /><rect x="3" y="16" width="5" height="4" rx="1" /><rect x="10" y="16" width="5" height="4" rx="1" /><rect x="17" y="16" width="4" height="4" rx="1" /></svg>
+              )}
+            </button>
+            {/* Live notifications are an admin preview for now — hidden for members
+                until the alerting pipeline goes live. */}
+            {marketVis.isAdmin && (
             <Link className="asb-btn ghost" href="/dashboard/alerts" title="Alerts" aria-label="Alerts" style={{ padding: "5px 8px", position: "relative", textDecoration: "none" }}>
               <IconBell size={15} />
               <span style={{ position: "absolute", top: 3, right: 5, width: 6, height: 6, borderRadius: 99, background: "var(--asb-red)" }} />
             </Link>
+            )}
           </div>
         </div>
       </div>
 
       <div className="filter-bar">
+        <PostedFilter value={postedDays} onChange={(d) => setFPosted(d)} vis={marketVis} />
         <FilterMenu label="Zones" badge={fZones.length || null} active={fZones.length > 0} width={150}>
           <CheckList options={ZONE_OPTS} value={fZones} onChange={setFZones} onClear={() => setFZones([])} />
         </FilterMenu>
@@ -336,7 +417,9 @@ export function DashboardBoard({
         <FilterMenu label="DWT / Quantity" summary={rangeSummary(fSize)} active={!!fSize} width={220}>
           <RangeMenu value={fSize} onChange={setFSize} />
         </FilterMenu>
-        <FilterMenu label="Time window" summary={fTime ? `${fTime}d` : null} active={fTime != null} width={210}>
+        {/* Forward-looking urgency (laycan/open date within N days) — distinct
+            from "Posted", which is backward-looking posting freshness. */}
+        <FilterMenu label="Laycan within" summary={fTime ? `${fTime}d` : null} active={fTime != null} width={210}>
           <TimeMenu value={fTime} onChange={setFTime} />
         </FilterMenu>
         <FilterMenu label="Classification" badge={fClass.length || null} active={fClass.length > 0} width={170}>
@@ -354,76 +437,8 @@ export function DashboardBoard({
         <span className="count">↗ {filteredCargos.length} cargo · {filteredVessels.length} tonnage</span>
       </div>
 
-      {/* Body: panels left + map right — drag the divider to resize */}
-      <div ref={splitContainerRef} className="mkt-body has-map" style={{ flex: 1, display: "flex", padding: 12, gap: 0, minHeight: 0, overflow: "hidden" }}>
-        <div className={`dash-right mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ width: `${splitPct}%`, flexShrink: 0, overflow: "auto", overflowX: "hidden", paddingRight: 4, minWidth: 180 }}>
-          <SheetHandle peek={sheetPeek} onToggle={toggleSheetPeek} label="Dashboard panels" />
-          <DashboardPanel<CargoView>
-            kind="cargo"
-            title="Cargo positions"
-            data={filteredCargos}
-            statDefs={[
-              { id: "active", label: "Active", variant: "active", filter: () => true },
-              { id: "urgent", label: "Urgent", variant: "urgent", filter: (c) => c.laycanDays != null && c.laycanDays < 3 },
-            ]}
-            focusedId={focusedCargo}
-            onSelect={focus.cargo}
-          />
-          <DashboardPanel<VesselView>
-            kind="vessel"
-            title="Open tonnage"
-            data={filteredVessels}
-            statDefs={[
-              { id: "open", label: "Open", variant: "active", filter: (v) => v.status === "open" },
-              { id: "overdue", label: "Overdue", variant: "urgent", filter: (v) => v.openDateUrgency === "red" || (v.openDateDays != null && v.openDateDays < 0) },
-            ]}
-            focusedId={focusedVessel}
-            onSelect={focus.vessel}
-          />
-          <DashboardPanel
-            kind="matches"
-            title="Top matches"
-            headerAccessory={<MatchModeSwitch mode={mode} setMode={setMode} />}
-          >
-            {topMatches.length === 0 ? (
-              <div className="dash-empty">No matches in the current filter.</div>
-            ) : (
-              topMatches.map((m, i) => (
-                <DashMatchCard key={i} m={m} mode={mode}
-                  focused={focusedCargo === m.cargoId}
-                  onClick={() => {
-                    // A match is a cargo↔vessel pair — focusing the cargo draws
-                    // its route on the map (the request behind the click).
-                    setFocusedCargo((id) => (id === m.cargoId ? null : m.cargoId));
-                    setFocusedVessel(null);
-                  }}
-                />
-              ))
-            )}
-          </DashboardPanel>
-        </div>
-        {/* Drag handle */}
-        <div
-          onMouseDown={onDividerMouseDown}
-          title="Drag to resize"
-          style={{
-            width: 10,
-            flexShrink: 0,
-            cursor: "col-resize",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 10,
-          }}
-        >
-          <div style={{
-            width: 3,
-            height: 36,
-            borderRadius: 999,
-            background: "#cbd5e1",
-          }} />
-        </div>
-        <div className="mkt-mappane" style={{ flex: 1, minHeight: 0, minWidth: 200, borderRadius: 4, overflow: "hidden", border: "var(--bd)" }}>
+      {(() => {
+        const mapEl = (
           <MarketMap
             cargos={filteredCargos}
             vessels={filteredVessels}
@@ -433,8 +448,114 @@ export function DashboardBoard({
             onSelectCargo={focus.cargo}
             onSelectVessel={focus.vessel}
           />
-        </div>
-      </div>
+        );
+        const panelEls = (defaultView: "list" | "card") => (
+          <React.Fragment key={defaultView}>
+            <DashboardPanel<CargoView>
+              kind="cargo"
+              title="Cargo positions"
+              data={filteredCargos}
+              defaultView={defaultView}
+              statDefs={[
+                { id: "active", label: "Active", variant: "active", filter: () => true },
+                { id: "urgent", label: "Urgent", variant: "urgent", filter: (c) => c.laycanDays != null && c.laycanDays < 3 },
+              ]}
+              focusedId={focusedCargo}
+              onSelect={focus.cargo}
+            />
+            <DashboardPanel<VesselView>
+              kind="vessel"
+              title="Open tonnage"
+              data={filteredVessels}
+              defaultView={defaultView}
+              statDefs={[
+                { id: "open", label: "Open", variant: "active", filter: (v) => v.status === "open" },
+                { id: "overdue", label: "Overdue", variant: "urgent", filter: (v) => v.openDateUrgency === "red" || (v.openDateDays != null && v.openDateDays < 0) },
+              ]}
+              focusedId={focusedVessel}
+              onSelect={focus.vessel}
+            />
+            <DashboardPanel
+              kind="matches"
+              title="Top matches"
+              headerAccessory={<MatchModeSwitch mode={mode} setMode={setMode} />}
+            >
+              {topMatches.length === 0 ? (
+                <div className="dash-empty">No matches in the current filter.</div>
+              ) : (
+                <div className="dash-match-list">
+                  {topMatches.map((m, i) => (
+                    <DashMatchCard key={i} m={m} mode={mode}
+                      focused={focusedCargo === m.cargoId}
+                      onClick={() => {
+                        // A match is a cargo↔vessel pair — focusing the cargo draws
+                        // its route on the map (the request behind the click).
+                        setFocusedCargo((id) => (id === m.cargoId ? null : m.cargoId));
+                        setFocusedVessel(null);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </DashboardPanel>
+          </React.Fragment>
+        );
+
+        if (wideMap) {
+          // Wide chart: the map spans the full width (full-screen height by
+          // default); the sections flow below as card grids — scroll down or
+          // drag the divider to trade map height for cards.
+          return (
+            <div ref={wideScrollRef} className="mkt-body has-map dash-widewrap" style={{ flex: 1, display: "flex", flexDirection: "column", padding: 12, minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
+              <div className="mkt-mappane" style={{ height: `${wideMapH}%`, minHeight: 320, flexShrink: 0, position: "relative", borderRadius: 4, overflow: "hidden", border: "var(--bd)" }}>
+                {mapEl}
+                <button type="button" className="dash-scrolldown" onClick={scrollToPanels} title="Scroll down to the cargo, tonnage and match cards">
+                  Cards
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+              </div>
+              <div className="dash-widedivider" onMouseDown={onWideDividerMouseDown} title="Drag to resize the map">
+                <div className="dash-widedivider__grip" />
+              </div>
+              <div ref={widePanelsRef} className="dash-widepanels">{panelEls("card")}</div>
+            </div>
+          );
+        }
+
+        return (
+          /* Body: panels left + map right — drag the divider to resize */
+          <div ref={splitContainerRef} className="mkt-body has-map" style={{ flex: 1, display: "flex", padding: 12, gap: 0, minHeight: 0, overflow: "hidden" }}>
+            <div className={`dash-right mkt-listpane${sheetPeek ? " is-peek" : ""}`} style={{ width: `${splitPct}%`, flexShrink: 0, overflow: "auto", overflowX: "hidden", paddingRight: 4, minWidth: 180 }}>
+              <SheetHandle peek={sheetPeek} onToggle={toggleSheetPeek} label="Dashboard panels" />
+              {panelEls("list")}
+            </div>
+            {/* Drag handle */}
+            <div
+              onMouseDown={onDividerMouseDown}
+              title="Drag to resize"
+              style={{
+                width: 10,
+                flexShrink: 0,
+                cursor: "col-resize",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+              }}
+            >
+              <div style={{
+                width: 3,
+                height: 36,
+                borderRadius: 999,
+                background: "#cbd5e1",
+              }} />
+            </div>
+            <div className="mkt-mappane" style={{ flex: 1, minHeight: 0, minWidth: 200, borderRadius: 4, overflow: "hidden", border: "var(--bd)" }}>
+              {mapEl}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

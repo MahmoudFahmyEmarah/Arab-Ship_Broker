@@ -1452,6 +1452,15 @@ button { font: inherit; cursor: pointer; }
 .dash-row__r1.is-left .dash-row__name { min-width: 0; flex-shrink: 1; }
 .dash-row__r1.is-left .asb-badge { flex-shrink: 0; }
 .dash-row__badge.is-inline { position: static; transform: none; flex-shrink: 0; }
+/* Posted-age tag — ONE fixed spot (top-right corner) on every row type */
+.dash-row__age {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 9px;
+  color: var(--asb-gray-500);
+  letter-spacing: 0.02em;
+}
 .dash-row--inline .dash-row__r2,
 .dash-row--inline .dash-row__r3 { padding-right: 0; }
 
@@ -3425,4 +3434,124 @@ button { font: inherit; cursor: pointer; }
   /* Market boards: the density toggle is desktop-only (phone cards are
      always one per row); keep view + map buttons which do real work */
   .match-toggle[aria-label="Card density"] { display: none; }
+}
+
+/* Flag state on vessel rows — SVG flag + registry name in the upper row */
+.dash-row__flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  margin-right: 34px; /* clear the corner posted-age tag */
+  font-size: 10px;
+  color: var(--asb-gray-500);
+  white-space: nowrap;
+  min-width: 0;
+}
+.dash-row__flag .fi {
+  font-size: 12px;          /* flag-icons scales off font-size */
+  border-radius: 2px;
+  box-shadow: 0 0 0 0.5px rgba(13, 37, 69, 0.18);
+}
+.dash-row__flag-name { overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+/* Compact dashboard rows — the type badge moved beside the name, so the rows
+   breathe with less padding and more listings fit per screen */
+.dash-row { padding: 6px 12px; }
+.dash-row__r3 { flex-wrap: wrap; }
+
+/* ════════════════════════════════════════════════════════════════════
+   Wide-chart dashboard layout — full-width map on top, the three
+   sections below as scrollable card grids (4 per row on a wide screen).
+   ════════════════════════════════════════════════════════════════════ */
+.dash-match-list { display: contents; }   /* neutral in the split layout */
+
+.dash-widepanels {
+  flex: none;                 /* natural height — the wide body itself scrolls */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Horizontal drag handle between map and sections (mirrors the split divider) */
+.dash-widedivider {
+  height: 12px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dash-widedivider__grip {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+.dash-widedivider:hover .dash-widedivider__grip { background: #94a3b8; }
+/* Floating "Cards ⌄" pill over the map — jumps to the sections below */
+.dash-scrolldown {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 1200;              /* above the Leaflet panes */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(10, 22, 36, 0.88);
+  color: #e7eef7;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(8, 20, 38, 0.35);
+}
+.dash-scrolldown:hover { background: rgba(16, 34, 54, 0.95); }
+/* Each section scrolls inside itself so all three stay reachable */
+.dash-widepanels .dash-scroll { max-height: 380px; }
+.dash-widepanels .dash-card-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.dash-widepanels .dash-match-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 4px 2px;
+  scrollbar-width: thin;
+}
+@media (max-width: 1500px) {
+  .dash-widepanels .dash-card-grid,
+  .dash-widepanels .dash-match-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1100px) {
+  .dash-widepanels .dash-card-grid,
+  .dash-widepanels .dash-match-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .dash-widepanels .dash-card-grid,
+  .dash-widepanels .dash-match-list { grid-template-columns: 1fr; }
+}
+
+/* On phones the sheet CSS absolutizes the map pane — the wide layout is a
+   plain stacked column instead, so undo those rules under .dash-widewrap. */
+@media (max-width: 900px) {
+  .mkt-body.dash-widewrap {
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 8px !important;
+  }
+  .mkt-body.dash-widewrap .mkt-mappane {
+    position: relative !important;
+    inset: auto !important;
+    height: 44vh !important;
+    min-height: 240px !important;
+  }
+  /* Touch drag is not wired for the divider — hide both affordances */
+  .dash-widedivider { display: none; }
+  .dash-scrolldown { display: none; }
 }

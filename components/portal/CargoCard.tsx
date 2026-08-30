@@ -6,6 +6,7 @@
 // visual structure and classes are otherwise identical.)
 import * as React from "react";
 import { CargoView } from "@/lib/portal/types";
+import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
 import {
   cargoTypeLabel,
   cargoTypeBadgeVariant,
@@ -70,6 +71,9 @@ export function CargoCard({
       <div className="cc-line1">
         <div className="cc-title">{c.cargo}</div>
         <span className={`cc-cat cc-cat--${typeVariant}`}>{typeLabel}</span>
+        {postedAgeLabel(c.postedAt) && (
+          <span className="mono" style={{ fontSize: 10, color: "var(--asb-gray-500)", marginLeft: "auto" }} title={postedAgeLabel(c.postedAt) === "<1d" ? "Posted today" : `Posted ${postedAgeLabel(c.postedAt)?.replace("d", " day(s)")} ago`}>{postedAgeLabel(c.postedAt)}</span>
+        )}
       </div>
 
       <div className="cc-line2">
