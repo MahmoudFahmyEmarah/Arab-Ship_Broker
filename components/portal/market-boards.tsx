@@ -26,7 +26,7 @@ import { IconMap } from "./icons";
 import { SheetHandle, useSheetPeek } from "./SheetHandle";
 import { useSplitPane, SplitDivider } from "./useSplitPane";
 import {
-  FilterMenu,
+  PostedFilter, FilterMenu,
   CheckList,
   RangeMenu,
   TimeMenu,
@@ -36,6 +36,7 @@ import {
   toMt,
   type SizeRange,
 } from "./filters";
+import { useMarketVisibility, withinPostedWindow } from "@/lib/portal/useMarketVisibility";
 
 const MarketMap = dynamic(() => import("./MarketMap"), {
   ssr: false,
@@ -437,6 +438,10 @@ export function CargoMarketBoard({
   const [fSize, setFSize] = React.useState<SizeRange>(null);
   const [fTime, setFTime] = React.useState<number | null>(null);
   const [sort, setSort] = React.useState<string | null>("Newest first");
+  const marketVis = useMarketVisibility();
+  const [fPosted, setFPosted] = React.useState<number | null>(null);
+  const postedDays = fPosted ?? marketVis.freshDays;
+
 
   // "My matches only" — ids of cargo matching MY open positions, from the same
   // match RPCs the detail panels use. Loaded lazily on first toggle.
@@ -466,13 +471,15 @@ export function CargoMarketBoard({
       if (fImsbc.length && !fImsbc.includes(`Group ${c.imsbcGroup}`)) return false;
       if (fSize) { const q = toMt(c.qtyMt); if (fSize.min != null && q < fSize.min) return false; if (fSize.max != null && q > fSize.max) return false; }
       if (fTime != null && !(c.laycanDays != null && c.laycanDays <= fTime)) return false;
+      if (!withinPostedWindow(c.postedAt, c.laycanTo || null, postedDays, marketVis.laycanException)) return false;
       return true;
     });
+    if (!sort || sort === "Newest first") out = [...out].sort((a, b) => Date.parse(b.postedAt ?? "0") - Date.parse(a.postedAt ?? "0"));
     if (sort === "Quantity ↑") out = [...out].sort((a, b) => toMt(a.qtyMt) - toMt(b.qtyMt));
     if (sort === "Quantity ↓") out = [...out].sort((a, b) => toMt(b.qtyMt) - toMt(a.qtyMt));
     if (sort === "Laycan soonest") out = [...out].sort((a, b) => (a.laycanDays ?? 999) - (b.laycanDays ?? 999));
     return out;
-  }, [views, fZones, fType, fTerms, fImsbc, fSize, fTime, sort, mineOnly, myMatchIds]);
+  }, [views, fZones, fType, fTerms, fImsbc, fSize, fTime, sort, mineOnly, myMatchIds, postedDays, marketVis.laycanException]);
 
   const selected = filtered.find((c) => c.id === selectedId);
 
@@ -525,6 +532,7 @@ export function CargoMarketBoard({
           <span className="mkt-layer-note" style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>Layer 1 · future · Layer 2 · 6d archive · Layer 3 · 1mo archive</span>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <PostedFilter value={postedDays} onChange={(d) => setFPosted(d)} vis={marketVis} />
           <FilterMenu label="Zone" badge={fZones.length || null} active={fZones.length > 0} width={150}>
             <CheckList options={ZONE_OPTS} value={fZones} onChange={setFZones} onClear={() => setFZones([])} />
           </FilterMenu>
@@ -620,6 +628,9 @@ export function TonnageMarketBoard({
   const [fGrain, setFGrain] = React.useState(false);
   const [fDg, setFDg] = React.useState(false);
   const [sort, setSort] = React.useState<string | null>("Newest");
+  const marketVis = useMarketVisibility();
+  const [fPosted, setFPosted] = React.useState<number | null>(null);
+  const postedDays = fPosted ?? marketVis.freshDays;
 
   // "My matches only" — ids of open positions matching MY live cargo.
   const [mineOnly, setMineOnly] = React.useState(false);
@@ -649,13 +660,15 @@ export function TonnageMarketBoard({
       if (fGear === "gearless" && v.geared) return false;
       if (fGrain && !v.grainCertified) return false;
       if (fDg && !v.dgCertified) return false;
+      if (!withinPostedWindow(v.postedAt, v.openDate !== "—" ? v.openDate : null, postedDays, marketVis.laycanException)) return false;
       return true;
     });
+    if (!sort || sort === "Newest") out = [...out].sort((a, b) => Date.parse(b.postedAt ?? "0") - Date.parse(a.postedAt ?? "0"));
     if (sort === "DWT ↑") out = [...out].sort((a, b) => toMt(a.dwt) - toMt(b.dwt));
     if (sort === "DWT ↓") out = [...out].sort((a, b) => toMt(b.dwt) - toMt(a.dwt));
     if (sort === "Open soonest") out = [...out].sort((a, b) => (a.openDateDays ?? 999) - (b.openDateDays ?? 999));
     return out;
-  }, [views, q, fZones, fType, fSize, fTime, fGear, fGrain, fDg, sort, mineOnly, myMatchIds]);
+  }, [views, q, fZones, fType, fSize, fTime, fGear, fGrain, fDg, sort, mineOnly, myMatchIds, postedDays, marketVis.laycanException]);
 
   const selected = filtered.find((v) => v.id === selectedId);
 
@@ -705,6 +718,7 @@ export function TonnageMarketBoard({
           </div>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <PostedFilter value={postedDays} onChange={(d) => setFPosted(d)} vis={marketVis} />
           <FilterMenu label="Zone" badge={fZones.length || null} active={fZones.length > 0} width={150}>
             <CheckList options={ZONE_OPTS} value={fZones} onChange={setFZones} onClear={() => setFZones([])} />
           </FilterMenu>

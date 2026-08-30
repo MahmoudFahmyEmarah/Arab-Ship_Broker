@@ -74,9 +74,12 @@ function vesselToRow(r: VesselRecord): RawRow {
     DWT_GRAIN: r.dwt ?? null,
     FLAG: r.flag ?? null,
     BUILT: r.built ?? null,
+    GRT: r.grt ?? null,
+    NRT: r.nrt ?? null,
     // Open-position intelligence rides along as raw-only keys (no matching
     // sheet column, so they never hit the vessels table) — the review queue
     // and the match engine consume them.
+    OPEN_DATE: r.open_date ?? null,
     OPEN_PORT: r.open_port ?? null,
     OPEN_COUNTRY: r.open_country ?? null,
     OPEN_ZONE: r.open_zone ?? null,

@@ -17,6 +17,7 @@ import {
   type CommodityQueueRow, type VesselQueueRow, type MatchView, type InvalidStagedRow,
 } from "@/app/(admin)/admin/data-sync/actions";
 import { StagedEditDrawer } from "./StagedEditDrawer";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { C, btn } from "./ui";
 
 type Status = "pending" | "mapped" | "ignored";
@@ -250,9 +251,12 @@ function VesselQueue({ onChange }: { onChange: () => void }) {
                 <div style={{ fontSize: 14, fontWeight: 600, color: C.navy }}>{r.vessel_name}</div>
                 <div style={{ fontSize: 12, color: C.ink3, fontFamily: C.mono }}>
                   {r.dwt_grain ? `${r.dwt_grain.toLocaleString()} dwt` : "dwt —"}
+                  {r.grt ? ` · ${r.grt.toLocaleString()} grt` : ""}
                   {r.open_port || r.open_country ? ` · open ${[r.open_port, r.open_country].filter(Boolean).join(", ")}${r.open_zone ? ` (${r.open_zone})` : ""}` : r.open_zone ? ` · open ${r.open_zone}` : ""}
+                  {r.open_date ? ` · from ${r.open_date}` : ""}
                   {r.direction ? ` · → ${r.direction}` : ""}
-                  {r.built ? ` · built ${r.built}` : ""} · no IMO
+                  {r.built ? ` · built ${r.built}` : ""}
+                  {r.imo_hint ? ` · IMO ${r.imo_hint} (workbook)` : " · no IMO"}
                 </div>
               </div>
               {status === "pending" ? (
@@ -275,15 +279,39 @@ function VesselQueue({ onChange }: { onChange: () => void }) {
 
 // ── vessel resolve modal — editable extraction, matches, reply, sync ────────
 function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: () => void; onDone: () => void }) {
-  const [imo, setImo] = useState("");
+  // A reference source (unified workbook) may already know the IMO — pre-fill
+  // it so the admin only has to confirm.
+  const [imo, setImo] = useState(row.imo_hint ?? "");
   const [name, setName] = useState(row.vessel_name);
   const [vtype, setVtype] = useState(row.vessel_type ?? "Bulk Carrier");
   const [dwt, setDwt] = useState(row.dwt_grain != null ? String(row.dwt_grain) : "");
+  const [grt, setGrt] = useState(row.grt != null ? String(row.grt) : "");
+  const [nrt, setNrt] = useState(row.nrt != null ? String(row.nrt) : "");
   const [built, setBuilt] = useState(row.built != null ? String(row.built) : "");
   const [flag, setFlag] = useState(row.flag ?? "");
   const [openPort, setOpenPort] = useState(row.open_port ?? "");
+  const [openDate, setOpenDate] = useState(row.open_date ?? "");
   const [openZone, setOpenZone] = useState(row.open_zone ?? "");
   const [direction, setDirection] = useState(row.direction ?? "");
+  // Platform-standard port entry: suggest curated ports (name · locode)
+  const [portOptions, setPortOptions] = useState<{ name: string; locode: string }[]>([]);
+  useEffect(() => {
+    let c = false;
+    (async () => {
+      // Same client-side read the portal's port autocomplete relies on
+      // (ports are verified-readable for every signed-in user).
+      const { data, error } = await getSupabaseBrowserClient()
+        .from("ports")
+        .select("trade_name, locode")
+        .eq("is_active", true)
+        .order("trade_name")
+        .limit(1000);
+      if (c) return;
+      if (error) { console.error("[manual-review] port options:", error.message); return; }
+      setPortOptions((data ?? []).map((p) => ({ name: p.trade_name as string, locode: p.locode as string })));
+    })();
+    return () => { c = true; };
+  }, []);
   const [saving, setSaving] = useState(false);
   const [matches, setMatches] = useState<MatchView[] | null | "loading">(null);
   const [sendingTeaser, setSendingTeaser] = useState(false);
@@ -298,9 +326,12 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
     vessel_name: name,
     vessel_type: vtype || null,
     dwt_grain: dwt.trim() ? Number.parseInt(dwt.replace(/[,\s]/g, ""), 10) || null : null,
+    grt: grt.trim() ? Number.parseInt(grt.replace(/[,\s]/g, ""), 10) || null : null,
+    nrt: nrt.trim() ? Number.parseInt(nrt.replace(/[,\s]/g, ""), 10) || null : null,
     built: built.trim() ? Number.parseInt(built, 10) || null : null,
     flag: flag.trim() || null,
     open_port: openPort.trim() || null,
+    open_date: openDate.trim() || null,
     open_zone: openZone || null,
     direction: direction.trim() || null,
   });
@@ -361,11 +392,26 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
           </select>
         </div>
         <div><label style={lab}>DWT</label><input value={dwt} onChange={(e) => setDwt(e.target.value)} placeholder="e.g. 17000" style={field} /></div>
+        <div>
+          <label style={lab}>GRT <span style={{ color: C.ink3, fontWeight: 400 }}>(gross — key for port costs)</span></label>
+          <input value={grt} onChange={(e) => setGrt(e.target.value)} placeholder="gross tonnage" style={field} />
+        </div>
+        <div>
+          <label style={lab}>NRT <span style={{ color: C.ink3, fontWeight: 400 }}>(net)</span></label>
+          <input value={nrt} onChange={(e) => setNrt(e.target.value)} placeholder="net tonnage" style={field} />
+        </div>
         <div><label style={lab}>Built</label><input value={built} onChange={(e) => setBuilt(e.target.value)} placeholder="year" style={field} /></div>
         <div><label style={lab}>Flag</label><input value={flag} onChange={(e) => setFlag(e.target.value)} style={field} /></div>
         <div>
           <label style={lab}>Open port {row.open_country && <span style={{ color: C.ink3, fontWeight: 400 }}>({row.open_country})</span>}</label>
-          <input value={openPort} onChange={(e) => setOpenPort(e.target.value)} placeholder="e.g. Mostaganem" style={field} />
+          <input value={openPort} onChange={(e) => setOpenPort(e.target.value)} placeholder="e.g. Mostaganem" style={field} list="dsq-ports" />
+          <datalist id="dsq-ports">
+            {portOptions.map((p) => <option key={p.locode} value={p.name}>{p.locode}</option>)}
+          </datalist>
+        </div>
+        <div>
+          <label style={lab}>Open date <span style={{ color: C.ink3, fontWeight: 400 }}>(availability — key match factor)</span></label>
+          <input type="date" value={openDate} onChange={(e) => setOpenDate(e.target.value)} style={field} />
         </div>
         <div>
           <label style={lab}>Open zone</label>
@@ -379,7 +425,10 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
           <input value={direction} onChange={(e) => setDirection(e.target.value)} placeholder="e.g. Black Sea or Turkey" style={field} />
         </div>
         <div style={{ gridColumn: "1 / -1" }}>
-          <label style={lab}>IMO number <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — 7 digits; blank = sync by name+built+dwt)</span></label>
+          <label style={lab}>
+            IMO number <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — 7 digits; blank = sync by name+built+dwt)</span>
+            {row.imo_hint && <span style={{ color: C.brassDeep, fontWeight: 600 }}> · pre-filled from the unified workbook — please confirm</span>}
+          </label>
           <input value={imo} onChange={(e) => setImo(e.target.value)} placeholder="leave blank to sync without an IMO" style={field} />
         </div>
       </div>

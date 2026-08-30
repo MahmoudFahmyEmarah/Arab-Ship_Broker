@@ -1317,3 +1317,340 @@
   /* Zone quick-chips: keep to one thumbable row */
   .asb-map .filter-chip { padding: 2px 8px; font-size: 10.5px; }
 }
+
+/* Region chips relocated into the right control bar */
+.asb-map .bar-zone {
+  width: 34px;
+  padding: 3px 0;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.10);
+  margin-bottom: 3px;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+/* ── Basemap picker (chart-style flyout from the right bar) ─────────── */
+.asb-map .base-picker {
+  position: absolute;
+  right: 52px;
+  bottom: 96px;
+  z-index: 720;
+  width: 170px;
+  background: rgba(10, 22, 36, 0.97);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.asb-map .base-picker__title {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 2px 6px 7px;
+}
+.asb-map .base-picker__opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+}
+.asb-map .base-picker__opt:hover { background: rgba(255, 255, 255, 0.08); }
+.asb-map .base-picker__opt.is-on { background: rgba(24, 95, 165, 0.3); color: #BFE0FF; }
+.asb-map .base-picker__check { margin-left: auto; font-size: 11px; color: #7BB8F0; }
+.asb-map .base-picker__dot {
+  width: 14px; height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 0.5px solid rgba(255, 255, 255, 0.25);
+}
+.asb-map .base-picker__dot.bp-light { background: linear-gradient(135deg, #f2f2f0, #d8dade); }
+.asb-map .base-picker__dot.bp-dark { background: linear-gradient(135deg, #2b2f33, #14171a); }
+.asb-map .base-picker__dot.bp-nautical { background: linear-gradient(135deg, #bfe3f5, #f6efdc); }
+.asb-map .base-picker__dot.bp-satellite { background: linear-gradient(135deg, #24421f, #123047); }
+
+/* ── Rail flyout panels (Layers / Search) ───────────────────────────── */
+.asb-map .map-flyout {
+  position: absolute;
+  right: 52px;
+  z-index: 720;
+  width: 210px;
+  background: rgba(10, 22, 36, 0.97);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.asb-map .map-flyout--wide { width: 250px; }
+.asb-map .map-flyout__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.asb-map .map-flyout__row:hover { background: rgba(255, 255, 255, 0.08); }
+.asb-map .map-flyout__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.asb-map .map-switch {
+  width: 26px; height: 15px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.15);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.asb-map .map-switch i {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  transition: left 0.15s ease, background 0.15s ease;
+}
+.asb-map .map-switch.is-on { background: rgba(24, 95, 165, 0.8); }
+.asb-map .map-switch.is-on i { left: 13px; background: #fff; }
+.asb-map .map-flyout__input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.asb-map .map-flyout__input::placeholder { color: rgba(255, 255, 255, 0.35); }
+.asb-map .map-flyout__results { max-height: 300px; overflow: auto; margin-top: 6px; }
+.asb-map .map-flyout__group {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 7px 8px 3px;
+}
+/* Vessel-names layer toggle */
+.asb-map.names-off .v-label { display: none !important; }
+
+/* ── Deal card — docked listing card (SeaRates-style) ───────────────── */
+.asb-map .deal-card {
+  position: absolute;
+  top: 12px;
+  right: 56px;
+  z-index: 730;
+  width: 300px;
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  background: rgba(10, 22, 36, 0.97);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.88);
+}
+.asb-map .deal-card__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+  position: sticky;
+  top: 0;
+  background: rgba(10, 22, 36, 0.97);
+  border-radius: 12px 12px 0 0;
+}
+.asb-map .deal-card__headmid { flex: 1; min-width: 0; text-align: center; }
+.asb-map .deal-card__title {
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.asb-map .deal-card__count { font-size: 9.5px; color: rgba(255, 255, 255, 0.4); margin-top: 1px; }
+.asb-map .deal-card__nav,
+.asb-map .deal-card__close {
+  border: 0;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.75);
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.asb-map .deal-card__nav:hover, .asb-map .deal-card__close:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+.asb-map .deal-card__body { padding: 10px 12px 12px; }
+.asb-map .deal-card__tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.asb-map .deal-card__tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.7);
+}
+.asb-map .deal-card__tag.is-spot { background: rgba(239, 159, 39, 0.2); color: #F5B759; }
+.asb-map .deal-card__tag.is-open { background: rgba(151, 196, 89, 0.18); color: #B4DA84; }
+.asb-map .deal-card__tag.is-age { background: rgba(123, 184, 240, 0.15); color: #9CC8F2; }
+.asb-map .deal-card__row { display: flex; gap: 10px; padding: 4px 0; font-size: 12px; }
+.asb-map .deal-card__k { width: 74px; flex-shrink: 0; color: rgba(255, 255, 255, 0.42); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 1px; }
+.asb-map .deal-card__v { flex: 1; min-width: 0; }
+.asb-map .deal-card__dim { color: rgba(255, 255, 255, 0.45); font-size: 11px; margin-left: 5px; }
+.asb-map .deal-card__matches { margin-top: 9px; border-top: 0.5px solid rgba(255, 255, 255, 0.1); padding-top: 8px; }
+.asb-map .deal-card__mtitle { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255, 255, 255, 0.4); margin-bottom: 5px; }
+.asb-map .deal-card__match {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  margin-bottom: 4px;
+  text-align: left;
+}
+.asb-map .deal-card__match:hover { background: rgba(255, 255, 255, 0.12); }
+.asb-map .deal-card__mname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asb-map .deal-card__fit {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+.asb-map .deal-card__fit.fit-strong { background: rgba(151, 196, 89, 0.2); color: #B4DA84; }
+.asb-map .deal-card__fit.fit-good { background: rgba(123, 184, 240, 0.2); color: #9CC8F2; }
+.asb-map .deal-card__fit:not(.fit-strong):not(.fit-good) { background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.6); }
+.asb-map .deal-card__actions { display: flex; gap: 6px; margin-top: 10px; }
+.asb-map .deal-card__btn {
+  flex: 1;
+  border: 0;
+  background: #185FA5;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.asb-map .deal-card__btn:hover { background: #1F6FBE; }
+.asb-map .deal-card__btn--ghost { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.8); }
+.asb-map .deal-card__btn--ghost:hover { background: rgba(255, 255, 255, 0.16); }
+
+/* ── Trade-lane flow animation ──────────────────────────────────────── */
+.asb-map .flow-line {
+  stroke-dasharray: 3 9;
+  animation: asbFlowDash 2.6s linear infinite;
+}
+@keyframes asbFlowDash { to { stroke-dashoffset: -12; } }
+@media (prefers-reduced-motion: reduce) { .asb-map .flow-line { animation: none; } }
+
+/* Mobile: the deal card becomes a bottom sheet over the map */
+@media (max-width: 900px) {
+  .asb-map .deal-card {
+    top: auto;
+    bottom: 10px;
+    left: 10px;
+    right: 54px;
+    width: auto;
+    max-height: 62%;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Chrome consolidation — the map's panels are the ops console: SOLID
+   dark on EVERY base (the translucent glass + light variants left
+   labels white-on-white on the light/nautical/satellite bases).
+   Appended last so these win the cascade.
+   ════════════════════════════════════════════════════════════════════ */
+.asb-map .filter-panel,
+.asb-map.base-light .filter-panel,
+.asb-map.base-nautical .filter-panel,
+.asb-map.base-satellite .filter-panel {
+  background: rgba(10, 22, 36, 0.97);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+}
+.asb-map .filter-panel.open,
+.asb-map.is-fullscreen .filter-panel.open { width: 252px; }
+.asb-map .filter-panel__inner,
+.asb-map.is-fullscreen .filter-panel__inner { width: 252px; }
+.asb-map.base-light .filter-panel__title { color: #7BB8F0; }
+.asb-map.base-light .filter-facet__label { color: rgba(255, 255, 255, 0.4); }
+.asb-map.base-light .filter-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.72);
+}
+.asb-map.base-light .filter-chip:hover { border-color: rgba(255, 255, 255, 0.4); color: #fff; }
+.asb-map.base-light .filter-chip.is-on { background: #185FA5; border-color: #185FA5; color: #fff; }
+.asb-map.base-light .filter-reset {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.75);
+}
+.asb-map .voy-panel,
+.asb-map.base-light .voy-panel,
+.asb-map.base-nautical .voy-panel,
+.asb-map.base-satellite .voy-panel {
+  background: rgba(10, 22, 36, 0.97);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+}
+
+/* Tooltips never sit over an open panel: the active icon's tooltip is
+   redundant (its panel is open), and while ANY panel is open the whole
+   bar goes tooltip-quiet. */
+.asb-map .bar-icon.active .tooltip-l,
+.asb-map .bar-icon.active .tooltip-r,
+.asb-map.panel-open .tooltip-l,
+.asb-map.panel-open .tooltip-r { display: none; }
+
+/* ── Tight rail ── set by MarketMap when the pane is under ~520px tall
+   (wide-layout divider dragged down): the rail scrolls instead of clipping
+   its top/bottom icons. Side tooltips are suppressed here — the scroll box
+   would clip them anyway. */
+.asb-map.rail-tight .right-bar {
+  max-height: calc(100% - 12px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.asb-map.rail-tight .right-bar::-webkit-scrollbar { display: none; }
+.asb-map.rail-tight .tooltip-l,
+.asb-map.rail-tight .tooltip-r { display: none; }

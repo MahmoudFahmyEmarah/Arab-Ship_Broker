@@ -92,6 +92,8 @@ export function toCargoView(
     laycanFrom: row.laycan_from ?? "",
     laycanTo: row.laycan_to ?? "",
     laycanDays: daysFromNow(row.laycan_from),
+    // Freshness clock — when the listing was posted/last confirmed
+    postedAt: (row as { refreshed_at?: string | null }).refreshed_at ?? row.created_at ?? null,
     loadTerms: row.load_terms,
     loadRate: row.load_rate,
     dischRate: row.disch_rate,
@@ -159,6 +161,8 @@ export function vesselFromAvailability(
     openDate: row.open_date ?? "—",
     openDateUrgency: urgencyFromDays(days),
     openDateDays: days,
+    // Freshness clock — when the position was posted/last confirmed
+    postedAt: (row as { refreshed_at?: string | null }).refreshed_at ?? row.created_at ?? null,
     status: statusFromAvailability(row.status),
     matches,
     fuel: {

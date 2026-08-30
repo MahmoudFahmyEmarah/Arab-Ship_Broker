@@ -7,6 +7,7 @@
 // the voyage-estimator phase.)
 import * as React from "react";
 import L from "leaflet";
+import { toast } from "sonner";
 import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -22,6 +23,10 @@ import { getPortRoute } from "@/sdk/app/routes";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
 import { ZONE_SHAPES } from "@/lib/portal/zone-shapes";
 import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
+import { formatLaycanRange, formatShortDate } from "@/lib/portal/format";
+import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
+import { flagCode } from "@/lib/portal/flags";
+import "flag-icons/css/flag-icons.min.css";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { functionalStore } from "@/lib/consent";
 import { getMatchesForCargo } from "@/sdk/app/cargos";
@@ -51,12 +56,54 @@ function curvePts(a: [number, number], b: [number, number], bend = 0.18): [numbe
 // so each zone reads as its real sea basin (the Red Sea looks like the Red Sea)
 // rather than a colored rectangle.
 
-const TILES = {
-  light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-  attribution: "© OpenStreetMap contributors © CARTO",
-  subdomains: "abcd",
+// ── Basemap registry ────────────────────────────────────────────────────────
+// Leaflet is the engine; these are tile PROVIDERS on top of it. Every entry
+// here is key-free and production-safe (the CARTO watermark incident came from
+// a keyed provider blocking non-localhost referers). Keyed providers (CARTO /
+// Mapbox) can join later behind admin-configured keys.
+export type MapBase = "light" | "dark" | "nautical" | "satellite";
+
+const BASES: Record<MapBase, {
+  label: string;
+  hint: string;
+  layers: { url: string; maxNativeZoom?: number }[];
+  attribution: string;
+  darkish: boolean; // drives contrast styling (route halo, chrome)
+}> = {
+  light: {
+    label: "Light",
+    hint: "Esri Light Gray — calm cartographic canvas",
+    layers: [{ url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", maxNativeZoom: 16 }],
+    attribution: "© Esri · © OpenStreetMap contributors",
+    darkish: false,
+  },
+  dark: {
+    label: "Dark",
+    hint: "Esri Dark Gray — the ops-room look",
+    layers: [{ url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", maxNativeZoom: 16 }],
+    attribution: "© Esri · © OpenStreetMap contributors",
+    darkish: true,
+  },
+  nautical: {
+    label: "Nautical",
+    hint: "OpenStreetMap + OpenSeaMap seamarks — buoys, lights, marks",
+    layers: [
+      { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png" },
+      { url: "https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" },
+    ],
+    attribution: "© OpenStreetMap contributors · © OpenSeaMap",
+    darkish: false,
+  },
+  satellite: {
+    label: "Satellite",
+    hint: "Esri World Imagery",
+    layers: [{ url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" }],
+    attribution: "© Esri · Maxar, Earthstar Geographics",
+    darkish: true,
+  },
 };
+
+const isDarkish = (b: MapBase) => BASES[b].darkish;
 
 // ── Marker helpers ─────────────────────────────────────────────────────────
 const SCOPE_COLOR: Record<string, string> = { in: "#97C459", partial: "#EF9F27", out: "#E24B4A" };
@@ -202,15 +249,15 @@ function vesselShipHTML(v: VesselView, dim = false): string {
 // Pairing eligibility + fit labels come from the ONE matching module —
 // the same gates the Top Matches panel uses (no per-surface math).
 // ── Persisted light/dark base ──────────────────────────────────────────────
-function useMapBase(): ["light" | "dark", (b: "light" | "dark") => void] {
-  const [base, setBase] = React.useState<"light" | "dark">("dark");
+function useMapBase(): [MapBase, (b: MapBase) => void] {
+  const [base, setBase] = React.useState<MapBase>("dark");
   React.useEffect(() => {
     try {
       const v = localStorage.getItem("asb:mapBase");
-      if (v === "light" || v === "dark") setBase(v);
+      if (v && v in BASES) setBase(v as MapBase);
     } catch {}
   }, []);
-  const set = (b: "light" | "dark") => {
+  const set = (b: MapBase) => {
     setBase(b);
     try {
       localStorage.setItem("asb:mapBase", b);
@@ -231,7 +278,7 @@ function drawRoute(
   exact: boolean,
   nm: number | null,
   fit: boolean,
-  base: "light" | "dark",
+  base: MapBase,
   shipOn: boolean,
   animRef: React.MutableRefObject<number | null>,
 ) {
@@ -239,7 +286,7 @@ function drawRoute(
   layer.clearLayers();
   if (line.length < 2) return;
   // 1) soft halo casing for legibility on any basemap
-  L.polyline(line, { color: base === "dark" ? "#0B1B30" : "#FFFFFF", weight: 6, opacity: 0.6, lineJoin: "round", lineCap: "round", interactive: false }).addTo(layer);
+  L.polyline(line, { color: isDarkish(base) ? "#0B1B30" : "#FFFFFF", weight: 6, opacity: 0.6, lineJoin: "round", lineCap: "round", interactive: false }).addTo(layer);
   // 2) the sailed track — high-contrast orange so it reads on any water;
   //    SOLID when exact (ECDIS), DASHED when estimated
   L.polyline(line, { color: "#F97316", weight: 2.6, opacity: 0.95, lineJoin: "round", lineCap: "round", dashArray: exact ? undefined : "7 6", interactive: false }).addTo(layer);
@@ -422,12 +469,25 @@ export default function MarketMap({
   const zonesRef = React.useRef<L.LayerGroup | null>(null);
   const routeRef = React.useRef<L.LayerGroup | null>(null);
   const vecRef = React.useRef<L.LayerGroup | null>(null);
-  const baseRef = React.useRef<L.TileLayer | null>(null);
+  const baseRef = React.useRef<L.Layer | null>(null);
+  const flowsRef = React.useRef<L.LayerGroup | null>(null);
+  const matchLinesRef = React.useRef<L.LayerGroup | null>(null);
   const cargoMk = React.useRef<Record<string, L.Marker>>({});
   const roRef = React.useRef<ResizeObserver | null>(null);
+  // True once the viewer pans/zooms by hand — after that, container resizes
+  // must never yank the view back to the default region.
+  const interactedRef = React.useRef(false);
 
   const [ready, setReady] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
+  const [basePickerOpen, setBasePickerOpen] = React.useState(false);
+  const [layersOpen, setLayersOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [searchQ, setSearchQ] = React.useState("");
+  const [namesOn, setNamesOn] = React.useState(true);
+  const [flowsOn, setFlowsOn] = React.useState(true);
+  // one panel at a time — opening any chrome panel closes the others
+  const closePanels = () => { setBasePickerOpen(false); setLayersOpen(false); setSearchOpen(false); setFiltersOpen(false); setVoyOpen(false); };
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [voyOpen, setVoyOpen] = React.useState(false);
   const tier = useViewerTier();
@@ -571,6 +631,8 @@ export default function MarketMap({
     });
     map.attributionControl.setPrefix(false);
     routeRef.current = L.layerGroup().addTo(map);
+    flowsRef.current = L.layerGroup().addTo(map);
+    matchLinesRef.current = L.layerGroup().addTo(map);
     vecRef.current = L.layerGroup().addTo(map);
     zonesRef.current = L.layerGroup();
     const cluster = L.markerClusterGroup({
@@ -620,10 +682,22 @@ export default function MarketMap({
 
     // Keep the map filling its flex panel: re-measure whenever the container
     // resizes (fixes the Leaflet-in-flex "gray gap" once the 50/50 layout
-    // settles, on map toggle, and on window resize).
+    // settles, on map toggle, and on window resize). Until the viewer pans or
+    // zooms by hand, also re-fit the MENA region so a layout change (split ↔
+    // wide, divider drags) keeps the market centered instead of drifting.
+    const markInteracted = () => { interactedRef.current = true; };
+    hostRef.current.addEventListener("pointerdown", markInteracted);
+    hostRef.current.addEventListener("wheel", markInteracted, { passive: true });
     const ro = new ResizeObserver(() => {
       try {
         mapRef.current?.invalidateSize();
+        if (!interactedRef.current) {
+          mapRef.current?.fitBounds([[12, 22], [47, 60]], { padding: [20, 20], animate: false });
+        }
+        // Short pane (wide-layout divider dragged down): let the icon rail
+        // scroll rather than clip its top/bottom entries.
+        const h = hostRef.current?.clientHeight ?? 0;
+        rootRef.current?.classList.toggle("rail-tight", h > 0 && h < 520);
       } catch {}
     });
     ro.observe(hostRef.current);
@@ -643,21 +717,40 @@ export default function MarketMap({
     [],
   );
 
-  // Base tiles (swap on light/dark)
+  // Base tiles — a provider may serve 1–2 layers (nautical = OSM + seamark
+  // overlay). If a provider starts failing (outage, policy change), fall back
+  // to the keyless Esri canvas automatically instead of showing a broken sea.
   React.useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
     if (baseRef.current) {
-      try {
-        map.removeLayer(baseRef.current);
-      } catch {}
+      try { map.removeLayer(baseRef.current); } catch {}
     }
-    baseRef.current = L.tileLayer(base === "dark" ? TILES.dark : TILES.light, {
-      attribution: TILES.attribution,
-      maxZoom: 18,
-      subdomains: TILES.subdomains,
-    }).addTo(map);
-    baseRef.current.bringToBack();
+    const def = BASES[base];
+    const group = L.layerGroup();
+    let errors = 0;
+    let fellBack = false;
+    def.layers.forEach((l, i) => {
+      const tl = L.tileLayer(l.url, {
+        attribution: i === 0 ? def.attribution : undefined,
+        maxZoom: 18,
+        ...(l.maxNativeZoom ? { maxNativeZoom: l.maxNativeZoom } : {}),
+      });
+      if (i === 0 && base !== "dark" && base !== "light") {
+        tl.on("tileerror", () => {
+          errors++;
+          if (errors > 12 && !fellBack) {
+            fellBack = true;
+            setBase(isDarkish(base) ? "dark" : "light");
+          }
+        });
+      }
+      group.addLayer(tl);
+    });
+    group.addTo(map);
+    group.eachLayer((l) => (l as L.TileLayer).bringToBack());
+    baseRef.current = group;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base, ready]);
 
   // Zones
@@ -724,6 +817,7 @@ export default function MarketMap({
           L.DomEvent.stopPropagation(ev);
           // Pairing-enabled surfaces: the click drives the pairing state machine.
           if (handlePairClick("cargo", c.id)) { onSelectCargo?.(c); return; }
+          closePanels();
           setPopup({ kind: "cargo", data: c, ll: mk.getLatLng() });
           onSelectCargo?.(c);
         });
@@ -771,6 +865,7 @@ export default function MarketMap({
         mk.on("click", (ev) => {
           L.DomEvent.stopPropagation(ev);
           if (handlePairClick("vessel", v.id)) { onSelectVessel?.(v); return; }
+          closePanels();
           setPopup({ kind: "vessel", data: v, ll: mk.getLatLng() });
           onSelectVessel?.(v);
         });
@@ -899,11 +994,23 @@ export default function MarketMap({
       if (prev) setPopup((p) => (p && p.kind === "vessel" && p.data.id === prev ? null : p));
       return;
     }
-    const geo = vesselGeo(v);
-    if (!geo) return;
+    let geo = vesselGeo(v);
+    let zoom = 13;
+    if (!geo) {
+      // The position carries NO open location (some circular-sourced rows) —
+      // fall back to the vessel's first preferred trading zone so the click
+      // still answers, at zone scale instead of berth scale.
+      const z = v.preferredZones?.[0] ? zoneByCode(v.preferredZones[0]) : null;
+      const c = z ? zoneCentroid(z) : null;
+      if (c) { geo = [c[0], c[1]]; zoom = 6; }
+    }
+    if (!geo) {
+      toast.info("This position carries no open location — ask the owner to confirm where she opens.");
+      return;
+    }
     // Same anchored position as the marker, so the card points at the vessel.
     const pos = anchoredLL(geo, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0);
-    map.flyTo(pos, 13, { duration: 1.2 });
+    map.flyTo(pos, zoom, { duration: 1.2 });
     const onEnd = () => setPopup({ kind: "vessel", data: v, ll: L.latLng(pos[0], pos[1]) });
     map.once("moveend", onEnd);
     return () => {
@@ -911,6 +1018,102 @@ export default function MarketMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedVesselId, ready]);
+
+  // Match lines (P4): while a cargo's deal card is open, draw dashed lines to
+  // its top matching tonnage — same eligibility gates as Top Matches/pairing.
+  React.useEffect(() => {
+    const lyr = matchLinesRef.current;
+    if (!lyr || !ready) return;
+    lyr.clearLayers();
+    if (!popup || popup.kind !== "cargo") return;
+    const c = popup.data;
+    const from: [number, number] = [popup.ll.lat, popup.ll.lng];
+    const rank: Record<string, number> = { Strong: 0, Good: 1 };
+    const ms = visVessels
+      .filter((v) => pairEligible(c, v))
+      .map((v) => ({ v, fit: fitLabel(c, v) }))
+      .sort((a, b) => (rank[a.fit] ?? 2) - (rank[b.fit] ?? 2))
+      .slice(0, 3);
+    for (const { v, fit } of ms) {
+      const g = vesselGeo(v);
+      if (!g) continue;
+      const to = anchoredLL(g, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0);
+      const color = fit === "Strong" ? "#97C459" : fit === "Good" ? "#7BB8F0" : "#8C9BB5";
+      L.polyline(curvePts(from, to, 0.12), { color, weight: 2, dashArray: "4 6", opacity: 0.85, interactive: false }).addTo(lyr);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popup, visVessels, ready]);
+
+  // Trade-lane flows (P5): animated corridors for the busiest visible lanes —
+  // the market's pulse, ShipMap-style, weighted by live listing volume.
+  React.useEffect(() => {
+    const lyr = flowsRef.current;
+    if (!lyr || !ready) return;
+    lyr.clearLayers();
+    if (!flowsOn) return;
+    const counts = new Map<string, number>();
+    for (const c of visCargos) {
+      const a = c.route?.polZone, b = c.route?.podZone;
+      if (!a || !b || a === b) continue;
+      counts.set(`${a}→${b}`, (counts.get(`${a}→${b}`) ?? 0) + 1);
+    }
+    const top = [...counts.entries()].sort((x, y) => y[1] - x[1]).slice(0, 6);
+    const max = top[0]?.[1] ?? 1;
+    for (const [lane, n] of top) {
+      const [a, b] = lane.split("→");
+      const za = zoneByCode(a), zb = zoneByCode(b);
+      const ca = za ? zoneCentroid(za) : null, cb = zb ? zoneCentroid(zb) : null;
+      if (!ca || !cb) continue;
+      L.polyline(curvePts([ca[0], ca[1]], [cb[0], cb[1]], 0.22), {
+        className: "flow-line",
+        color: "#7BB8F0",
+        weight: 1.5 + 2.5 * (n / max),
+        opacity: 0.45,
+        interactive: false,
+      }).addTo(lyr);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visCargos, flowsOn, ready]);
+
+  // Deep links (P3): the open card writes #/cargo/{ref} · #/vessel/{id}, and
+  // an arriving hash opens that listing once the data is on board.
+  // The inbound hash must be captured at FIRST render — the popup-sync effect
+  // below would otherwise clear it (popup starts null) before it can be read.
+  const initialHash = React.useRef<string>(typeof window !== "undefined" ? window.location.hash : "");
+  const hashHandled = React.useRef(!/^#\/(cargo|vessel)\//.test(initialHash.current));
+  React.useEffect(() => {
+    try {
+      if (!popup) {
+        if (hashHandled.current && window.location.hash.startsWith("#/"))
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+        return;
+      }
+      const tag = popup.kind === "cargo"
+        ? `#/cargo/${encodeURIComponent(popup.data.refId)}`
+        : `#/vessel/${popup.data.id}`;
+      history.replaceState(null, "", tag);
+    } catch {}
+  }, [popup]);
+  React.useEffect(() => {
+    if (hashHandled.current || !ready) return;
+    const m = /^#\/(cargo|vessel)\/(.+)$/.exec(initialHash.current);
+    if (!m) { hashHandled.current = true; return; }
+    if (m[1] === "cargo") {
+      const c = cargos.find((x) => x.refId === decodeURIComponent(m[2]));
+      if (!c) return; // data may still be loading — retry on next change
+      hashHandled.current = true;
+      const g = geoFor(c.route?.polCode);
+      const ll = g ? anchoredLL(g, "land", (c.id || "").charCodeAt(0) || 0, (c.id || "").charCodeAt(1) || 0) : null;
+      setPopup({ kind: "cargo", data: c, ll: ll ? L.latLng(ll[0], ll[1]) : L.latLng(24, 40) });
+      onSelectCargo?.(c);
+    } else {
+      const v = vessels.find((x) => x.id === m[2]);
+      if (!v) return;
+      hashHandled.current = true;
+      onSelectVessel?.(v); // focus effect deep-zooms and opens the card
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, cargos, vessels]);
 
   // Fullscreen: reflow Leaflet tiles after the size change; Esc exits.
   React.useEffect(() => {
@@ -928,7 +1131,7 @@ export default function MarketMap({
     return () => window.removeEventListener("keydown", onKey);
   }, [fullscreen]);
 
-  const point = popup && mapRef.current ? mapRef.current.latLngToContainerPoint(popup.ll) : null;
+
 
   const BarIcon = ({ on, onClick, title, children }: { on?: boolean; onClick: () => void; title: string; children: React.ReactNode }) => (
     <div className={`bar-icon${on ? " active" : ""}`} onClick={onClick}>
@@ -938,18 +1141,12 @@ export default function MarketMap({
   );
 
   return (
-    <div ref={rootRef} data-zoom="far" className={`asb-map base-${base}${barLeft ? " bar-inner-left" : ""}${fullscreen ? " is-fullscreen" : ""}`}>
+    <div ref={rootRef} data-zoom="far" className={`asb-map base-${base}${(basePickerOpen || layersOpen || searchOpen || filtersOpen || voyOpen) ? " panel-open" : ""}${namesOn ? "" : " names-off"}${barLeft ? " bar-inner-left" : ""}${fullscreen ? " is-fullscreen" : ""}`}>
       <div className="map-canvas">
         <div ref={hostRef} className="leaflet-host" />
 
         <div className="map-title">
           Arab ShipBroker Platform <span className="map-title__beta">BETA</span>
-        </div>
-
-        <div className="filter-bar">
-          {["A.Gulf", "R.Sea", "E.Med", "B.Sea"].map((k, i) => (
-            <div key={k} className={`filter-chip${i < 2 ? " active" : ""}`}>{k}</div>
-          ))}
         </div>
 
         <div className="layer-strip">
@@ -968,16 +1165,57 @@ export default function MarketMap({
           </div>
         </div>
 
-        {popup && point && (
-          <MapPopup popup={popup} point={point} onClose={() => setPopup(null)} onView={() => {
-            if (popup.kind === "cargo") onSelectCargo?.(popup.data);
-            else onSelectVessel?.(popup.data);
-            setPopup(null);
-          }} />
+        {popup && (
+          <DealCard
+            popup={popup}
+            cargoList={visCargos}
+            vesselList={visVessels}
+            onClose={() => setPopup(null)}
+            onStep={(dir) => {
+              const list = popup.kind === "cargo" ? visCargos : visVessels;
+              const i = list.findIndex((x) => x.id === popup.data.id);
+              if (i < 0 || list.length < 2) return;
+              const next = list[(i + dir + list.length) % list.length];
+              if (popup.kind === "cargo") {
+                const c = next as CargoView;
+                const g = geoFor(c.route?.polCode);
+                const ll = g ? anchoredLL(g, "land", (c.id || "").charCodeAt(0) || 0, (c.id || "").charCodeAt(1) || 0) : null;
+                setPopup({ kind: "cargo", data: c, ll: ll ? L.latLng(ll[0], ll[1]) : popup.ll });
+                onSelectCargo?.(c);
+              } else {
+                const v = next as VesselView;
+                const g = vesselGeo(v);
+                const ll = g ? anchoredLL(g, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0) : null;
+                setPopup({ kind: "vessel", data: v, ll: ll ? L.latLng(ll[0], ll[1]) : popup.ll });
+                onSelectVessel?.(v);
+              }
+            }}
+            onPickVessel={(v) => {
+              const g = vesselGeo(v);
+              const ll = g ? anchoredLL(g, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0) : null;
+              if (ll) setPopup({ kind: "vessel", data: v, ll: L.latLng(ll[0], ll[1]) });
+              onSelectVessel?.(v);
+            }}
+            onVoyOpex={() => {
+              if (voyLocked) { toast.info("Voy OPEX is a Subscriber (T3+) tool."); return; }
+              setVoyOpen(true);
+            }}
+            onCopyLink={() => {
+              try {
+                navigator.clipboard.writeText(window.location.href);
+                toast.success("Link copied — opens the map centred on this listing.");
+              } catch { toast.error("Could not copy the link."); }
+            }}
+          />
         )}
       </div>
 
       <div className="right-bar">
+        {/* Region chips — moved from the top-left strip to the control bar */}
+        {[["A.Gulf", "AG"], ["R.Sea", "RS"], ["E.Med", "EM"], ["B.Sea", "BS"]].map(([full, short]) => (
+          <div key={full} className="bar-zone" title={full}>{short}</div>
+        ))}
+        <div className="bar-divider" />
         <BarIcon on={cargoOn} onClick={() => setCargoOn((v) => !v)} title="Cargo positions">
           {G.cargo}
           {cargoOn && <span className="bar-badge bar-badge--cargo" />}
@@ -994,22 +1232,113 @@ export default function MarketMap({
           {G.ship}
         </BarIcon>
         <div className="bar-divider" />
-        <BarIcon on={filtersOpen} onClick={() => setFiltersOpen((o) => !o)} title="Filters">
+        <BarIcon on={layersOpen} onClick={() => { const n = !layersOpen; closePanels(); setLayersOpen(n); }} title="Layers — what the chart shows">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 8l10 5 10-5-10-5Z" /><path d="m2 13 10 5 10-5" /><path d="m2 18 10 5 10-5" opacity=".55" /></svg>
+        </BarIcon>
+        <BarIcon on={searchOpen} onClick={() => { const n = !searchOpen; closePanels(); setSearchOpen(n); }} title="Search — jump to a port, vessel or cargo">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" /></svg>
+        </BarIcon>
+        <BarIcon on={filtersOpen} onClick={() => { const n = !filtersOpen; closePanels(); setFiltersOpen(n); }} title="Filters">
           {G.filter}
           {Object.values(selections).some((s) => s.size > 0) && <span className="bar-badge bar-badge--cargo" />}
         </BarIcon>
+        {layersOpen && (
+          <div className="map-flyout" style={{ bottom: "auto", top: 46 }} onClick={(e) => e.stopPropagation()}>
+            <div className="base-picker__title">Chart layers</div>
+            {[
+              { label: "Cargo positions", on: cargoOn, set: () => setCargoOn((v) => !v), dot: "#97C459" },
+              { label: "Open tonnage", on: vesselsOn, set: () => setVesselsOn((v) => !v), dot: "#7BB8F0" },
+              { label: "Trading zones", on: zonesOn, set: () => setZonesOn((v) => !v), dot: "#EF9F27" },
+              { label: "Route ship animation", on: routeShipOn, set: toggleRouteShip, dot: "#F97316" },
+              { label: "Trade-lane flows", on: flowsOn, set: () => setFlowsOn((v) => !v), dot: "#7BB8F0" },
+              { label: "Vessel names", on: namesOn, set: () => setNamesOn((v) => !v), dot: "#B8C4D4" },
+            ].map((r) => (
+              <button key={r.label} className="map-flyout__row" onClick={r.set}>
+                <span className="map-flyout__dot" style={{ background: r.dot, opacity: r.on ? 1 : 0.25 }} />
+                <span style={{ flex: 1, textAlign: "left" }}>{r.label}</span>
+                <span className={`map-switch${r.on ? " is-on" : ""}`}><i /></span>
+              </button>
+            ))}
+          </div>
+        )}
+        {searchOpen && (
+          <div className="map-flyout map-flyout--wide" style={{ bottom: "auto", top: 84 }} onClick={(e) => e.stopPropagation()}>
+            <input
+              autoFocus
+              className="map-flyout__input"
+              placeholder="Port, vessel or cargo…"
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+            />
+            {searchQ.trim().length >= 2 && (() => {
+              const q = searchQ.trim().toLowerCase();
+              const portHits = Object.entries({ ...FALLBACK_PORTS, ...(portCoords ?? {}) })
+                .filter(([code]) => code.toLowerCase().includes(q))
+                .slice(0, 5);
+              const vesselHits = vessels.filter((v) => v.name.toLowerCase().includes(q)).slice(0, 5);
+              const cargoHits = cargos.filter((c) =>
+                (c.commodity || c.cargo || "").toLowerCase().includes(q) || c.refId.toLowerCase().includes(q)).slice(0, 5);
+              const none = !portHits.length && !vesselHits.length && !cargoHits.length;
+              return (
+                <div className="map-flyout__results">
+                  {portHits.length > 0 && <div className="map-flyout__group">Ports</div>}
+                  {portHits.map(([code, geo]) => (
+                    <button key={code} className="map-flyout__row" onClick={() => {
+                      mapRef.current?.flyTo([geo[0], geo[1]], 9, { duration: 1.1 });
+                      setSearchOpen(false);
+                    }}>
+                      <span className="mono" style={{ fontSize: 11 }}>{code}</span>
+                    </button>
+                  ))}
+                  {vesselHits.length > 0 && <div className="map-flyout__group">Vessels</div>}
+                  {vesselHits.map((v) => (
+                    <button key={v.id} className="map-flyout__row" onClick={() => { onSelectVessel?.(v); setSearchOpen(false); }}>
+                      <span style={{ flex: 1, textAlign: "left" }}>{v.name}</span>
+                      <span className="mono" style={{ fontSize: 10, opacity: 0.6 }}>{v.dwt} DWT</span>
+                    </button>
+                  ))}
+                  {cargoHits.length > 0 && <div className="map-flyout__group">Cargo</div>}
+                  {cargoHits.map((c) => (
+                    <button key={c.id} className="map-flyout__row" onClick={() => { onSelectCargo?.(c); setSearchOpen(false); }}>
+                      <span style={{ flex: 1, textAlign: "left" }}>{c.cargo}</span>
+                      <span className="mono" style={{ fontSize: 10, opacity: 0.6 }}>{c.route.polZone}→{c.route.podZone}</span>
+                    </button>
+                  ))}
+                  {none && <div className="map-flyout__group">No matches</div>}
+                </div>
+              );
+            })()}
+          </div>
+        )}
         <BarIcon
           on={voyOpen && !voyLocked}
-          onClick={() => (voyLocked ? undefined : setVoyOpen((o) => !o))}
+          onClick={() => { if (voyLocked) return; const n = !voyOpen; closePanels(); setVoyOpen(n); }}
           title={voyLocked ? "Voy OPEX — upgrade to Subscriber (T3) to unlock" : "Voy OPEX estimator"}
         >
           {voyLocked ? G.lock : G.voy}
         </BarIcon>
         <div className="bar-spacer" />
         <div className="bar-divider" />
-        <BarIcon onClick={() => setBase(base === "light" ? "dark" : "light")} title={base === "light" ? "Light base · switch to dark" : "Dark base · switch to light"}>
-          {base === "light" ? G.sun : G.moon}
+        <BarIcon on={basePickerOpen} onClick={() => { const n = !basePickerOpen; closePanels(); setBasePickerOpen(n); }} title="Basemap — choose the chart style">
+          {isDarkish(base) ? G.moon : G.sun}
         </BarIcon>
+        {basePickerOpen && (
+          <div className="base-picker" onClick={(e) => e.stopPropagation()}>
+            <div className="base-picker__title">Chart style</div>
+            {(Object.keys(BASES) as MapBase[]).map((b) => (
+              <button
+                key={b}
+                className={`base-picker__opt${b === base ? " is-on" : ""}`}
+                title={BASES[b].hint}
+                onClick={() => { setBase(b); setBasePickerOpen(false); }}
+              >
+                <span className={`base-picker__dot bp-${b}`} />
+                {BASES[b].label}
+                {b === base && <span className="base-picker__check">✓</span>}
+              </button>
+            ))}
+          </div>
+        )}
         <BarIcon onClick={() => mapRef.current?.zoomIn()} title="Zoom in">{G.plus}</BarIcon>
         <BarIcon onClick={() => mapRef.current?.zoomOut()} title="Zoom out">{G.minus}</BarIcon>
         <div className="bar-divider" />
@@ -1084,58 +1413,123 @@ export default function MarketMap({
   );
 }
 
-function MapPopup({
+// ── Deal card — the docked listing card (SeaRates-style) ────────────────────
+// Replaces the small anchored popup: full details, ‹ › carousel through the
+// filtered market, inline top matches (same gates as Top Matches / pairing),
+// and actions — all without leaving the chart.
+function DealCard({
   popup,
-  point,
+  cargoList,
+  vesselList,
   onClose,
-  onView,
+  onStep,
+  onPickVessel,
+  onVoyOpex,
+  onCopyLink,
 }: {
   popup: Popup;
-  point: L.Point;
+  cargoList: CargoView[];
+  vesselList: VesselView[];
   onClose: () => void;
-  onView: () => void;
+  onStep: (dir: 1 | -1) => void;
+  onPickVessel: (v: VesselView) => void;
+  onVoyOpex: () => void;
+  onCopyLink: () => void;
 }) {
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
-  const style: React.CSSProperties = { left: point.x, top: point.y };
-  if (popup.kind === "cargo") {
+  const list = popup.kind === "cargo" ? cargoList : vesselList;
+  const idx = list.findIndex((x) => x.id === popup.data.id);
+  const matches = React.useMemo(() => {
+    if (popup.kind !== "cargo") return [];
     const c = popup.data;
-    const laycan = c.laycanFrom && c.laycanTo ? `${c.laycanFrom} – ${c.laycanTo}` : "—";
-    return (
-      <div className="map-popup" style={style} onClick={stop} onMouseDown={stop}>
-        <button className="map-popup__close" onClick={onClose}>×</button>
-        <div className="map-popup__title">{c.cargo}</div>
-        <div className="map-popup__sub">
-          {c.route.polCode} → {c.route.podCode} · {c.route.polZone} → {c.route.podZone}
-        </div>
-        <div className="map-popup__grid">
-          <div><div className="map-popup__k">QTY</div><div className="map-popup__v">{c.qtyMt} MT</div></div>
-          <div><div className="map-popup__k">Laycan</div><div className="map-popup__v">{laycan}</div></div>
-          <div><div className="map-popup__k">Terms</div><div className="map-popup__v">{c.loadTerms || "—"}</div></div>
-          <div><div className="map-popup__k">SF</div><div className="map-popup__v">{c.sf != null ? `${c.sf} m³/t` : "—"}</div></div>
-        </div>
-        <div className="map-popup__actions">
-          <button className="map-popup__btn map-popup__btn--view" onClick={onView}>View card</button>
-          <button className="map-popup__btn map-popup__btn--match" onClick={onView}>Match</button>
-        </div>
-      </div>
-    );
-  }
-  const v = popup.data;
+    const rank: Record<string, number> = { Strong: 0, Good: 1 };
+    return vesselList
+      .filter((v) => pairEligible(c, v))
+      .map((v) => ({ v, fit: fitLabel(c, v) }))
+      .sort((a, b) => (rank[a.fit] ?? 2) - (rank[b.fit] ?? 2))
+      .slice(0, 3);
+  }, [popup, vesselList]);
+
+  const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
+    <div className="deal-card__row"><span className="deal-card__k">{k}</span><span className="deal-card__v">{v}</span></div>
+  );
+
   return (
-    <div className="map-popup" style={style} onClick={stop} onMouseDown={stop}>
-      <button className="map-popup__close" onClick={onClose}>×</button>
-      <div className="map-popup__title">{v.name}</div>
-      <div className="map-popup__sub">{v.type} · {v.flag}{v.built ? ` · Built ${v.built}` : ""}</div>
-      <div className="map-popup__grid">
-        <div><div className="map-popup__k">DWT</div><div className="map-popup__v">{v.dwt} MT</div></div>
-        <div><div className="map-popup__k">Open port</div><div className="map-popup__v">{v.openPort}</div></div>
-        <div><div className="map-popup__k">Open date</div><div className="map-popup__v">{v.openDate}</div></div>
-        <div><div className="map-popup__k">Status</div><div className="map-popup__v">{v.status.toUpperCase()}</div></div>
+    <div className="deal-card" onClick={stop} onMouseDown={stop} onDoubleClick={stop} onWheel={stop}>
+      <div className="deal-card__head">
+        <button className="deal-card__nav" onClick={() => onStep(-1)} title="Previous listing">‹</button>
+        <div className="deal-card__headmid">
+          <div className="deal-card__title">{popup.kind === "cargo" ? popup.data.cargo : popup.data.name}</div>
+          {idx >= 0 && <div className="deal-card__count">{idx + 1} / {list.length}</div>}
+        </div>
+        <button className="deal-card__nav" onClick={() => onStep(1)} title="Next listing">›</button>
+        <button className="deal-card__close" onClick={onClose}>×</button>
       </div>
-      <div className="map-popup__actions">
-        <button className="map-popup__btn map-popup__btn--view" onClick={onView}>View card</button>
-        <button className="map-popup__btn map-popup__btn--match" onClick={onView}>Match</button>
-      </div>
+
+      {popup.kind === "cargo" ? (() => {
+        const c = popup.data;
+        const hasPorts = !!(c.route.polCode && c.route.podCode);
+        return (
+          <div className="deal-card__body">
+            <div className="deal-card__tags">
+              <span className="deal-card__tag">{c.type}</span>
+              {c.spot && <span className="deal-card__tag is-spot">SPOT</span>}
+              {postedAgeLabel(c.postedAt) && <span className="deal-card__tag is-age">{postedAgeLabel(c.postedAt)}</span>}
+            </div>
+            <Row k="Route" v={hasPorts
+              ? <>{c.route.polCode} → {c.route.podCode} <span className="deal-card__dim">{c.route.polZone} → {c.route.podZone}</span></>
+              : <>{c.route.polZone || "—"} → {c.route.podZone || "—"}</>} />
+            <Row k="Laycan" v={c.spot ? "SPOT" : formatLaycanRange(c.laycanFrom, c.laycanTo)} />
+            <Row k="Quantity" v={`${c.qtyMt} MT${c.sf != null ? ` · SF ${c.sf} m³/t` : ""}`} />
+            {(c.loadRate != null || c.dischRate != null) && (
+              <Row k="Rates" v={`${c.loadRate ?? "—"} / ${c.dischRate ?? "—"}${c.loadTerms ? ` · ${c.loadTerms}` : ""}`} />
+            )}
+            {c.freightIdea != null && (
+              <Row k="Freight idea" v={`$${c.freightIdea}/MT${c.commission != null ? ` · ${c.commission}%` : ""}`} />
+            )}
+            {matches.length > 0 && (
+              <div className="deal-card__matches">
+                <div className="deal-card__mtitle">Top matching tonnage</div>
+                {matches.map(({ v, fit }) => (
+                  <button key={v.id} className="deal-card__match" onClick={() => onPickVessel(v)}>
+                    <span className={`deal-card__fit fit-${fit.toLowerCase()}`}>{fit}</span>
+                    <span className="deal-card__mname">{v.name}</span>
+                    <span className="deal-card__dim">{v.dwt} DWT</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="deal-card__actions">
+              <button className="deal-card__btn" onClick={onVoyOpex}>Voy OPEX</button>
+              <button className="deal-card__btn deal-card__btn--ghost" onClick={onCopyLink}>Copy link</button>
+            </div>
+          </div>
+        );
+      })() : (() => {
+        const v = popup.data;
+        const fc = flagCode(v.flag);
+        return (
+          <div className="deal-card__body">
+            <div className="deal-card__tags">
+              <span className="deal-card__tag">{v.type}</span>
+              <span className={`deal-card__tag ${v.status === "open" ? "is-open" : ""}`}>{v.status.toUpperCase()}</span>
+              {postedAgeLabel(v.postedAt) && <span className="deal-card__tag is-age">{postedAgeLabel(v.postedAt)}</span>}
+            </div>
+            <Row k="DWT" v={`${v.dwt} MT${v.built ? ` · Built ${v.built}` : ""} · ${v.geared ? "Geared" : "Gearless"}`} />
+            {v.flag && v.flag !== "—" && (
+              <Row k="Flag" v={<>{fc && <span className={`fi fi-${fc}`} style={{ fontSize: 11, borderRadius: 2, marginRight: 5 }} aria-hidden />}{v.flag}</>} />
+            )}
+            <Row k="Open" v={`${v.openPort !== "—" ? v.openPort : v.openPortZone} · ${formatShortDate(v.openDate)}`} />
+            {v.preferredZones && v.preferredZones.length > 0 && (
+              <Row k="Prefers" v={v.preferredZones.join(" · ")} />
+            )}
+            <div className="deal-card__actions">
+              <button className="deal-card__btn" onClick={onVoyOpex}>Voy OPEX</button>
+              <button className="deal-card__btn deal-card__btn--ghost" onClick={onCopyLink}>Copy link</button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

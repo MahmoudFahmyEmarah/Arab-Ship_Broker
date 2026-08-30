@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { loadViewerContext, loadVesselViews, loadCargoViews, loadFuelPrices } from "@/lib/portal/data";
+import { ComingSoon } from "@/components/portal/ComingSoon";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { VoyageEstimator, CalculatorLocked } from "@/components/portal/calculators";
 
@@ -15,7 +16,10 @@ export default async function VoyageEstimatorPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { tier } = await loadViewerContext();
+  const { tier, role } = await loadViewerContext();
+  // Calculators are hidden behind Coming Soon for members while they mature —
+  // admins keep full access for internal use.
+  if (role !== "admin") return <ComingSoon variant="radar" />;
   // Server-side tier gate (T3+) — do not rely on the client hiding it.
   if (isCalculatorLocked(tier)) return <CalculatorLocked title="Voyage Cost Estimator" />;
 

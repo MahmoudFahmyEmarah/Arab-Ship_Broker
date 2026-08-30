@@ -135,6 +135,38 @@ export type PlatformSettingsData = {
   cardFields: Record<string, boolean>;
 };
 
+// ── Market freshness ────────────────────────────────────────────────────────
+// The live market shows RECENT postings; the freshness clock is the posting
+// date (refreshed_at), never the laycan. Stored under its own app_settings
+// key because the database's RLS helper (fn_market_fresh_ok) reads the same
+// row — one config, enforced in SQL and rendered in the UI.
+export const MARKET_VISIBILITY_KEY = "market_visibility";
+
+export type MarketVisibilitySettings = {
+  freshDays: number; // default live window, days
+  laycanException: boolean; // future laycan/open date keeps a listing visible
+  archiveDaysByTier: { T1: number; T2: number; T3: number; T4: number };
+};
+
+export const DEFAULT_MARKET_VISIBILITY: MarketVisibilitySettings = {
+  freshDays: 7,
+  laycanException: true,
+  archiveDaysByTier: { T1: 0, T2: 0, T3: 30, T4: 60 },
+};
+
+export async function getMarketVisibility(): Promise<MarketVisibilitySettings> {
+  const stored = await readSetting<Partial<MarketVisibilitySettings>>(MARKET_VISIBILITY_KEY);
+  if (!stored || typeof stored !== "object") return DEFAULT_MARKET_VISIBILITY;
+  return {
+    freshDays: Number(stored.freshDays) > 0 ? Number(stored.freshDays) : DEFAULT_MARKET_VISIBILITY.freshDays,
+    laycanException: stored.laycanException ?? DEFAULT_MARKET_VISIBILITY.laycanException,
+    archiveDaysByTier: {
+      ...DEFAULT_MARKET_VISIBILITY.archiveDaysByTier,
+      ...(stored.archiveDaysByTier ?? {}),
+    },
+  };
+}
+
 // Default card fields shown on new users' cards (Commission + Matches off).
 export const DEFAULT_CARD_FIELDS: Record<string, boolean> = {
   "REF code": true,
