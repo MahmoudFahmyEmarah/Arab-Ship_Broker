@@ -4,6 +4,8 @@
 // (asb/pages.jsx). Operate on the portal view models.
 import * as React from "react";
 import { CargoView, VesselView } from "@/lib/portal/types";
+import { toast } from "sonner";
+import type { MarketVisibilityView } from "@/lib/portal/useMarketVisibility";
 
 export const CLASS_OPTS = ["IMSBC", "Grain", "DG"];
 const GRAIN_SET = new Set(["Wheat", "Corn", "Barley", "Rice", "Sorghum", "Soybean", "Soybeans", "Maize"]);
@@ -201,5 +203,70 @@ export function GearSeg({ value, onChange }: { value: string; onChange: (v: stri
         </button>
       ))}
     </div>
+  );
+}
+
+// ── Posted (market freshness) filter ────────────────────────────────────────
+// The live market defaults to the fresh window; deeper archive options come
+// from configuration (Admin → Settings → Market freshness) and lock beyond
+// the viewer's tier cap — the database enforces the same caps via RLS, this
+// chip only ever narrows what the tier is already allowed to see.
+
+export function PostedFilter({
+  value,
+  onChange,
+  vis,
+}: {
+  value: number;
+  onChange: (days: number) => void;
+  vis: MarketVisibilityView;
+}) {
+  return (
+    <FilterMenu
+      label="Posted"
+      summary={value === vis.freshDays ? `Live · ${vis.freshDays}d` : `${value}d`}
+      active={value !== vis.freshDays}
+      width={230}
+    >
+      <div className="fm-list">
+        {vis.ladder.map((d) => {
+          const locked = !vis.isAdmin && d > vis.archiveCapDays;
+          const on = value === d;
+          // the LOWEST tier whose configured reach covers this window —
+          // that's the tier a locked viewer must upgrade to
+          const unlockTier = (["T1", "T2", "T3", "T4"] as const).find(
+            (t) => (vis.tiers?.[t] ?? 0) >= d,
+          );
+          const tierLabel = unlockTier
+            ? unlockTier === "T4" ? "Tier 4" : `${unlockTier.replace("T", "Tier ")}+`
+            : null;
+          return (
+            <button
+              key={d}
+              className={`fm-opt ${on ? "is-on" : ""}`}
+              style={locked ? { opacity: 0.55 } : undefined}
+              title={locked && tierLabel ? `Available from ${tierLabel}` : undefined}
+              onClick={() => {
+                if (locked) {
+                  toast.error(
+                    tierLabel
+                      ? `The ${d}-day archive is a ${tierLabel} feature — upgrade to reach further back.`
+                      : "Historical market data is a subscriber feature — upgrade to reach further back.",
+                  );
+                  return;
+                }
+                onChange(d);
+              }}
+            >
+              <span className="fm-check">{on ? "✓" : ""}</span>
+              <span className="fm-opt__lbl">
+                {d === vis.freshDays ? `Live — last ${d} days` : `Last ${d} days`}
+                {locked && tierLabel ? `  ·  ${tierLabel}` : ""}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </FilterMenu>
   );
 }

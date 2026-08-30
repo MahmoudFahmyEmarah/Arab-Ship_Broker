@@ -8,12 +8,14 @@ import {
   PLATFORM_MODE_KEY,
   COMING_SOON_DESIGN_KEY,
   PLATFORM_SETTINGS_KEY,
+  MARKET_VISIBILITY_KEY,
   COMING_SOON_VARIANTS,
   normalizeComingSoonDesign,
   type PlatformMode,
   type ComingSoonDesign,
   type ComingSoonVariant,
   type PlatformSettingsData,
+  type MarketVisibilitySettings,
 } from "@/lib/app-settings";
 
 // Flip the global beta-mode flag. Owner-only (the "settings" section is
@@ -79,6 +81,44 @@ export async function savePlatformSettings(input: {
 
   revalidatePath("/admin/settings");
   // These settings change what every non-admin sees across the whole portal.
+  revalidatePath("/dashboard", "layout");
+  return { success: true };
+}
+
+// Market freshness — the live-window + per-tier archive caps + the future-
+// laycan exception. The database's RLS gate (fn_market_fresh_ok) reads the
+// SAME app_settings row, so saving here changes enforcement everywhere at
+// once. Owner-only; writes bypass RLS via the service-role key.
+export async function saveMarketVisibility(input: MarketVisibilitySettings) {
+  await requireAdmin({ section: "settings", edit: true });
+
+  const day = (v: unknown, lo: number, hi: number): number | null => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= lo && n <= hi ? n : null;
+  };
+  const fresh = day(input?.freshDays, 1, 60);
+  const t1 = day(input?.archiveDaysByTier?.T1, 0, 365);
+  const t2 = day(input?.archiveDaysByTier?.T2, 0, 365);
+  const t3 = day(input?.archiveDaysByTier?.T3, 0, 365);
+  const t4 = day(input?.archiveDaysByTier?.T4, 0, 365);
+  if (fresh === null || t1 === null || t2 === null || t3 === null || t4 === null) {
+    return { success: false, error: "Freshness windows must be whole days (fresh 1–60, archives 0–365)." };
+  }
+
+  const value: MarketVisibilitySettings = {
+    freshDays: fresh,
+    laycanException: !!input.laycanException,
+    archiveDaysByTier: { T1: t1, T2: t2, T3: t3, T4: t4 },
+  };
+  const { error } = await getSupabaseAdminClient()
+    .from("app_settings")
+    .upsert(
+      { key: MARKET_VISIBILITY_KEY, value, updated_at: new Date().toISOString() },
+      { onConflict: "key" },
+    );
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/settings");
   revalidatePath("/dashboard", "layout");
   return { success: true };
 }

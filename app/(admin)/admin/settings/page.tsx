@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { getPlatformMode, getComingSoonDesign, getPlatformSettings } from "@/lib/app-settings";
+import { getPlatformMode, getComingSoonDesign, getPlatformSettings, getMarketVisibility } from "@/lib/app-settings";
 import { canAccess } from "@/lib/admin/sections";
 import { PlatformSettings } from "@/components/admin/settings/PlatformSettings";
 
@@ -10,10 +10,11 @@ export default async function AdminSettingsPage() {
   const admin = await requireAdmin({ section: "settings" });
   const canEdit = canAccess("settings", admin.tier, admin.perms) === "edit";
 
-  const [mode, design, settings] = await Promise.all([
+  const [mode, design, settings, visibility] = await Promise.all([
     getPlatformMode(),
     getComingSoonDesign(),
     getPlatformSettings(),
+    getMarketVisibility(),
   ]);
 
   return (
@@ -28,6 +29,7 @@ export default async function AdminSettingsPage() {
         initialMode={mode}
         initialDesign={design}
         initialSettings={settings}
+        initialVisibility={visibility}
         canEdit={canEdit}
       />
     </div>

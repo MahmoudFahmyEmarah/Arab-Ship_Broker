@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { savePlatformSettings } from "@/app/(admin)/admin/settings/actions";
+import type { MarketVisibilitySettings } from "@/lib/app-settings";
+import { savePlatformSettings, saveMarketVisibility } from "@/app/(admin)/admin/settings/actions";
 import { ComingSoon } from "@/components/portal/ComingSoon";
 // Type-only import: pulling a runtime value from app-settings would drag the
 // server-only supabase client (next/headers) into this client bundle.
@@ -156,11 +157,13 @@ export function PlatformSettings({
   initialMode,
   initialDesign,
   initialSettings,
+  initialVisibility,
   canEdit,
 }: {
   initialMode: PlatformMode;
   initialDesign: ComingSoonDesign;
   initialSettings: PlatformSettingsData;
+  initialVisibility: MarketVisibilitySettings;
   canEdit: boolean;
 }) {
   const [mode, setMode] = React.useState<PlatformMode>(initialMode);
@@ -171,6 +174,10 @@ export function PlatformSettings({
   const [ai, setAi] = React.useState(initialSettings.ai);
   const [market, setMarket] = React.useState(initialSettings.marketplace);
   const [fields, setFields] = React.useState<Record<string, boolean>>(initialSettings.cardFields);
+  // Market freshness — saved to its own app_settings row (the DB RLS gate
+  // reads the same row, so this is live enforcement, not just UI defaults).
+  const [vis, setVis] = React.useState<MarketVisibilitySettings>(initialVisibility);
+  const [visBaseline, setVisBaseline] = React.useState<MarketVisibilitySettings>(initialVisibility);
 
   // Transient AI-test UI (not persisted).
   const [showKey, setShowKey] = React.useState(false);
@@ -246,6 +253,7 @@ export function PlatformSettings({
     setAi(baseline.settings.ai);
     setMarket(baseline.settings.marketplace);
     setFields(baseline.settings.cardFields);
+    setVis(visBaseline);
     setStatus("untested");
     setMsg("");
     setError(null);
@@ -259,10 +267,16 @@ export function PlatformSettings({
       const res = await savePlatformSettings({ mode, design, settings });
       if (!res.success) {
         setError(res.error ?? "Failed to save");
-      } else {
-        setBaseline({ mode, design, settings });
-        setSaved(true);
+        return;
       }
+      const visRes = await saveMarketVisibility(vis);
+      if (!visRes.success) {
+        setError(visRes.error ?? "Failed to save market freshness");
+        return;
+      }
+      setBaseline({ mode, design, settings });
+      setVisBaseline(vis);
+      setSaved(true);
     });
   }
 
@@ -477,6 +491,57 @@ export function PlatformSettings({
         <hr className="asd-group__rule" />
 
         <div className="adm-settings-grid">
+          {/* Market freshness — enforced by the database (RLS), not just UI */}
+          <div className="adm-card">
+            <div className="adm-card__head">
+              <span className="adm-card__title">Market freshness</span>
+              <span className="adn-status-pill is-on">DB-enforced</span>
+            </div>
+            <div className="adm-settings-grid">
+              <div className="adm-field">
+                <span className="adm-field__label">Live window (days)</span>
+                <input
+                  className="adm-input" type="number" min={1} max={60} inputMode="numeric"
+                  value={vis.freshDays} disabled={!canEdit}
+                  onChange={(e) => setVis((v) => ({ ...v, freshDays: Number(e.target.value) || 0 }))}
+                />
+                <span style={{ fontSize: 11, color: "#8B95A3", marginTop: 4 }}>
+                  Everyone&apos;s default market view — listings posted within this many days.
+                  The freshness clock is the POSTING date, never the laycan.
+                </span>
+              </div>
+              {(["T1", "T2", "T3", "T4"] as const).map((t) => (
+                <div className="adm-field" key={t}>
+                  <span className="adm-field__label">{t} archive reach (days)</span>
+                  <input
+                    className="adm-input" type="number" min={0} max={365} inputMode="numeric"
+                    value={vis.archiveDaysByTier[t]} disabled={!canEdit}
+                    onChange={(e) =>
+                      setVis((v) => ({
+                        ...v,
+                        archiveDaysByTier: { ...v.archiveDaysByTier, [t]: Number(e.target.value) || 0 },
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+              <div className="adm-field">
+                <span className="adm-field__label">Future-laycan exception</span>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5, cursor: canEdit ? "pointer" : "default" }}>
+                  <input
+                    type="checkbox" checked={vis.laycanException} disabled={!canEdit}
+                    onChange={(e) => setVis((v) => ({ ...v, laycanException: e.target.checked }))}
+                  />
+                  Keep a listing visible while its laycan / open date is still ahead
+                </label>
+                <span style={{ fontSize: 11, color: "#8B95A3", marginTop: 4 }}>
+                  0 days = that tier sees the live window only. Caps are enforced by the
+                  database — a client cannot query past its tier&apos;s reach.
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Archive layers */}
           <div className="adm-card">
             <div className="adm-card__head">
