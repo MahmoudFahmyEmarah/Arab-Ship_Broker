@@ -51,9 +51,25 @@ export async function middleware(request: NextRequest) {
     return redirectWithSupabaseCookies(redirectUrl);
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // ── Fail OPEN on ambiguity. getUser() fails for two very different
+  // reasons: Supabase explicitly rejecting the session (signed out — status
+  // 4xx), or a transient failure reaching Supabase at all (network blip,
+  // 5xx, thrown "fetch failed"). Only the former means "logged out"; the
+  // latter must let the request through untouched, otherwise every blip
+  // bounces a perfectly valid session to the login page.
+  let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] = null;
+  let authUnavailable = false;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    user = data.user;
+    if (!user && error) {
+      const status = (error as { status?: number }).status;
+      authUnavailable =
+        error.name === "AuthRetryableFetchError" || !status || status >= 500;
+    }
+  } catch {
+    authUnavailable = true;
+  }
 
   // ── Inactivity timeout: sessions expire after 30 minutes without a page
   // visit. Every authenticated request rolls the window forward; a request
@@ -72,7 +88,9 @@ export async function middleware(request: NextRequest) {
     const signedInAt = user.last_sign_in_at ? Date.parse(user.last_sign_in_at) : 0;
     const fromThisSession = Number.isFinite(lastActive) && lastActive >= signedInAt;
     if (fromThisSession && Date.now() - lastActive > IDLE_LIMIT_MS) {
-      await supabase.auth.signOut();
+      // signOut can itself throw on a network failure — the redirect (which
+      // clears the auth cookies) must still go out either way.
+      try { await supabase.auth.signOut(); } catch {}
       const res = redirectWithSupabaseCookies("/auth/login?error=session_expired");
       res.cookies.delete(LAST_ACTIVE_COOKIE);
       return res;
@@ -100,18 +118,29 @@ export async function middleware(request: NextRequest) {
   const isDashboardRoute = pathname.startsWith("/dashboard");
 
   if (!user) {
+    // Transient auth outage: pass the request through with the session
+    // cookies intact — the next request recovers. Never redirect to login
+    // here, and never touch the refresh token.
+    if (authUnavailable) return supabaseResponse;
     if (isPublicRoute || isAuthRoute) return supabaseResponse;
     return redirectWithSupabaseCookies("/auth/login");
   }
 
-  const { data: appUser } = await supabase
+  const { data: appUser, error: appUserError } = await supabase
     .from("users")
     .select("role, is_active, trust_tier")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
+
+  // Same fail-open rule for the role lookup: a failed QUERY (network blip,
+  // DB hiccup) is not a missing account. The old code fell through to a
+  // GLOBAL signOut here, revoking the refresh token over a one-off hiccup —
+  // that was the main source of the random logouts. Only a query that
+  // SUCCEEDS and finds no row / an unknown role may end the session.
+  if (appUserError) return supabaseResponse;
 
   if (appUser && !appUser.is_active) {
-    await supabase.auth.signOut();
+    try { await supabase.auth.signOut(); } catch {}
     const res = redirectWithSupabaseCookies("/auth/login?error=account_suspended");
     res.cookies.delete(LAST_ACTIVE_COOKIE);
     return res;
@@ -157,7 +186,9 @@ export async function middleware(request: NextRequest) {
     return redirectWithSupabaseCookies("/dashboard");
   }
 
-  await supabase.auth.signOut();
+  // Reached only when the users query SUCCEEDED yet found no row or an
+  // unrecognized role — a genuinely broken account, not a hiccup.
+  try { await supabase.auth.signOut(); } catch {}
   const res = redirectWithSupabaseCookies("/auth/login");
   res.cookies.delete(LAST_ACTIVE_COOKIE);
   return res;

@@ -45,6 +45,7 @@ function cargoToRow(r: CargoRecord, prefix: string): RawRow {
     REF: ref,
     CARGO_TYPE: r.cargo_type ?? null,
     COMMODITY: r.commodity ?? null,
+    PACKAGING: r.packaging ?? null,
     QTY_MIN_MT: r.qty_min_mt ?? null,
     QTY_MAX_MT: r.qty_max_mt ?? null,
     LOAD_PORT: r.load_port ?? null,

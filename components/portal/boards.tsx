@@ -167,13 +167,16 @@ export function DashboardBoard({
 }) {
   const [mode, setMode] = React.useState<"cargo" | "vessel">("cargo");
   // Layout: split (panels beside the map) or wide (full-width map, card
-  // sections below). Persisted per browser.
+  // sections below). Split is the standing default on every fresh visit;
+  // the wide choice only sticks for the current browser session
+  // (sessionStorage), so navigating around the portal keeps it but a new
+  // login starts side-by-side again.
   const [wideMap, setWideMap] = React.useState(false);
   React.useEffect(() => {
-    try { if (localStorage.getItem("asb:dashLayout") === "wide") setWideMap(true); } catch {}
+    try { if (sessionStorage.getItem("asb:dashLayout") === "wide") setWideMap(true); } catch {}
   }, []);
   const toggleWide = () => setWideMap((w) => {
-    try { localStorage.setItem("asb:dashLayout", w ? "split" : "wide"); } catch {}
+    try { sessionStorage.setItem("asb:dashLayout", w ? "split" : "wide"); } catch {}
     return !w;
   });
   // Wide layout: map height as % of the visible body (100 = full screen,
@@ -353,13 +356,27 @@ export function DashboardBoard({
   );
   const topMatches = mode === "cargo" ? cargoTopMatches : vesselTopMatches;
 
+  // In the wide layout the map sits above the card sections — selecting a
+  // card must bring the map back into view, or the fly-to happens off-screen
+  // and the click looks dead.
+  const showMap = React.useCallback((selected: boolean) => {
+    if (selected) wideScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
   const focus = {
     cargo: (c: CargoView) => {
-      setFocusedCargo((id) => (id === c.id ? null : c.id));
+      setFocusedCargo((id) => {
+        const next = id === c.id ? null : c.id;
+        showMap(next != null);
+        return next;
+      });
       setFocusedVessel(null);
     },
     vessel: (v: VesselView) => {
-      setFocusedVessel((id) => (id === v.id ? null : v.id));
+      setFocusedVessel((id) => {
+        const next = id === v.id ? null : v.id;
+        showMap(next != null);
+        return next;
+      });
       setFocusedCargo(null);
     },
   };
@@ -490,7 +507,11 @@ export function DashboardBoard({
                       onClick={() => {
                         // A match is a cargo↔vessel pair — focusing the cargo draws
                         // its route on the map (the request behind the click).
-                        setFocusedCargo((id) => (id === m.cargoId ? null : m.cargoId));
+                        setFocusedCargo((id) => {
+                          const next = id === m.cargoId ? null : m.cargoId;
+                          showMap(next != null);
+                          return next;
+                        });
                         setFocusedVessel(null);
                       }}
                     />

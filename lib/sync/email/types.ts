@@ -27,6 +27,7 @@ export interface CargoRecord {
   ref?: string | null;
   cargo_type?: "Dry Bulk" | "Break Bulk" | null;
   commodity?: string | null;
+  packaging?: string | null;      // split out of the description: "bags", "bulk", …
   qty_min_mt?: number | null;
   qty_max_mt?: number | null;
   load_port?: string | null;

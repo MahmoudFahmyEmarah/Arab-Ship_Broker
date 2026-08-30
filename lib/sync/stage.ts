@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cell, SheetCounts, StagedRow, SyncSource } from "./types";
 import { specById } from "./sheets";
 import { buildStagedRow, mapRow } from "./diff";
+import { fetchCommodityIndex, resolveCommodity, type CommodityIndex } from "./commodity";
 
 const CHUNK = 500;
 
@@ -208,6 +209,30 @@ export async function stageBatch({
       if (!spec) continue;
       counts[sheet] = emptyCounts();
 
+      // 2a · commodity normalization: split the packaging out of the raw
+      // commodity phrase ("Brucite Ore in big bags" → name + packaging) and
+      // link the cleaned name to the commodities catalog. Runs on the RAW
+      // rows so the mapped payload, the diff and the review UI all see the
+      // resolved values. A failed catalog fetch skips resolution (never
+      // fatal) — and also disables the unlinked→queue rule below so a
+      // transient DB error cannot flood the review queue.
+      let commodityIndex: CommodityIndex | null = null;
+      if (sheet === "cargo") {
+        commodityIndex = await fetchCommodityIndex(supabase);
+        if (commodityIndex) {
+          for (const raw of rows) {
+            const res = resolveCommodity(
+              typeof raw["COMMODITY"] === "string" ? raw["COMMODITY"] : null,
+              commodityIndex,
+            );
+            if (!res) continue;
+            raw["COMMODITY"] = res.name;
+            if (raw["PACKAGING"] == null || raw["PACKAGING"] === "") raw["PACKAGING"] = res.packaging;
+            raw["COMMODITY_ID"] = res.commodityId;
+          }
+        }
+      }
+
       // 2 · fetch existing live rows for this sheet's keys (chunked .in)
       const keys = Array.from(
         new Set(
@@ -267,13 +292,17 @@ export async function stageBatch({
         if (error) throw new Error(`staging ${sheet}: ${error.message}`);
       }
 
-      // 3b · surface UNMAPPED commodities into the Manual Review queue.
-      // Best-effort: a queue hiccup must never fail the batch.
+      // 3b · surface unresolved commodities into the Manual Review queue:
+      // rows flagged UNMAPPED (no regime) plus any row the catalog resolver
+      // could not link (commodity_id still null). Best-effort: a queue hiccup
+      // must never fail the batch.
       if (sheet === "cargo") {
         const seen = new Set<string>();
         const queue: { raw_name: string; sample_ref: string | null; source: string; first_batch_id: string }[] = [];
         for (const s of staged) {
-          if (!s.flags.some((f) => f.field === "asb_regime")) continue;
+          const unmappedRegime = s.flags.some((f) => f.field === "asb_regime");
+          const unlinked = commodityIndex != null && s.payload["commodity_id"] == null;
+          if (!unmappedRegime && !unlinked) continue;
           const name = s.payload["commodity_name"];
           if (typeof name !== "string" || !name.trim() || seen.has(name)) continue;
           seen.add(name);
