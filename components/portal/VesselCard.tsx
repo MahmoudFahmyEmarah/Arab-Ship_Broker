@@ -56,8 +56,9 @@ export function VesselCard({
             {name}
           </div>
           <div style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-gray-500)", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+            {/* Built year lives in the "Built / age" field row of the full
+                card — the meta line keeps just identity: IMO, flag, type. */}
             <span className="mono">{imo}</span> · {flagCode(v.flag) && <><span className={`fi fi-${flagCode(v.flag)}`} style={{ fontSize: 11, borderRadius: 2, marginRight: 4, boxShadow: "0 0 0 0.5px rgba(13,37,69,.18)" }} aria-hidden /></>}{v.flag} · {v.type}
-            {v.built ? ` · Built ${v.built}` : ""}
             {postedAgeLabel(v.postedAt) ? <> · <span title={postedAgeLabel(v.postedAt) === "<1d" ? "Posted today" : `Posted ${postedAgeLabel(v.postedAt)?.replace("d", " day(s)")} ago`}>{postedAgeLabel(v.postedAt)} ago</span></> : null}
           </div>
         </div>

@@ -366,6 +366,9 @@ const G = {
   zones: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><polygon points="3,7 9,4 15,7 21,4 21,17 15,20 9,17 3,20" /></svg>,
   sun: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5" /></svg>,
   moon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>,
+  // Folded map — the basemap/provider picker (a moon/sun here read as a mere
+  // dark-mode toggle and nobody found the picker behind it)
+  foldedMap: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z" /><path d="M9 4v13M15 6.5v13" /></svg>,
   plus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>,
   minus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14" /></svg>,
   maximize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>,
@@ -1319,8 +1322,8 @@ export default function MarketMap({
         </BarIcon>
         <div className="bar-spacer" />
         <div className="bar-divider" />
-        <BarIcon on={basePickerOpen} onClick={() => { const n = !basePickerOpen; closePanels(); setBasePickerOpen(n); }} title="Basemap — choose the chart style">
-          {isDarkish(base) ? G.moon : G.sun}
+        <BarIcon on={basePickerOpen} onClick={() => { const n = !basePickerOpen; closePanels(); setBasePickerOpen(n); }} title="Chart style — Light / Dark / Nautical / Satellite">
+          {G.foldedMap}
         </BarIcon>
         {basePickerOpen && (
           <div className="base-picker" onClick={(e) => e.stopPropagation()}>
