@@ -53,9 +53,12 @@ export interface VesselRecord {
   vessel_name?: string | null;
   vessel_type?: string | null;
   dwt?: number | null;
+  grt?: number | null;            // gross tonnage — key for port cost calc
+  nrt?: number | null;            // net tonnage
   flag?: string | null;
   built?: number | null;
   // open-position intelligence (drives location-aware matching)
+  open_date?: string | null;      // availability date, ISO yyyy-mm-dd
   open_port?: string | null;      // where she's open, e.g. "Mostaganem"
   open_country?: string | null;   // e.g. "Algeria"
   open_zone?: string | null;      // zone code, e.g. "W.MED"

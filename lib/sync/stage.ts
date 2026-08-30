@@ -39,8 +39,36 @@ function emptyCounts(): SheetCounts {
 
 const asInt = (v: Cell): number | null => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : null);
 const asStr = (v: Cell): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+// Any parseable date/datetime string → "yyyy-mm-dd" (email-header formats included).
+const isoDay = (v: string | null): string | null => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(+d) ? null : d.toISOString().slice(0, 10);
+};
 
-// Queue IMO-less vessels for manual review, deduped by a name+built+dwt composite.
+// Queue IMO-less vessels for manual review, deduped by a name+built+dwt
+// composite. The DWT in the key is rounded to the nearest 100 — the same ship
+// is routinely reported as 9,299 in one circular and 9,300 in the next, and an
+// exact key turned every such wobble into a duplicate queue entry.
+const compositeKeyFor = (name: string, built: number | null, dwt: number | null) =>
+  `${name.toLowerCase()}|${built ?? ""}|${dwt != null ? Math.round(dwt / 100) * 100 : ""}`;
+
+// Same ship, slightly different report? (placeholder "Unnamed vessel" rows are
+// exempt — different ships share that name)
+function isNearDup(
+  a: { vessel_name: string; built: number | null; dwt_grain: number | null },
+  name: string, built: number | null, dwt: number | null,
+): boolean {
+  if (a.vessel_name.toLowerCase() !== name.toLowerCase()) return false;
+  if (name.toLowerCase().startsWith("unnamed vessel")) return false;
+  if (a.built != null && built != null && a.built !== built) return false;
+  if (a.dwt_grain != null && dwt != null) {
+    const tol = Math.max(100, Math.round(a.dwt_grain / 20));
+    if (Math.abs(a.dwt_grain - dwt) > tol) return false;
+  }
+  return true;
+}
+
 async function enqueueVessels(
   supabase: SupabaseClient,
   rows: StagedRow[],
@@ -49,6 +77,7 @@ async function enqueueVessels(
 ): Promise<void> {
   const seen = new Set<string>();
   const queue: Record<string, unknown>[] = [];
+  const incoming: { name: string; built: number | null; dwt: number | null }[] = [];
   for (const s of rows) {
     const raw = s.raw as Record<string, Cell>;
     // A circular may describe an unnamed vessel ("our vessel, 17k dwt…") — keep
@@ -58,9 +87,10 @@ async function enqueueVessels(
       `Unnamed vessel (${asStr(raw._SRC_NAME) ?? asStr(raw._SRC_FROM) ?? "unknown contact"})`;
     const built = asInt(s.payload["build_year"]);
     const dwt = asInt(s.payload["dwt_grain"]);
-    const composite = `${name.toLowerCase()}|${built ?? ""}|${dwt ?? ""}`;
+    const composite = compositeKeyFor(name, built, dwt);
     if (seen.has(composite)) continue;
     seen.add(composite);
+    incoming.push({ name, built, dwt });
     const source_email = raw._SRC_FROM || raw._SRC_SUBJECT || raw._SRC_TEXT
       ? {
           from: raw._SRC_FROM ?? null, subject: raw._SRC_SUBJECT ?? null,
@@ -72,7 +102,13 @@ async function enqueueVessels(
     queue.push({
       vessel_name: name, built, dwt_grain: dwt,
       vessel_type: asStr(s.payload["vessel_type"]), flag: asStr(s.payload["flag"]),
-      // open-position intelligence (raw-only keys from the channel extraction)
+      // tonnage intelligence — GRT is key for the Port Module / cost calc
+      grt: asInt(raw["GRT"]), nrt: asInt(raw["NRT"]),
+      // open-position intelligence (raw-only keys from the channel extraction).
+      // Open date is a KEY matchmaking factor and never stays empty: the
+      // extracted date wins, else the circular's posted date, else today —
+      // the day the record entered the database.
+      open_date: asStr(raw["OPEN_DATE"]) ?? isoDay(asStr(raw["_SRC_DATE"])) ?? isoDay(new Date().toISOString()),
       open_port: asStr(raw["OPEN_PORT"]), open_country: asStr(raw["OPEN_COUNTRY"]),
       open_zone: asStr(raw["OPEN_ZONE"]), direction: asStr(raw["DIRECTION"]),
       dest_zones: destZones ? destZones.split("|").filter(Boolean) : null,
@@ -83,8 +119,43 @@ async function enqueueVessels(
   }
   if (!queue.length) return;
   try {
-    // Re-surface (re-open) a previously-resolved vessel when it's sighted again.
-    await supabase.from("vessel_review_queue").upsert(queue, { onConflict: "composite_key" });
+    // Near-duplicate guard: a PENDING row for the same ship (same name, built
+    // compatible, DWT within ~5%) absorbs the new sighting — position fields
+    // refresh, missing scalars fill in — instead of spawning a second entry.
+    const { data: pending } = await supabase
+      .from("vessel_review_queue")
+      .select("id, vessel_name, built, dwt_grain, posted_at")
+      .eq("status", "pending")
+      .in("vessel_name", incoming.map((i) => i.name))
+      .limit(400);
+    const updates: { id: string; patch: Record<string, unknown> }[] = [];
+    const inserts: Record<string, unknown>[] = [];
+    for (const q of queue) {
+      const hit = (pending ?? []).find((p) =>
+        isNearDup(p, q.vessel_name as string, q.built as number | null, q.dwt_grain as number | null));
+      if (hit) {
+        updates.push({
+          id: hit.id,
+          patch: {
+            // fresher sighting wins the position; scalars only fill gaps
+            open_port: q.open_port, open_country: q.open_country, open_zone: q.open_zone,
+            direction: q.direction, dest_zones: q.dest_zones,
+            open_date: q.open_date, posted_at: q.posted_at ?? hit.posted_at,
+            source_email: q.source_email,
+            ...(q.grt != null ? { grt: q.grt } : {}),
+            ...(q.nrt != null ? { nrt: q.nrt } : {}),
+            ...(q.built != null ? { built: q.built } : {}),
+          },
+        });
+      } else {
+        inserts.push(q);
+      }
+    }
+    for (const u of updates)
+      await supabase.from("vessel_review_queue").update(u.patch).eq("id", u.id);
+    if (inserts.length)
+      // Re-surface (re-open) a previously-resolved vessel when it's sighted again.
+      await supabase.from("vessel_review_queue").upsert(inserts, { onConflict: "composite_key" });
   } catch {
     /* queue is advisory — never fail the batch */
   }

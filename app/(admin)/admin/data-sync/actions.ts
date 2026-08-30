@@ -811,6 +811,10 @@ export interface VesselQueueRow {
   dwt_grain: number | null;
   vessel_type: string | null;
   flag: string | null;
+  grt: number | null;
+  nrt: number | null;
+  open_date: string | null;
+  imo_hint: string | null;
   open_port: string | null;
   open_country: string | null;
   open_zone: string | null;
@@ -830,7 +834,7 @@ export async function listVesselQueue(
     const c = await adminClient();
     const { data, error } = await c
       .from("vessel_review_queue")
-      .select("id, vessel_name, built, dwt_grain, vessel_type, flag, open_port, open_country, open_zone, direction, dest_zones, posted_at, source, status, source_email, created_at")
+      .select("id, vessel_name, built, dwt_grain, vessel_type, flag, grt, nrt, open_date, imo_hint, open_port, open_country, open_zone, direction, dest_zones, posted_at, source, status, source_email, created_at")
       .eq("status", status)
       .order("created_at", { ascending: false })
       .limit(500);
@@ -860,6 +864,9 @@ export interface VesselQueuePatch {
   dwt_grain?: number | null;
   vessel_type?: string | null;
   flag?: string | null;
+  grt?: number | null;
+  nrt?: number | null;
+  open_date?: string | null;
   open_port?: string | null;
   open_country?: string | null;
   open_zone?: string | null;
@@ -873,6 +880,9 @@ function vesselPatchToUpdate(patch: VesselQueuePatch): Record<string, unknown> {
   if (patch.dwt_grain !== undefined) upd.dwt_grain = patch.dwt_grain;
   if (patch.vessel_type !== undefined) upd.vessel_type = patch.vessel_type;
   if (patch.flag !== undefined) upd.flag = patch.flag;
+  if (patch.grt !== undefined) upd.grt = patch.grt;
+  if (patch.nrt !== undefined) upd.nrt = patch.nrt;
+  if (patch.open_date !== undefined) upd.open_date = patch.open_date;
   if (patch.open_port !== undefined) upd.open_port = patch.open_port;
   if (patch.open_country !== undefined) upd.open_country = patch.open_country;
   if (patch.open_zone !== undefined) upd.open_zone = patch.open_zone;
