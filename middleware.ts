@@ -63,7 +63,15 @@ export async function middleware(request: NextRequest) {
   const LAST_ACTIVE_COOKIE = "asb-last-active";
   if (user) {
     const lastActive = Number(request.cookies.get(LAST_ACTIVE_COOKIE)?.value ?? NaN);
-    if (Number.isFinite(lastActive) && Date.now() - lastActive > IDLE_LIMIT_MS) {
+    // The cookie only counts if it was written during THIS session. It is
+    // httpOnly, so a client-side sign-out cannot clear it — after a manual
+    // logout (or an overnight session lapse) it lingers with the OLD
+    // timestamp, and without this guard the very first navigation of a
+    // brand-new login would be "idle for hours" and get signed out on the
+    // spot. A stale cookie is ignored and simply re-rolled below.
+    const signedInAt = user.last_sign_in_at ? Date.parse(user.last_sign_in_at) : 0;
+    const fromThisSession = Number.isFinite(lastActive) && lastActive >= signedInAt;
+    if (fromThisSession && Date.now() - lastActive > IDLE_LIMIT_MS) {
       await supabase.auth.signOut();
       const res = redirectWithSupabaseCookies("/auth/login?error=session_expired");
       res.cookies.delete(LAST_ACTIVE_COOKIE);
@@ -104,7 +112,9 @@ export async function middleware(request: NextRequest) {
 
   if (appUser && !appUser.is_active) {
     await supabase.auth.signOut();
-    return redirectWithSupabaseCookies("/auth/login?error=account_suspended");
+    const res = redirectWithSupabaseCookies("/auth/login?error=account_suspended");
+    res.cookies.delete(LAST_ACTIVE_COOKIE);
+    return res;
   }
 
   if (!user.email_confirmed_at) {
@@ -148,7 +158,9 @@ export async function middleware(request: NextRequest) {
   }
 
   await supabase.auth.signOut();
-  return redirectWithSupabaseCookies("/auth/login");
+  const res = redirectWithSupabaseCookies("/auth/login");
+  res.cookies.delete(LAST_ACTIVE_COOKIE);
+  return res;
 }
 
 export const config = {
