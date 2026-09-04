@@ -388,25 +388,22 @@ export function DashboardBoard({
         <div className="row-sb">
           <div>
             <h1 className="page-title">Dashboard</h1>
-            <div className="eyebrow" style={{ marginTop: 2 }}>
-              Arabian Gulf · Red Sea · East Med · Black Sea, Today
-            </div>
           </div>
           <div className="row" style={{ gap: 8 }}>
             <SourcePill source={source} />
             <button
               type="button"
-              className="asb-btn ghost"
+              className={`asb-btn ghost dash-layout-btn${wideMap ? " is-wide" : ""}`}
               onClick={toggleWide}
-              title={wideMap ? "Split view — panels beside the map" : "Wide chart — full-width map, card sections below"}
+              title={wideMap ? "Back to split view: cargo and tonnage panels beside the chart" : "Wide chart: the map fills the width, the cargo / tonnage / match panels flow below it"}
               aria-label="Toggle dashboard layout"
-              style={{ padding: "5px 8px" }}
             >
               {wideMap ? (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="8" height="16" rx="1.5" /><rect x="14" y="4" width="7" height="16" rx="1.5" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="8" height="16" rx="1.5" /><rect x="14" y="4" width="7" height="16" rx="1.5" /></svg>
               ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="9" rx="1.5" /><rect x="3" y="16" width="5" height="4" rx="1" /><rect x="10" y="16" width="5" height="4" rx="1" /><rect x="17" y="16" width="4" height="4" rx="1" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="9" rx="1.5" /><rect x="3" y="16" width="5" height="4" rx="1" /><rect x="10" y="16" width="5" height="4" rx="1" /><rect x="17" y="16" width="4" height="4" rx="1" /></svg>
               )}
+              <span>{wideMap ? "Split view" : "Wide chart"}</span>
             </button>
             {/* Live notifications are an admin preview for now — hidden for members
                 until the alerting pipeline goes live. */}
@@ -422,27 +419,34 @@ export function DashboardBoard({
 
       <div className="filter-bar">
         <PostedFilter value={postedDays} onChange={(d) => setFPosted(d)} vis={marketVis} />
-        <FilterMenu label="Zones" badge={fZones.length || null} active={fZones.length > 0} width={150}>
+        <FilterMenu label="Zones" badge={fZones.length || null} active={fZones.length > 0} width={150}
+          hint="Trading zones: show only cargoes loading or discharging, and vessels opening, in the selected sea areas">
           <CheckList options={ZONE_OPTS} value={fZones} onChange={setFZones} onClear={() => setFZones([])} />
         </FilterMenu>
-        <FilterMenu label="Cargo Type" badge={fCargoType.length || null} active={fCargoType.length > 0} width={170}>
+        <FilterMenu label="Cargo Type" badge={fCargoType.length || null} active={fCargoType.length > 0} width={170}
+          hint="Cargo category: Grain, Dry Bulk or Break Bulk">
           <CheckList options={CARGO_TYPE_OPTS} value={fCargoType} onChange={setFCargoType} onClear={() => setFCargoType([])} />
         </FilterMenu>
-        <FilterMenu label="Vessel Type" badge={fVesselType.length || null} active={fVesselType.length > 0} width={180}>
+        <FilterMenu label="Vessel Type" badge={fVesselType.length || null} active={fVesselType.length > 0} width={180}
+          hint="Vessel type of the open tonnage: Bulk Carrier, General Cargo…">
           <CheckList options={VESSEL_TYPE_OPTS} value={fVesselType} onChange={setFVesselType} onClear={() => setFVesselType([])} />
         </FilterMenu>
-        <FilterMenu label="DWT / Quantity" summary={rangeSummary(fSize)} active={!!fSize} width={220}>
+        <FilterMenu label="DWT / Quantity" summary={rangeSummary(fSize)} active={!!fSize} width={220}
+          hint="Size band in metric tonnes: cargo quantity and vessel deadweight">
           <RangeMenu value={fSize} onChange={setFSize} />
         </FilterMenu>
         {/* Forward-looking urgency (laycan/open date within N days) — distinct
             from "Posted", which is backward-looking posting freshness. */}
-        <FilterMenu label="Laycan within" summary={fTime ? `${fTime}d` : null} active={fTime != null} width={210}>
+        <FilterMenu label="Laycan within" summary={fTime ? `${fTime}d` : null} active={fTime != null} width={210}
+          hint="Urgency: cargoes whose laycan, and vessels whose open date, fall within the next N days">
           <TimeMenu value={fTime} onChange={setFTime} />
         </FilterMenu>
-        <FilterMenu label="Classification" badge={fClass.length || null} active={fClass.length > 0} width={170}>
+        <FilterMenu label="Classification" badge={fClass.length || null} active={fClass.length > 0} width={170}
+          hint="Cargo classification: IMSBC group (A liquefies, B chemical hazard, C inert), DG, Grain Code">
           <CheckList options={CLASS_OPTS} value={fClass} onChange={setFClass} onClear={() => setFClass([])} />
         </FilterMenu>
-        <FilterMenu label="Gear" summary={fGear !== "any" ? (fGear === "geared" ? "Geared" : "Gearless") : null} active={fGear !== "any"} width={150}>
+        <FilterMenu label="Gear" summary={fGear !== "any" ? (fGear === "geared" ? "Geared" : "Gearless") : null} active={fGear !== "any"} width={150}
+          hint="Cargo gear: geared vessels carry their own cranes; gearless need shore cranes">
           <div className="fm-list">
             {(([["any", "Any gear"], ["geared", "Geared"], ["gearless", "Gearless"]]) as [string, string][]).map(([v, l]) => (
               <button key={v} className={`fm-opt ${fGear === v ? "is-on" : ""}`} onClick={() => setFGear(v)}>
@@ -451,7 +455,7 @@ export function DashboardBoard({
             ))}
           </div>
         </FilterMenu>
-        <span className="count">↗ {filteredCargos.length} cargo · {filteredVessels.length} tonnage</span>
+        <span className="count" title="Listings matching the current filters">↗ {filteredCargos.length} cargo · {filteredVessels.length} tonnage</span>
       </div>
 
       {(() => {
@@ -471,6 +475,7 @@ export function DashboardBoard({
             <DashboardPanel<CargoView>
               kind="cargo"
               title="Cargo positions"
+              hint="Cargoes looking for a ship: load → discharge, laycan, quantity, and who posted them. Click a row to see it on the chart with its matching tonnage."
               data={filteredCargos}
               defaultView={defaultView}
               statDefs={[
@@ -483,6 +488,7 @@ export function DashboardBoard({
             <DashboardPanel<VesselView>
               kind="vessel"
               title="Open tonnage"
+              hint="Vessels open for employment: type, deadweight, gear, where and when she opens, and who posted her. Click a row to see her on the chart with matching cargoes."
               data={filteredVessels}
               defaultView={defaultView}
               statDefs={[
@@ -495,6 +501,7 @@ export function DashboardBoard({
             <DashboardPanel
               kind="matches"
               title="Top matches"
+              hint="Best cargo ↔ vessel pairings in the current filter, scored on size, position, timing and cargo suitability."
               headerAccessory={<MatchModeSwitch mode={mode} setMode={setMode} />}
             >
               {topMatches.length === 0 ? (

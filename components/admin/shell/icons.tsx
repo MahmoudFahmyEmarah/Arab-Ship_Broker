@@ -13,6 +13,12 @@ const base = {
 } as const;
 
 export const ADMIN_ICONS: Record<string, React.ReactNode> = {
+  risk: (
+    <svg {...base}>
+      <path d="M7 1.6 12.6 11.6H1.4L7 1.6Z" strokeLinejoin="round" />
+      <path d="M7 5.4v2.8M7 10v.4" strokeLinecap="round" />
+    </svg>
+  ),
   dash: (
     <svg {...base}>
       <rect x="2" y="2" width="4" height="4" rx="0.5" />

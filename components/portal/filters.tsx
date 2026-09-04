@@ -42,6 +42,7 @@ export function FilterMenu({
   summary,
   active,
   width = 200,
+  hint,
   children,
 }: {
   label: string;
@@ -49,6 +50,8 @@ export function FilterMenu({
   summary?: string | null;
   active?: boolean;
   width?: number;
+  /** plain-language tooltip explaining what this filter does */
+  hint?: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -65,6 +68,7 @@ export function FilterMenu({
     <div className="filter-menu" ref={ref}>
       <button
         className={`asb-chip ${active ? "is-active" : ""}`}
+        title={hint}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((o) => !o);
@@ -227,6 +231,7 @@ export function PostedFilter({
       summary={value === vis.freshDays ? `Live · ${vis.freshDays}d` : `${value}d`}
       active={value !== vis.freshDays}
       width={230}
+      hint={`Posting freshness: how far back to look. Live = posted or re-confirmed in the last ${vis.freshDays} days; longer archive windows depend on your tier.`}
     >
       <div className="fm-list">
         {vis.ladder.map((d) => {

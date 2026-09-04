@@ -4,6 +4,7 @@
 // zone/enum validation, and the UNMAPPED→Manual-Review queue all apply for free.
 
 import { createHash } from "node:crypto";
+import { parseSender } from "@/lib/sync/sender";
 import type { ParsedSheet, RawRow } from "../types";
 import type { CargoRecord, EmailSource, VesselRecord } from "./types";
 
@@ -41,8 +42,11 @@ function provisionalRef(r: CargoRecord, prefix: string): string {
 
 function cargoToRow(r: CargoRecord, prefix: string): RawRow {
   const ref = r.ref && r.ref.trim() ? r.ref.trim() : provisionalRef(r, prefix);
+  const sender = parseSender(r.__src?.from, r.__src?.name);
   return {
     REF: ref,
+    SOURCE_CONTACT: sender.contact,
+    SOURCE_COMPANY: sender.company,
     CARGO_TYPE: r.cargo_type ?? null,
     COMMODITY: r.commodity ?? null,
     PACKAGING: r.packaging ?? null,

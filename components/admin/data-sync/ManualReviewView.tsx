@@ -7,14 +7,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Check, X, ArrowRight, Ban, PackageSearch, Ship, Mail, Wrench } from "lucide-react";
+import { Loader2, Check, X, ArrowRight, Ban, PackageSearch, Ship, Mail, Wrench, ExternalLink, Clipboard } from "lucide-react";
 import { ENUMS } from "@/lib/sync/preview";
+import { normalizeFlag } from "@/lib/geo/flag-states";
+import { isValidImo } from "@/lib/sync/imo";
+import { parseEquasisPaste, equasisPasteHasData } from "@/lib/sync/equasis-paste";
 import {
   listCommodityQueue, resolveCommodityReview, ignoreCommodityReview, countCommodityQueuePending,
   listVesselQueue, resolveVesselReview, ignoreVesselReview, countVesselQueuePending,
   resolveVesselQueuePatchOnly, findVesselQueueMatches, sendVesselQueueTeaser,
-  listInvalidStaged, countInvalidStagedPending,
+  listInvalidStaged, countInvalidStagedPending, listFlagStates, listOrganizationNames,
   type CommodityQueueRow, type VesselQueueRow, type MatchView, type InvalidStagedRow,
+  type FlagStateOpt, type OrganizationOpt,
 } from "@/app/(admin)/admin/data-sync/actions";
 import { StagedEditDrawer } from "./StagedEditDrawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -256,6 +260,7 @@ function VesselQueue({ onChange }: { onChange: () => void }) {
                   {r.open_date ? ` · from ${r.open_date}` : ""}
                   {r.direction ? ` · → ${r.direction}` : ""}
                   {r.built ? ` · built ${r.built}` : ""}
+                  {r.commercial_manager ? ` · mgr ${r.commercial_manager}` : ""}
                   {r.imo_hint ? ` · IMO ${r.imo_hint} (workbook)` : " · no IMO"}
                 </div>
               </div>
@@ -266,7 +271,14 @@ function VesselQueue({ onChange }: { onChange: () => void }) {
                   </button>
                   <button onClick={(e) => { e.stopPropagation(); setResolving(r); }} style={btn("primary")}>Review &amp; edit <ArrowRight size={14} /></button>
                 </>
-              ) : <StatusPill status={r.status} good="synced" />}
+              ) : (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {r.status === "synced" && r.resolved_with_imo === false && (
+                    <span title="Synced by name + built + DWT — add the IMO when known" style={{ fontSize: 10, fontWeight: 700, color: C.amber, border: `1px solid ${C.amber}`, borderRadius: 3, padding: "1px 5px" }}>IMO PENDING</span>
+                  )}
+                  <StatusPill status={r.status} good="synced" />
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -288,11 +300,34 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
   const [grt, setGrt] = useState(row.grt != null ? String(row.grt) : "");
   const [nrt, setNrt] = useState(row.nrt != null ? String(row.nrt) : "");
   const [built, setBuilt] = useState(row.built != null ? String(row.built) : "");
-  const [flag, setFlag] = useState(row.flag ?? "");
+  // flag is a closed vocabulary (flag_states) — normalise what the circular said
+  const [flag, setFlag] = useState(normalizeFlag(row.flag) ?? row.flag ?? "");
   const [openPort, setOpenPort] = useState(row.open_port ?? "");
   const [openDate, setOpenDate] = useState(row.open_date ?? "");
   const [openZone, setOpenZone] = useState(row.open_zone ?? "");
   const [direction, setDirection] = useState(row.direction ?? "");
+  // company roles (Equasis wording) — linked into the company registry on sync
+  const [ownerCompany, setOwnerCompany] = useState(row.owner_company ?? "");
+  const [commercialManager, setCommercialManager] = useState(row.commercial_manager ?? "");
+  const [ismManager, setIsmManager] = useState(row.ism_manager ?? "");
+  const [flagOptions, setFlagOptions] = useState<FlagStateOpt[]>([]);
+  const [orgOptions, setOrgOptions] = useState<OrganizationOpt[]>([]);
+  useEffect(() => {
+    let c = false;
+    (async () => {
+      const [f, o] = await Promise.all([listFlagStates(), listOrganizationNames()]);
+      if (c) return;
+      if (f.success) setFlagOptions(f.data); else toast.error(f.error);
+      if (o.success) setOrgOptions(o.data);
+    })();
+    return () => { c = true; };
+  }, []);
+  // Equasis: manual lookup + paste (their conditions forbid automated fetching)
+  const [equasisOpen, setEquasisOpen] = useState(false);
+  const [equasisText, setEquasisText] = useState("");
+  const imoTrim = imo.trim();
+  const imoOk = isValidImo(imoTrim);
+  const flagKnown = !flag || flagOptions.length === 0 || flagOptions.some((f) => f.name === flag);
   // Platform-standard port entry: suggest curated ports (name · locode)
   const [portOptions, setPortOptions] = useState<{ name: string; locode: string }[]>([]);
   useEffect(() => {
@@ -334,16 +369,45 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
     open_date: openDate.trim() || null,
     open_zone: openZone || null,
     direction: direction.trim() || null,
+    owner_company: ownerCompany.trim() || null,
+    commercial_manager: commercialManager.trim() || null,
+    ism_manager: ismManager.trim() || null,
   });
 
-  const sync = async () => {
+  // Sync = write the vessel to the register AND post her OPEN position to the
+  // market (dashboard / Vessels board / Insights). The IMO is mandatory; the
+  // "temporary" path needs an explicit confirmation and leaves an IMO PENDING
+  // marker on the queue row.
+  const sync = async (allowWithoutImo = false) => {
+    if (allowWithoutImo && !confirm(
+      "Sync without an IMO number?\n\nThis is temporary: the vessel joins the register by name + built + DWT and stays marked \u201cIMO pending\u201d until you add it.")) return;
     setSaving(true);
-    const res = await resolveVesselReview(row.id, imo || null, patch());
+    const res = await resolveVesselReview(row.id, imoTrim || null, patch(), { allowWithoutImo });
     setSaving(false);
     if (!res.success) { toast.error(res.error); return; }
-    const msg = res.data.op === "imo" ? "Synced with IMO." : res.data.op === "composite-update" ? "Matched an existing vessel — updated." : "Synced (IMO pending).";
-    toast.success(msg);
+    const msg = res.data.op === "imo" ? "Synced with IMO — open position is live on the market."
+      : res.data.op === "composite-update" ? "Matched an existing vessel — updated, position live."
+      : "Synced (IMO pending) — position live.";
+    toast.success(res.data.portResolved || !openPort.trim() ? msg : `${msg} Open port kept as text (no port-registry match).`);
     onDone();
+  };
+
+  const applyEquasis = () => {
+    const p = parseEquasisPaste(equasisText);
+    if (!equasisPasteHasData(p)) { toast.error("Nothing recognisable in the pasted text — copy the Ship info and Management detail tables."); return; }
+    if (p.imo) setImo(p.imo);
+    if (p.name) setName(p.name);
+    if (p.flag) setFlag(p.flag);
+    if (p.grt) setGrt(String(p.grt));
+    if (p.dwt && !dwt.trim()) setDwt(String(p.dwt));
+    if (p.built) setBuilt(String(p.built));
+    if (p.vesselType) setVtype(p.vesselType);
+    if (p.registeredOwner) setOwnerCompany(p.registeredOwner);
+    if (p.commercialManager) setCommercialManager(p.commercialManager);
+    if (p.ismManager) setIsmManager(p.ismManager);
+    const n = Object.values(p).filter((v) => v !== undefined && v !== "").length;
+    toast.success(`Filled ${n} field${n === 1 ? "" : "s"} from Equasis — review, then sync.`);
+    setEquasisOpen(false);
   };
 
   // Save corrections WITHOUT syncing — the record stays pending in the queue.
@@ -401,7 +465,23 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
           <input value={nrt} onChange={(e) => setNrt(e.target.value)} placeholder="net tonnage" style={field} />
         </div>
         <div><label style={lab}>Built</label><input value={built} onChange={(e) => setBuilt(e.target.value)} placeholder="year" style={field} /></div>
-        <div><label style={lab}>Flag</label><input value={flag} onChange={(e) => setFlag(e.target.value)} style={field} /></div>
+        <div>
+          <label style={lab}>
+            Flag <span style={{ color: C.ink3, fontWeight: 400 }}>(ship register)</span>
+            {!flagKnown && <span style={{ color: C.red, fontWeight: 600 }}> · \u201c{flag}\u201d is not a known register — pick one</span>}
+          </label>
+          <select value={flag} onChange={(e) => setFlag(e.target.value)} style={{ ...field, borderColor: flagKnown ? C.line : C.red }}>
+            <option value="">—</option>
+            {!flagKnown && <option value={flag}>{flag} (unrecognised)</option>}
+            <optgroup label="Open registries">
+              {flagOptions.filter((f) => f.category === "open").map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+            </optgroup>
+            <optgroup label="National registers">
+              {flagOptions.filter((f) => f.category === "national").map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+            </optgroup>
+            {flagOptions.filter((f) => f.category === "unknown").map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+          </select>
+        </div>
         <div>
           <label style={lab}>Open port {row.open_country && <span style={{ color: C.ink3, fontWeight: 400 }}>({row.open_country})</span>}</label>
           <input value={openPort} onChange={(e) => setOpenPort(e.target.value)} placeholder="e.g. Mostaganem" style={field} list="dsq-ports" />
@@ -424,17 +504,71 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
           <label style={lab}>Direction {row.dest_zones?.length ? <span style={{ color: C.ink3, fontWeight: 400 }}>(zones: {row.dest_zones.join(" / ")})</span> : null}</label>
           <input value={direction} onChange={(e) => setDirection(e.target.value)} placeholder="e.g. Black Sea or Turkey" style={field} />
         </div>
+        <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, paddingTop: 6, borderTop: `1px dashed ${C.line}` }}>
+          <div>
+            <label style={lab}>Registered owner</label>
+            <input value={ownerCompany} onChange={(e) => setOwnerCompany(e.target.value)} placeholder="company name" style={field} list="dsq-orgs" />
+          </div>
+          <div>
+            <label style={lab}>Commercial / ship manager <span style={{ color: C.brassDeep, fontWeight: 600 }}>(key counterparty)</span></label>
+            <input value={commercialManager} onChange={(e) => setCommercialManager(e.target.value)} placeholder="who fixes her" style={{ ...field, borderColor: C.brass }} list="dsq-orgs" />
+          </div>
+          <div>
+            <label style={lab}>ISM manager</label>
+            <input value={ismManager} onChange={(e) => setIsmManager(e.target.value)} placeholder="DOC holder" style={field} list="dsq-orgs" />
+          </div>
+          <datalist id="dsq-orgs">
+            {orgOptions.map((o) => <option key={o.name} value={o.name}>{o.org_type ?? ""}</option>)}
+          </datalist>
+          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: C.ink3, marginTop: -4 }}>
+            Names are matched to the company registry on sync (created there when new). The commercial manager is what matters for chartering.
+          </div>
+        </div>
         <div style={{ gridColumn: "1 / -1" }}>
           <label style={lab}>
-            IMO number <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — 7 digits; blank = sync by name+built+dwt)</span>
+            IMO number <span style={{ color: C.ink3, fontWeight: 400 }}>(required — 7 digits with a valid check digit)</span>
             {row.imo_hint && <span style={{ color: C.brassDeep, fontWeight: 600 }}> · pre-filled from the unified workbook — please confirm</span>}
+            {imoTrim && !imoOk && <span style={{ color: C.red, fontWeight: 600 }}> · not a valid IMO</span>}
+            {imoOk && <span style={{ color: C.green, fontWeight: 600 }}> · check digit OK</span>}
           </label>
-          <input value={imo} onChange={(e) => setImo(e.target.value)} placeholder="leave blank to sync without an IMO" style={field} />
+          <input value={imo} onChange={(e) => setImo(e.target.value.replace(/[^\d]/g, "").slice(0, 7))} inputMode="numeric" placeholder="e.g. 9365702 — look her up on Equasis if the circular has none"
+            style={{ ...field, fontFamily: C.mono, borderColor: !imoTrim ? C.line : imoOk ? C.green : C.red }} />
         </div>
       </div>
       {row.posted_at && (
         <div style={{ fontSize: 11.5, color: C.ink3, marginTop: 8 }}>Position posted {new Date(row.posted_at).toLocaleString()}</div>
       )}
+
+      {/* Equasis — manual lookup + paste. Their conditions of use forbid
+          web-robots / automated retrieval, so the platform never fetches. */}
+      <div style={{ marginTop: 14, padding: "10px 12px", border: `1px dashed ${C.line}`, borderRadius: 8, background: C.sunken }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: C.ink3 }}>EQUASIS</span>
+          <a href="https://www.equasis.org/EquasisWeb/public/HomePage" target="_blank" rel="noreferrer"
+            onClick={() => { if (imoTrim) navigator.clipboard?.writeText(imoTrim).catch(() => {}); }}
+            style={{ ...btn("ghost"), padding: "5px 10px", fontSize: 12, textDecoration: "none" }}>
+            <ExternalLink size={13} /> Open Equasis{imoTrim ? " (IMO copied)" : ""}
+          </a>
+          <button onClick={() => setEquasisOpen((o) => !o)} style={{ ...btn("ghost"), padding: "5px 10px", fontSize: 12 }}>
+            <Clipboard size={13} /> {equasisOpen ? "Hide paste box" : "Paste ship particulars"}
+          </button>
+          <span style={{ fontSize: 11.5, color: C.ink3 }}>
+            Look her up, copy the <b>Ship info</b> and <b>Management detail</b> tables, paste — the fields above fill in for your review.
+          </span>
+        </div>
+        {equasisOpen && (
+          <>
+            <textarea value={equasisText} onChange={(e) => setEquasisText(e.target.value)}
+              placeholder={"IMO number : 9365702\nName of ship : DORIS\nGross tonnage : 2999\nType of ship : General Cargo Ship\nYear of build : 2006\nFlag : Barbados\nRegistered owner   SOME OWNER LTD\nShip manager/Commercial manager   SOME MANAGER CO\nISM Manager   SOME MANAGER CO"}
+              style={{ ...field, marginTop: 8, minHeight: 120, fontFamily: C.mono, fontSize: 12, resize: "vertical" }} />
+            <div style={{ marginTop: 8 }}>
+              <button onClick={applyEquasis} disabled={!equasisText.trim()} style={{ ...btn("dark"), padding: "6px 12px", fontSize: 12.5, opacity: equasisText.trim() ? 1 : 0.5 }}>
+                <Check size={13} /> Fill fields from paste
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* matches — usable even on incomplete records (needs at least a DWT) */}
       <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
@@ -484,10 +618,22 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
         <button onClick={saveOnly} disabled={savingOnly || saving || !name.trim()} style={{ ...btn("dark"), opacity: savingOnly || !name.trim() ? 0.5 : 1 }}>
           {savingOnly ? <Loader2 size={15} style={spin} /> : <Check size={15} />} Save changes
         </button>
-        <button onClick={sync} disabled={saving || savingOnly || !name.trim()} style={{ ...btn("primary"), opacity: saving || !name.trim() ? 0.5 : 1 }}>
-          {saving ? <Loader2 size={15} style={spin} /> : <Check size={15} />} {imo ? "Sync with IMO" : "Sync without IMO"}
+        <button onClick={() => sync(false)} disabled={saving || savingOnly || !name.trim() || !imoOk}
+          title={!imoOk ? "Enter a valid 7-digit IMO number to sync" : "Write to the register and post her open position"}
+          style={{ ...btn("primary"), opacity: saving || !name.trim() || !imoOk ? 0.5 : 1 }}>
+          {saving ? <Loader2 size={15} style={spin} /> : <Check size={15} />} Sync with IMO
         </button>
+        {!imoTrim && (
+          <button onClick={() => sync(true)} disabled={saving || savingOnly || !name.trim()}
+            title="Temporary — the vessel is matched by name + built + DWT and stays flagged IMO PENDING"
+            style={{ ...btn("ghost"), fontSize: 12.5, opacity: saving || !name.trim() ? 0.5 : 1 }}>
+            Sync without IMO (temporary)
+          </button>
+        )}
         <button onClick={onClose} style={{ ...btn("ghost"), marginLeft: "auto" }}>Cancel</button>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.ink3, marginTop: 8 }}>
+        <b>Save changes</b> keeps your corrections on this queue record only. <b>Sync</b> writes the vessel to the register, links the companies, and posts her OPEN position live on the dashboard and Vessels board.
       </div>
     </ModalShell>
   );

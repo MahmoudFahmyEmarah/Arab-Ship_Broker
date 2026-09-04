@@ -21,6 +21,8 @@ import { useViewerTier } from "@/lib/portal/tier";
 import { routeGeometry } from "@/lib/portal/routeGeometry";
 import { getPortRoute } from "@/sdk/app/routes";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
+import { routeAlerts, positionAlerts, tagLeg, parseRiskAreaRow, type RiskArea, type RouteAlert } from "@/lib/portal/risk-areas";
+import { FLEET_ZONES } from "@/lib/zones";
 import { ZONE_SHAPES } from "@/lib/portal/zone-shapes";
 import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
 import { formatLaycanRange, formatShortDate } from "@/lib/portal/format";
@@ -190,6 +192,19 @@ function commodityGlyph(c: CargoView, regime: CargoRegime): string {
 }
 
 type CargoState = "dot" | "pill" | "thumb";
+// Zoomed-out ("far") scale: EVERY listing is a bubble — a cluster shows its
+// count, a lone listing shows "1" — so the chart reads the same at every
+// scale. Zoom past FAR_ZOOM and the bubbles resolve into the cargo shapes
+// and vessel triangles. Clicking a bubble zooms in rather than opening a card.
+const FAR_ZOOM = 6;
+function singleBubbleIcon(kind: "cargo" | "vessel", selected: boolean, extraCls = "") {
+  return L.divIcon({
+    html: `<div class="asb-cluster asb-cluster--one is-${kind}${selected ? " is-selected" : ""}" style="width:28px;height:28px;">1</div>`,
+    className: "asb-cluster-wrap asb-cluster-wrap--one" + extraCls,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+}
 function cargoStateForZoom(z: number): CargoState {
   if (z <= 6) return "dot";
   if (z <= 8) return "pill";
@@ -362,7 +377,7 @@ function drawRoute(
 const G = {
   cargo: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /></svg>,
   vessel: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 L20 19 H4 Z" /></svg>,
-  ship: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="9.5" width="3" height="3" /><rect x="5" y="6" width="1.6" height="3.8" /><path d="M 1.5 14 L 17 14 Q 21 14 22.5 11 L 22.5 16 Q 22 17.5 19 17.5 L 4 17.5 Q 2 17.5 1.5 16 Z" /><path d="M 1.5 19.5 Q 4 18.5 6.5 19.5 T 11.5 19.5 T 16.5 19.5 T 22.5 19.5" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round" /></svg>,
+  ship: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8V5h8v3" /><path d="M9 5V3h2v2" /><path d="M4 8h13l4 5-2 5H6l-3-5 1-5Z" /><path d="M2 14h2" opacity=".55" /><path d="M1 11h3" opacity=".35" /></svg>,
   zones: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><polygon points="3,7 9,4 15,7 21,4 21,17 15,20 9,17 3,20" /></svg>,
   sun: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5" /></svg>,
   moon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>,
@@ -475,7 +490,12 @@ export default function MarketMap({
   const baseRef = React.useRef<L.Layer | null>(null);
   const flowsRef = React.useRef<L.LayerGroup | null>(null);
   const matchLinesRef = React.useRef<L.LayerGroup | null>(null);
+  const riskRef = React.useRef<L.LayerGroup | null>(null);
   const cargoMk = React.useRef<Record<string, L.Marker>>({});
+  const vesselMk = React.useRef<Record<string, L.Marker>>({});
+  // Latest props for the map's zoom handler (registered once at init).
+  const latest = React.useRef({ cargos, vessels, focusedCargoId, focusedVesselId });
+  React.useEffect(() => { latest.current = { cargos, vessels, focusedCargoId, focusedVesselId }; }, [cargos, vessels, focusedCargoId, focusedVesselId]);
   const roRef = React.useRef<ResizeObserver | null>(null);
   // True once the viewer pans/zooms by hand — after that, container resizes
   // must never yank the view back to the default region.
@@ -489,13 +509,29 @@ export default function MarketMap({
   const [searchQ, setSearchQ] = React.useState("");
   const [namesOn, setNamesOn] = React.useState(true);
   const [flowsOn, setFlowsOn] = React.useState(true);
+  // Risk-area layer (war zones / high-risk / advisory) — OFF by default on the
+  // member maps; the route alerts still fire regardless of this layer.
+  const [riskOn, setRiskOn] = React.useState(false);
   // one panel at a time — opening any chrome panel closes the others
-  const closePanels = () => { setBasePickerOpen(false); setLayersOpen(false); setSearchOpen(false); setFiltersOpen(false); setVoyOpen(false); };
+  const closePanels = () => {
+    setZonePickOpen(false); setBasePickerOpen(false); setLayersOpen(false); setSearchOpen(false); setFiltersOpen(false); setVoyOpen(false); };
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [voyOpen, setVoyOpen] = React.useState(false);
   const tier = useViewerTier();
   const voyLocked = tier === "T1" || tier === "T2";
   const [selections, setSelections] = React.useState<Selections>({});
+  const selectedZones = React.useMemo(() => new Set<string>([...(selections.zone ?? []), ...(selections.openZone ?? [])]), [selections]);
+  const selectedZoneCount = selectedZones.size;
+  const toggleZone = React.useCallback((code: string) => {
+    setSelections((prev) => {
+      const next = new Set<string>([...(prev.zone ?? []), ...(prev.openZone ?? [])]);
+      if (next.has(code)) next.delete(code); else next.add(code);
+      return { ...prev, zone: new Set(next), openZone: new Set(next) };
+    });
+  }, []);
+  const clearZones = React.useCallback(() => {
+    setSelections((prev) => ({ ...prev, zone: new Set<string>(), openZone: new Set<string>() }));
+  }, []);
   const [qtyMin, setQtyMin] = React.useState<number | "">("");
   const [qtyMax, setQtyMax] = React.useState<number | "">("");
   // Click-to-pair (09 §8): any cargo OR vessel marker becomes the pair anchor;
@@ -524,8 +560,44 @@ export default function MarketMap({
   });
   const shipAnimRef = React.useRef<number | null>(null);
   const [zonesOn, setZonesOn] = React.useState(true);
+  // Zones picker (rail button) — drives the shared zone facets so the pins,
+  // the filter flyout and the boards all agree on which sea areas are shown.
+  const [zonePickOpen, setZonePickOpen] = React.useState(false);
   const [base, setBase] = useMapBase();
   const [popup, setPopup] = React.useState<Popup | null>(null);
+  // Route intelligence: admin-drawn risk areas (war zones etc.) + the alerts
+  // raised for the drawn route (Suez tolls, war-risk premium), the "no route"
+  // notice, and the consent prompt before a straight-line estimate is shown.
+  const [riskAreas, setRiskAreas] = React.useState<RiskArea[]>([]);
+  const riskAreasRef = React.useRef<RiskArea[]>([]);
+  React.useEffect(() => { riskAreasRef.current = riskAreas; }, [riskAreas]);
+  React.useEffect(() => {
+    let x = false;
+    (async () => {
+      try {
+        const { data } = await getSupabaseBrowserClient()
+          .from("risk_areas")
+          .select("id, name, severity, alert_text, polygon, is_active")
+          .eq("is_active", true);
+        if (x) return;
+        setRiskAreas(((data ?? []) as Parameters<typeof parseRiskAreaRow>[0][]).map(parseRiskAreaRow).filter((a): a is RiskArea => !!a));
+      } catch { /* alerts degrade to none */ }
+    })();
+    return () => { x = true; };
+  }, []);
+  const [routeAlertList, setRouteAlerts] = React.useState<RouteAlert[]>([]);
+  const [routeNotice, setRouteNotice] = React.useState<string | null>(null);
+  const [estimatePrompt, setEstimatePrompt] = React.useState<{ line: [number, number][]; nm: number | null; label: string; kind: "computed" | "corridor" | "arc"; cps: string[] | null } | null>(null);
+  React.useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setRouteAlerts([]); setRouteNotice(null); setEstimatePrompt(null);
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
+  // Owner's rule: ALWAYS ask before an estimate — nothing is remembered.
+  try { localStorage.removeItem("asb:routeEstimate"); } catch { /* private mode */ }
 
   // Filter facets drive real marker visibility (§2b shared facet model).
   const visCargos = React.useMemo(
@@ -636,6 +708,7 @@ export default function MarketMap({
     routeRef.current = L.layerGroup().addTo(map);
     flowsRef.current = L.layerGroup().addTo(map);
     matchLinesRef.current = L.layerGroup().addTo(map);
+    riskRef.current = L.layerGroup().addTo(map);
     vecRef.current = L.layerGroup().addTo(map);
     zonesRef.current = L.layerGroup();
     const cluster = L.markerClusterGroup({
@@ -663,13 +736,25 @@ export default function MarketMap({
     map.on("move zoom", () => force());
     map.on("zoomend", () => {
       rootRef.current?.setAttribute("data-zoom", zoomTier(map.getZoom()));
-      const state = cargoStateForZoom(map.getZoom());
+      const z = map.getZoom();
+      const far = z <= FAR_ZOOM;
+      const state = cargoStateForZoom(z);
+      const cur = latest.current;
       Object.entries(cargoMk.current).forEach(([id, mk]) => {
-        const c = cargos.find((x) => x.id === id);
+        const c = cur.cargos.find((x) => x.id === id);
         if (!c) return;
-        const sel = focusedCargoId === id;
+        const sel = cur.focusedCargoId === id;
+        if (far) { mk.setIcon(singleBubbleIcon("cargo", sel)); return; }
         const ic = cargoIcon(c, state, sel);
         mk.setIcon(L.divIcon({ html: ic.html, className: "cargo-marker", iconSize: ic.size, iconAnchor: ic.anchor }));
+      });
+      Object.entries(vesselMk.current).forEach(([id, mk]) => {
+        const v = cur.vessels.find((x) => x.id === id);
+        if (!v) return;
+        const sel = cur.focusedVesselId === id;
+        if (far) { mk.setIcon(singleBubbleIcon("vessel", sel)); return; }
+        const box = sel ? 40 : Math.max(vesselSize(v).w, vesselSize(v).h, 28);
+        mk.setIcon(L.divIcon({ html: sel ? vesselShipHTML(v) : vesselTriangleHTML(v, sel), className: "vessel-marker", iconSize: [box, box], iconAnchor: [box / 2, box / 2] }));
       });
     });
 
@@ -801,7 +886,9 @@ export default function MarketMap({
     if (!cluster || !map || !ready) return;
     cluster.clearLayers();
     cargoMk.current = {};
+    vesselMk.current = {};
     vecRef.current?.clearLayers();
+    const far = map.getZoom() <= FAR_ZOOM;
 
     if (cargoOn) {
       const state = cargoStateForZoom(map.getZoom());
@@ -813,11 +900,15 @@ export default function MarketMap({
         const sel = focusedCargoId === c.id;
         const ic = cargoIcon(c, state, sel);
         const mk = L.marker(pos, {
-          icon: L.divIcon({ html: ic.html, className: "cargo-marker" + pairCls("cargo", c.id), iconSize: ic.size, iconAnchor: ic.anchor }),
+          icon: far
+            ? singleBubbleIcon("cargo", sel, pairCls("cargo", c.id))
+            : L.divIcon({ html: ic.html, className: "cargo-marker" + pairCls("cargo", c.id), iconSize: ic.size, iconAnchor: ic.anchor }),
           riseOnHover: true,
         });
         mk.on("click", (ev) => {
           L.DomEvent.stopPropagation(ev);
+          // Far scale: a bubble zooms in to reveal the shape (like a cluster).
+          if (map.getZoom() <= FAR_ZOOM) { map.flyTo(mk.getLatLng(), FAR_ZOOM + 2, { duration: 0.8 }); return; }
           // Pairing-enabled surfaces: the click drives the pairing state machine.
           if (handlePairClick("cargo", c.id)) { onSelectCargo?.(c); return; }
           closePanels();
@@ -862,16 +953,20 @@ export default function MarketMap({
         }
         const box = sel ? 40 : Math.max(vesselSize(v).w, vesselSize(v).h, 28);
         const mk = L.marker(pos, {
-          icon: L.divIcon({ html: sel ? vesselShipHTML(v, dim) : vesselTriangleHTML(v, sel, dim), className: "vessel-marker" + pairCls("vessel", v.id), iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
+          icon: far
+            ? singleBubbleIcon("vessel", sel, pairCls("vessel", v.id))
+            : L.divIcon({ html: sel ? vesselShipHTML(v, dim) : vesselTriangleHTML(v, sel, dim), className: "vessel-marker" + pairCls("vessel", v.id), iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
           riseOnHover: true,
         });
         mk.on("click", (ev) => {
           L.DomEvent.stopPropagation(ev);
+          if (map.getZoom() <= FAR_ZOOM) { map.flyTo(mk.getLatLng(), FAR_ZOOM + 2, { duration: 0.8 }); return; }
           if (handlePairClick("vessel", v.id)) { onSelectVessel?.(v); return; }
           closePanels();
           setPopup({ kind: "vessel", data: v, ll: mk.getLatLng() });
           onSelectVessel?.(v);
         });
+        vesselMk.current[v.id] = mk;
         cluster.addLayer(mk);
       });
     }
@@ -886,65 +981,87 @@ export default function MarketMap({
     if (shipAnimRef.current != null) { cancelAnimationFrame(shipAnimRef.current); shipAnimRef.current = null; }
     route.clearLayers();
     const c = cargos.find((x) => x.id === focusedCargoId);
+    setRouteAlerts([]);
+    setEstimatePrompt(null);
+    setRouteNotice(null);
     if (!c) return;
     const pol = coordFor(c.route?.polCode);
     const pod = coordFor(c.route?.podCode);
-    // No coordinates for one or both ends (backstop ports, or email-ingested
-    // listings that carry a RANGE like "Egypt Med" instead of a port):
-    //   1. a stored route may still know the exact geometry → draw it;
-    //   2. else, different known zones → dashed zone-to-zone estimate;
-    //   3. else nothing can honestly be drawn.
+    let cancelled = false;
+
+    // Draw + raise the alerts (Suez tolls, risk areas) for the final line.
+    const finish = (line: [number, number][], exact: boolean, nm: number | null, stored?: string[] | null) => {
+      if (cancelled) return;
+      drawRoute(map, route, line, exact, nm, true, base, routeShipOn, shipAnimRef);
+      const alerts = routeAlerts(line, riskAreasRef.current, stored);
+      setRouteAlerts(alerts);
+      // shade the crossed areas so the warning is visible on the chart itself
+      for (const al of alerts) {
+        if (al.kind !== "risk") continue;
+        const a = riskAreasRef.current.find((x) => x.id === al.areaId);
+        if (!a) continue;
+        const col = al.severity === "war_zone" ? "#E24B4A" : al.severity === "high_risk" ? "#EF9F27" : "#F5D48A";
+        L.polygon(a.polygon, { color: col, weight: 1.2, dashArray: "4 4", fillColor: col, fillOpacity: 0.12, interactive: false }).addTo(route);
+      }
+    };
+    const polLabel = c.route?.polName || c.route?.polCode || c.route?.polZone || "load";
+    const podLabel = c.route?.podName || c.route?.podCode || c.route?.podZone || "discharge";
+
+    // Owner's rule (4 Sep 2026): only true port-to-port routes are drawn. A
+    // range / country position ("Egypt Med", "Reni or Izmail") gets no line —
+    // the chart flies to the trading area and says why.
+    const flyToArea = () => {
+      if (cancelled) return;
+      const zP = zoneByCode(c.route?.polZone);
+      const zD = zoneByCode(c.route?.podZone);
+      const cP = zP ? zoneCentroid(zP) : null;
+      const cD = zD ? zoneCentroid(zD) : null;
+      const at = pol ?? pod ?? (cP ? ([cP[0], cP[1]] as [number, number]) : null) ?? (cD ? ([cD[0], cD[1]] as [number, number]) : null);
+      if (at) map.flyTo(at, 6, { duration: 1.0 });
+      const missing = !pol && !pod ? "Both ends are ranges" : !pol ? `Load side is a range (${polLabel})` : `Discharge side is a range (${podLabel})`;
+      setRouteNotice(`${missing} — no port given, so no route is drawn.`);
+    };
+
+    // Consent gate (owner's rule, 4 Sep 2026): ONLY measured ECDIS tracks draw
+    // on their own. Anything estimated — a computed sea distance with corridor
+    // geometry, a corridor estimate, or the straight arc — asks first, unless
+    // the viewer chose "always show".
+    const gateEstimate = (line: [number, number][], nm: number | null, kind: "computed" | "corridor" | "arc", cps: string[] | null) => {
+      if (cancelled) return;
+      if (line.length >= 2) map.fitBounds(L.latLngBounds(line), { padding: [70, 70], maxZoom: 6, animate: true });
+      setEstimatePrompt({ line, nm, label: `${polLabel} → ${podLabel}`, kind, cps });
+    };
+
+    const cleanup = () => {
+      cancelled = true;
+      if (shipAnimRef.current != null) { cancelAnimationFrame(shipAnimRef.current); shipAnimRef.current = null; }
+    };
+
     if (!pol || !pod) {
-      let cancelled = false;
-      const zoneFallback = () => {
-        if (cancelled) return;
-        const zP = zoneByCode(c.route?.polZone);
-        const zD = zoneByCode(c.route?.podZone);
-        const cP = zP ? zoneCentroid(zP) : null;
-        const cD = zD ? zoneCentroid(zD) : null;
-        const zPol = pol ?? (cP ? ([cP[0], cP[1]] as [number, number]) : null);
-        const zPod = pod ?? (cD ? ([cD[0], cD[1]] as [number, number]) : null);
-        if (!zPol || !zPod || (zPol[0] === zPod[0] && zPol[1] === zPod[1])) {
-          // Same-zone range or unknown zone — no honest lane to draw, but the
-          // click still responds: fly to the trading area.
-          const at = zPol ?? zPod;
-          if (at) map.flyTo(at, 6, { duration: 1.0 });
-          return;
-        }
-        const geo = routeGeometry({
-          polCode: null, podCode: null, polLL: zPol, podLL: zPod,
-          polZone: c.route?.polZone, podZone: c.route?.podZone,
-        });
-        if (geo && geo.pts.length >= 2) drawRoute(map, route, geo.pts as [number, number][], false, null, true, base, routeShipOn, shipAnimRef);
-      };
+      // A stored route may still know both ends by LOCODE even when the local
+      // coordinates table lacks one of them — that is still port-to-port.
       if (c.route?.polCode && c.route?.podCode) {
         (async () => {
           const stored = await getPortRoute(getSupabaseBrowserClient(), c.route?.polCode, c.route?.podCode);
           if (cancelled) return;
           if (stored && stored.waypoints.length >= 2) {
             const pts = stored.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]);
-            drawRoute(map, route, pts, stored.source.toUpperCase().startsWith("ECDIS"), Math.round(stored.totalNm), true, base, routeShipOn, shipAnimRef);
+            if (stored.source.toUpperCase().startsWith("ECDIS")) finish(pts, true, Math.round(stored.totalNm), stored.chokepoints);
+            else gateEstimate(pts, Math.round(stored.totalNm), "computed", stored.chokepoints);
           } else {
-            zoneFallback();
+            flyToArea();
           }
         })();
       } else {
-        zoneFallback();
+        flyToArea();
       }
-      return () => {
-        cancelled = true;
-        if (shipAnimRef.current != null) { cancelAnimationFrame(shipAnimRef.current); shipAnimRef.current = null; }
-      };
+      return cleanup;
     }
 
-    // Draws the track (halo + line + end dots + NM chip) and optionally refits.
-    const draw = (line: [number, number][], exact: boolean, nm: number | null, fit: boolean) =>
-      drawRoute(map, route, line, exact, nm, fit, base, routeShipOn, shipAnimRef);
-
-    // Resolve the best route ONCE, then draw ONCE — no estimated line that
-    // gets replaced moments later. Bundled exact geometry draws immediately;
-    // otherwise the stored route is awaited (typically <300ms) and only if
-    // the DB has nothing does the corridor/arc estimate render.
+    // Both ends are real ports. Resolve the best route ONCE, then draw ONCE:
+    // bundled ECDIS geometry → stored ECDIS track → stored computed sea route
+    // (corridor geometry + calibrated distance) → corridor estimate → and only
+    // as a last resort the straight arc, behind the consent prompt.
     const geo =
       routeGeometry({
         polCode: c.route?.polCode,
@@ -956,33 +1073,52 @@ export default function MarketMap({
       }) ?? { pts: [pol, pod], nm: null, exact: false, source: "arc" as const };
     const estLine = geo.pts.length >= 2 ? (geo.pts as [number, number][]) : [pol, pod];
 
-    let cancelled = false;
     if (geo.exact) {
-      draw(estLine, true, geo.nm, true);
+      finish(estLine, true, geo.nm, null);
     } else if (c.route?.polCode && c.route?.podCode) {
       (async () => {
         const stored = await getPortRoute(getSupabaseBrowserClient(), c.route?.polCode, c.route?.podCode);
         if (cancelled) return;
-        if (stored && stored.waypoints.length >= 2) {
-          // stored geometry — solid "ECDIS" for measured, dashed for computed
+        if (stored && stored.waypoints.length >= 2 && stored.source.toUpperCase().startsWith("ECDIS")) {
           const pts = stored.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]);
-          draw(pts, stored.source.toUpperCase().startsWith("ECDIS"), Math.round(stored.totalNm), true);
+          finish(pts, true, Math.round(stored.totalNm), stored.chokepoints);
+        } else if (stored && stored.waypoints.length >= 2) {
+          const pts = stored.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]);
+          gateEstimate(pts, Math.round(stored.totalNm), "computed", stored.chokepoints);
         } else if (stored) {
-          // distance-only row — corridor geometry with the calibrated distance
-          draw(estLine, false, Math.round(stored.totalNm), true);
+          gateEstimate(estLine, Math.round(stored.totalNm), "computed", stored.chokepoints);
         } else {
-          draw(estLine, false, geo.nm, true);
+          gateEstimate(estLine, geo.nm, geo.source === "corridor" ? "corridor" : "arc", null);
         }
       })();
     } else {
-      draw(estLine, false, geo.nm, true);
+      gateEstimate(estLine, geo.nm, geo.source === "corridor" ? "corridor" : "arc", null);
     }
-    return () => {
-      cancelled = true;
-      if (shipAnimRef.current != null) { cancelAnimationFrame(shipAnimRef.current); shipAnimRef.current = null; }
-    };
+    return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedCargoId, ready, base, routeShipOn]);
+
+  const acceptEstimate = () => {
+    const p = estimatePrompt;
+    const map = mapRef.current, route = routeRef.current;
+    if (!p || !map || !route) return;
+    setEstimatePrompt(null);
+    drawRoute(map, route, p.line, false, p.nm, true, base, routeShipOn, shipAnimRef);
+    const alerts = routeAlerts(p.line, riskAreasRef.current, p.cps);
+    setRouteAlerts(alerts);
+    for (const al of alerts) {
+      if (al.kind !== "risk") continue;
+      const a = riskAreasRef.current.find((x) => x.id === al.areaId);
+      if (!a) continue;
+      const col = al.severity === "war_zone" ? "#E24B4A" : al.severity === "high_risk" ? "#EF9F27" : "#F5D48A";
+      L.polygon(a.polygon, { color: col, weight: 1.2, dashArray: "4 4", fillColor: col, fillOpacity: 0.12, interactive: false }).addTo(route);
+    }
+    setRouteNotice("Point-to-point estimate — a distance guide only, not a navigation route.");
+  };
+  const declineEstimate = () => {
+    setEstimatePrompt(null);
+    setRouteNotice("No measured route for this pair — estimate not shown.");
+  };
 
   // Focused vessel → deep flyTo down to the vessel itself, then open its card.
   const prevFocusVessel = React.useRef<string | null>(null);
@@ -994,7 +1130,7 @@ export default function MarketMap({
     const v = vessels.find((x) => x.id === focusedVesselId);
     if (!v) {
       // Toggle-off: close the card we opened for the previously focused vessel.
-      if (prev) setPopup((p) => (p && p.kind === "vessel" && p.data.id === prev ? null : p));
+      if (prev) { setPopup((p) => (p && p.kind === "vessel" && p.data.id === prev ? null : p)); setRouteAlerts([]); }
       return;
     }
     let geo = vesselGeo(v);
@@ -1013,6 +1149,10 @@ export default function MarketMap({
     }
     // Same anchored position as the marker, so the card points at the vessel.
     const pos = anchoredLL(geo, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0);
+    // Risk alert for the open position itself (only when a real port is known —
+    // a zone-centroid fallback is not where she is).
+    setRouteAlerts(zoom === 13 ? positionAlerts([geo[0], geo[1]], riskAreasRef.current) : []);
+    setRouteNotice(null);
     map.flyTo(pos, zoom, { duration: 1.2 });
     const onEnd = () => setPopup({ kind: "vessel", data: v, ll: L.latLng(pos[0], pos[1]) });
     map.once("moveend", onEnd);
@@ -1021,6 +1161,59 @@ export default function MarketMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedVesselId, ready]);
+
+  // Pairing (cargo ↔ vessel): the proposed voyage has two legs — ballast from
+  // her open port to the load port, then laden load → discharge. Raise the
+  // Suez / risk-area alerts for both, tagged by leg, on every map surface.
+  React.useEffect(() => {
+    if (!pairDone) return;
+    let x = false;
+    (async () => {
+      const sb = getSupabaseBrowserClient();
+      const { cargo: c, vessel: v } = pairDone;
+      const legs: RouteAlert[] = [];
+      const lineFor = async (a?: string | null, b?: string | null, aLL?: [number, number] | null, bLL?: [number, number] | null) => {
+        const stored = await getPortRoute(sb, a, b);
+        if (stored && stored.waypoints.length >= 2)
+          return { pts: stored.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]), cps: stored.chokepoints };
+        if (aLL && bLL) {
+          const g = routeGeometry({ polCode: a, podCode: b, polLL: aLL, podLL: bLL, polZone: null, podZone: null });
+          if (g && g.pts.length >= 2 && g.source !== "arc") return { pts: g.pts as [number, number][], cps: stored?.chokepoints ?? null };
+        }
+        return null;
+      };
+      const vOpen = coordFor(v.openPortLocode);
+      const pol = coordFor(c.route?.polCode);
+      const pod = coordFor(c.route?.podCode);
+      const ballast = await lineFor(v.openPortLocode, c.route?.polCode, vOpen, pol);
+      if (ballast) legs.push(...tagLeg(routeAlerts(ballast.pts, riskAreasRef.current, ballast.cps), "Ballast leg"));
+      else if (vOpen) legs.push(...tagLeg(positionAlerts(vOpen, riskAreasRef.current), "Ballast leg"));
+      const laden = await lineFor(c.route?.polCode, c.route?.podCode, pol, pod);
+      if (laden) legs.push(...tagLeg(routeAlerts(laden.pts, riskAreasRef.current, laden.cps), "Laden leg"));
+      if (!x) setRouteAlerts(legs);
+    })();
+    return () => { x = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pairDone]);
+
+  // Risk-area layer: every active area as a pulsing outline, coloured by
+  // severity, with its name and alert on hover. Off by default.
+  React.useEffect(() => {
+    const lyr = riskRef.current;
+    if (!lyr || !ready) return;
+    lyr.clearLayers();
+    if (!riskOn) return;
+    const sevLabel: Record<string, string> = { war_zone: "War zone", high_risk: "High-risk area", advisory: "Advisory" };
+    for (const a of riskAreas) {
+      const col = a.severity === "war_zone" ? "#E24B4A" : a.severity === "high_risk" ? "#EF9F27" : "#F5D48A";
+      L.polygon(a.polygon, {
+        className: `risk-poly sev-${a.severity}`,
+        color: col, weight: 1.6, fillColor: col, fillOpacity: 0.14, interactive: true,
+      })
+        .bindTooltip(`<b>${sevLabel[a.severity] ?? a.severity}</b> · ${a.name}${a.alertText ? `<br><span style="opacity:.8">${a.alertText}</span>` : ""}`, { sticky: true, className: "risk-tip" })
+        .addTo(lyr);
+    }
+  }, [riskOn, riskAreas, ready]);
 
   // Match lines (P4): while a cargo's deal card is open, draw dashed lines to
   // its top matching tonnage — same eligibility gates as Top Matches/pairing.
@@ -1151,13 +1344,63 @@ export default function MarketMap({
         <div className="map-title">
           Arab ShipBroker Platform <span className="map-title__beta">BETA</span>
         </div>
+        {(routeNotice || routeAlertList.length > 0) && (
+          <div className="route-alerts">
+            <div className="route-alerts__bar" onClick={(e) => e.stopPropagation()}>
+              <span>
+                {routeAlertList.length > 0
+                  ? `${routeAlertList.length} route ${routeAlertList.length === 1 ? "alert" : "alerts"}`
+                  : "Route"}
+              </span>
+              <button type="button" onClick={() => { setRouteAlerts([]); setRouteNotice(null); }} title="Dismiss all (Esc)">Dismiss all ×</button>
+            </div>
+            {routeNotice && (
+              <div className="route-alert sev-info" onClick={(e) => e.stopPropagation()}>
+                <span className="route-alert__icon">i</span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="route-alert__text" style={{ marginTop: 0 }}>{routeNotice}</div>
+                </div>
+                <button type="button" className="route-alert__close" title="Dismiss" aria-label="Dismiss notice" onClick={() => setRouteNotice(null)}>×</button>
+              </div>
+            )}
+            {routeAlertList.map((a, i) => (
+              <div key={`${a.kind}-${a.areaId ?? i}`} className={`route-alert sev-${a.severity}`} onClick={(e) => e.stopPropagation()}>
+                <span className="route-alert__icon">{a.kind === "suez" ? "$" : "!"}</span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="route-alert__title">{a.title}</div>
+                  <div className="route-alert__text">
+                    {a.text}
+                    {a.href && <> <a href={a.href}>Open the Suez toll calculator →</a></>}
+                  </div>
+                </div>
+                <button type="button" className="route-alert__close" title="Dismiss this alert" aria-label="Dismiss" onClick={() => setRouteAlerts((xs) => xs.filter((_, j) => j !== i))}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {estimatePrompt && (
+          <div className="route-consent" role="dialog" aria-label="Estimated route" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="route-consent__x" title="Close without showing (Esc)" aria-label="Close" onClick={declineEstimate}>×</button>
+            <div className="route-consent__title">No measured route for {estimatePrompt.label}</div>
+            <div className="route-consent__text">
+              We can show a <b>point-to-point estimate</b> for this pair
+              {estimatePrompt.nm ? ` (about ${estimatePrompt.nm.toLocaleString()} NM)` : ""}.
+              It is a distance guide only — <b>not a navigation route</b>: it does not follow traffic
+              separation schemes, charted hazards or weather routing.
+            </div>
+            <div className="route-consent__opts">
+              <button type="button" className="route-consent__btn is-primary" onClick={acceptEstimate} title="Draw the point-to-point estimate (dashed, labelled est.)">Show the estimate</button>
+              <button type="button" className="route-consent__btn" onClick={declineEstimate} title="Leave the chart without a route">Don&apos;t show</button>
+            </div>
+          </div>
+        )}
 
         <div className="layer-strip">
           <div className={`layer-pill ${cargoOn ? "on" : "off"}`} onClick={() => setCargoOn((v) => !v)}>
             <span className="pill-dot" style={{ background: "#97C459" }} /> Cargo
           </div>
           <div className={`layer-pill ${vesselsOn ? "on" : "off"}`} onClick={() => setVesselsOn((v) => !v)}>
-            <span className="pill-tri" style={{ borderBottom: "7px solid #7BB8F0" }} /> Tonnage
+            <span className="pill-tri" style={{ borderBottom: "7px solid #97C459" }} /> Tonnage
           </div>
           <div className={`layer-pill ${zonesOn ? "on" : "off"}`} onClick={() => setZonesOn((v) => !v)}>
             <span className="pill-hex" /> Zones
@@ -1214,37 +1457,61 @@ export default function MarketMap({
       </div>
 
       <div className="right-bar">
-        {/* Region chips — moved from the top-left strip to the control bar */}
-        {[["A.Gulf", "AG"], ["R.Sea", "RS"], ["E.Med", "EM"], ["B.Sea", "BS"]].map(([full, short]) => (
-          <div key={full} className="bar-zone" title={full}>{short}</div>
-        ))}
+        {/* Zones picker — every trading zone, not just four chips; selecting
+            zones narrows the pins (shared facet with the Filters flyout). */}
+        <BarIcon on={zonePickOpen || selectedZoneCount > 0} onClick={() => { const n = !zonePickOpen; closePanels(); setZonePickOpen(n); }}
+          title={selectedZoneCount > 0 ? `Zones — showing ${selectedZoneCount} selected sea area${selectedZoneCount === 1 ? "" : "s"}; click to change` : "Zones — pick the sea areas to show (cargo load/discharge zones and vessel open zones)"}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></svg>
+          {selectedZoneCount > 0 && <span className="bar-badge bar-badge--zone" />}
+        </BarIcon>
         <div className="bar-divider" />
-        <BarIcon on={cargoOn} onClick={() => setCargoOn((v) => !v)} title="Cargo positions">
+        <BarIcon on={cargoOn} onClick={() => setCargoOn((v) => !v)} title={cargoOn ? "Cargo positions are shown — click to hide the cargo pins" : "Cargo positions are hidden — click to show the cargo pins"}>
           {G.cargo}
           {cargoOn && <span className="bar-badge bar-badge--cargo" />}
         </BarIcon>
-        <BarIcon on={vesselsOn} onClick={() => setVesselsOn((v) => !v)} title="Open tonnage">
+        <BarIcon on={vesselsOn} onClick={() => setVesselsOn((v) => !v)} title={vesselsOn ? "Open tonnage is shown — click to hide the vessel pins" : "Open tonnage is hidden — click to show the vessel pins"}>
           {G.vessel}
           {vesselsOn && <span className="bar-badge bar-badge--vessel" />}
         </BarIcon>
-        <BarIcon on={zonesOn} onClick={() => setZonesOn((v) => !v)} title="Trading zones">
+        <BarIcon on={zonesOn} onClick={() => setZonesOn((v) => !v)} title={zonesOn ? "Trading-zone shading is on — click to hide the sea-area outlines" : "Trading-zone shading is off — click to outline the sea areas"}>
           {G.zones}
           {zonesOn && <span className="bar-badge bar-badge--zone" />}
         </BarIcon>
-        <BarIcon on={routeShipOn} onClick={toggleRouteShip} title="Animated ship on the focused route">
+        <BarIcon on={routeShipOn} onClick={toggleRouteShip} title={routeShipOn ? "Route animation is on: a ship sails the focused cargo's route (click a cargo to see it). Click to turn off" : "Route animation is off — click to animate a ship along the focused cargo's route"}>
           {G.ship}
         </BarIcon>
         <div className="bar-divider" />
-        <BarIcon on={layersOpen} onClick={() => { const n = !layersOpen; closePanels(); setLayersOpen(n); }} title="Layers — what the chart shows">
+        <BarIcon on={layersOpen} onClick={() => { const n = !layersOpen; closePanels(); setLayersOpen(n); }} title="Layers — choose what the chart draws: cargo, tonnage, zones, routes, flows, names">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 8l10 5 10-5-10-5Z" /><path d="m2 13 10 5 10-5" /><path d="m2 18 10 5 10-5" opacity=".55" /></svg>
         </BarIcon>
-        <BarIcon on={searchOpen} onClick={() => { const n = !searchOpen; closePanels(); setSearchOpen(n); }} title="Search — jump to a port, vessel or cargo">
+        <BarIcon on={searchOpen} onClick={() => { const n = !searchOpen; closePanels(); setSearchOpen(n); }} title="Search — type a port, vessel name or cargo to fly the chart to it">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" /></svg>
         </BarIcon>
-        <BarIcon on={filtersOpen} onClick={() => { const n = !filtersOpen; closePanels(); setFiltersOpen(n); }} title="Filters">
+        <BarIcon on={filtersOpen} onClick={() => { const n = !filtersOpen; closePanels(); setFiltersOpen(n); }} title="Filters — narrow the pins by category, IMSBC group, load terms, zone, vessel type or size">
           {G.filter}
           {Object.values(selections).some((s) => s.size > 0) && <span className="bar-badge bar-badge--cargo" />}
         </BarIcon>
+        {zonePickOpen && (
+          <div className="map-flyout" style={{ bottom: "auto", top: 8, width: 300 }} onClick={(e) => e.stopPropagation()}>
+            <div className="base-picker__title" title="Sea areas used to group cargo and tonnage. Pick one or more to show only listings in those zones.">Zones</div>
+            <div className="zone-flyout__list">
+              {FLEET_ZONES.map((z) => {
+                const on = selectedZones.has(z.code);
+                return (
+                  <button key={z.code} type="button" className={`zone-flyout__opt${on ? " is-on" : ""}`} onClick={() => toggleZone(z.code)} title={`${z.label} (${z.code})`}>
+                    <span className="zone-flyout__swatch" style={{ background: z.color }} />
+                    <span>{z.short}</span>
+                    <span className="zone-flyout__code">{z.code}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="zone-flyout__foot">
+              <span>{selectedZoneCount > 0 ? `${selectedZoneCount} zone${selectedZoneCount === 1 ? "" : "s"} selected` : "All zones shown"}</span>
+              {selectedZoneCount > 0 && <button type="button" onClick={clearZones}>Show all</button>}
+            </div>
+          </div>
+        )}
         {layersOpen && (
           <div className="map-flyout" style={{ bottom: "auto", top: 46 }} onClick={(e) => e.stopPropagation()}>
             <div className="base-picker__title">Chart layers</div>
@@ -1254,6 +1521,7 @@ export default function MarketMap({
               { label: "Trading zones", on: zonesOn, set: () => setZonesOn((v) => !v), dot: "#EF9F27" },
               { label: "Route ship animation", on: routeShipOn, set: toggleRouteShip, dot: "#F97316" },
               { label: "Trade-lane flows", on: flowsOn, set: () => setFlowsOn((v) => !v), dot: "#7BB8F0" },
+              { label: "Risk areas · war zones", on: riskOn, set: () => setRiskOn((v) => !v), dot: "#E24B4A" },
               { label: "Vessel names", on: namesOn, set: () => setNamesOn((v) => !v), dot: "#B8C4D4" },
             ].map((r) => (
               <button key={r.label} className="map-flyout__row" onClick={r.set}>
@@ -1262,6 +1530,25 @@ export default function MarketMap({
                 <span className={`map-switch${r.on ? " is-on" : ""}`}><i /></span>
               </button>
             ))}
+            <div className="map-key">
+              <div className="base-picker__title" style={{ marginTop: 10 }}>How to read the chart</div>
+              <div className="map-key__row"><span className="map-key__bubble">12</span><span>Zoomed out, every listing is a bubble: the number is how many sit there (a lone one shows 1). Click to zoom in.</span></div>
+              <div className="map-key__row"><span className="map-key__sym map-key__circle" /><span>Grain cargo</span></div>
+              <div className="map-key__row"><span className="map-key__sym map-key__square" /><span>Dry bulk cargo (IMSBC)</span></div>
+              <div className="map-key__row"><span className="map-key__sym map-key__diamond" /><span>Break bulk cargo</span></div>
+              <div className="map-key__row"><span className="map-key__tri" /><span>Open vessel — bigger triangle, bigger DWT</span></div>
+              <div className="map-key__row"><span className="map-key__sym map-key__risk" /><span>Risk area (layer off by default) — red war zone, amber high risk, pale advisory; routes through one raise an alert</span></div>
+              <div className="map-key__row map-key__row--colors">
+                <span><i style={{ background: "#97C459" }} /> laycan / open date a week or more away</span>
+              </div>
+              <div className="map-key__row map-key__row--colors">
+                <span><i style={{ background: "#EF9F27" }} /> within 7 days, or under review</span>
+              </div>
+              <div className="map-key__row map-key__row--colors">
+                <span><i style={{ background: "#E24B4A" }} /> within 3 days or overdue</span>
+              </div>
+              <div className="map-key__note">Zoom in for names and details; hover any symbol for its card.</div>
+            </div>
           </div>
         )}
         {searchOpen && (

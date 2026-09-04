@@ -8,6 +8,7 @@ import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
 import { flagCode } from "@/lib/portal/flags";
 import "flag-icons/css/flag-icons.min.css";
 import { FieldRow, urgencyDot } from "./ui";
+import { PosterLine } from "./PosterLine";
 
 export function VesselCard({
   data,
@@ -98,6 +99,8 @@ export function VesselCard({
           </div>
         </div>
       )}
+
+      <PosterLine poster={v.poster} />
 
       <div className="row" style={{ paddingTop: 8, borderTop: "var(--bd)" }}>
         <span className="mono" style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-gray-500)" }}>{imo}</span>

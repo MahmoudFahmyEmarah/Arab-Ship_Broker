@@ -10,6 +10,7 @@ import type { Cell, SheetCounts, StagedRow, SyncSource } from "./types";
 import { specById } from "./sheets";
 import { buildStagedRow, mapRow } from "./diff";
 import { fetchCommodityIndex, resolveCommodity, type CommodityIndex } from "./commodity";
+import { fetchPortIndex, resolvePortLocode } from "./ports";
 
 const CHUNK = 500;
 
@@ -218,6 +219,23 @@ export async function stageBatch({
       // transient DB error cannot flood the review queue.
       let commodityIndex: CommodityIndex | null = null;
       if (sheet === "cargo") {
+        // 2b · port resolution: circulars name ports ("Novo", "Constantza",
+        // "Jeddah Port"); key them to the registry LOCODE here so the listing
+        // lands with its code + canonical name + zone, and the market cards
+        // show port → port. Unresolvable text (countries, ranges) stays as the
+        // name and the cards show it, then the zone.
+        const portIndex = await fetchPortIndex(supabase);
+        if (portIndex) {
+          for (const raw of rows) {
+            for (const [nameKey, codeKey] of [["LOAD_PORT", "LOAD_LOCODE"], ["DISCH_PORT", "DISCH_LOCODE"]] as const) {
+              const code = raw[codeKey];
+              if (code != null && String(code).trim()) continue;
+              const nm = raw[nameKey];
+              const hit = resolvePortLocode(typeof nm === "string" ? nm : null, portIndex);
+              if (hit) raw[codeKey] = hit;
+            }
+          }
+        }
         commodityIndex = await fetchCommodityIndex(supabase);
         if (commodityIndex) {
           for (const raw of rows) {

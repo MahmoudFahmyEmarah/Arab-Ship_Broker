@@ -4,6 +4,19 @@
 
 export type CargoScope = "in" | "partial" | "out" | "fixed";
 
+// Who put the listing on the market — always a platform account, resolved
+// server-side (get_listing_posters): the member who owns it, else the admin
+// who synced it, else the platform itself. Never the circular's sender.
+// kind: individual = member with no company seat; company = the company's
+// admin seat (or the platform); employee = a member seat.
+export interface PosterView {
+  name: string | null;
+  company: string | null;
+  kind: "individual" | "company" | "employee";
+  isAdmin: boolean;
+  orgId: string | null;
+}
+
 export interface CargoView {
   id: string;
   refId: string;
@@ -44,6 +57,7 @@ export interface CargoView {
   wog?: boolean;
   forCirculation?: boolean;
   partnerSlug?: string | null;
+  poster?: PosterView | null;
   // Detail-panel extras (optional; "—" when the source row has no value)
   nature?: string | null;
   requiresGeared?: boolean | null;
@@ -94,6 +108,7 @@ export interface VesselView {
   postedAt?: string | null;
   status: VesselStatusView;
   matches: number;
+  poster?: PosterView | null;
   fuel: {
     vlsfoSea: number | string;
     vlsfoPort: number | string;

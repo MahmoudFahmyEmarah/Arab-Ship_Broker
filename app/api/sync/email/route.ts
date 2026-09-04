@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  let admin: Awaited<ReturnType<typeof requireAdmin>>;
   try {
-    await requireAdmin({ section: "datasync", edit: true });
+    admin = await requireAdmin({ section: "datasync", edit: true });
   } catch {
     return new Response(JSON.stringify({ error: "Not authorized." }), {
       status: 403, headers: { "Content-Type": "application/json" },
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
       };
       try {
         if (sample) await runEmailDryRun({ supabase, sampleText: sample, emit });
-        else await runEmailSync({ supabase, limit, emit });
+        else await runEmailSync({ supabase, limit, emit, startedBy: admin.rowId });
       } catch (e) {
         emit({ type: "error", error: e instanceof Error ? e.message : "Email sync failed." });
       } finally {

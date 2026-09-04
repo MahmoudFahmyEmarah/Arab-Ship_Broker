@@ -6,6 +6,7 @@
 
 import { LOAD_TERMS } from "@/lib/schemas/cargo";
 import { stripVesselNamePrefix, isPlaceholderVesselName } from "@/lib/schemas/vessel";
+import { isKnownFlag, normalizeFlag } from "@/lib/geo/flag-states";
 import type { Cell, ColumnSpec, Flag, SheetSpec } from "./types";
 import { intStrip, locode, num, parseLaycan, str, upper } from "./normalize";
 
@@ -74,6 +75,14 @@ function loadTerms(v: Cell): Cell {
   return match ?? s; // unknown → keep as-is (validate will flag it)
 }
 
+// flag: canonical flag-state name when the text is a known register (or one of
+// its spellings); unknown text is kept so validate() can flag it for review.
+function flagState(v: Cell): Cell {
+  const s = str(v);
+  if (!s) return null;
+  return normalizeFlag(s) ?? s;
+}
+
 // port type: normalize casing/spacing variants ("seaport" → "Sea Port").
 function portType(v: Cell): Cell {
   const s = str(v);
@@ -116,6 +125,10 @@ export const SHEET_SPECS: SheetSpec[] = [
       { header: "QTY_MIN_MT", aliases: ["QTY_MIN"], column: "qty_min_mt", transform: intStrip, required: true },
       { header: "QTY_MAX_MT", aliases: ["QTY_MAX"], column: "qty_max_mt", transform: intStrip, required: true },
       { header: "STOWAGE_FACTOR", aliases: ["SF"], column: "stowage_factor", transform: num },
+      // Sender of the circular (filled by the email/WhatsApp source; the
+      // dashboard's poster line shows it when no member owns the listing).
+      { header: "SOURCE_CONTACT", column: "source_contact", transform: str },
+      { header: "SOURCE_COMPANY", column: "source_company", transform: str },
       { header: "LOAD_LOCODE", aliases: ["LOAD_PORT_LOCODE"], column: "load_port_locode", transform: locode },
       { header: "LOAD_PORT", aliases: ["LOAD_PORT_NAME"], column: "load_port_name", transform: str },
       { header: "LOAD_ZONE", column: "load_zone", transform: upper },
@@ -247,7 +260,7 @@ export const SHEET_SPECS: SheetSpec[] = [
       { header: "DWCC", column: "dwcc", transform: intStrip },
       { header: "DWT_BALE", column: "dwt_bale", transform: intStrip },
       { header: "GRAIN_CBM", column: "grain_cbm", transform: num },
-      { header: "FLAG", column: "flag", transform: str },
+      { header: "FLAG", column: "flag", transform: flagState },
       { header: "BUILT", aliases: ["BUILD_YEAR", "YEAR"], column: "build_year", transform: intStrip },
     ],
     validate(payload) {
@@ -255,6 +268,12 @@ export const SHEET_SPECS: SheetSpec[] = [
       const imo = payload["imo_number"];
       if (imo && !/^\d{7}$/.test(String(imo)))
         f.push({ level: "warn", field: "imo_number", msg: `IMO "${imo}" isn't 7 digits` });
+      // DQ-V03: the flag must be a register in the flag_states table. Unknown
+      // text (a class society, a typo, a country that isn't a register) routes
+      // the row to Manual Review → Needs fixing, where the dropdown fixes it.
+      const fl = payload["flag"];
+      if (fl && !isKnownFlag(String(fl)))
+        f.push({ level: "error", field: "flag", msg: `"${fl}" is not a known flag state — pick one from the registry` });
       const vt = payload["vessel_type"];
       if (vt && !VESSEL_TYPES.has(String(vt)))
         f.push({ level: "error", field: "vessel_type", msg: `unknown vessel type "${vt}"` });
