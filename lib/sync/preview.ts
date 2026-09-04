@@ -117,6 +117,24 @@ export const PREVIEW_TABLES: PreviewTable[] = [
     ],
   },
   {
+    // Flag-state registry — the closed vocabulary behind vessels.flag. Seeded
+    // from lib/geo/flag-states.ts; editable here so a new register can be
+    // added without a deploy. Aliases are the spellings normalised onto it.
+    id: "flag_states",
+    label: "Flag states",
+    table: "flag_states",
+    keyCol: "name",
+    searchCols: ["name", "iso2", "category"],
+    columns: [
+      { col: "name", label: "Flag state", type: "text", editable: false, required: true, w: 190 },
+      { col: "iso2", label: "ISO", type: "text", nullable: true, w: 60 },
+      { col: "category", label: "Category", type: "enum", options: ["open", "national", "unknown"], required: true, def: "national", w: 110 },
+      { col: "aliases", label: "Aliases (spellings)", type: "list", nullable: true, w: 260 },
+      { col: "is_active", label: "Active", type: "bool", def: true, w: 74 },
+      { col: "sort_order", label: "Order", type: "int", nullable: true, w: 70 },
+    ],
+  },
+  {
     id: "companies",
     label: "Companies",
     table: "organizations",

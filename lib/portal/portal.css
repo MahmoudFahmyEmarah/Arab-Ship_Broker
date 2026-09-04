@@ -3555,3 +3555,94 @@ button { font: inherit; cursor: pointer; }
   .dash-widedivider { display: none; }
   .dash-scrolldown { display: none; }
 }
+
+/* ── Poster line (line 3 on market rows/cards): who posted the listing ── */
+.poster-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 0.5px dashed #E3E9F2;
+  font-size: 10px;
+  color: #6B7A99;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+.poster-line__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  background: #EEF2F8;
+  color: #4B5566;
+}
+.poster-line__icon.is-company  { background: #E6F1FB; color: #0C447C; }
+.poster-line__icon.is-employee { background: #EAF3DE; color: #27500A; }
+.poster-line__name { color: #1B3A5C; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.poster-line__sep { color: var(--asb-gray-200); }
+.poster-line__co { color: #4B5566; overflow: hidden; text-overflow: ellipsis; }
+.poster-line__co.is-link { color: #185FA5; text-decoration: none; }
+.poster-line__co.is-link:hover { text-decoration: underline; }
+.poster-line__admin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 99px;
+  background: #0D2545;
+  color: #F5D48A;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+.dash-row__poster { padding-right: 28px; }
+.dash-row__zones { color: var(--asb-gray-500); font-size: 9.5px; }
+
+/* Wide-chart / split toggle — the "map" button beside the bell, sized to be found */
+.dash-layout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px !important;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 8px;
+}
+.dash-layout-btn svg { width: 22px; height: 22px; }
+.dash-layout-btn.is-wide { background: #0D2545; color: #fff; border-color: #0D2545; }
+
+/* Zones flyout on the map rail */
+.asb-map .zone-flyout__list { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; max-height: 300px; overflow-y: auto; padding-right: 2px; }
+.asb-map .zone-flyout__opt {
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 5px;
+  font-size: 11px; color: rgba(255,255,255,.82); cursor: pointer; border: 0.5px solid transparent; background: transparent; font-family: inherit; text-align: left;
+}
+.asb-map .zone-flyout__opt:hover { background: rgba(255,255,255,.08); }
+.asb-map .zone-flyout__opt.is-on { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.18); color: #fff; }
+.asb-map .zone-flyout__swatch { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+.asb-map .zone-flyout__code { font-family: var(--asb-font-mono); font-size: 9.5px; color: rgba(255,255,255,.55); margin-left: auto; }
+.asb-map .zone-flyout__foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 10.5px; color: rgba(255,255,255,.6); }
+.asb-map .zone-flyout__foot button { background: none; border: none; color: #F5D48A; cursor: pointer; font: inherit; font-size: 10.5px; padding: 0; }
+
+/* ── Three-line rows, always: line 2 never wraps; it ellipsises instead ── */
+.dash-row .dash-row__r3 {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 28px;
+}
+.dash-row .dash-row__r3 > * { vertical-align: baseline; }
+.dash-row .dash-row__r3 .dash-row__sep { margin: 0 4px; }
+.dash-row .dash-row__r3 .dash-row__zones { margin-left: 5px; }
+.dash-row .dash-row__r3 .asb-dot { margin-right: 4px; }
+.dash-row .dash-row__r3 .cc-spot { vertical-align: middle; }
+.dash-row__r1.is-left { flex-wrap: nowrap; overflow: hidden; }
+.dash-row__r1.is-left .dash-row__flag { flex-shrink: 0; }

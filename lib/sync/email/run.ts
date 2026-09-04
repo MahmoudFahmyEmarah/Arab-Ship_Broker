@@ -167,6 +167,7 @@ async function stageAndFinish(
   vessels: VesselRecord[],
   fileName: string,
   emit: Emit,
+  startedBy: string | null = null,
 ) {
   const sheets = recordsToSheets(cargo, vessels);
   if (sheets.length === 0) {
@@ -176,13 +177,15 @@ async function stageAndFinish(
   emit({ type: "log", msg: `staging ${cargo.length} cargo + ${vessels.length} vessel record(s)…` });
   const source = new EmailLlmSource(sheets);
   const label = `Email sync · ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
-  const result = await stageBatch({ supabase, source, fileName, label });
+  // startedBy = the admin running the sync — credited as the poster on the
+  // market cards (get_listing_posters), never the circular's sender.
+  const result = await stageBatch({ supabase, source, fileName, label, startedBy });
   emit({ type: "done", batchId: result.batchId, totals: result.totals });
 }
 
 // Live IMAP sync of the configured circulation inbox.
 export async function runEmailSync(
-  { supabase, limit, emit }: { supabase: SupabaseClient; limit?: number; emit: Emit },
+  { supabase, limit, emit, startedBy = null }: { supabase: SupabaseClient; limit?: number; emit: Emit; startedBy?: string | null },
 ): Promise<void> {
   emit({ type: "log", msg: "reading inbox connection…" });
   const { data: cfg, error } = await supabase
@@ -224,7 +227,7 @@ export async function runEmailSync(
   }
 
   const { cargo, vessels } = await classifyAll(supabase, emails, emit);
-  await stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit);
+  await stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy);
   // Advance the watermark only after a successful pass (staging throws → we skip this).
   await setWatermark(supabase, "email", startedAt);
 }

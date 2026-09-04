@@ -12,6 +12,8 @@ import { classify } from "@/lib/sync/diff";
 import { previewTable, coerce } from "@/lib/sync/preview";
 import { str, num, intStrip, locode, upper, parseLaycan } from "@/lib/sync/normalize";
 import { FUEL_TYPES } from "@/lib/schemas/vessel";
+import { isValidImo } from "@/lib/sync/imo";
+import { parseSender } from "@/lib/sync/sender";
 import type { Cell, Flag, RawRow } from "@/lib/sync/types";
 
 const SHEET_IDS = new Set<string>(SHEET_SPECS.map((s) => s.id));
@@ -821,8 +823,13 @@ export interface VesselQueueRow {
   direction: string | null;
   dest_zones: string[] | null;
   posted_at: string | null;
+  // company links (Equasis roles) — commercial/ship manager is the one that matters commercially
+  owner_company: string | null;
+  commercial_manager: string | null;
+  ism_manager: string | null;
   source: string;
   status: "pending" | "synced" | "ignored";
+  resolved_with_imo: boolean | null;   // false on a synced row = IMO still pending
   source_email: EmailSourceView | null;
   created_at: string;
 }
@@ -834,7 +841,7 @@ export async function listVesselQueue(
     const c = await adminClient();
     const { data, error } = await c
       .from("vessel_review_queue")
-      .select("id, vessel_name, built, dwt_grain, vessel_type, flag, grt, nrt, open_date, imo_hint, open_port, open_country, open_zone, direction, dest_zones, posted_at, source, status, source_email, created_at")
+      .select("id, vessel_name, built, dwt_grain, vessel_type, flag, grt, nrt, open_date, imo_hint, open_port, open_country, open_zone, direction, dest_zones, posted_at, owner_company, commercial_manager, ism_manager, source, status, resolved_with_imo, source_email, created_at")
       .eq("status", status)
       .order("created_at", { ascending: false })
       .limit(500);
@@ -871,6 +878,9 @@ export interface VesselQueuePatch {
   open_country?: string | null;
   open_zone?: string | null;
   direction?: string | null;
+  owner_company?: string | null;
+  commercial_manager?: string | null;
+  ism_manager?: string | null;
 }
 
 function vesselPatchToUpdate(patch: VesselQueuePatch): Record<string, unknown> {
@@ -887,8 +897,12 @@ function vesselPatchToUpdate(patch: VesselQueuePatch): Record<string, unknown> {
   if (patch.open_country !== undefined) upd.open_country = patch.open_country;
   if (patch.open_zone !== undefined) upd.open_zone = patch.open_zone;
   if (patch.direction !== undefined) upd.direction = patch.direction;
+  if (patch.owner_company !== undefined) upd.owner_company = patch.owner_company;
+  if (patch.commercial_manager !== undefined) upd.commercial_manager = patch.commercial_manager;
+  if (patch.ism_manager !== undefined) upd.ism_manager = patch.ism_manager;
   return upd;
 }
+
 
 // imo null/blank → composite sync (name+built+dwt); otherwise upsert by IMO.
 // An optional patch lets the admin CORRECT the extracted fields (name, dwt,
@@ -897,10 +911,17 @@ export async function resolveVesselReview(
   id: string,
   imo?: string | null,
   patch?: VesselQueuePatch,
-): Promise<Result<{ vesselId: string; op: string }>> {
+  opts: { allowWithoutImo?: boolean } = {},
+): Promise<Result<{ vesselId: string; op: string; availabilityId: string | null; portResolved: boolean }>> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid queue id." };
   const trimmed = imo?.trim() || null;
-  if (trimmed && !/^\d{7}$/.test(trimmed)) return { success: false, error: "An IMO number is 7 digits — leave it blank to sync without one." };
+  // The IMO is the vessel's identity — mandatory. The explicit "temporary"
+  // path (allowWithoutImo) is the only way round it, and the queue row keeps
+  // resolved_with_imo=false so the gap stays visible until it is filled.
+  if (!trimmed && !opts.allowWithoutImo)
+    return { success: false, error: "The IMO number is required. Use “Sync without IMO (temporary)” only when it genuinely cannot be found yet." };
+  if (trimmed && !/^\d{7}$/.test(trimmed)) return { success: false, error: "An IMO number is 7 digits." };
+  if (trimmed && !isValidImo(trimmed)) return { success: false, error: `IMO ${trimmed} fails the check digit — please re-check it.` };
   if (patch && "vessel_name" in patch && !patch.vessel_name?.trim())
     return { success: false, error: "The vessel needs a name." };
   try {
@@ -912,9 +933,28 @@ export async function resolveVesselReview(
     }
     const { data, error } = await c.rpc("resolve_vessel_review", { p_id: id, p_imo: trimmed, p_actor: actor });
     if (error) return { success: false, error: error.message };
+    const d = data as { vessel_id: string; op: string; availability_id: string | null; port_resolved: boolean | null };
+    // Poster line on the market: the circular's sender (person + company)
+    // rides onto the posted position. Best-effort — never fails the sync.
+    if (d.availability_id) {
+      try {
+        const { data: q } = await c.from("vessel_review_queue").select("source_email").eq("id", id).single();
+        const src = (q?.source_email ?? null) as { from?: string | null; name?: string | null } | null;
+        if (src) {
+          const sender = parseSender(src.from, src.name);
+          if (sender.contact || sender.company)
+            await c.from("vessel_availability")
+              .update({ source_contact: sender.contact, source_company: sender.company })
+              .eq("id", d.availability_id);
+        }
+      } catch (e) {
+        console.error("[data-sync] poster source on availability:", e);
+      }
+    }
     revalidatePath("/admin/data-sync");
-    const d = data as { vessel_id: string; op: string };
-    return { success: true, data: { vesselId: d.vessel_id, op: d.op } };
+    // The sync now posts the OPEN position too — refresh the market pages.
+    revalidatePath("/dashboard", "layout");
+    return { success: true, data: { vesselId: d.vessel_id, op: d.op, availabilityId: d.availability_id ?? null, portResolved: !!d.port_resolved } };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Could not sync the vessel." };
   }
@@ -922,6 +962,41 @@ export async function resolveVesselReview(
 
 // Save corrected fields on a queue entry WITHOUT syncing (used before matching
 // so the match runs on what the admin actually sees).
+// ── reference lists for the vessel review drawer ────────────────────────────
+export interface FlagStateOpt { name: string; category: "open" | "national" | "unknown" }
+export async function listFlagStates(): Promise<Result<FlagStateOpt[]>> {
+  try {
+    const c = await adminClient();
+    const { data, error } = await c
+      .from("flag_states")
+      .select("name, category")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("name")
+      .limit(500);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: (data ?? []) as FlagStateOpt[] };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Could not read the flag registry." };
+  }
+}
+
+export interface OrganizationOpt { name: string; org_type: string | null }
+export async function listOrganizationNames(): Promise<Result<OrganizationOpt[]>> {
+  try {
+    const c = await adminClient();
+    const { data, error } = await c
+      .from("organizations")
+      .select("name, org_type")
+      .order("name")
+      .limit(2000);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: (data ?? []) as OrganizationOpt[] };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Could not read the company registry." };
+  }
+}
+
 export async function resolveVesselQueuePatchOnly(id: string, patch: VesselQueuePatch): Promise<Result> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid queue id." };
   try {

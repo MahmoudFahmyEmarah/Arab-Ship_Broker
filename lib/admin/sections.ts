@@ -18,6 +18,7 @@ export const ADMIN_SECTIONS: { id: string; href: string }[] = [
   { id: "vesselavail", href: "/admin/vessel-availability" },
   { id: "vessels", href: "/admin/vessels" },
   { id: "ports", href: "/admin/ports" },
+  { id: "risk", href: "/admin/risk-areas" },
   { id: "commodities", href: "/admin/commodities" },
   { id: "safety", href: "/admin/safety-questions" },
   { id: "users", href: "/admin/users" },
@@ -55,7 +56,7 @@ export const ADMIN_PRESETS: Record<
     perms: {
       review: "edit", cargo: "edit", vesselavail: "edit",
       vessels: "view", users: "view", commodities: "view", ports: "view",
-      bunker: "view", safety: "view", orgmembers: "view",
+      bunker: "view", safety: "view", orgmembers: "view", risk: "view",
     },
   },
   accountant: {
@@ -68,7 +69,7 @@ export const ADMIN_PRESETS: Record<
     blurb: "Platform data, integrations and technical configuration.",
     perms: {
       ports: "edit", commodities: "edit", safety: "edit",
-      bunker: "edit", vessels: "edit", messages: "view",
+      bunker: "edit", vessels: "edit", messages: "view", risk: "edit",
     },
   },
 };

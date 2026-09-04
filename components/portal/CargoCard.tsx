@@ -16,6 +16,12 @@ import {
   ldRateRender,
 } from "@/lib/portal/format";
 import { MarketPartnerTag } from "./MarketPartnerPanel";
+import { PosterLine } from "./PosterLine";
+
+// LOCODE → port name → zone (owner's cascade) so a circular's "Egypt Med"
+// shows as text instead of an empty pair of codes.
+const leg = (code: string | null | undefined, name: string | null | undefined, zone: string | null | undefined) =>
+  code || (name && name.trim()) || zone || "—";
 
 function CCField({
   label,
@@ -78,17 +84,21 @@ export function CargoCard({
 
       <div className="cc-line2">
         <div className="cc-route-line">
-          <span className="cc-ports">
-            <span>{c.route.polCode}</span>
+          <span className="cc-ports" title={[c.route.polName, c.route.podName].filter(Boolean).join(" → ") || undefined}>
+            <span>{leg(c.route.polCode, c.route.polName, c.route.polZone)}</span>
             <span className="cc-arrow"> → </span>
-            <span>{c.route.podCode}</span>
+            <span>{leg(c.route.podCode, c.route.podName, c.route.podZone)}</span>
           </span>
-          <span className="cc-mid">·</span>
-          <span className="cc-zones">
-            <span>{c.route.polZone}</span>
-            <span className="cc-arrow"> → </span>
-            <span>{c.route.podZone}</span>
-          </span>
+          {(c.route.polCode || c.route.polName || c.route.podCode || c.route.podName) && (
+            <>
+              <span className="cc-mid">·</span>
+              <span className="cc-zones" title="Trading zones">
+                <span>{c.route.polZone}</span>
+                <span className="cc-arrow"> → </span>
+                <span>{c.route.podZone}</span>
+              </span>
+            </>
+          )}
         </div>
         {c.wog && <span className="cc-wog">WOG</span>}
       </div>
@@ -162,6 +172,8 @@ export function CargoCard({
           </>)}
           </div>
         </div>
+
+      <PosterLine poster={c.poster} />
 
       <div className="cc-footer">
         <div className="cc-foot-col cc-foot-col--freight">

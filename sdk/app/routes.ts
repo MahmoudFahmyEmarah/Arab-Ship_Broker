@@ -9,6 +9,8 @@ export interface MeasuredRoute {
   totalNm: number;
   verified: boolean;
   source: string;
+  /** Straits/canals the stored route transits (SUEZ, BOSPHORUS, HORMUZ, …). */
+  chokepoints: string[];
   /** [lat, lon, cumulative_nm|null] ordered in the requested direction. */
   waypoints: [number, number, number | null][];
 }
@@ -24,12 +26,13 @@ export async function getPortRoute(
       p_pol: polLocode,
       p_pod: podLocode,
     });
-    const d = data as { found?: boolean; total_nm?: number; verified?: boolean; source?: string; waypoints?: [number, number, number | null][] } | null;
+    const d = data as { found?: boolean; total_nm?: number; verified?: boolean; source?: string; chokepoints?: string[]; waypoints?: [number, number, number | null][] } | null;
     if (error || !d?.found || !Number.isFinite(Number(d.total_nm))) return null;
     return {
       totalNm: Number(d.total_nm),
       verified: !!d.verified,
       source: d.source ?? "ECDIS voyage plan",
+      chokepoints: Array.isArray(d.chokepoints) ? d.chokepoints.map(String) : [],
       waypoints: Array.isArray(d.waypoints) ? d.waypoints : [],
     };
   } catch {

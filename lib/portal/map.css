@@ -1654,3 +1654,159 @@
 .asb-map.rail-tight .right-bar::-webkit-scrollbar { display: none; }
 .asb-map.rail-tight .tooltip-l,
 .asb-map.rail-tight .tooltip-r { display: none; }
+
+/* ── Far-zoom bubbles: a lone listing is a cluster of one (same look) ── */
+.asb-cluster--one { font-size: 10.5px; }
+.asb-cluster--one.is-selected { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.55), 0 0 12px rgba(24, 95, 165, 0.45); }
+.asb-cluster-wrap--one.is-faded { opacity: .3; }
+
+/* ── "How to read the chart" key (Layers panel) ───────────────────── */
+.asb-map .map-key { border-top: 0.5px solid rgba(255,255,255,.10); margin-top: 8px; padding-top: 2px; }
+.asb-map .map-key__row { display: flex; align-items: center; gap: 8px; padding: 3px 4px; font-size: 10.5px; color: rgba(255,255,255,.78); line-height: 1.35; }
+.asb-map .map-key__bubble {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(24, 95, 165, 0.85); border: 1.5px solid #7BB8F0; color: #fff;
+  font-size: 9px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
+}
+.asb-map .map-key__sym { flex-shrink: 0; width: 10px; height: 10px; background: #97C459; margin: 0 6px; }
+.asb-map .map-key__circle { border-radius: 50%; }
+.asb-map .map-key__square { border-radius: 2px; }
+.asb-map .map-key__diamond { border-radius: 1px; transform: rotate(45deg); }
+.asb-map .map-key__tri { flex-shrink: 0; width: 0; height: 0; margin: 0 6px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 13px solid #97C459; }
+.asb-map .map-key__row--colors span { display: inline-flex; align-items: center; gap: 6px; }
+.asb-map .map-key__row--colors i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 6px 0 7px; }
+.asb-map .map-key__note { font-size: 9.5px; color: rgba(255,255,255,.5); padding: 4px 4px 0; font-style: italic; }
+
+/* ── Right rail always inside the chart: pinned top/bottom and centred only
+   when it fits. NO overflow clipping here — the hover tooltips and the
+   Layers / Search / Filters / Chart-style flyouts hang outside the rail and
+   must stay visible. A short chart gets a tighter rail instead. ── */
+.asb-map .right-bar {
+  top: 8px;
+  bottom: 8px;
+  transform: none;
+  height: auto;
+  max-height: calc(100% - 16px);
+  justify-content: safe center;
+  overflow: visible;
+}
+.asb-map .right-bar > * { flex-shrink: 0; }
+@media (max-height: 860px) {
+  .asb-map .right-bar { gap: 4px; }
+  .asb-map .bar-icon, .asb-map .voy-opex-icon { width: 30px; height: 30px; border-radius: 7px; }
+  .asb-map .bar-divider { height: 2px; }
+}
+@media (max-height: 740px) {
+  .asb-map .right-bar { gap: 3px; }
+  .asb-map .bar-icon, .asb-map .voy-opex-icon { width: 27px; height: 27px; border-radius: 6px; }
+  .asb-map .bar-icon svg { width: 13px; height: 13px; }
+  .asb-map .bar-divider { height: 1px; }
+}
+
+/* ── Route alerts (Suez tolls, war-risk areas) + estimate consent + notices ── */
+.asb-map .route-alerts {
+  position: absolute; top: 44px; left: 10px; z-index: 520; width: 300px; max-width: calc(100% - 80px);
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+.asb-map .route-alert {
+  pointer-events: auto; display: flex; gap: 9px; align-items: flex-start;
+  background: rgba(12, 31, 48, 0.94); border: 0.5px solid rgba(255,255,255,.14); border-left: 3px solid #EF9F27;
+  border-radius: 8px; padding: 8px 10px; color: rgba(255,255,255,.9); font-size: 11px; line-height: 1.4;
+  box-shadow: 0 6px 18px rgba(4, 12, 24, .35); backdrop-filter: blur(4px);
+}
+.asb-map .route-alert.sev-war_zone  { border-left-color: #E24B4A; }
+.asb-map .route-alert.sev-high_risk { border-left-color: #EF9F27; }
+.asb-map .route-alert.sev-advisory  { border-left-color: #F5D48A; }
+.asb-map .route-alert.sev-cost      { border-left-color: #7BB8F0; }
+.asb-map .route-alert__icon { flex-shrink: 0; width: 18px; height: 18px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: rgba(255,255,255,.1); }
+.asb-map .route-alert.sev-war_zone .route-alert__icon { background: #E24B4A; color: #fff; }
+.asb-map .route-alert.sev-high_risk .route-alert__icon { background: #EF9F27; color: #1b1b1b; }
+.asb-map .route-alert.sev-cost .route-alert__icon { background: #185FA5; color: #fff; }
+.asb-map .route-alert__title { font-weight: 600; font-size: 11.5px; }
+.asb-map .route-alert__text { color: rgba(255,255,255,.72); margin-top: 1px; }
+.asb-map .route-alert a { color: #F5D48A; text-decoration: none; }
+.asb-map .route-alert a:hover { text-decoration: underline; }
+.asb-map .route-alert__close { margin-left: auto; background: none; border: none; color: rgba(255,255,255,.5); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+
+.asb-map .route-notice {
+  position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 520;
+  background: rgba(12, 31, 48, 0.94); border: 0.5px solid rgba(255,255,255,.14); border-radius: 8px;
+  padding: 7px 12px; color: rgba(255,255,255,.85); font-size: 11px; box-shadow: 0 6px 18px rgba(4, 12, 24, .35);
+  max-width: 420px; text-align: center;
+}
+
+.asb-map .route-consent {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 640; width: 360px; max-width: calc(100% - 40px);
+  background: rgba(12, 31, 48, 0.97); border: 0.5px solid rgba(255,255,255,.16); border-radius: 12px; padding: 16px 18px;
+  color: rgba(255,255,255,.9); box-shadow: 0 14px 40px rgba(4, 12, 24, .55);
+}
+.asb-map .route-consent__title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.asb-map .route-consent__text { font-size: 11.5px; line-height: 1.45; color: rgba(255,255,255,.75); }
+.asb-map .route-consent__opts { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+.asb-map .route-consent__btn { font: inherit; font-size: 11.5px; font-weight: 600; padding: 7px 12px; border-radius: 7px; cursor: pointer; border: 0.5px solid rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: #fff; }
+.asb-map .route-consent__btn.is-primary { background: #185FA5; border-color: #2F7BD0; }
+.asb-map .route-consent__remember { margin-left: auto; font-size: 10.5px; color: rgba(255,255,255,.6); display: inline-flex; align-items: center; gap: 5px; }
+.asb-map.base-light .route-alert, .asb-map.base-nautical .route-alert,
+.asb-map.base-light .route-notice, .asb-map.base-nautical .route-notice,
+.asb-map.base-light .route-consent, .asb-map.base-nautical .route-consent { background: rgba(255,255,255,.96); color: #0B1F3A; border-color: rgba(13,37,69,.15); }
+.asb-map.base-light .route-alert__text, .asb-map.base-nautical .route-alert__text,
+.asb-map.base-light .route-consent__text, .asb-map.base-nautical .route-consent__text { color: #4B5566; }
+.asb-map.base-light .route-alert a, .asb-map.base-nautical .route-alert a { color: #185FA5; }
+
+/* ── Dismissable alerts: visible close controls in both themes ── */
+.asb-map .route-alerts__bar {
+  pointer-events: auto; display: flex; align-items: center; justify-content: space-between;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: rgba(255,255,255,.7);
+  padding: 0 2px 0 4px;
+}
+.asb-map .route-alerts__bar button {
+  font: inherit; font-size: 10.5px; font-weight: 600; text-transform: none; letter-spacing: 0; cursor: pointer;
+  background: rgba(12,31,48,.9); color: #fff; border: 0.5px solid rgba(255,255,255,.25); border-radius: 6px; padding: 3px 8px;
+}
+.asb-map .route-alerts__bar button:hover { background: #E24B4A; border-color: #E24B4A; }
+.asb-map .route-alert__close {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; margin: -2px -4px 0 4px;
+  background: rgba(255,255,255,.12); color: #fff; font-size: 15px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+}
+.asb-map .route-alert__close:hover { background: #E24B4A; color: #fff; }
+.asb-map .route-notice { display: flex; align-items: center; gap: 10px; pointer-events: auto; }
+.asb-map.base-light .route-alerts__bar, .asb-map.base-nautical .route-alerts__bar { color: #4B5566; }
+.asb-map.base-light .route-alerts__bar button, .asb-map.base-nautical .route-alerts__bar button { background: #fff; color: #0B1F3A; border-color: rgba(13,37,69,.25); }
+.asb-map.base-light .route-alert__close, .asb-map.base-nautical .route-alert__close { background: rgba(13,37,69,.08); color: #0B1F3A; }
+
+/* ── Risk-area layer: pulsing outlines by severity ── */
+@keyframes risk-pulse {
+  0%   { stroke-opacity: .95; fill-opacity: .10; stroke-width: 1.6; }
+  50%  { stroke-opacity: .45; fill-opacity: .30; stroke-width: 3; }
+  100% { stroke-opacity: .95; fill-opacity: .10; stroke-width: 1.6; }
+}
+.asb-map path.risk-poly { animation: risk-pulse 2.4s ease-in-out infinite; }
+.asb-map path.risk-poly.sev-high_risk { animation-duration: 3s; }
+.asb-map path.risk-poly.sev-advisory  { animation-duration: 3.8s; }
+.asb-map .risk-tip { background: rgba(12,31,48,.95); color: #fff; border: 0.5px solid rgba(255,255,255,.15); border-radius: 6px; font-size: 11px; line-height: 1.4; max-width: 260px; white-space: normal; }
+.asb-map .risk-tip::before { border-top-color: rgba(12,31,48,.95); }
+.asb-map .map-key__risk { background: #E24B4A; border-radius: 2px; border: 1px dashed #fff; box-shadow: 0 0 0 2px rgba(226,75,74,.35); }
+@media (prefers-reduced-motion: reduce) { .asb-map path.risk-poly { animation: none; } }
+
+/* ── Estimate dialog: explicit close + explicit "always" choice ── */
+.asb-map .route-consent { padding-top: 18px; }
+.asb-map .route-consent__x {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 6px; border: none; cursor: pointer;
+  background: rgba(255,255,255,.1); color: #fff; font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+}
+.asb-map .route-consent__x:hover { background: #E24B4A; }
+.asb-map .route-consent__always {
+  display: block; margin-top: 10px; background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+  font-size: 10.5px; color: rgba(255,255,255,.55); text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.asb-map .route-consent__always:hover { color: #F5D48A; }
+.asb-map.base-light .route-consent__x, .asb-map.base-nautical .route-consent__x { background: rgba(13,37,69,.08); color: #0B1F3A; }
+.asb-map.base-light .route-consent__always, .asb-map.base-nautical .route-consent__always { color: #6B7A99; }
+
+/* ── One stack for every route message: notice + alerts, top-left, never overlapping ── */
+.asb-map .route-alerts { top: 12px; left: 12px; width: 320px; max-height: calc(100% - 70px); overflow-y: auto; scrollbar-width: thin; }
+.asb-map .route-alert.sev-info { border-left-color: #7BB8F0; }
+.asb-map .route-alert.sev-info .route-alert__icon { background: rgba(123,184,240,.25); color: #fff; font-style: italic; font-family: Georgia, serif; }
+.asb-map.base-light .route-alert.sev-info .route-alert__icon, .asb-map.base-nautical .route-alert.sev-info .route-alert__icon { color: #0B1F3A; }
+/* the centred title yields to the stack on narrow charts */
+@media (max-width: 1100px) { .asb-map .route-alerts { width: 260px; } }

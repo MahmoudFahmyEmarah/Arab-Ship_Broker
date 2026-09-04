@@ -17,7 +17,7 @@ import type { PortGeo } from "./port-coords";
 import { getTemporalAccess, type TemporalAccess } from "@/lib/temporal";
 import { toCargoView, vesselFromAvailability } from "./adapters";
 import { MOCK_CARGOS, MOCK_VESSELS } from "./mock";
-import { CargoView, VesselView } from "./types";
+import { CargoView, VesselView, type PosterView } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CargoListingRow } from "@/lib/schemas/cargo";
 import type { VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
@@ -125,6 +125,33 @@ export async function loadFuelPrices(): Promise<{ vlsfo: number; lsmgo: number; 
   }
 }
 
+// Who posted each listing — one RPC per board load (display fields only).
+// A failure degrades to "no poster line", never to a failed board.
+async function loadPosters(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  type: "cargo" | "vessel_availability",
+  ids: string[],
+): Promise<Record<string, PosterView>> {
+  try {
+    const { data, error } = await supabase.rpc("get_listing_posters", { p_type: type, p_ids: ids });
+    if (error || !data) return {};
+    const out: Record<string, PosterView> = {};
+    for (const r of data as { listing_id: string; poster_name: string | null; poster_company: string | null; poster_kind: string; is_admin: boolean; org_id: string | null }[]) {
+      out[r.listing_id] = {
+        name: r.poster_name,
+        company: r.poster_company,
+        kind: (["individual", "company", "employee"].includes(r.poster_kind) ? r.poster_kind : "individual") as PosterView["kind"],
+        isAdmin: !!r.is_admin,
+        orgId: r.org_id,
+      };
+    }
+    return out;
+  } catch (err) {
+    console.error("[portal] posters load failed:", err);
+    return {};
+  }
+}
+
 export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<CargoView>> {
   if (isSupabaseConfigured()) {
     try {
@@ -149,10 +176,11 @@ export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<Carg
         });
       }
       const counts = rows.length ? await cargoMatchCounts(supabase, rows) : {};
+      const posters = rows.length ? await loadPosters(supabase, "cargo", rows.map((r) => r.id)) : {};
       // Configured = real environment: return live results even when empty so
       // members see a proper empty state, never mock listings.
       return {
-        views: rows.map((r) => toCargoView(r, counts[r.id] ?? 0)),
+        views: rows.map((r) => ({ ...toCargoView(r, counts[r.id] ?? 0), poster: posters[r.id] ?? null })),
         source: "live",
         archiveLabel,
       };
@@ -218,8 +246,9 @@ export async function loadVesselViews({ mine = false } = {}): Promise<Loaded<Ves
         });
       }
       const counts = rows.length ? await availabilityMatchCounts(supabase, rows) : {};
+      const posters = rows.length ? await loadPosters(supabase, "vessel_availability", rows.map((r) => r.id)) : {};
       return {
-        views: rows.map((r) => vesselFromAvailability(r, counts[r.id] ?? 0)),
+        views: rows.map((r) => ({ ...vesselFromAvailability(r, counts[r.id] ?? 0), poster: posters[r.id] ?? null })),
         source: "live",
         archiveLabel,
       };
