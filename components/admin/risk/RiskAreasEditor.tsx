@@ -68,7 +68,9 @@ export function RiskAreasEditor({ initial, canEdit }: { initial: RiskAreaRow[]; 
     });
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 50);
-    return () => { map.remove(); mapRef.current = null; };
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => map.invalidateSize()) : null;
+    if (ro && hostRef.current) ro.observe(hostRef.current);
+    return () => { ro?.disconnect(); map.remove(); mapRef.current = null; };
   }, []);
 
   // ── shapes + vertex handles ──
@@ -178,7 +180,7 @@ export function RiskAreasEditor({ initial, canEdit }: { initial: RiskAreaRow[]; 
   const lab: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "#4B5566", marginBottom: 4, display: "block" };
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 14, alignItems: "start" }}>
+    <div className="ra-layout">
       <style>{`
         .ra-vertex div { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid #185FA5; box-shadow: 0 0 0 1px rgba(0,0,0,.35); cursor: grab; }
         .ra-mid div { width: 10px; height: 10px; border-radius: 50%; background: #185FA5; opacity: .55; border: 1px solid #fff; cursor: copy; }
@@ -195,10 +197,25 @@ export function RiskAreasEditor({ initial, canEdit }: { initial: RiskAreaRow[]; 
         .ra-btn.is-primary { background: #0D2545; color: #fff; border-color: #0D2545; }
         .ra-btn.is-danger { color: #A32D2D; border-color: #E9B4B4; }
         .ra-btn:disabled { opacity: .5; cursor: default; }
-        .ra-tools { position: absolute; top: 10px; left: 10px; z-index: 500; display: flex; gap: 6px; align-items: center; background: rgba(12,31,48,.9); padding: 6px 8px; border-radius: 8px; color: #fff; font-size: 11.5px; }
+        .ra-tools { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 500; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: rgba(12,31,48,.9); padding: 6px 8px; border-radius: 8px; color: #fff; font-size: 11.5px; width: max-content; max-width: calc(100% - 20px); }
+        .ra-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 14px; align-items: start; }
+        .ra-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+        .ra-map { padding: 0; position: relative; overflow: hidden; min-height: 640px; }
+        .ra-form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        @media (max-width: 900px) {
+          .ra-layout { grid-template-columns: 1fr; }
+          /* chart first so the admin can draw straight away; list + form below */
+          .ra-map { order: -1; min-height: 58vh; height: 58vh; }
+          .ra-tools { font-size: 12px; }
+          .ra-tools .ra-btn { padding: 8px 12px; }
+          .ra-vertex div { width: 18px; height: 18px; }
+          .ra-mid div { width: 14px; height: 14px; opacity: .75; }
+          .ra-row { padding: 10px 12px; }
+          .ra-btn { padding: 9px 14px; font-size: 13px; }
+        }
       `}</style>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="ra-side">
         <div className="adm-card" style={{ padding: 10 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 6px 8px" }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: "#1B3A5C" }}>Areas ({areas.length})</span>
@@ -248,7 +265,7 @@ export function RiskAreasEditor({ initial, canEdit }: { initial: RiskAreaRow[]; 
               {selected.polygon.length} points · drag a handle to reshape, click a small dot to add a point, right-click a handle to remove it.
             </div>
             {canEdit && (
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="ra-form-actions">
                 <button className="ra-btn is-primary" onClick={save} disabled={saving || !selected.dirty && !!selected.id}>{saving ? "Saving…" : selected.id ? "Save changes" : "Save area"}</button>
                 <button className="ra-btn is-danger" onClick={remove} disabled={saving}>Delete</button>
                 <button className="ra-btn" style={{ marginLeft: "auto" }} onClick={() => setSelectedKey(null)}>Close</button>
@@ -258,7 +275,7 @@ export function RiskAreasEditor({ initial, canEdit }: { initial: RiskAreaRow[]; 
         )}
       </div>
 
-      <div className="adm-card" style={{ padding: 0, position: "relative", overflow: "hidden", minHeight: 640 }}>
+      <div className="adm-card ra-map">
         <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />
         {drawing && (
           <div className="ra-tools">

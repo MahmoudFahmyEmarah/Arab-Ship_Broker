@@ -508,7 +508,8 @@ export default function MarketMap({
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchQ, setSearchQ] = React.useState("");
   const [namesOn, setNamesOn] = React.useState(true);
-  const [flowsOn, setFlowsOn] = React.useState(true);
+  // Trade-lane flows are a visual extra — OFF by default (owner, 4 Sep 2026).
+  const [flowsOn, setFlowsOn] = React.useState(false);
   // Risk-area layer (war zones / high-risk / advisory) — OFF by default on the
   // member maps; the route alerts still fire regardless of this layer.
   const [riskOn, setRiskOn] = React.useState(false);

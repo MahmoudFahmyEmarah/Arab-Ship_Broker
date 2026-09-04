@@ -544,16 +544,28 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
       <div style={{ marginTop: 14, padding: "10px 12px", border: `1px dashed ${C.line}`, borderRadius: 8, background: C.sunken }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: C.ink3 }}>EQUASIS</span>
-          <a href="https://www.equasis.org/EquasisWeb/public/HomePage" target="_blank" rel="noreferrer"
-            onClick={() => { if (imoTrim) navigator.clipboard?.writeText(imoTrim).catch(() => {}); }}
+          {/* Equasis' ship search is a login-protected form (no public deep
+              link that carries the query), so we open the Search page itself
+              and put the best search key on the clipboard: the IMO when we
+              have one, else the vessel name. The browser's own password
+              manager handles the login — the platform never stores it. */}
+          <a href="https://www.equasis.org/EquasisWeb/restricted/Search?fs=HomePage" target="_blank" rel="noreferrer"
+            onClick={() => {
+              const key = imoOk ? imoTrim : name.trim().replace(/^unnamed vessel.*$/i, "").trim();
+              if (!key) return;
+              navigator.clipboard?.writeText(key)
+                .then(() => toast.success(`Copied “${key}” — paste it into the Equasis ship search box.`))
+                .catch(() => {});
+            }}
+            title={imoOk ? `Opens the Equasis ship search with IMO ${imoTrim} on your clipboard` : name.trim() ? `Opens the Equasis ship search with “${name.trim()}” on your clipboard` : "Opens the Equasis ship search"}
             style={{ ...btn("ghost"), padding: "5px 10px", fontSize: 12, textDecoration: "none" }}>
-            <ExternalLink size={13} /> Open Equasis{imoTrim ? " (IMO copied)" : ""}
+            <ExternalLink size={13} /> Open Equasis search{imoOk ? " (IMO copied)" : name.trim() && !/^unnamed vessel/i.test(name) ? " (name copied)" : ""}
           </a>
           <button onClick={() => setEquasisOpen((o) => !o)} style={{ ...btn("ghost"), padding: "5px 10px", fontSize: 12 }}>
             <Clipboard size={13} /> {equasisOpen ? "Hide paste box" : "Paste ship particulars"}
           </button>
           <span style={{ fontSize: 11.5, color: C.ink3 }}>
-            Look her up, copy the <b>Ship info</b> and <b>Management detail</b> tables, paste — the fields above fill in for your review.
+            Sign in (your browser can remember it), paste the search key, open the ship, copy the <b>Ship info</b> and <b>Management detail</b> tables, paste — the fields above fill in for your review.
           </span>
         </div>
         {equasisOpen && (
