@@ -3,6 +3,7 @@
 // Page bodies for the portal preview, ported from the Claude design
 // (asb/pages.jsx). Server pages adapt rows → views and hand them here.
 import * as React from "react";
+import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { SheetHandle, useSheetPeek } from "./SheetHandle";
@@ -459,10 +460,19 @@ export function DashboardBoard({
       </div>
 
       {(() => {
+        // The chart gets the filtered market PLUS whatever is focused, so a
+        // match chosen from the popup still draws even if the filter chips
+        // (Posted / Zones / …) hide its row.
+        const mapCargos = focusedCargo && !filteredCargos.some((c) => c.id === focusedCargo)
+          ? [...filteredCargos, ...cargos.filter((c) => c.id === focusedCargo)]
+          : filteredCargos;
+        const mapVessels = focusedVessel && !filteredVessels.some((v) => v.id === focusedVessel)
+          ? [...filteredVessels, ...vessels.filter((v) => v.id === focusedVessel)]
+          : filteredVessels;
         const mapEl = (
           <MarketMap
-            cargos={filteredCargos}
-            vessels={filteredVessels}
+            cargos={mapCargos}
+            vessels={mapVessels}
             portCoords={portCoords}
             focusedCargoId={focusedCargo}
             focusedVesselId={focusedVessel}
@@ -478,6 +488,13 @@ export function DashboardBoard({
               hint="Cargoes looking for a ship: load → discharge, laycan, quantity, and who posted them. Click a row to see it on the chart with its matching tonnage."
               data={filteredCargos}
               defaultView={defaultView}
+              matchPool={vessels}
+              onFocusMatch={(id) => {
+                const v = vessels.find((x) => x.id === id);
+                if (!v) return;
+                if (!filteredVessels.some((x) => x.id === id)) toast.info(`${v.name} is hidden by the filter chips above (Posted, Zones, …) — shown on the chart only.`);
+                focus.vessel(v);
+              }}
               statDefs={[
                 { id: "active", label: "Active", variant: "active", filter: () => true },
                 { id: "urgent", label: "Urgent", variant: "urgent", filter: (c) => c.laycanDays != null && c.laycanDays < 3 },
@@ -491,6 +508,13 @@ export function DashboardBoard({
               hint="Vessels open for employment: type, deadweight, gear, where and when she opens, and who posted her. Click a row to see her on the chart with matching cargoes."
               data={filteredVessels}
               defaultView={defaultView}
+              matchPool={cargos}
+              onFocusMatch={(id) => {
+                const c = cargos.find((x) => x.id === id);
+                if (!c) return;
+                if (!filteredCargos.some((x) => x.id === id)) toast.info(`${c.cargo} is hidden by the filter chips above (Posted, Zones, …) — shown on the chart only.`);
+                focus.cargo(c);
+              }}
               statDefs={[
                 { id: "open", label: "Open", variant: "active", filter: (v) => v.status === "open" },
                 { id: "overdue", label: "Overdue", variant: "urgent", filter: (v) => v.openDateUrgency === "red" || (v.openDateDays != null && v.openDateDays < 0) },
@@ -685,7 +709,7 @@ export function CargoBoard({
         </div>
         {mapOpen ? (
           <div className="mkt-mappane" style={{ width: "58%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
-            <MarketMap barLeft cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
+            <MarketMap cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
           </div>
         ) : selectedId ? (
           <div className="mkt-detailpane" style={{ flex: "0 0 40%", overflow: "hidden", borderLeft: "var(--bd)" }} onClick={(e) => e.stopPropagation()}>
@@ -789,7 +813,7 @@ export function VesselBoard({
         </div>
         {mapOpen ? (
           <div className="mkt-mappane" style={{ width: "55%", flexShrink: 0, borderLeft: "var(--bd)", position: "relative" }} onClick={(e) => e.stopPropagation()}>
-            <MarketMap barLeft cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
+            <MarketMap cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
           </div>
         ) : selectedId ? (
           <div className="mkt-detailpane" style={{ flex: "0 0 42%", overflow: "hidden", borderLeft: "var(--bd)" }} onClick={(e) => e.stopPropagation()}>

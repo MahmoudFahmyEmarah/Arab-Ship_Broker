@@ -129,10 +129,17 @@ export const DEFAULT_VESSEL_ACTIVE_DAYS = 14;
 // fn_build_market_insights() SQL fallback.
 export const DEFAULT_INSIGHTS_OPEN_LOOKBACK_DAYS = 14;
 
+/** Member-portal sidebar look: the classic white rail or the console's navy rail. */
+export type SidebarStyle = "classic" | "navy";
+export const SIDEBAR_STYLES: SidebarStyle[] = ["classic", "navy"];
+export type AppearanceSettings = { sidebar: SidebarStyle };
+export const DEFAULT_APPEARANCE: AppearanceSettings = { sidebar: "classic" };
+
 export type PlatformSettingsData = {
   ai: AiSettings;
   marketplace: MarketplaceDefaults;
   cardFields: Record<string, boolean>;
+  appearance: AppearanceSettings;
 };
 
 // ── Market freshness ────────────────────────────────────────────────────────
@@ -197,6 +204,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsData = {
     iacDefault: "Included (IAC)",
   },
   cardFields: DEFAULT_CARD_FIELDS,
+  appearance: DEFAULT_APPEARANCE,
 };
 
 // Read the platform-settings blob, merging stored values over the defaults so a
@@ -208,7 +216,15 @@ export async function getPlatformSettings(): Promise<PlatformSettingsData> {
     ai: { ...DEFAULT_PLATFORM_SETTINGS.ai, ...(stored.ai ?? {}) },
     marketplace: { ...DEFAULT_PLATFORM_SETTINGS.marketplace, ...(stored.marketplace ?? {}) },
     cardFields: { ...DEFAULT_CARD_FIELDS, ...(stored.cardFields ?? {}) },
+    appearance: {
+      sidebar: SIDEBAR_STYLES.includes(stored.appearance?.sidebar as SidebarStyle) ? (stored.appearance!.sidebar as SidebarStyle) : DEFAULT_APPEARANCE.sidebar,
+    },
   };
+}
+
+/** The member-portal sidebar style chosen in admin → Platform settings → Appearance. */
+export async function getSidebarStyle(): Promise<SidebarStyle> {
+  return (await getPlatformSettings()).appearance.sidebar;
 }
 
 // Resolve the spot-cargo active window (in days) as a positive integer, falling

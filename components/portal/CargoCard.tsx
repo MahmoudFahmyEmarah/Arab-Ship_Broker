@@ -5,7 +5,8 @@
 // market-partner tag from the original are deferred to a later phase; the
 // visual structure and classes are otherwise identical.)
 import * as React from "react";
-import { CargoView } from "@/lib/portal/types";
+import { CargoView, VesselView } from "@/lib/portal/types";
+import { MatchesPopover } from "./MatchesPopover";
 import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
 import {
   cargoTypeLabel,
@@ -44,14 +45,22 @@ export function CargoCard({
   onSelect,
   compact,
   limited,
+  matchPool,
+  onFocusMatch,
 }: {
   data: CargoView;
   selected?: boolean;
   onSelect?: (id: string) => void;
   compact?: boolean;
   limited?: boolean;
+  /** open tonnage this cargo can match against — enables the matches popup on the badge */
+  matchPool?: VesselView[];
+  /** called with the matched vessel's id when the user picks one in the popup */
+  onFocusMatch?: (vesselId: string) => void;
 }) {
   const c = data;
+  const [matchesOpen, setMatchesOpen] = React.useState(false);
+  const canPop = !limited && (c.matches || 0) > 0 && !!matchPool;
   const stripClass = `strip-${cargoStripKey(c)}`;
   const { weight, volume, sfMissing } = formatQtyVol(c);
   const laycanStr = formatLaycanRange(c.laycanFrom, c.laycanTo);
@@ -199,10 +208,11 @@ export function CargoCard({
         </div>
 
         <div
-          className="cc-foot-col cc-foot-col--match"
+          className={`cc-foot-col cc-foot-col--match${canPop ? " is-pop" : ""}`}
+          title={limited ? "Matches are a Subscriber feature" : matches === 0 ? "No matching vessels on the market right now" : `${matches} matching ${matches === 1 ? "vessel" : "vessels"} — click to see ${matches === 1 ? "it" : "them"}`}
           onClick={(e) => {
             e.stopPropagation();
-            onSelect?.(c.id);
+            if (canPop) setMatchesOpen(true); else onSelect?.(c.id);
           }}
         >
           <div className="cc-foot-label">Match</div>
@@ -211,6 +221,10 @@ export function CargoCard({
           </span>
         </div>
       </div>
+      {matchesOpen && (
+        <MatchesPopover source={{ kind: "cargo", view: c }} pool={matchPool ?? []} count={matches}
+          onClose={() => setMatchesOpen(false)} onFocus={(id) => onFocusMatch?.(id)} />
+      )}
     </div>
   );
 }

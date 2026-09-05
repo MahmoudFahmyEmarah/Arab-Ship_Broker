@@ -33,7 +33,7 @@ export function VesselAvailabilityTable({ rows }: { rows: AdminVesselAvailRow[] 
       render: (r) => (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <strong style={{ color: "#1B3A5C", fontWeight: 500 }}>{r.vessel_name}</strong>
+            <strong style={{ color: "var(--asb-navy-global)", fontWeight: 500 }}>{r.vessel_name}</strong>
             {r.is_sanctioned && <span className="adm-badge flagged">Sanctioned</span>}
           </span>
           {r.imo_number && <span className="mono">IMO {r.imo_number}</span>}
@@ -53,7 +53,7 @@ export function VesselAvailabilityTable({ rows }: { rows: AdminVesselAvailRow[] 
       render: (r) => (
         <span>
           {r.open_port_name ?? "—"}
-          {r.open_zone ? <span style={{ color: "#8B95A3" }}> · {r.open_zone}</span> : null}
+          {r.open_zone ? <span style={{ color: "var(--asb-gray-500)" }}> · {r.open_zone}</span> : null}
         </span>
       ),
     },

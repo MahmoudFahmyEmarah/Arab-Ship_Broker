@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { withJobRun } from "@/lib/jobs/runs";
 
 // Weekly Market Insights generator — runs each Monday (Vercel Cron, see
 // vercel.json). Computes the trailing week (previous Mon–Sun), then calls the
@@ -52,17 +53,22 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createClient(url, key, { auth: { persistSession: false } });
-  const { data, error } = await supabase.rpc("fn_publish_market_insights_edition", {
-    p_from: fmt(lastMonday),
-    p_to: fmt(lastSunday),
-    p_week_id: weekId,
-    p_publish: true,
-  });
-
-  if (error) {
-    return NextResponse.json({ ok: false, week_id: weekId, error: error.message }, { status: 500 });
+  let row: { week_id?: string; published_at?: string | null } | null;
+  try {
+    // Every run leaves a job_runs row (status, error, week) for the console dashboard.
+    row = await withJobRun(supabase, "market-insights", { trigger: isVercelCron ? "cron" : "manual", meta: { week_id: weekId } }, async () => {
+      const { data, error } = await supabase.rpc("fn_publish_market_insights_edition", {
+        p_from: fmt(lastMonday),
+        p_to: fmt(lastSunday),
+        p_week_id: weekId,
+        p_publish: true,
+      });
+      if (error) throw new Error(error.message);
+      return { result: data as { week_id?: string; published_at?: string | null } | null, rows: 1, meta: { week_id: weekId } };
+    });
+  } catch (e) {
+    return NextResponse.json({ ok: false, week_id: weekId, error: e instanceof Error ? e.message : "publish failed" }, { status: 500 });
   }
-  const row = data as { week_id?: string; published_at?: string | null } | null;
   return NextResponse.json({
     ok: true,
     week_id: row?.week_id ?? weekId,

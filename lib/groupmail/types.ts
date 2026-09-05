@@ -1,5 +1,38 @@
 // Group Mail — shared types (client-safe, no server imports).
 
+/** The sign-off block under the body. Default lives in Settings; every
+ *  campaign carries its own editable copy so the sender can sign as themselves. */
+export interface Signature {
+  closing: string;  // "Sincerest Regards,"
+  name: string;     // "Capt Mohamed Dawoud"
+  role: string;     // "Founder · Arab ShipBroker" (optional)
+  phone: string;    // "+20 …" (optional)
+  email: string;    // reply address shown in the signature
+  site: string;     // "www.arabshipbroker.com"
+}
+
+export const DEFAULT_SIGNATURE: Signature = {
+  closing: "Sincerest Regards,",
+  name: "As Brokers Only",
+  role: "",
+  phone: "",
+  email: "circ@arabshipbroker.com",
+  site: "www.arabshipbroker.com",
+};
+
+export function normalizeSignature(raw: unknown, fallbackEmail?: string | null): Signature {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof Signature, unknown>>;
+  const str = (v: unknown, d: string) => (typeof v === "string" ? v.trim() : d);
+  return {
+    closing: str(r.closing, DEFAULT_SIGNATURE.closing),
+    name: str(r.name, DEFAULT_SIGNATURE.name),
+    role: str(r.role, ""),
+    phone: str(r.phone, ""),
+    email: str(r.email, fallbackEmail ?? DEFAULT_SIGNATURE.email) || (fallbackEmail ?? DEFAULT_SIGNATURE.email),
+    site: str(r.site, DEFAULT_SIGNATURE.site) || DEFAULT_SIGNATURE.site,
+  };
+}
+
 export interface GroupMailConfig {
   cpanel_host: string | null;
   cpanel_user: string | null;
@@ -9,6 +42,7 @@ export interface GroupMailConfig {
   smtp_user: string | null;
   from_name: string;
   test_recipients: string[] | null;
+  signature: Signature | null; // default signature for new circulars
 }
 
 /** Which secrets are stored (never the values). */
@@ -75,6 +109,7 @@ export interface CampaignInput {
   body: string;        // plain text; blank line = new paragraph
   links: CampaignLink[];
   office: Office;      // signature office for the date line
+  signature?: Signature; // editable sign-off (defaults to Settings → Default signature)
 }
 
 export interface CampaignRow {

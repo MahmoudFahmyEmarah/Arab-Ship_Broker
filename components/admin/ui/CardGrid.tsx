@@ -50,7 +50,7 @@ export function CardGrid<T extends Record<string, unknown>>({
           onChange={(e) => setQ(e.target.value)}
         />
         {toolbar}
-        <span style={{ fontSize: 10, color: "#8B95A3" }}>
+        <span style={{ fontSize: 10, color: "var(--asb-gray-500)" }}>
           {filtered.length} of {rows.length}
         </span>
       </div>

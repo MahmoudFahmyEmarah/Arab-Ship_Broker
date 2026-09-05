@@ -1,145 +1,101 @@
-// Admin sidebar icon set — inline 14×14 line SVGs, ported verbatim from the
-// design handoff (14_admin_rebuild/admin/admin-shell.jsx). currentColor so the
-// .adm-side__icon CSS controls the hue (muted → navy on active).
+// Admin sidebar icon set — the ASB design system's Icon glyphs (24-unit grid,
+// round caps, 1.7 stroke at 16 px), ported from the console redesign. Line
+// icons stroke with currentColor; Cargo and Vessel are the system's solid
+// marks. The .adm-side__icon wrapper controls the hue (muted → baby blue on
+// the active item).
 import * as React from "react";
 
-const base = {
-  viewBox: "0 0 14 14",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.4,
-  width: 14,
-  height: 14,
-} as const;
+type Glyph = { svg: string; solid?: boolean };
 
-export const ADMIN_ICONS: Record<string, React.ReactNode> = {
-  risk: (
-    <svg {...base}>
-      <path d="M7 1.6 12.6 11.6H1.4L7 1.6Z" strokeLinejoin="round" />
-      <path d="M7 5.4v2.8M7 10v.4" strokeLinecap="round" />
-    </svg>
-  ),
-  dash: (
-    <svg {...base}>
-      <rect x="2" y="2" width="4" height="4" rx="0.5" />
-      <rect x="8" y="2" width="4" height="4" rx="0.5" />
-      <rect x="2" y="8" width="4" height="4" rx="0.5" />
-      <rect x="8" y="8" width="4" height="4" rx="0.5" />
-    </svg>
-  ),
-  queue: (
-    <svg {...base} strokeLinecap="round">
-      <path d="M3 4h8M3 7h8M3 10h5" />
-      <circle cx="11.5" cy="10" r="1.4" />
-    </svg>
-  ),
-  list: (
-    <svg {...base} strokeLinecap="round">
-      <circle cx="3.5" cy="4" r="0.7" />
-      <line x1="6" y1="4" x2="12" y2="4" />
-      <circle cx="3.5" cy="7" r="0.7" />
-      <line x1="6" y1="7" x2="12" y2="7" />
-      <circle cx="3.5" cy="10" r="0.7" />
-      <line x1="6" y1="10" x2="12" y2="10" />
-    </svg>
-  ),
-  sync: (
-    <svg {...base} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11.3 6 A4.4 4.4 0 0 0 3 5.2" />
-      <path d="M2.7 8 A4.4 4.4 0 0 0 11 8.8" />
-      <path d="M11.4 3 V6 H8.6" />
-      <path d="M2.6 11 V8 H5.4" />
-    </svg>
-  ),
-  vessel: (
-    <svg {...base} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2.5 8 L7 9.5 L11.5 8" />
-      <path d="M3.5 8 V5 h7 V8" />
-      <path d="M7 5 V2.5" />
-      <path d="M2.5 10.5 q4.5 2 9 0" />
-    </svg>
-  ),
-  users: (
-    <svg {...base}>
-      <circle cx="5" cy="5" r="2.2" />
-      <path d="M2 12 c0 -2 1.5 -3.5 3 -3.5 s3 1.5 3 3.5" />
-      <circle cx="10" cy="5.5" r="1.8" />
-      <path d="M8 12 c0 -1.7 1.2 -3 2 -3 s2 1.3 2 3" />
-    </svg>
-  ),
-  building: (
-    <svg {...base} strokeLinejoin="round" strokeLinecap="round">
-      <rect x="2.5" y="1.8" width="5.5" height="10.2" rx="0.5" />
-      <path d="M8 5 h3.5 v7 H2.5" />
-      <path d="M4 4 h2 M4 6 h2 M4 8 h2 M9.4 7 h0.8 M9.4 9 h0.8" />
-    </svg>
-  ),
-  bunker: (
-    <svg {...base}>
-      <path d="M2 12 h10 M3 9 l-1 3 M11 9 l1 3 M4 4 h6 v5 h-6 z M5 1.5 h4 v2.5 h-4 z" />
-    </svg>
-  ),
-  commod: (
-    <svg {...base} strokeLinecap="round">
-      <rect x="2.5" y="2.5" width="9" height="9" rx="1" />
-      <path d="M5 2.5 v9 M9 2.5 v9 M2.5 5 h9 M2.5 9 h9" />
-    </svg>
-  ),
-  port: (
-    <svg {...base} strokeLinecap="round">
-      <circle cx="7" cy="4" r="1.6" />
-      <path d="M7 5.6 v6 M3.5 11.5 h7 M5 8.5 l-1.5 3 M9 8.5 l1.5 3" />
-    </svg>
-  ),
-  rules: (
-    <svg {...base} strokeLinecap="round">
-      <circle cx="4" cy="7" r="1.6" />
-      <path d="M4 1.5 v3.9 M4 8.6 v3.9" />
-      <circle cx="10" cy="7" r="1.6" />
-      <path d="M10 1.5 v3.9 M10 8.6 v3.9" />
-    </svg>
-  ),
-  chart: (
-    <svg {...base} strokeLinecap="round">
-      <path d="M2 12 V4 M2 12 h10" />
-      <rect x="4" y="8" width="2" height="3.5" />
-      <rect x="7" y="6" width="2" height="5.5" />
-      <rect x="10" y="4" width="2" height="7.5" />
-    </svg>
-  ),
-  announ: (
-    <svg {...base} strokeLinecap="round">
-      <path d="M3 5 v4 l5 2 V3 Z" />
-      <path d="M8 5 q3 0 3 2 t-3 2" />
-    </svg>
-  ),
-  mail: (
-    <svg {...base} strokeLinejoin="round" strokeLinecap="round">
-      <rect x="1.5" y="3" width="11" height="8" rx="1" />
-      <path d="M2 4 L7 8 L12 4" />
-    </svg>
-  ),
-  shield: (
-    <svg {...base} strokeLinejoin="round" strokeLinecap="round">
-      <path d="M7 1.5 L12 3 v4 c0 3 -2 5 -5 6 -3 -1 -5 -3 -5 -6 V3 Z" />
-      <path d="M5 7 l1.5 1.5 L9 6" />
-    </svg>
-  ),
-  shieldlock: (
-    <svg {...base} strokeLinejoin="round" strokeLinecap="round">
-      <path d="M7 1.5 L12 3 v4 c0 3 -2 5 -5 6 -3 -1 -5 -3 -5 -6 V3 Z" />
-      <rect x="5.2" y="6.2" width="3.6" height="3" rx="0.5" />
-      <path d="M5.9 6.2 V5.3 a1.1 1.1 0 0 1 2.2 0 v0.9" />
-    </svg>
-  ),
-  gear: (
-    <svg {...base} strokeLinejoin="round" strokeLinecap="round">
-      <circle cx="7" cy="7" r="2" />
-      <path d="M7 1.6v1.6M7 10.8v1.6M1.6 7h1.6M10.8 7h1.6M3.2 3.2l1.1 1.1M9.7 9.7l1.1 1.1M10.8 3.2L9.7 4.3M4.3 9.7L3.2 10.8" />
-    </svg>
-  ),
+export const ADMIN_ICONS: Record<string, Glyph> = {
+  Dashboard: {
+    svg: '<rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1"/>',
+  },
+  DocAudit: {
+    svg: '<path d="M 6 3 L 16 3 L 19 6 L 19 21 L 6 21 Z"/><line x1="9" y1="8.6" x2="16" y2="8.6"/><line x1="9" y1="12.4" x2="14.4" y2="12.4"/><polyline points="9,16.6 11.2,18.8 15.8,14.2"/>',
+  },
+  Cargo: {
+    solid: true,
+    svg: '<path d="M 13.5 6 L 22.5 19 L 9.5 19 Z"/><path d="M 7 10 L 14.5 19 L 1.5 19 L 5 14 Z"/>',
+  },
+  Vessel: {
+    solid: true,
+    svg: '<rect x="4" y="9.5" width="3" height="3"/><rect x="5" y="6" width="1.6" height="3.8"/><path d="M 1.5 14 L 17 14 Q 21 14 22.5 11 L 22.5 16 Q 22 17.5 19 17.5 L 4 17.5 Q 2 17.5 1.5 16 Z"/><path d="M 1.5 19.5 Q 4 18.5 6.5 19.5 T 11.5 19.5 T 16.5 19.5 T 22.5 19.5" stroke="currentColor" stroke-width="1.1" fill="none"/><path d="M 1.5 21.5 Q 4 20.5 6.5 21.5 T 11.5 21.5 T 16.5 21.5 T 22.5 21.5" stroke="currentColor" stroke-width="1.1" fill="none"/>',
+  },
+  User: {
+    svg: '<circle cx="12" cy="8" r="3.5"/><path d="M 4 21 Q 4 14 12 14 Q 20 14 20 21"/>',
+  },
+  Globe: {
+    svg: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3.3" y1="9.2" x2="20.7" y2="9.2"/><line x1="3.3" y1="14.8" x2="20.7" y2="14.8"/>',
+  },
+  Mail: {
+    svg: '<rect x="3" y="5.5" width="18" height="13" rx="1.5"/><polyline points="4.2,6.6 12,13 19.8,6.6"/>',
+  },
+  Shield: {
+    svg: '<path d="M 12 3 L 4 6 L 4 12 Q 4 18 12 21 Q 20 18 20 12 L 20 6 Z"/>',
+  },
+  ShieldLock: {
+    svg: '<path d="M 12 3 L 4 6 L 4 12 Q 4 18 12 21 Q 20 18 20 12 L 20 6 Z"/><rect x="9.5" y="11" width="5" height="5" rx="0.5"/><path d="M 10.5 11 V 9.5 Q 10.5 8 12 8 Q 13.5 8 13.5 9.5 V 11"/>',
+  },
+  Layers: {
+    svg: '<polygon points="12,3 21,7.5 12,12 3,7.5"/><polyline points="3,12.5 12,17 21,12.5"/><polyline points="3,16.5 12,21 21,16.5"/>',
+  },
+  Anchor: {
+    svg: '<circle cx="12" cy="5" r="2.2"/><line x1="12" y1="7.2" x2="12" y2="21"/><line x1="7.5" y1="10.5" x2="16.5" y2="10.5"/><path d="M 4 14 Q 5.2 20.4 12 21 Q 18.8 20.4 20 14"/><polyline points="4,14 2.6,17 6.4,16.2"/><polyline points="20,14 21.4,17 17.6,16.2"/>',
+  },
+  Map: {
+    svg: '<polygon points="3,7 9,4 15,7 21,4 21,17 15,20 9,17 3,20"/><line x1="9" y1="4" x2="9" y2="17"/><line x1="15" y1="7" x2="15" y2="20"/>',
+  },
+  TrendUp: {
+    svg: '<polyline points="3,17.5 9,11.5 13,15.5 21,7"/><polyline points="15.6,7 21,7 21,12.4"/>',
+  },
+  Sliders: {
+    svg: '<line x1="3.5" y1="7" x2="20.5" y2="7"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><line x1="3.5" y1="17" x2="20.5" y2="17"/><circle cx="9" cy="7" r="2.1"/><circle cx="15.5" cy="12" r="2.1"/><circle cx="7" cy="17" r="2.1"/>',
+  },
+  Clock: {
+    svg: '<circle cx="12" cy="12" r="9"/><polyline points="12,6.6 12,12 16.4,14.4"/>',
+  },
+  MarketBars: {
+    svg: '<rect x="3.4" y="13.4" width="4.6" height="7.2" rx="1"/><rect x="9.7" y="9.2" width="4.6" height="11.4" rx="1"/><rect x="16" y="4.6" width="4.6" height="16" rx="1"/>',
+  },
+  Bell: {
+    svg: '<path d="M 6 17 V 11 Q 6 6 12 6 Q 18 6 18 11 V 17 L 20 19 H 4 Z"/><path d="M 10 21 Q 12 22 14 21"/>',
+  },
+  Doc: {
+    svg: '<path d="M 6 3 L 16 3 L 19 6 L 19 21 L 6 21 Z"/><line x1="9" y1="9" x2="16" y2="9"/><line x1="9" y1="13" x2="16" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>',
+  },
+  Settings: {
+    svg: '<circle cx="12" cy="12" r="3"/><path d="M 12 2 L 12 5 M 12 19 L 12 22 M 2 12 L 5 12 M 19 12 L 22 12 M 5 5 L 7 7 M 17 17 L 19 19 M 5 19 L 7 17 M 17 7 L 19 5"/>',
+  },
 };
 
+/** A design-system glyph at any size (defaults to the rail's 16 px). */
+export function AdminGlyph({ name, size = 16, title }: { name: string; size?: number; title?: string }) {
+  const g = ADMIN_ICONS[name] ?? ADMIN_ICONS.Dashboard;
+  const strokeWidth = size <= 16 ? 1.7 : 1.5;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill={g.solid ? "currentColor" : "none"}
+      stroke={g.solid ? undefined : "currentColor"}
+      strokeWidth={g.solid ? undefined : strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden={title ? undefined : true}
+      role={title ? "img" : undefined}
+      aria-label={title}
+      style={{ display: "inline-block", verticalAlign: "middle", flex: "none" }}
+      dangerouslySetInnerHTML={{ __html: (title ? `<title>${title}</title>` : "") + g.svg }}
+    />
+  );
+}
+
 export function AdminIcon({ name }: { name: string }) {
-  return <span className="adm-side__icon">{ADMIN_ICONS[name] ?? ADMIN_ICONS.dash}</span>;
+  return (
+    <span className="adm-side__icon">
+      <AdminGlyph name={name} />
+    </span>
+  );
 }

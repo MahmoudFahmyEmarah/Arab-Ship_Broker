@@ -9,7 +9,8 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { cpListLists, cpAddList, cpDeleteList, cpUpdateList, type CpanelAuth } from "@/lib/groupmail/cpanel";
 import { mailmanListMembers, mailmanAddMembers, mailmanRemoveMembers, type MailmanAuth } from "@/lib/groupmail/mailman";
-import { buildCircularEmail, officeStamp } from "@/lib/groupmail/template";
+import { buildCircularEmail, officeStamp, mailmanOptionsUrl } from "@/lib/groupmail/template";
+import { normalizeSignature } from "@/lib/groupmail/types";
 import { dispatchDue } from "@/lib/groupmail/dispatch";
 import { EMAIL_LOGO_B64 } from "@/lib/groupmail/logo";
 import type { Office } from "@/lib/groupmail/types";
@@ -40,7 +41,7 @@ function fail(e: unknown, fallback: string): { success: false; error: string } {
 const DEFAULT_CONFIG: GroupMailConfig = {
   cpanel_host: null, cpanel_user: null, mailman_base: null,
   smtp_host: null, smtp_port: 465, smtp_user: null,
-  from_name: "Arab ShipBroker", test_recipients: null,
+  from_name: "Arab ShipBroker", test_recipients: null, signature: null,
 };
 
 async function readConfig(c: ReturnType<typeof getSupabaseAdminClient>): Promise<GroupMailConfig> {
@@ -80,7 +81,7 @@ export async function saveGroupMailConfig(patch: Partial<GroupMailConfig>): Prom
   try {
     const { c } = await adminWrite();
     const allowed: (keyof GroupMailConfig)[] = [
-      "cpanel_host", "cpanel_user", "mailman_base", "smtp_host", "smtp_port", "smtp_user", "from_name", "test_recipients",
+      "cpanel_host", "cpanel_user", "mailman_base", "smtp_host", "smtp_port", "smtp_user", "from_name", "test_recipients", "signature",
     ];
     const clean: Record<string, unknown> = { id: 1, updated_at: new Date().toISOString() };
     for (const k of allowed) if (patch[k] !== undefined) clean[k] = patch[k];
@@ -348,8 +349,11 @@ export async function previewCircular(input: CampaignInput): Promise<Result<{ ht
   try {
     const { c } = await adminWrite();
     const cfg = await readConfig(c);
+    const mailmanBase = cfg.mailman_base?.trim() || (cfg.cpanel_host ? `https://${cfg.cpanel_host}/mailman` : null);
     const { html, subject } = buildCircularEmail(
-      input, officeStamp(input.office), PREVIEW_LOGO, cfg.smtp_user ?? undefined,
+      { ...input, signature: normalizeSignature(input.signature ?? cfg.signature, cfg.smtp_user) },
+      officeStamp(input.office), PREVIEW_LOGO, cfg.smtp_user ?? undefined,
+      mailmanOptionsUrl(mailmanBase, input.list_email),
     );
     return { success: true, data: { html, subject } };
   } catch (e) {
@@ -387,6 +391,7 @@ export async function startCircular(
           list_email: input.list_email, mode, subject: input.subject.trim(),
           title: input.title.trim() || null, body: input.body, links: input.links.filter((l) => l.label && l.url),
           badge: input.badge.trim() || "Circulation", stamp_office: input.office,
+          signature: normalizeSignature(input.signature ?? (await readConfig(c)).signature, (await readConfig(c)).smtp_user),
           status: "scheduled", scheduled_at: at.toISOString(), schedule_tz: schedule.tz,
           recipients_total: 0, sent_by: actor,
         })
@@ -413,6 +418,7 @@ export async function startCircular(
         list_email: input.list_email, mode, subject: input.subject.trim(),
         title: input.title.trim() || null, body: input.body, links: input.links.filter((l) => l.label && l.url),
         badge: input.badge.trim() || "Circulation", stamp_office: input.office,
+        signature: normalizeSignature(input.signature ?? (await readConfig(c)).signature, (await readConfig(c)).smtp_user),
         recipients_total: recipients.length, sent_by: actor,
       })
       .select("id")
@@ -462,28 +468,32 @@ export async function sendCircularBatch(
     const { c } = await adminWrite();
     const { data: camp, error: cErr } = await c
       .from("groupmail_campaign")
-      .select("id, list_email, subject, title, body, links, badge, stamp_office, sent_ok, sent_fail, failures, status")
+      .select("id, list_email, mode, subject, title, body, links, badge, stamp_office, signature, sent_ok, sent_fail, failures, status")
       .eq("id", campaignId)
       .single();
     if (cErr || !camp) return { success: false, error: "Campaign not found." };
     const row = camp as {
-      list_email: string; subject: string; title: string | null; body: string;
-      links: { label: string; url: string }[] | null; badge: string | null; stamp_office: string | null;
+      list_email: string; mode: string; subject: string; title: string | null; body: string;
+      links: { label: string; url: string }[] | null; badge: string | null; stamp_office: string | null; signature: unknown;
       sent_ok: number; sent_fail: number; failures: { email: string; error?: string }[] | null; status: string;
     };
     if (row.status !== "sending") return { success: false, error: "This campaign is already finished." };
     const office = (row.stamp_office as Office) ?? "Cairo";
     const cfg = await readConfig(c);
+    const mailmanBase = cfg.mailman_base?.trim() || (cfg.cpanel_host ? `https://${cfg.cpanel_host}/mailman` : null);
+    const unsubscribeUrl = row.mode === "broadcast" ? mailmanOptionsUrl(mailmanBase, row.list_email) : null;
     const mail = buildCircularEmail(
       {
         list_email: row.list_email, subject: row.subject, title: row.title ?? "",
         body: row.body, links: row.links ?? [], badge: row.badge ?? "Circulation", office,
+        signature: normalizeSignature(row.signature ?? cfg.signature, cfg.smtp_user),
       },
       officeStamp(office),
       undefined,
       cfg.smtp_user ?? undefined,
+      unsubscribeUrl,
     );
-    const results = await sendToRecipients(await smtpAuth(c), emails, { ...mail, replyTo: cfg.smtp_user ?? undefined });
+    const results = await sendToRecipients(await smtpAuth(c), emails, { ...mail, replyTo: cfg.smtp_user ?? undefined, listEmail: row.list_email, unsubscribeUrl });
     const ok = results.filter((r) => r.ok).length;
     const failures = results.filter((r) => !r.ok).map((r) => ({ email: r.email, error: r.error }));
     await c.from("groupmail_campaign").update({

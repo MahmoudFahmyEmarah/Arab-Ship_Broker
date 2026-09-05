@@ -327,6 +327,15 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
   const [equasisText, setEquasisText] = useState("");
   const imoTrim = imo.trim();
   const imoOk = isValidImo(imoTrim);
+  // Equasis ship search, pre-filled. The search runs on their restricted
+  // page, which needs the admin's own Equasis session (the browser keeps it);
+  // the query travels as GET parameters so the session cookie is sent with
+  // the navigation. The platform never holds Equasis credentials — their
+  // conditions of use forbid automated access.
+  const equasisKey = imoOk ? imoTrim : /^unnamed vessel/i.test(name.trim()) ? "" : name.trim();
+  const equasisSearchUrl = equasisKey
+    ? `https://www.equasis.org/EquasisWeb/restricted/Search?fs=HomePage&P_ENTREE_HOME=${encodeURIComponent(equasisKey)}&P_ENTREE_HOME_HIDDEN=${encodeURIComponent(equasisKey)}&checkbox-ship=Ship&checkbox-company=Company`
+    : "https://www.equasis.org/EquasisWeb/restricted/Search?fs=HomePage";
   const flagKnown = !flag || flagOptions.length === 0 || flagOptions.some((f) => f.name === flag);
   // Platform-standard port entry: suggest curated ports (name · locode)
   const [portOptions, setPortOptions] = useState<{ name: string; locode: string }[]>([]);
@@ -543,18 +552,29 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
           web-robots / automated retrieval, so the platform never fetches. */}
       <div style={{ marginTop: 14, padding: "10px 12px", border: `1px dashed ${C.line}`, borderRadius: 8, background: C.sunken }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: C.ink3 }}>EQUASIS</span>
-          <a href="https://www.equasis.org/EquasisWeb/public/HomePage" target="_blank" rel="noreferrer"
-            onClick={() => { if (imoTrim) navigator.clipboard?.writeText(imoTrim).catch(() => {}); }}
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: C.ink3, minWidth: 58 }}>EQUASIS</span>
+          {/* Equasis' ship search is a login-protected form (no public deep
+              link that carries the query), so we open the Search page itself
+              and put the best search key on the clipboard: the IMO when we
+              have one, else the vessel name. The browser's own password
+              manager handles the login — the platform never stores it. */}
+          <a href={equasisSearchUrl} target="_blank" rel="noreferrer"
+            onClick={() => {
+              if (!equasisKey) return;
+              navigator.clipboard?.writeText(equasisKey)
+                .then(() => toast.success(`Searching Equasis for “${equasisKey}” (also copied, in case the search box needs it).`))
+                .catch(() => {});
+            }}
+            title={imoOk ? `Opens the Equasis ship search with IMO ${imoTrim} on your clipboard` : name.trim() ? `Opens the Equasis ship search with “${name.trim()}” on your clipboard` : "Opens the Equasis ship search"}
             style={{ ...btn("ghost"), padding: "5px 10px", fontSize: 12, textDecoration: "none" }}>
-            <ExternalLink size={13} /> Open Equasis{imoTrim ? " (IMO copied)" : ""}
+            <ExternalLink size={13} /> Open Equasis search{imoOk ? " (IMO copied)" : name.trim() && !/^unnamed vessel/i.test(name) ? " (name copied)" : ""}
           </a>
           <button onClick={() => setEquasisOpen((o) => !o)} style={{ ...btn("ghost"), padding: "5px 10px", fontSize: 12 }}>
             <Clipboard size={13} /> {equasisOpen ? "Hide paste box" : "Paste ship particulars"}
           </button>
-          <span style={{ fontSize: 11.5, color: C.ink3 }}>
-            Look her up, copy the <b>Ship info</b> and <b>Management detail</b> tables, paste — the fields above fill in for your review.
-          </span>
+        </div>
+        <div style={{ fontSize: 11.5, color: C.ink3, marginTop: 8, lineHeight: 1.45 }}>
+          Sign in once (your browser can remember it), paste the search key, open the ship, copy the <b>Ship info</b> and <b>Management detail</b> tables, then paste them here — the fields above fill in for your review.
         </div>
         {equasisOpen && (
           <>
@@ -614,7 +634,7 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 10, marginTop: 20, alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={saveOnly} disabled={savingOnly || saving || !name.trim()} style={{ ...btn("dark"), opacity: savingOnly || !name.trim() ? 0.5 : 1 }}>
           {savingOnly ? <Loader2 size={15} style={spin} /> : <Check size={15} />} Save changes
         </button>
@@ -623,15 +643,17 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
           style={{ ...btn("primary"), opacity: saving || !name.trim() || !imoOk ? 0.5 : 1 }}>
           {saving ? <Loader2 size={15} style={spin} /> : <Check size={15} />} Sync with IMO
         </button>
-        {!imoTrim && (
-          <button onClick={() => sync(true)} disabled={saving || savingOnly || !name.trim()}
-            title="Temporary — the vessel is matched by name + built + DWT and stays flagged IMO PENDING"
-            style={{ ...btn("ghost"), fontSize: 12.5, opacity: saving || !name.trim() ? 0.5 : 1 }}>
-            Sync without IMO (temporary)
-          </button>
-        )}
         <button onClick={onClose} style={{ ...btn("ghost"), marginLeft: "auto" }}>Cancel</button>
       </div>
+      {!imoTrim && (
+        <div style={{ marginTop: 8 }}>
+          <button onClick={() => sync(true)} disabled={saving || savingOnly || !name.trim()}
+            title="Temporary — the vessel is matched by name + built + DWT and stays flagged IMO PENDING"
+            style={{ background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.brassDeep, textDecoration: "underline dotted", textUnderlineOffset: 3, cursor: "pointer", opacity: saving || !name.trim() ? 0.5 : 1 }}>
+            No IMO yet? Sync without IMO (temporary) →
+          </button>
+        </div>
+      )}
       <div style={{ fontSize: 11.5, color: C.ink3, marginTop: 8 }}>
         <b>Save changes</b> keeps your corrections on this queue record only. <b>Sync</b> writes the vessel to the register, links the companies, and posts her OPEN position live on the dashboard and Vessels board.
       </div>

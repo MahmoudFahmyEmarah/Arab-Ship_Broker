@@ -1,11 +1,12 @@
 "use client";
 
-// Dark navy admin topbar — the deliberate signal that the operator is in a
-// privileged surface. Logo + amber "Admin" pill · real logged-in identity with
-// Super/Sub badge · "Back to platform" (the broker portal) · Sign out.
+// Navy admin topbar — the deliberate signal that the operator is in a
+// privileged surface. Per the console design the brand lives in the rail, so
+// the bar carries the current route + "Admin" pill · the real logged-in
+// identity with its Super/Sub badge · "Back to platform" · Sign out.
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { logout } from "@/sdk/auth";
@@ -13,6 +14,7 @@ import type { AdminTier } from "@/lib/admin/sections";
 
 export function AdminTopbar({ name, tier }: { name: string; tier: AdminTier }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [signingOut, setSigningOut] = React.useState(false);
 
   const handleSignOut = async () => {
@@ -30,8 +32,8 @@ export function AdminTopbar({ name, tier }: { name: string; tier: AdminTier }) {
 
   return (
     <div className="adm-topbar">
-      <Link href="/admin/dashboard" className="adm-topbar__logo">
-        Arab ShipBroker
+      <Link href="/admin/dashboard" className="adm-topbar__logo" title="Arab ShipBroker · admin console">
+        <span className="adm-topbar__path">{pathname || "/admin"}</span>
         <span className="adm-topbar__pill">Admin</span>
       </Link>
       <div className="adm-topbar__spacer" />

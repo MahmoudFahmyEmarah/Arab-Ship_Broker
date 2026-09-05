@@ -3,7 +3,8 @@
 // VesselCard — ported from the Claude design (asb/cards.jsx) to TS.
 // (Rules-engine tooltips + voyage deep-link deferred; structure/classes intact.)
 import * as React from "react";
-import { VesselView } from "@/lib/portal/types";
+import { VesselView, CargoView } from "@/lib/portal/types";
+import { MatchesPopover } from "./MatchesPopover";
 import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
 import { flagCode } from "@/lib/portal/flags";
 import "flag-icons/css/flag-icons.min.css";
@@ -16,14 +17,22 @@ export function VesselCard({
   onSelect,
   compact,
   masked,
+  matchPool,
+  onFocusMatch,
 }: {
   data: VesselView;
   selected?: boolean;
   onSelect?: (id: string) => void;
   compact?: boolean;
   masked?: boolean;
+  /** live cargoes this vessel can match against — enables the matches popup on the badge */
+  matchPool?: CargoView[];
+  /** called with the matched cargo's id when the user picks one in the popup */
+  onFocusMatch?: (cargoId: string) => void;
 }) {
   const v = data;
+  const [matchesOpen, setMatchesOpen] = React.useState(false);
+  const canPop = !masked && (v.matches || 0) > 0 && !!matchPool;
   const stripClass = `strip-${v.status}`;
   // Status header strip (Option C) — reuse the app's existing status labels.
   const STATUS_MAP: Record<string, [string, string]> = {
@@ -105,13 +114,25 @@ export function VesselCard({
       <div className="row" style={{ paddingTop: 8, borderTop: "var(--bd)" }}>
         <span className="mono" style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-gray-500)" }}>{imo}</span>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-          <span className="asb-match">{v.matches} matches</span>
+          {canPop ? (
+            <button type="button" className="asb-match is-btn"
+              title={`${v.matches} matching ${v.matches === 1 ? "cargo" : "cargoes"} — click to see ${v.matches === 1 ? "it" : "them"}`}
+              onClick={(e) => { e.stopPropagation(); setMatchesOpen(true); }}>
+              {v.matches} matches
+            </button>
+          ) : (
+            <span className="asb-match" title={masked ? "Matches are a Subscriber feature" : v.matches === 0 ? "No matching cargoes on the market right now" : undefined}>{v.matches} matches</span>
+          )}
           <a style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-blue)", textDecoration: "none" }}>
             Estimate voyage →
           </a>
         </span>
       </div>
       </div>
+      {matchesOpen && (
+        <MatchesPopover source={{ kind: "vessel", view: v }} pool={matchPool ?? []} count={v.matches}
+          onClose={() => setMatchesOpen(false)} onFocus={(id) => onFocusMatch?.(id)} />
+      )}
     </div>
   );
 }

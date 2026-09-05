@@ -16,6 +16,7 @@ import { PositionCheckin } from "@/components/portal/PositionCheckin";
 import { TierProvider, type Tier } from "@/lib/portal/tier";
 import { MarketPartnerHost } from "@/components/portal/MarketPartnerPanel";
 import type { AppRole } from "@/lib/role";
+import type { SidebarStyle } from "@/lib/app-settings";
 
 function profileRole(hasCargo: boolean, hasVessel: boolean): PortalRole {
   return hasCargo && hasVessel ? "broker" : hasVessel ? "vessel_owner" : hasCargo ? "cargo_owner" : "broker";
@@ -24,10 +25,12 @@ function profileRole(hasCargo: boolean, hasVessel: boolean): PortalRole {
 function DashboardShell({
   serverRole,
   userName,
+  sidebarStyle,
   children,
 }: {
   serverRole: AppRole | null;
   userName: string | null;
+  sidebarStyle: SidebarStyle;
   children: React.ReactNode;
 }) {
   const { account, hasCargoProfile, hasVesselProfile } = useDashboard();
@@ -43,7 +46,7 @@ function DashboardShell({
   const showVessel = role === "broker" || role === "vessel_owner" || role === "admin" || hasVesselProfile;
 
   return (
-    <div className="asb-portal">
+    <div className="asb-portal" data-sidebar={sidebarStyle}>
       <div className="shell">
         <PortalSidebar role={role} userName={displayName} basePath="/dashboard" showCargo={showCargo} showVessel={showVessel} />
         <main
@@ -73,17 +76,19 @@ export function DashboardShellClient({
   tier,
   role,
   userName,
+  sidebarStyle = "classic",
   children,
 }: {
   tier: Tier;
   role: AppRole | null;
   userName: string | null;
+  sidebarStyle?: SidebarStyle;
   children: React.ReactNode;
 }) {
   return (
     <TierProvider tier={tier}>
       <DashboardProvider>
-        <DashboardShell serverRole={role} userName={userName}>
+        <DashboardShell serverRole={role} userName={userName} sidebarStyle={sidebarStyle}>
           {children}
         </DashboardShell>
       </DashboardProvider>

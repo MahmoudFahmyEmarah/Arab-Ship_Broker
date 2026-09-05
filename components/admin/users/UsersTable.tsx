@@ -31,7 +31,7 @@ export function UsersTable({ rows }: { rows: AdminUserListRow[] }) {
       render: (r) => (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <strong style={{ color: "#1B3A5C", fontWeight: 500 }}>{r.full_name || r.name || "—"}</strong>
+            <strong style={{ color: "var(--asb-navy-global)", fontWeight: 500 }}>{r.full_name || r.name || "—"}</strong>
             {!r.is_active && <AdminBadge variant="inactive" label="Suspended" />}
           </span>
           <span className="mono" style={{ textTransform: "none" }}>{r.email}</span>
@@ -46,7 +46,7 @@ export function UsersTable({ rows }: { rows: AdminUserListRow[] }) {
       label: "Strikes",
       cellClass: "num",
       render: (r) => (
-        <span style={{ color: r.strike_count > 0 ? "#C84A4A" : undefined, fontWeight: r.strike_count > 0 ? 600 : 400 }}>
+        <span style={{ color: r.strike_count > 0 ? "var(--asb-red)" : undefined, fontWeight: r.strike_count > 0 ? 600 : 400 }}>
           {r.strike_count}
         </span>
       ),

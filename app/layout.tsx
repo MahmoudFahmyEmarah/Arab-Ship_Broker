@@ -3,6 +3,9 @@ import { Suspense } from "react";
 import { Toaster } from "sonner";
 
 import { Geist, Inter, Noto_Sans_Arabic } from "next/font/google";
+// Design-system tokens first (single source of truth for every surface);
+// globals.css may refine them for the portal, admin.css consumes them as-is.
+import "./design-tokens.css";
 import "./globals.css";
 import { PropellerLoader } from "@/components/portal/PropellerLoader";
 import { CookieConsent } from "@/components/CookieConsent";

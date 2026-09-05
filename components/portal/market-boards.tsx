@@ -7,6 +7,7 @@
 import type { PortGeo } from "@/lib/portal/port-coords";
 import * as React from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { CargoView, VesselView } from "@/lib/portal/types";
 import { LOAD_TERMS } from "@/lib/schemas/cargo";
 import {
@@ -418,13 +419,22 @@ export function CargoMarketBoard({
   views,
   portCoords,
   archiveLabel,
+  matchPool,
 }: {
   views: CargoView[];
   source?: "live" | "sample";
   portCoords?: Record<string, PortGeo>;
   archiveLabel?: string;
+  /** open tonnage, so a cargo's match badge can open the matches popup */
+  matchPool?: VesselView[];
 }) {
   const limited = isLimitedTier(useViewerTier());
+  const router = useRouter();
+  // A match picked here lives on the OTHER board — open it on the dashboard
+  // chart via the deep link the map already understands (#/vessel/{id}).
+  const focusMatchOnDashboard = React.useCallback((vesselId: string) => {
+    router.push(`/dashboard#/vessel/${vesselId}`);
+  }, [router]);
 
   const [view, setView] = React.useState<"card" | "list">("card");
   const [density, setDensity] = React.useState<Density>("comfortable");
@@ -585,7 +595,8 @@ export function CargoMarketBoard({
             <>
               <div className={`mkt-cards-grid${density === "compact" ? " is-compact" : ""}`}>
                 {shown.map((c) => (
-                  <CargoCard key={c.id} data={c} limited={limited} compact={density === "compact"} selected={selectedId === c.id} onSelect={(id) => setSelectedId((s) => (s === id ? null : id))} />
+                  <CargoCard key={c.id} data={c} limited={limited} compact={density === "compact"} selected={selectedId === c.id} onSelect={(id) => setSelectedId((s) => (s === id ? null : id))}
+                    matchPool={matchPool} onFocusMatch={focusMatchOnDashboard} />
                 ))}
               </div>
               <LoadMore total={filtered.length} visible={visible} onMore={() => setVisible((v) => v + PAGE_SIZE)} />
@@ -595,7 +606,7 @@ export function CargoMarketBoard({
         {mapOpen && <SplitDivider onMouseDown={split.onDividerMouseDown} />}
         {mapOpen && (
           <div className="mkt-mappane" style={{ flex: 1, minWidth: 0, borderLeft: "var(--bd)", position: "relative" }}>
-            <MarketMap barLeft cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
+            <MarketMap cargos={filtered} vessels={[]} portCoords={portCoords} focusedCargoId={selected?.id ?? null} onSelectCargo={(c) => setSelectedId((s) => (s === c.id ? null : c.id))} />
           </div>
         )}
       </div>
@@ -607,12 +618,20 @@ export function CargoMarketBoard({
 export function TonnageMarketBoard({
   views,
   portCoords,
+  matchPool,
 }: {
   views: VesselView[];
   source?: "live" | "sample";
   portCoords?: Record<string, PortGeo>;
+  /** live cargoes, so a vessel's match badge can open the matches popup */
+  matchPool?: CargoView[];
 }) {
   const masked = isLimitedTier(useViewerTier());
+  const router = useRouter();
+  const focusMatchOnDashboard = React.useCallback((cargoId: string) => {
+    const c = matchPool?.find((x) => x.id === cargoId);
+    router.push(c ? `/dashboard#/cargo/${encodeURIComponent(c.refId)}` : "/dashboard");
+  }, [router, matchPool]);
 
   const [view, setView] = React.useState<"card" | "list">("card");
   const [density, setDensity] = React.useState<Density>("comfortable");
@@ -770,7 +789,8 @@ export function TonnageMarketBoard({
             <>
               <div className={`tonnage-grid${density === "compact" ? " is-compact" : ""}`}>
                 {shown.map((v) => (
-                  <VesselCard key={v.id} data={v} masked={masked} compact={density === "compact"} selected={selectedId === v.id} onSelect={(id) => setSelectedId((s) => (s === id ? null : id))} />
+                  <VesselCard key={v.id} data={v} masked={masked} compact={density === "compact"} selected={selectedId === v.id} onSelect={(id) => setSelectedId((s) => (s === id ? null : id))}
+                    matchPool={matchPool} onFocusMatch={focusMatchOnDashboard} />
                 ))}
               </div>
               <LoadMore total={filtered.length} visible={visible} onMore={() => setVisible((v) => v + PAGE_SIZE)} />
@@ -780,7 +800,7 @@ export function TonnageMarketBoard({
         {mapOpen && <SplitDivider onMouseDown={split.onDividerMouseDown} />}
         {mapOpen && (
           <div className="mkt-mappane" style={{ flex: 1, minWidth: 0, borderLeft: "var(--bd)", position: "relative" }}>
-            <MarketMap barLeft cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
+            <MarketMap cargos={[]} vessels={filtered} portCoords={portCoords} focusedVesselId={selected?.id ?? null} onSelectVessel={(v) => setSelectedId((s) => (s === v.id ? null : v.id))} />
           </div>
         )}
       </div>

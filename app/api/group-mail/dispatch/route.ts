@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dispatchDue } from "@/lib/groupmail/dispatch";
+import { withJobRun } from "@/lib/jobs/runs";
 
 // Scheduled-circular dispatcher — pinged by pg_cron (groupmail_dispatch_tick)
 // every 10 minutes whenever a campaign is due. Auth: the Vault dispatch token
@@ -17,7 +18,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
   try {
-    const result = await dispatchDue(c);
+    // job_runs row per tick: sent count as rows, the dispatcher's note as meta.
+    const result = await withJobRun(c, "groupmail-dispatch", { trigger: "pg_cron" }, async () => {
+      const r = await dispatchDue(c);
+      return { result: r, rows: r.sent, meta: { processed: r.processed ?? null, failed: r.failed, done: r.done, note: r.note } };
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     console.error("[group-mail] dispatch error:", e);

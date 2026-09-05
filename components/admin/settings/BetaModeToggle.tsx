@@ -39,7 +39,7 @@ export function BetaModeToggle({ initial }: { initial: boolean }) {
             : "All pages are fully open to members per their normal access."}
         </div>
         {error && (
-          <div style={{ fontSize: 11, color: "#b42318", marginTop: 6 }}>{error}</div>
+          <div style={{ fontSize: 11, color: "var(--asb-red)", marginTop: 6 }}>{error}</div>
         )}
       </div>
 
@@ -58,7 +58,7 @@ export function BetaModeToggle({ initial }: { initial: boolean }) {
           border: "none",
           cursor: pending ? "wait" : "pointer",
           position: "relative",
-          background: on ? "#2f9d5e" : "#c3ccd6",
+          background: on ? "var(--asb-navy)" : "var(--asb-gray-400)",
           transition: "background 160ms ease",
           opacity: pending ? 0.7 : 1,
         }}

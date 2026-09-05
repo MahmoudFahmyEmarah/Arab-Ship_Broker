@@ -62,7 +62,7 @@ export function CargoListingsTable({ rows }: { rows: AdminCargoListRow[] }) {
       render: (r) => (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <strong style={{ color: "#1B3A5C", fontWeight: 500 }}>{r.commodity_name}</strong>
+            <strong style={{ color: "var(--asb-navy-global)", fontWeight: 500 }}>{r.commodity_name}</strong>
             {r.is_dg_cargo && <span className="adm-badge rejected">DG</span>}
             {r.is_grain_cargo && <span className="adm-badge amber">Grain</span>}
           </span>
@@ -76,7 +76,7 @@ export function CargoListingsTable({ rows }: { rows: AdminCargoListRow[] }) {
       label: "Route",
       render: (r) => (
         <span title={`${r.load_port_name ?? ""} → ${r.disch_port_name ?? ""}`}>
-          {r.load_zone ?? "—"} <span style={{ color: "#8B95A3" }}>→</span> {r.disch_zone ?? "—"}
+          {r.load_zone ?? "—"} <span style={{ color: "var(--asb-gray-500)" }}>→</span> {r.disch_zone ?? "—"}
         </span>
       ),
     },

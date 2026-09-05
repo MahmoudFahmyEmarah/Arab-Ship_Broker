@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/admin/require-admin";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { runEmailSync, runEmailDryRun } from "@/lib/sync/email/run";
 import type { SyncEvent } from "@/lib/sync/email/types";
+import { startJobRun, finishJobRun } from "@/lib/jobs/runs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +31,17 @@ export async function POST(req: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
+      // Live runs leave a job_runs row; the stream's done/error event settles it
+      // (IMAP failures included), so the console dashboard can alert on them.
+      const runId = sample ? null : await startJobRun(supabase, "email-sync", { trigger: "admin", meta: { limit } });
+      let settled = false;
       const emit = (e: SyncEvent) => {
+        if (runId != null && !settled && (e.type === "done" || e.type === "error")) {
+          settled = true;
+          void finishJobRun(supabase, runId, e.type === "done"
+            ? { ok: true, rows: e.totals.new + e.totals.updated, meta: { batch_id: e.batchId, ...e.totals } }
+            : { ok: false, error: e.error });
+        }
         try { controller.enqueue(enc.encode(`data: ${JSON.stringify(e)}\n\n`)); } catch { /* closed */ }
       };
       try {
@@ -39,6 +50,7 @@ export async function POST(req: Request) {
       } catch (e) {
         emit({ type: "error", error: e instanceof Error ? e.message : "Email sync failed." });
       } finally {
+        if (runId != null && !settled) await finishJobRun(supabase, runId, { ok: false, error: "sync ended without a result" });
         controller.close();
       }
     },

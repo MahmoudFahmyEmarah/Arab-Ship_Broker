@@ -3646,3 +3646,87 @@ button { font: inherit; cursor: pointer; }
 .dash-row .dash-row__r3 .cc-spot { vertical-align: middle; }
 .dash-row__r1.is-left { flex-wrap: nowrap; overflow: hidden; }
 .dash-row__r1.is-left .dash-row__flag { flex-shrink: 0; }
+
+/* ── Match badge (clickable) + matches popover ─────────────────────── */
+.dash-row__badge.is-btn { border: none; cursor: pointer; font: inherit; font-size: 9px; font-weight: 600; transition: background .12s, color .12s, transform .12s; }
+.dash-row__badge.is-btn:hover { background: #185FA5; color: #fff; transform: translateY(-50%) scale(1.06); }
+.dash-row__badge.is-inline.is-btn:hover { transform: scale(1.06); }
+.dash-right .dash-row__badge.is-btn { font-size: 11px; }
+
+.mpop-scrim { position: fixed; inset: 0; z-index: 900; background: rgba(13,37,69,.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.mpop { width: 420px; max-width: 100%; max-height: calc(100vh - 32px); overflow: auto; background: #fff; border-radius: 14px; box-shadow: 0 24px 60px rgba(13,37,69,.35); padding: 14px 16px 12px; font-family: inherit; }
+.mpop__head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.mpop__title { flex: 1; font-size: 13px; font-weight: 600; color: #1B3A5C; line-height: 1.3; }
+.mpop__x { width: 26px; height: 26px; border-radius: 7px; border: none; background: #EEF2F8; color: #1B3A5C; font-size: 17px; line-height: 1; cursor: pointer; flex-shrink: 0; }
+.mpop__x:hover { background: #E24B4A; color: #fff; }
+.mpop__empty { padding: 22px 6px; font-size: 12.5px; color: #6B7A99; text-align: center; }
+.mpop__card { position: relative; border: 0.5px solid #DDE5F0; border-radius: 11px; padding: 12px 12px 10px; cursor: pointer; transition: border-color .12s, box-shadow .12s; }
+.mpop__card:hover { border-color: #0D2545; box-shadow: 0 0 0 2px rgba(13,37,69,.12); }
+.mpop__fit { position: absolute; top: 10px; right: 10px; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border: 1px solid; border-radius: 4px; padding: 1px 6px; background: #fff; }
+.mpop__name { font-size: 14px; font-weight: 600; color: #1B3A5C; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding-right: 80px; margin-bottom: 8px; }
+.mpop__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+.mpop__row { display: flex; flex-direction: column; min-width: 0; }
+.mpop__k { font-size: 8.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8B95A3; }
+.mpop__v { font-size: 12px; color: #1B3A5C; font-weight: 500; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mpop__grid .mpop__row:first-child { grid-column: 1 / -1; }
+.mpop__fallback { font-size: 12.5px; color: #1B3A5C; }
+.mpop__note { font-size: 10.5px; color: #8B95A3; font-style: italic; margin-top: 4px; }
+.mpop__cta { margin-top: 10px; font-size: 11.5px; font-weight: 600; color: #185FA5; }
+.mpop__nav { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.mpop__arrow { width: 30px; height: 30px; border-radius: 8px; border: 0.5px solid #C4D1E6; background: #fff; color: #1B3A5C; font-size: 18px; line-height: 1; cursor: pointer; }
+.mpop__arrow:hover { background: #0D2545; color: #fff; border-color: #0D2545; }
+.mpop__dots { flex: 1; display: flex; justify-content: center; gap: 5px; flex-wrap: wrap; }
+.mpop__dot { width: 7px; height: 7px; border-radius: 99px; background: #DDE5F0; cursor: pointer; }
+.mpop__dot.is-on { background: #185FA5; }
+.mpop__count { font-size: 10.5px; color: #6B7A99; font-variant-numeric: tabular-nums; }
+.mpop__hint { margin-top: 6px; text-align: center; font-size: 10px; color: #8B95A3; }
+@media (max-width: 600px) { .mpop { padding: 12px; } .mpop__grid { grid-template-columns: 1fr; } .mpop__hint { display: none; } }
+
+/* ── Match badges on the market cards open the matches popup ── */
+.asb-match.is-btn { border: none; cursor: pointer; font: inherit; font-size: 9px; font-weight: 600; transition: background .12s, color .12s, transform .12s; }
+.asb-match.is-btn:hover { background: #185FA5; color: #fff; transform: translateY(-1px); }
+.cc-foot-col--match.is-pop { cursor: pointer; }
+.cc-foot-col--match.is-pop:hover .cc-match-circle { background: #185FA5; color: #fff; border-color: #185FA5; transform: scale(1.06); }
+.cc-match-circle { transition: background .12s, color .12s, transform .12s; }
+
+/* ── Sidebar theme: navy rail (admin → Platform settings → Appearance) ──
+   The classic look keeps every default; this block only sets the --side-*
+   variables the sidebar reads and retints the nav items. ───────────── */
+.asb-portal[data-sidebar="navy"] {
+  --side-bg: var(--asb-navy);
+  --side-bd: 1px solid rgba(255, 255, 255, 0.1);
+  --side-brand: #fff;
+  --side-sub: rgba(123, 184, 240, 0.85);
+  --side-pill-bg: rgba(123, 184, 240, 0.18);
+  --side-pill-fg: var(--asb-tonnage-blue);
+  --side-icon: rgba(255, 255, 255, 0.62);
+  --side-icon-on: var(--asb-tonnage-blue);
+  --side-logo: var(--asb-tonnage-blue);
+}
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-item { color: rgba(255, 255, 255, 0.82); }
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-item.is-active,
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-item.admin.is-active {
+  background: rgba(123, 184, 240, 0.16);
+  color: #fff;
+  border-left-color: var(--asb-tonnage-blue);
+}
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-item.admin { color: rgba(255, 255, 255, 0.82); }
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-item.admin:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-item.is-disabled { color: rgba(255, 255, 255, 0.5); }
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-section { color: rgba(123, 184, 240, 0.72); }
+.asb-portal[data-sidebar="navy"] .asb-sidebar .nav-item span span { color: rgba(255, 255, 255, 0.6) !important; border-color: rgba(255, 255, 255, 0.3) !important; }
+.asb-portal[data-sidebar="navy"] .asb-sidebar > div:last-child button[type="button"] {
+  color: rgba(255, 255, 255, 0.75) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  background: transparent !important;
+}
+.asb-portal[data-sidebar="navy"] .asb-sidebar > div:last-child button[type="button"]:hover { color: #fff !important; background: rgba(255, 255, 255, 0.06) !important; }
+.asb-portal[data-sidebar="navy"] .asb-sidebar { scrollbar-color: rgba(255, 255, 255, 0.25) transparent; }
+
+/* Theme-paired icons: the brand PNGs stay on the classic rail, the recolourable
+   SVG twins take over on the navy rail. */
+.icon-navy { display: none !important; }
+.asb-portal[data-sidebar="navy"] .icon-navy { display: block !important; }
+.asb-portal[data-sidebar="navy"] .icon-classic { display: none !important; }
+

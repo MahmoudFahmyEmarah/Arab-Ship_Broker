@@ -1810,3 +1810,14 @@
 .asb-map.base-light .route-alert.sev-info .route-alert__icon, .asb-map.base-nautical .route-alert.sev-info .route-alert__icon { color: #0B1F3A; }
 /* the centred title yields to the stack on narrow charts */
 @media (max-width: 1100px) { .asb-map .route-alerts { width: 260px; } }
+
+/* ── Flyouts never overflow the chart: cap height, scroll inside ── */
+.asb-map .map-flyout, .asb-map .base-picker {
+  max-height: calc(100% - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.25) transparent;
+}
+.asb-map .map-flyout::-webkit-scrollbar { width: 6px; }
+.asb-map .map-flyout::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); border-radius: 3px; }
