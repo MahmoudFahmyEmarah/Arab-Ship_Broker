@@ -66,16 +66,17 @@ async function tallyMatchCounts(
 ): Promise<Record<string, number>> {
   if (!ids.length) return {};
   try {
-    const { data, error } = await supabase
-      .from("matches")
-      .select(column)
-      .in(column, ids);
-    if (error || !data) return {};
+    // One RPC (ids travel in the body, so a 1,000-listing board is fine).
+    // Counts LIVE counterparts only — an expired cargo or a fixed vessel never
+    // counts — but ignores the viewer's freshness window, so a match that is
+    // merely outside the current filters still shows (owner's rule).
+    const { data, error } = await supabase.rpc("count_live_matches", {
+      p_type: column === "cargo_id" ? "cargo" : "vessel_availability",
+      p_ids: ids,
+    });
+    if (error) throw error;
     const counts: Record<string, number> = {};
-    for (const row of data as Record<string, string>[]) {
-      const key = row[column];
-      counts[key] = (counts[key] ?? 0) + 1;
-    }
+    for (const row of (data ?? []) as { listing_id: string; n: number }[]) counts[row.listing_id] = Number(row.n) || 0;
     return counts;
   } catch (err) {
     console.error("[portal] match count tally failed:", err);

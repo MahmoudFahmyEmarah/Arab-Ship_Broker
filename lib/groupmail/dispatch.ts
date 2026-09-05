@@ -10,7 +10,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mailmanListMembers } from "./mailman";
-import { buildCircularEmail, officeStamp } from "./template";
+import { buildCircularEmail, officeStamp, mailmanOptionsUrl } from "./template";
+import { normalizeSignature } from "./types";
 import { sendToRecipients, type SmtpAuth } from "./send";
 import type { CampaignLink, Office } from "./types";
 
@@ -26,6 +27,7 @@ interface DueCampaign {
   links: CampaignLink[] | null;
   badge: string | null;
   stamp_office: string | null;
+  signature: unknown;
   recipients: string[] | null;
   sent_ok: number;
   sent_fail: number;
@@ -52,7 +54,7 @@ export async function dispatchDue(c: SupabaseClient): Promise<DispatchResult> {
 
   const { data: dueRows, error } = await c
     .from("groupmail_campaign")
-    .select("id, list_email, mode, subject, title, body, links, badge, stamp_office, recipients, sent_ok, sent_fail, failures, status")
+    .select("id, list_email, mode, subject, title, body, links, badge, stamp_office, signature, recipients, sent_ok, sent_fail, failures, status")
     .in("status", ["scheduled", "sending"])
     .not("scheduled_at", "is", null)
     .lte("scheduled_at", new Date().toISOString())
@@ -112,17 +114,21 @@ export async function dispatchDue(c: SupabaseClient): Promise<DispatchResult> {
     return { processed: camp.id, sent: 0, failed: 0, done: true, note: "completed" };
   }
 
+  const mailmanBase = cfg.mailman_base?.trim() || (cfg.cpanel_host ? `https://${cfg.cpanel_host}/mailman` : null);
+  const unsubscribeUrl = camp.mode === "broadcast" ? mailmanOptionsUrl(mailmanBase, camp.list_email) : null;
   const mail = buildCircularEmail(
     {
       list_email: camp.list_email, subject: camp.subject, title: camp.title ?? "",
       body: camp.body, links: camp.links ?? [], badge: camp.badge ?? "Circulation",
       office: (camp.stamp_office as Office) ?? "Cairo",
+      signature: normalizeSignature(camp.signature ?? cfg.signature, cfg.smtp_user),
     },
     officeStamp(((camp.stamp_office as Office) ?? "Cairo")),
     undefined,
     cfg.smtp_user,
+    unsubscribeUrl,
   );
-  const results = await sendToRecipients(smtp, chunk, { ...mail, replyTo: cfg.smtp_user });
+  const results = await sendToRecipients(smtp, chunk, { ...mail, replyTo: cfg.smtp_user, listEmail: camp.list_email, unsubscribeUrl });
   const ok = results.filter((r) => r.ok).length;
   const failures = results.filter((r) => !r.ok).map((r) => ({ email: r.email, error: r.error }));
   const finished = offset + chunk.length >= recipients.length;

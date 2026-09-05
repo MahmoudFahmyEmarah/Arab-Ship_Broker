@@ -8,6 +8,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { ASB_LOGO_MASK } from "@/components/admin/shell/logo-mask";
 import { logout } from "@/sdk/auth";
 import { useViewerTier, isCalculatorLocked } from "@/lib/portal/tier";
 import {
@@ -125,7 +126,7 @@ export function PortalSidebar({
 
   const isCargo = showCargo ?? (role === "broker" || role === "cargo_owner" || role === "admin");
   const isVessel = showVessel ?? (role === "broker" || role === "vessel_owner" || role === "admin");
-  const c = (a: boolean) => (a ? "var(--asb-blue)" : "var(--asb-gray-500)");
+  const c = (a: boolean) => (a ? "var(--side-icon-on, var(--asb-blue))" : "var(--side-icon, var(--asb-gray-500))");
 
   const nav: (NavDef | { section: string })[] = [
     { section: "Overview" },
@@ -174,8 +175,8 @@ export function PortalSidebar({
       style={{
         width: collapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w)",
         flexShrink: 0,
-        background: "var(--asb-white)",
-        borderRight: "var(--bd)",
+        background: "var(--side-bg, var(--asb-white))",
+        borderRight: "var(--side-bd, var(--bd))",
         display: "flex",
         flexDirection: "column",
         transition: "width var(--t-base)",
@@ -187,28 +188,63 @@ export function PortalSidebar({
           display: "flex",
           alignItems: "center",
           justifyContent: collapsed ? "center" : "space-between",
-          gap: 8,
-          padding: collapsed ? "12px 0" : "14px 16px",
-          borderBottom: "var(--bd)",
+          gap: 7,
+          padding: collapsed ? "10px 0" : "10px 10px 10px 12px",
+          borderBottom: "var(--side-bd, var(--bd))",
           height: 56,
+          flexDirection: collapsed ? "column" : "row",
         }}
       >
+        {/* Brand: logo mark + one-line name, "Portal" beneath — the same block
+            the admin console rail uses, retinted per sidebar theme. */}
+        {/* Brand mark + name link to the public home page. It is a plain
+            navigation — the session cookie is untouched, so the member stays
+            signed in and can come straight back to the dashboard. */}
+        <Link
+          href="/"
+          title="Arab ShipBroker — home page"
+          style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, flex: collapsed ? "none" : 1, textDecoration: "none", color: "inherit" }}
+        >
+        <span
+          aria-hidden
+          style={{
+            display: "inline-block", width: 22, height: 22, flexShrink: 0,
+            background: "var(--side-logo, var(--asb-navy))",
+            WebkitMaskImage: `url(${ASB_LOGO_MASK})`, maskImage: `url(${ASB_LOGO_MASK})`,
+            WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat",
+            WebkitMaskPosition: "center", maskPosition: "center",
+            WebkitMaskSize: "contain", maskSize: "contain",
+          }}
+        />
         {!collapsed && (
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--asb-navy)", lineHeight: 1.1 }}>Arab ShipBroker</span>
-              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "var(--asb-blue)", background: "var(--asb-blue-light)", border: "0.5px solid var(--asb-blue)", borderRadius: 3, padding: "1px 4px", lineHeight: 1.2 }}>BETA</span>
+            {/* 12 px keeps the full name inside the 180 px rail next to the mark and toggle */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--side-brand, var(--asb-navy))", lineHeight: 1.1, whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>Arab ShipBroker</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 600, color: "var(--side-sub, var(--asb-gray-500))", letterSpacing: "0.12em", textTransform: "uppercase" }}>Portal</span>
+              <span style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: "0.08em", color: "var(--side-pill-fg, var(--asb-blue))", background: "var(--side-pill-bg, var(--asb-blue-light))", border: "0.5px solid var(--side-pill-fg, var(--asb-blue))", borderRadius: 3, padding: "0 4px", lineHeight: 1.4 }}>BETA</span>
             </div>
-            <div style={{ fontSize: 9, color: "var(--asb-gray-500)", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 2 }}>Portal</div>
           </div>
         )}
-        <button
-          onClick={() => setCollapsed((v) => !v)}
-          style={{ background: "transparent", border: "none", padding: 4, color: "var(--asb-gray-500)", display: "flex", alignItems: "center", borderRadius: 3, cursor: "pointer" }}
-          title="Toggle sidebar"
-        >
-          <IconSidebar size={16} />
-        </button>
+        </Link>
+        {!collapsed && (
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            style={{ background: "transparent", border: "none", padding: 2, color: "var(--side-sub, var(--asb-gray-500))", display: "flex", alignItems: "center", borderRadius: 3, cursor: "pointer", flexShrink: 0 }}
+            title="Collapse sidebar"
+          >
+            <IconSidebar size={15} />
+          </button>
+        )}
+        {collapsed && (
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            style={{ background: "transparent", border: "none", padding: 4, color: "var(--side-sub, var(--asb-gray-500))", display: "flex", alignItems: "center", borderRadius: 3, cursor: "pointer" }}
+            title="Expand sidebar"
+          >
+            <IconSidebar size={16} />
+          </button>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
@@ -226,7 +262,7 @@ export function PortalSidebar({
         <div style={{ flex: 1 }} />
       </div>
 
-      <div style={{ borderTop: "var(--bd)" }}>
+      <div style={{ borderTop: "var(--side-bd, var(--bd))" }}>
         {!collapsed && <div className="nav-section">Account</div>}
         <NavItem href={`${basePath}/alerts`} label="My Alerts" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconBell className="nav-icon" size={16} color={c(a)} />} />
         <NavItem href={`${basePath}/team`} label="My Company" activeHref={activeHref} collapsed={collapsed} glyph={(a) => <IconDoc className="nav-icon" size={16} color={c(a)} />} />
@@ -235,7 +271,7 @@ export function PortalSidebar({
 
         <div
           style={{
-            borderTop: "var(--bd)",
+            borderTop: "var(--side-bd, var(--bd))",
             padding: collapsed ? "10px 0" : "12px 14px",
             display: "flex",
             alignItems: "center",
@@ -248,8 +284,8 @@ export function PortalSidebar({
               width: 32,
               height: 32,
               borderRadius: 99,
-              background: "var(--asb-blue-light)",
-              color: "var(--asb-blue)",
+              background: "var(--side-pill-bg, var(--asb-blue-light))",
+              color: "var(--side-pill-fg, var(--asb-blue))",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -262,10 +298,10 @@ export function PortalSidebar({
           </div>
           {!collapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--asb-ink)", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--side-brand, var(--asb-ink))", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {userName}
               </div>
-              <div style={{ fontSize: 10, color: "var(--asb-gray-500)", letterSpacing: "0.07em", textTransform: "uppercase", marginTop: 2 }}>
+              <div style={{ fontSize: 10, color: "var(--side-sub, var(--asb-gray-500))", letterSpacing: "0.07em", textTransform: "uppercase", marginTop: 2 }}>
                 {role.replace("_", " ")}
               </div>
             </div>
@@ -281,8 +317,8 @@ export function PortalSidebar({
             style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
               margin: "6px 10px 2px", padding: "6px 10px",
-              background: "var(--asb-blue-light)", border: "0.5px solid var(--asb-blue)",
-              borderRadius: 6, color: "var(--asb-blue)",
+              background: "var(--side-pill-bg, var(--asb-blue-light))", border: "0.5px solid var(--side-pill-fg, var(--asb-blue))",
+              borderRadius: 6, color: "var(--side-pill-fg, var(--asb-blue))",
               fontSize: 11, fontWeight: 600, textDecoration: "none",
             }}
           >

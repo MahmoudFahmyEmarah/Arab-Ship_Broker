@@ -22,7 +22,7 @@ import {
 import type {
   GroupMailConfig, GroupMailSecretStatus, MailingListRow, ListMember, CampaignInput, CampaignRow, CampaignLink,
 } from "@/lib/groupmail/types";
-import { OFFICES, SCHEDULE_ZONES, type Office } from "@/lib/groupmail/types";
+import { OFFICES, SCHEDULE_ZONES, DEFAULT_SIGNATURE, normalizeSignature, type Office, type Signature } from "@/lib/groupmail/types";
 
 // "Riyadh (UTC+3)" — live offset per zone, computed once at module load (a
 // render-time Date would trip the purity lint; offsets only shift overnight).
@@ -561,6 +561,14 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
     (async () => { await Promise.resolve(); if (!x) setInput((p) => ({ ...p, list_email: lists[0].list })); })();
     return () => { x = true; };
   }, [lists, input.list_email]);
+  // Prefill the sign-off from Settings → Default signature (once, on load).
+  useEffect(() => {
+    if (input.signature || !config) return;
+    const sig = normalizeSignature(config.signature, config.smtp_user);
+    let x = false;
+    (async () => { await Promise.resolve(); if (!x) setInput((p) => (p.signature ? p : { ...p, signature: sig })); })();
+    return () => { x = true; };
+  }, [config, input.signature]);
   useEffect(() => {
     if (testTo || !config?.test_recipients?.length) return;
     const val = config.test_recipients.join(", ");
@@ -570,6 +578,9 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
   }, [config, testTo]);
 
   const patch = (p: Partial<CampaignInput>) => setInput((prev) => ({ ...prev, ...p }));
+  const patchSig = (p: Partial<Signature>) =>
+    setInput((prev) => ({ ...prev, signature: { ...(prev.signature ?? normalizeSignature(config?.signature, config?.smtp_user)), ...p } }));
+  const [sigOpen, setSigOpen] = useState(false);
   const patchLink = (i: number, p: Partial<CampaignLink>) =>
     setInput((prev) => ({ ...prev, links: prev.links.map((l, x) => (x === i ? { ...l, ...p } : l)) }));
 
@@ -679,6 +690,44 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
             </div>
           </div>
         )}
+        <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+          <button type="button" onClick={() => setSigOpen((v) => !v)}
+            style={{ ...btn("ghost"), width: "100%", justifyContent: "space-between", padding: "4px 2px", fontSize: 12.5 }}>
+            <span>Signature — <strong>{input.signature?.name || DEFAULT_SIGNATURE.name}</strong>{input.signature?.role ? ` · ${input.signature.role}` : ""}</span>
+            <span style={{ color: C.ink3 }}>{sigOpen ? "▴ hide" : "▾ edit"}</span>
+          </button>
+          {sigOpen && (
+            <div style={{ marginTop: 10 }}>
+              <div className="gm-grid2">
+                <Field label="Closing line">
+                  <input value={input.signature?.closing ?? DEFAULT_SIGNATURE.closing} onChange={(e) => patchSig({ closing: e.target.value })} style={INPUT} />
+                </Field>
+                <Field label="Name (who signs this circular)">
+                  <input value={input.signature?.name ?? ""} onChange={(e) => patchSig({ name: e.target.value })} style={INPUT} placeholder="Capt Mohamed Dawoud" />
+                </Field>
+              </div>
+              <div className="gm-grid2">
+                <Field label="Role / company line (optional)">
+                  <input value={input.signature?.role ?? ""} onChange={(e) => patchSig({ role: e.target.value })} style={INPUT} placeholder="Founder · Arab ShipBroker" />
+                </Field>
+                <Field label="Phone (optional)">
+                  <input value={input.signature?.phone ?? ""} onChange={(e) => patchSig({ phone: e.target.value })} style={INPUT} placeholder="+20 …" />
+                </Field>
+              </div>
+              <div className="gm-grid2">
+                <Field label="Email shown in the signature">
+                  <input value={input.signature?.email ?? ""} onChange={(e) => patchSig({ email: e.target.value })} style={INPUT} placeholder={config?.smtp_user ?? "circ@arabshipbroker.com"} />
+                </Field>
+                <Field label="Website">
+                  <input value={input.signature?.site ?? DEFAULT_SIGNATURE.site} onChange={(e) => patchSig({ site: e.target.value })} style={INPUT} />
+                </Field>
+              </div>
+              <div style={{ fontSize: 12, color: C.ink3, marginTop: -6 }}>
+                Applies to this circular only. Change the default under Settings → Default signature.
+              </div>
+            </div>
+          )}
+        </div>
         <Field label="Links (become buttons under the body)">
           {input.links.map((l, i) => (
             <div key={i} className="gm-linkrow" style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -753,7 +802,7 @@ function ComposeView({ lists, config }: { lists: MailingListRow[]; config: Group
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: C.ink3, marginBottom: 8 }}>Preview</div>
         {preview ? (
           <iframe title="Email preview" srcDoc={preview} className="gm-preview"
-            style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, background: "#eef2f7" }} />
+            style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, background: "var(--asb-gray-100)" }} />
         ) : (
           <div style={{ border: `1px dashed ${C.line}`, borderRadius: 10, padding: "60px 24px", textAlign: "center", color: C.ink3, fontSize: 13.5, background: "#fff" }}>
             Fill the form and press <strong>Preview</strong> to see the branded circular exactly as members receive it.
@@ -939,7 +988,7 @@ function CircularDetailDrawer({ row, onClose }: { row: CampaignRow; onClose: () 
             {row.sent_fail > 0 && <span style={{ color: C.red }}>{row.sent_fail} failed</span>}
           </div>
           {data.failures.length > 0 && (
-            <div style={{ border: `1px solid ${C.redBg}`, background: "#fdf6f6", borderRadius: 8, padding: "10px 13px", marginBottom: 14 }}>
+            <div style={{ border: `1px solid ${C.redBg}`, background: C.redBg, borderRadius: 8, padding: "10px 13px", marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: C.red, marginBottom: 6 }}>Failed addresses</div>
               {data.failures.map((f, i) => (
                 <div key={i} style={{ fontSize: 12.5, fontFamily: C.mono, color: C.ink, marginBottom: 3 }}>
@@ -949,7 +998,7 @@ function CircularDetailDrawer({ row, onClose }: { row: CampaignRow; onClose: () 
             </div>
           )}
           <iframe title="Sent circular" srcDoc={data.html} className="gm-detail-frame"
-            style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, background: "#eef2f7" }} />
+            style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, background: "var(--asb-gray-100)" }} />
         </>
       )}
     </Drawer>
@@ -1082,6 +1131,30 @@ function SettingsView({ config, secrets, onSaved }: {
       </div>
 
       <div className="gm-card" style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
+        <div style={SECTION}>Default signature — prefilled in every new circular (editable per send)</div>
+        {(() => {
+          const sig = normalizeSignature(cfg.signature, cfg.smtp_user);
+          const setSig = (p: Partial<Signature>) => set({ signature: { ...sig, ...p } });
+          return (
+            <>
+              <div className="gm-grid2">
+                <Field label="Closing line"><input value={sig.closing} onChange={(e) => setSig({ closing: e.target.value })} style={INPUT} /></Field>
+                <Field label="Name"><input value={sig.name} onChange={(e) => setSig({ name: e.target.value })} style={INPUT} placeholder="Capt Mohamed Dawoud" /></Field>
+              </div>
+              <div className="gm-grid2">
+                <Field label="Role / company line (optional)"><input value={sig.role} onChange={(e) => setSig({ role: e.target.value })} style={INPUT} placeholder="Founder · Arab ShipBroker" /></Field>
+                <Field label="Phone (optional)"><input value={sig.phone} onChange={(e) => setSig({ phone: e.target.value })} style={INPUT} /></Field>
+              </div>
+              <div className="gm-grid2">
+                <Field label="Email shown in the signature"><input value={sig.email} onChange={(e) => setSig({ email: e.target.value })} style={INPUT} /></Field>
+                <Field label="Website"><input value={sig.site} onChange={(e) => setSig({ site: e.target.value })} style={INPUT} /></Field>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+
+      <div className="gm-card" style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "18px 20px", marginBottom: 16 }}>
         <div style={SECTION}>Testing</div>
         <Field label="Default test addresses (comma-separated)">
           <input value={Array.isArray(cfg.test_recipients) ? cfg.test_recipients.join(", ") : (cfg.test_recipients ?? "")}
@@ -1148,7 +1221,7 @@ function DrawerActions({ saving, onSave, onCancel, saveLabel }: {
 
 const TH: React.CSSProperties = {
   textAlign: "left", padding: "9px 14px", fontSize: 11, fontWeight: 600, letterSpacing: ".03em",
-  textTransform: "uppercase", color: C.ink3, background: "#fafbfc", borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap",
+  textTransform: "uppercase", color: C.ink3, background: C.sunken, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap",
 };
 const TD: React.CSSProperties = {
   padding: "9px 14px", borderBottom: `1px solid ${C.line}`, fontSize: 13, color: C.ink,

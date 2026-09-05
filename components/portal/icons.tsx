@@ -275,30 +275,59 @@ export function IconClose({ size = 14, color, className }: IconProps) {
 }
 
 // ── Ports DA Calculator — ASB grey logo (brand asset, per design sidebar.jsx) ──
-export function IconPortDA({ size = 16, className }: IconProps) {
+// Ports DA — the original brand PNG on the classic (white) rail; on the navy
+// rail the PNG cannot be recoloured, so a currentColor SVG of the design
+// system's PortDA glyph takes over. Both render; CSS (.asb-portal[data-sidebar])
+// shows one at a time.
+export function IconPortDA({ size = 16, color, className }: IconProps) {
+  const fill = color || "currentColor";
   return (
-    <img
-      src="/icons/asb-logo-grey.png"
-      alt=""
-      width={size}
-      height={size}
-      className={className}
-      style={{ objectFit: "contain", display: "block", flexShrink: 0 }}
-    />
+    <>
+      <img
+        src="/icons/asb-logo-grey.png"
+        alt=""
+        width={size}
+        height={size}
+        className={`${className ?? ""} icon-classic`.trim()}
+        style={{ objectFit: "contain", display: "block", flexShrink: 0 }}
+      />
+      <svg width={size} height={size} viewBox="0 0 24 24" className={`${className ?? ""} icon-navy`.trim()} fill="none" style={{ display: "block", flexShrink: 0 }}>
+        <rect fill={fill} x="10.4" y="2" width="3.2" height="2" rx="0.4" />
+        <path fill="none" stroke={fill} strokeWidth="0.8" d="M11.4 4 L9.2 7.3 M12.6 4 L14.8 7.3" />
+        <rect fill={fill} x="8.6" y="7" width="6.8" height="1.2" rx="0.3" />
+        <path fill={fill} d="M9 8.2 C7.6 10 8.1 12.1 11.8 12.7 L11.8 8.2 Z M15 8.2 C16.4 10 15.9 12.1 12.2 12.7 L12.2 8.2 Z" />
+        <path fill={fill} d="M8.5 15 Q10 13 12 14 Q14 13 15.5 15 Z" />
+        <path fill={fill} d="M8.5 15 L15.5 15 L14 18.4 L10 18.4 Z" />
+        <path fill="none" stroke={fill} strokeWidth="0.9" d="M9.6 18.4 L8.6 21 M14.4 18.4 L15.4 21" />
+        <rect fill={fill} x="8.4" y="20.3" width="7.2" height="0.8" />
+      </svg>
+    </>
   );
 }
 
-// ── Suez Canal Toll — ASB anchor icon (brand asset, per design sidebar.jsx) ──
-export function IconSuezToll({ size = 16, className }: IconProps) {
+// Suez Canal Toll — the original ASB anchor PNG on the classic rail; a
+// currentColor anchor line glyph on the navy rail (same show/hide rule).
+export function IconSuezToll({ size = 16, color, className }: IconProps) {
+  const stroke = color || "currentColor";
   return (
-    <img
-      src="/icons/asb-icon.png"
-      alt=""
-      width={size}
-      height={size}
-      className={className}
-      style={{ objectFit: "contain", display: "block", flexShrink: 0 }}
-    />
+    <>
+      <img
+        src="/icons/asb-icon.png"
+        alt=""
+        width={size}
+        height={size}
+        className={`${className ?? ""} icon-classic`.trim()}
+        style={{ objectFit: "contain", display: "block", flexShrink: 0 }}
+      />
+      <svg width={size} height={size} viewBox="0 0 24 24" className={`${className ?? ""} icon-navy`.trim()} fill="none" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0 }}>
+        <circle cx="12" cy="5" r="2.2" />
+        <line x1="12" y1="7.2" x2="12" y2="21" />
+        <line x1="7.5" y1="10.5" x2="16.5" y2="10.5" />
+        <path d="M 4 14 Q 5.2 20.4 12 21 Q 18.8 20.4 20 14" />
+        <polyline points="4,14 2.6,17 6.4,16.2" />
+        <polyline points="20,14 21.4,17 17.6,16.2" />
+      </svg>
+    </>
   );
 }
 

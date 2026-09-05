@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { withJobRun } from "@/lib/jobs/runs";
 
 // Recompute the precomputed `matches` cache table (Vercel Cron, see vercel.json).
 // Calls the SECURITY DEFINER fn_refresh_matches() via the service role, which
@@ -26,10 +27,16 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createClient(url, key, { auth: { persistSession: false } });
-  const { data, error } = await supabase.rpc("fn_refresh_matches");
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  try {
+    // Every run leaves a job_runs row (status, rows, error) for the console dashboard.
+    const matches = await withJobRun(supabase, "refresh-matches", { trigger: isVercelCron ? "cron" : "manual" }, async () => {
+      const { data, error } = await supabase.rpc("fn_refresh_matches");
+      if (error) throw new Error(error.message);
+      const n = typeof data === "number" ? data : null;
+      return { result: n, rows: n };
+    });
+    return NextResponse.json({ ok: true, matches });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "refresh failed" }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, matches: typeof data === "number" ? data : null });
 }

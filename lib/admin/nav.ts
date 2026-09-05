@@ -3,7 +3,7 @@
 // both the server layout and the client sidebar consume one definition.
 //
 // `section` ids match the authorization ids in sections.ts (canAccess). Icon
-// keys resolve to inline SVGs in components/admin/shell/icons.tsx.
+// keys are the design system's Icon names (components/admin/shell/icons.tsx).
 
 export type AdminNavItem = {
   id: string; // authorization id (canAccess) — also used for the active match
@@ -19,49 +19,49 @@ export type AdminNavGroup = { section: string; items: AdminNavItem[] };
 export const ADMIN_NAV: AdminNavGroup[] = [
   {
     section: "Overview",
-    items: [{ id: "dashboard", label: "Dashboard", href: "/admin/dashboard", icon: "dash" }],
+    items: [{ id: "dashboard", label: "Dashboard", href: "/admin/dashboard", icon: "Dashboard" }],
   },
   {
     section: "Listings",
     items: [
-      { id: "review", label: "Review queue", href: "/admin/queue", icon: "queue", countKey: "review" },
-      { id: "cargo", label: "Cargo listings", href: "/admin/cargo", icon: "list" },
-      { id: "vesselavail", label: "Vessel availability", href: "/admin/vessel-availability", icon: "vessel" },
+      { id: "review", label: "Review queue", href: "/admin/queue", icon: "DocAudit", countKey: "review" },
+      { id: "cargo", label: "Cargo listings", href: "/admin/cargo", icon: "Cargo" },
+      { id: "vesselavail", label: "Vessel availability", href: "/admin/vessel-availability", icon: "Vessel" },
     ],
   },
   {
     section: "Users",
     items: [
-      { id: "users", label: "All users", href: "/admin/users", icon: "users" },
-      { id: "orgmembers", label: "Companies", href: "/admin/org-members", icon: "building" },
-      { id: "groupmail", label: "Group Mail", href: "/admin/group-mail", icon: "mail", superOnly: true },
+      { id: "users", label: "All users", href: "/admin/users", icon: "User" },
+      { id: "orgmembers", label: "Companies", href: "/admin/org-members", icon: "Globe" },
+      { id: "groupmail", label: "Group Mail", href: "/admin/group-mail", icon: "Mail", superOnly: true },
     ],
   },
   {
-    section: "Platform Data",
+    section: "Platform data",
     items: [
-      { id: "vessels", label: "Vessel intel", href: "/admin/vessels", icon: "shield" },
-      { id: "commodities", label: "Commodities", href: "/admin/commodities", icon: "commod" },
-      { id: "ports", label: "Ports", href: "/admin/ports", icon: "port" },
-      { id: "risk", label: "Risk areas", href: "/admin/risk-areas", icon: "risk" },
-      { id: "bunker", label: "Bunker ticker", href: "/admin/bunker", icon: "bunker" },
-      { id: "safety", label: "Intelligence rules", href: "/admin/safety-questions", icon: "rules" },
+      { id: "vessels", label: "Vessel intel", href: "/admin/vessels", icon: "Shield" },
+      { id: "commodities", label: "Commodities", href: "/admin/commodities", icon: "Layers" },
+      { id: "ports", label: "Ports", href: "/admin/ports", icon: "Anchor" },
+      { id: "risk", label: "Risk areas", href: "/admin/risk-areas", icon: "Map" },
+      { id: "bunker", label: "Bunker ticker", href: "/admin/bunker", icon: "TrendUp" },
+      { id: "safety", label: "Intelligence rules", href: "/admin/safety-questions", icon: "Sliders" },
     ],
   },
   {
     section: "Data",
     items: [
-      { id: "datasync", label: "Data Sync", href: "/admin/data-sync", icon: "sync", superOnly: true },
+      { id: "datasync", label: "Data Sync", href: "/admin/data-sync", icon: "Clock", superOnly: true, countKey: "sync" },
     ],
   },
   {
     section: "Platform",
     items: [
-      { id: "stats", label: "Analytics", href: "/admin/stats", icon: "chart" },
-      { id: "messages", label: "Messages", href: "/admin/messages", icon: "announ" },
-      { id: "eta", label: "ETA / tax console", href: "/admin/eta", icon: "building", superOnly: true },
-      { id: "admins", label: "Admin accounts", href: "/admin/admins", icon: "shieldlock", superOnly: true },
-      { id: "settings", label: "Platform settings", href: "/admin/settings", icon: "gear", superOnly: true },
+      { id: "stats", label: "Analytics", href: "/admin/stats", icon: "MarketBars" },
+      { id: "messages", label: "Messages", href: "/admin/messages", icon: "Bell", countKey: "messages" },
+      { id: "eta", label: "ETA / tax console", href: "/admin/eta", icon: "Doc", superOnly: true },
+      { id: "admins", label: "Admin accounts", href: "/admin/admins", icon: "ShieldLock", superOnly: true },
+      { id: "settings", label: "Platform settings", href: "/admin/settings", icon: "Settings", superOnly: true },
     ],
   },
 ];

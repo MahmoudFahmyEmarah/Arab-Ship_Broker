@@ -9,6 +9,7 @@ import { NextResponse, after } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyMetaSignature, extractMetaTexts } from "@/lib/sync/whatsapp/security";
 import { processPendingWhatsapp } from "@/lib/sync/whatsapp/process";
+import { startJobRun, finishJobRun } from "@/lib/jobs/runs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,9 +59,11 @@ export async function POST(req: Request) {
         raw: { meta: true },
       }));
       // dedupe on wa_message_id — Meta retries webhooks; must be idempotent
+      const runId = await startJobRun(supabase, "whatsapp-webhook", { trigger: "webhook" });
       const { error } = await supabase
         .from("whatsapp_message")
         .upsert(rows, { onConflict: "wa_message_id", ignoreDuplicates: true });
+      await finishJobRun(supabase, runId, { ok: !error, rows: rows.length, error: error?.message ?? null });
       if (!error) {
         // classify + stage + ack AFTER the response — Meta gets its 200 fast
         after(async () => {

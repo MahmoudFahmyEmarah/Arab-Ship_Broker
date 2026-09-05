@@ -113,7 +113,7 @@ export function DataTable<T extends Record<string, unknown>>({
             })}
             {filtered.length === 0 && (
               <tr className="no-hover">
-                <td colSpan={columns.length} style={{ textAlign: "center", color: "#8B95A3", padding: 30 }}>
+                <td colSpan={columns.length} style={{ textAlign: "center", color: "var(--asb-gray-500)", padding: 30 }}>
                   {emptyText}
                 </td>
               </tr>

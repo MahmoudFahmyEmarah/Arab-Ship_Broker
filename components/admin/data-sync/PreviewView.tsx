@@ -180,7 +180,7 @@ export function PreviewView() {
               ) : rows.map((r) => {
                 const sel = selected.has(r.key);
                 return (
-                  <tr key={r.key} style={{ background: sel ? "#fffdf6" : "#fff" }}>
+                  <tr key={r.key} style={{ background: sel ? C.brassBg : C.card }}>
                     <td style={{ ...TDL, textAlign: "center" }}>
                       <input type="checkbox" checked={sel} onChange={() => toggleOne(r.key)} aria-label={`Select ${r.key}`} />
                     </td>
@@ -522,7 +522,7 @@ function Drawer({ title, subtitle, onClose, children }: {
 
 const THL: React.CSSProperties = {
   textAlign: "left", padding: "9px 12px", fontSize: 11, fontWeight: 600, letterSpacing: ".03em",
-  textTransform: "uppercase", color: C.ink3, background: "#fafbfc", borderBottom: `1px solid ${C.line}`,
+  textTransform: "uppercase", color: C.ink3, background: C.sunken, borderBottom: `1px solid ${C.line}`,
   whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1,
 };
 const TDL: React.CSSProperties = {

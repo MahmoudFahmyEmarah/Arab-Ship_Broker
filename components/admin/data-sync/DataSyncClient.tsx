@@ -367,7 +367,7 @@ function SyncView(props: {
           onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) onDrop(f); }}
           onClick={uploadState === "parsing" ? undefined : onPick}
           style={{ border: `2px dashed ${drag ? C.brass : C.line}`, borderRadius: 12, padding: "34px 22px", textAlign: "center", height: "100%", boxSizing: "border-box",
-            cursor: uploadState === "parsing" ? "default" : "pointer", background: drag ? "#fffdf6" : C.card, transition: "border-color .14s,background .14s" }}
+            cursor: uploadState === "parsing" ? "default" : "pointer", background: drag ? C.brassBg : C.card, transition: "border-color .14s,background .14s" }}
         >
           {uploadState === "parsing" ? (
             <>
@@ -713,7 +713,7 @@ function DiffTable({ rows, sheetId, onCommitSelection, onReload, busy, blockedRe
           const warns = r.flags.filter((f) => f.level === "warn");
           const infos = r.flags.filter((f) => f.level === "info");
           const hasErr = errs.length > 0;
-          const bg = r.committed ? "#fafcfb" : hasErr ? "#fdf3f3" : r.classification === "new" ? "#f4fbf6" : r.classification === "updated" ? "#fdfaf3" : "#fff";
+          const bg = r.committed ? C.sunken : hasErr ? C.redBg : r.classification === "new" ? C.greenBg : r.classification === "updated" ? C.amberBg : C.card;
           const bar = hasErr ? C.red : r.classification === "new" ? C.green : r.classification === "updated" ? C.brass : "transparent";
           // Which specific cell each flag points at → highlight that cell.
           const cellFlag = new Map<string, { level: "error" | "warn"; msg: string }>();
@@ -737,9 +737,9 @@ function DiffTable({ rows, sheetId, onCommitSelection, onReload, busy, blockedRe
                 const ch = r.diff?.[c];
                 const val = cell(ch ? ch.new : r.payload[c]);
                 const flag = cellFlag.get(c);
-                const flagBg = flag?.level === "error" ? "#f2b8b8" : flag?.level === "warn" ? "#f1ddb2" : undefined;
+                const flagBg = flag?.level === "error" ? C.redBg : flag?.level === "warn" ? C.amberBg : undefined;
                 return (
-                  <td key={c} style={{ ...td, background: flagBg ?? (ch ? "#fbf3e0" : undefined), verticalAlign: ch ? "top" : "middle",
+                  <td key={c} style={{ ...td, background: flagBg ?? (ch ? C.brassBg : undefined), verticalAlign: ch ? "top" : "middle",
                     color: flag?.level === "error" ? C.red : undefined, fontWeight: flag ? 600 : undefined,
                     cursor: flag ? "help" : undefined }}
                     title={flag ? flag.msg : ch ? `${cell(ch.old)} → ${val}` : String(r.payload[c] ?? "")}>
@@ -881,7 +881,7 @@ function SourceDrawer({ row, sheetId, onClose }: { row: StagedRowView; sheetId: 
             </div>
             {isWa ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
-                <span style={{ width: 34, height: 34, borderRadius: "50%", background: "#e7f6ee", color: "#1f8a4c", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>
+                <span style={{ width: 34, height: 34, borderRadius: "50%", background: C.greenBg, color: C.green, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>
                   {(source.name ?? "?").slice(0, 1).toUpperCase()}
                 </span>
                 <div style={{ minWidth: 0 }}>

@@ -3,7 +3,14 @@
 // anchor mark, badge pill, title block, body card, link buttons, footer.
 // Table-based with inline styles + plain-text fallback for deliverability.
 
-import { OFFICES, type CampaignInput, type Office } from "./types";
+import { OFFICES, normalizeSignature, type CampaignInput, type Office } from "./types";
+
+/** Mailman's member options page for a list — where a member can unsubscribe. */
+export function mailmanOptionsUrl(base: string | null | undefined, listEmail: string): string | null {
+  const local = listEmail.split("@")[0]?.trim();
+  if (!base || !local) return null;
+  return `${base.replace(/\/+$/, "")}/options/${encodeURIComponent(local)}`;
+}
 
 /** "15 Aug 2026, 14:55 (Dubai)" — send-time stamp in the signature office's zone. */
 export function officeStamp(office: Office, when: Date = new Date()): string {
@@ -44,8 +51,11 @@ export function buildCircularEmail(
   stampedAt: string,
   logoSrc: string = DEFAULT_LOGO_SRC,
   replyTo: string = "circ@arabshipbroker.com",
+  unsubscribeUrl: string | null = null,
 ): { subject: string; html: string; text: string } {
   const subject = input.subject.trim();
+  const sig = normalizeSignature(input.signature, replyTo);
+  const sigSite = sig.site.replace(/^https?:\/\//i, "");
   const badge = input.badge.trim() || "Circulation";
   const year = new Date().getFullYear();
   const preheader = `${input.title.trim() || subject}: ${input.body.trim().slice(0, 90)}`;
@@ -92,10 +102,12 @@ export function buildCircularEmail(
         <!-- Signature -->
         <tr><td style="padding:${links.length ? "8px" : "22px"} 28px 24px;">
           <div style="font-size:14px;line-height:1.75;color:#0f172a;">
-            Sincerest Regards,<br>
-            <span style="font-weight:700;color:${BRAND.navy};">As Brokers Only</span><br>
-            <a href="mailto:${esc(replyTo)}" style="color:${BRAND.accent};text-decoration:none;">${esc(replyTo)}</a><br>
-            <a href="https://www.${BRAND.site}" style="color:${BRAND.accent};text-decoration:none;">www.${BRAND.site}</a>
+            ${esc(sig.closing)}<br>
+            <span style="font-weight:700;color:${BRAND.navy};">${esc(sig.name)}</span><br>
+            ${sig.role ? `<span style="color:#475569;">${esc(sig.role)}</span><br>` : ""}
+            ${sig.phone ? `<span style="color:#475569;">${esc(sig.phone)}</span><br>` : ""}
+            <a href="mailto:${esc(sig.email)}" style="color:${BRAND.accent};text-decoration:none;">${esc(sig.email)}</a><br>
+            <a href="https://${esc(sigSite)}" style="color:${BRAND.accent};text-decoration:none;">${esc(sigSite)}</a>
           </div>
         </td></tr>
         <!-- Footer -->
@@ -111,6 +123,11 @@ export function buildCircularEmail(
             You are receiving this circular as a member of ${esc(input.list_email)}.
             For replies and inquiries, please write to
             <a href="mailto:${esc(replyTo)}" style="color:${BRAND.accent};text-decoration:none;font-weight:600;">${esc(replyTo)}</a>.
+            To stop receiving these circulars,
+            ${unsubscribeUrl
+              ? `<a href="${esc(unsubscribeUrl)}" style="color:${BRAND.accent};text-decoration:none;font-weight:600;">unsubscribe here</a> or`
+              : ""}
+            reply with the subject <strong>unsubscribe</strong>.
           </div>
           <div style="font-size:10.5px;color:#a3aebc;line-height:1.55;margin-top:12px;border-top:1px solid #e9eef4;padding-top:10px;">
             This email (including attachments) is confidential, privileged, and intended solely for the
@@ -135,10 +152,12 @@ export function buildCircularEmail(
     "",
     ...links.map((l) => `${l.label}: ${l.url}`),
     "",
-    "Sincerest Regards,",
-    "As Brokers Only",
-    replyTo,
-    `www.${BRAND.site}`,
+    sig.closing,
+    sig.name,
+    ...(sig.role ? [sig.role] : []),
+    ...(sig.phone ? [sig.phone] : []),
+    sig.email,
+    sigSite,
     "",
     `${BRAND.name} (Brand under legal establishment)`,
     "Represented by Mohamed Dawoud (Founder)",
@@ -147,6 +166,7 @@ export function buildCircularEmail(
     "",
     `You are receiving this circular as a member of ${input.list_email}.`,
     `For replies and inquiries, please write to ${replyTo}.`,
+    `To stop receiving these circulars, ${unsubscribeUrl ? `unsubscribe at ${unsubscribeUrl} or ` : ""}reply with the subject "unsubscribe".`,
     "",
     "This email (including attachments) is confidential, privileged, and intended solely for the named recipient(s). If you are not the intended recipient, you are hereby notified that any use, dissemination, distribution, copying, or retention of this communication is strictly prohibited and may be unlawful. Please notify the sender immediately and permanently delete all copies.",
     `© ${year} ${BRAND.name} · ${BRAND.site}`,

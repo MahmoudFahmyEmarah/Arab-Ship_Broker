@@ -31,6 +31,7 @@ import { flagCode } from "@/lib/portal/flags";
 import "flag-icons/css/flag-icons.min.css";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { functionalStore } from "@/lib/consent";
+import { logEvent } from "@/lib/portal/events";
 import { getMatchesForCargo } from "@/sdk/app/cargos";
 import { getMatchesForAvailability } from "@/sdk/app/vessels";
 
@@ -985,15 +986,29 @@ export default function MarketMap({
     setRouteAlerts([]);
     setEstimatePrompt(null);
     setRouteNotice(null);
-    if (!c) return;
+    // A new focus (or none) always retires the previous deal card.
+    if (!c) { setPopup(null); return; }
+    setPopup(null);
     const pol = coordFor(c.route?.polCode);
     const pod = coordFor(c.route?.podCode);
     let cancelled = false;
+    // Open the cargo's deal card at its load port (same card a marker click
+    // opens), so focusing from a row or a match popup shows the details too.
+    {
+      const zP = zoneByCode(c.route?.polZone);
+      const cP = zP ? zoneCentroid(zP) : null;
+      const at = pol ?? pod ?? (cP ? ([cP[0], cP[1]] as [number, number]) : null);
+      if (at) {
+        const anchored = pol ? anchoredLL(pol, "land", (c.id || "").charCodeAt(0) || 0, (c.id || "").charCodeAt(1) || 0) : at;
+        setPopup({ kind: "cargo", data: c, ll: L.latLng(anchored[0], anchored[1]) });
+      }
+    }
 
     // Draw + raise the alerts (Suez tolls, risk areas) for the final line.
     const finish = (line: [number, number][], exact: boolean, nm: number | null, stored?: string[] | null) => {
       if (cancelled) return;
       drawRoute(map, route, line, exact, nm, true, base, routeShipOn, shipAnimRef);
+      logEvent("route_drawn", { target: `${c.route?.polCode ?? ""}-${c.route?.podCode ?? ""}`, meta: { exact, nm, chokepoints: stored ?? [] } });
       const alerts = routeAlerts(line, riskAreasRef.current, stored);
       setRouteAlerts(alerts);
       // shade the crossed areas so the warning is visible on the chart itself
@@ -1104,6 +1119,7 @@ export default function MarketMap({
     const map = mapRef.current, route = routeRef.current;
     if (!p || !map || !route) return;
     setEstimatePrompt(null);
+    logEvent("estimate_shown", { target: p.label, meta: { kind: p.kind, nm: p.nm } });
     drawRoute(map, route, p.line, false, p.nm, true, base, routeShipOn, shipAnimRef);
     const alerts = routeAlerts(p.line, riskAreasRef.current, p.cps);
     setRouteAlerts(alerts);
@@ -1117,6 +1133,7 @@ export default function MarketMap({
     setRouteNotice("Point-to-point estimate — a distance guide only, not a navigation route.");
   };
   const declineEstimate = () => {
+    if (estimatePrompt) logEvent("estimate_declined", { target: estimatePrompt.label, meta: { kind: estimatePrompt.kind } });
     setEstimatePrompt(null);
     setRouteNotice("No measured route for this pair — estimate not shown.");
   };
@@ -1134,6 +1151,7 @@ export default function MarketMap({
       if (prev) { setPopup((p) => (p && p.kind === "vessel" && p.data.id === prev ? null : p)); setRouteAlerts([]); }
       return;
     }
+    setPopup(null); // retire whatever card was open; hers opens when the fly-to lands
     let geo = vesselGeo(v);
     let zoom = 13;
     if (!geo) {
@@ -1329,6 +1347,23 @@ export default function MarketMap({
   }, [fullscreen]);
 
 
+
+  // Any open panel (layers, search, filters, zones, chart style, Voy OPEX)
+  // closes on a click anywhere outside it — the rail buttons keep their own
+  // toggle behaviour, and clicks inside a panel are left alone.
+  const anyPanelOpen = layersOpen || searchOpen || filtersOpen || zonePickOpen || basePickerOpen || voyOpen;
+  React.useEffect(() => {
+    if (!anyPanelOpen) return;
+    const h = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t || typeof t.closest !== "function") return;
+      if (t.closest(".map-flyout, .base-picker, .right-bar, [data-map-panel]")) return;
+      closePanels();
+    };
+    document.addEventListener("mousedown", h);
+    document.addEventListener("touchstart", h, { passive: true });
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("touchstart", h); };
+  }, [anyPanelOpen]);
 
   const BarIcon = ({ on, onClick, title, children }: { on?: boolean; onClick: () => void; title: string; children: React.ReactNode }) => (
     <div className={`bar-icon${on ? " active" : ""}`} onClick={onClick}>
@@ -1638,6 +1673,7 @@ export default function MarketMap({
         </BarIcon>
       </div>
 
+      <div data-map-panel style={{ display: "contents" }}>
       <MapFilterPanel
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
@@ -1660,7 +1696,10 @@ export default function MarketMap({
         }}
       />
 
-      <VoyOpexPanel open={voyOpen && !voyLocked} onClose={() => setVoyOpen(false)} />
+      </div>
+      <div data-map-panel style={{ display: "contents" }}>
+        <VoyOpexPanel open={voyOpen && !voyLocked} onClose={() => setVoyOpen(false)} />
+      </div>
 
       {/* Armed-pairing hint (09 §8) — visible legend state while anchored. */}
       {pairingEnabled && pairAnchor && !pairDone && (

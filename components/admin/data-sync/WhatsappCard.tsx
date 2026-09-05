@@ -19,9 +19,9 @@ import { C, btn } from "./ui";
 const WA = { header: "#075e54", bg: "#e5ddd5", bubble: "#ffffff", meta: "#667781", accent: "#25d366" };
 
 const STATUS_META: Record<string, { c: string; bg: string }> = {
-  pending: { c: "#a9761a", bg: "#f6e9cf" },
-  staged: { c: "#2f7d52", bg: "#e4f1ea" },
-  failed: { c: "#b23b3b", bg: "#f8e0e0" },
+  pending: { c: "var(--asb-amber)", bg: "var(--asb-amber-bg)" },
+  staged: { c: "var(--asb-green)", bg: "var(--asb-green-bg)" },
+  failed: { c: "var(--asb-red)", bg: "var(--asb-red-bg)" },
 };
 
 export function WhatsappCard({ onOpenBatch }: { onOpenBatch: (b: BatchMeta) => void }) {
@@ -65,7 +65,7 @@ export function WhatsappCard({ onOpenBatch }: { onOpenBatch: (b: BatchMeta) => v
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "22px 24px", background: C.card }}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <span style={{ width: 40, height: 40, borderRadius: 9, background: "#e7f6ee", color: "#1f8a4c", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
+        <span style={{ width: 40, height: 40, borderRadius: 9, background: "var(--asb-green-bg)", color: "var(--asb-green)", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
           <MessageCircle size={20} />
         </span>
         <div style={{ flex: 1, minWidth: 200 }}>
@@ -197,7 +197,7 @@ function WhatsappInbox({ rows, onClose, onChanged, onOpenBatch }: {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11, color: WA.meta }}>
                   {r.status === "staged" && <span>{r.staged_cargo} cargo · {r.staged_vessels} vessel · ack {r.ack_status}</span>}
-                  {r.status === "failed" && r.error && <span style={{ color: "#b23b3b" }}>{r.error.slice(0, 60)}</span>}
+                  {r.status === "failed" && r.error && <span style={{ color: "var(--asb-red)" }}>{r.error.slice(0, 60)}</span>}
                   <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
                     {r.batch_id && (
                       <button onClick={() => openBatch(r.batch_id!)}
@@ -206,7 +206,7 @@ function WhatsappInbox({ rows, onClose, onChanged, onOpenBatch }: {
                       </button>
                     )}
                     <button onClick={() => remove(r.id)} disabled={busy === r.id} title="Delete message"
-                      style={{ border: "none", background: "transparent", color: "#b23b3b", cursor: "pointer", padding: 2, display: "inline-flex" }}>
+                      style={{ border: "none", background: "transparent", color: "var(--asb-red)", cursor: "pointer", padding: 2, display: "inline-flex" }}>
                       {busy === r.id ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={13} />}
                     </button>
                   </span>

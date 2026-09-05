@@ -24,6 +24,7 @@ import {
 } from "@/lib/portal/econ";
 import "@/lib/portal/voyage-estimator.css";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { logEvent } from "@/lib/portal/events";
 import { getRouteNm } from "@/sdk/app/routes";
 
 const KAP_SAR_USD = 3.75;
@@ -175,6 +176,9 @@ export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initia
 
   const vessel = vessels.find((v) => v.id === vesselId) ?? null;
   const cargo = cargos.find((c) => c.id === cargoId) ?? null;
+  React.useEffect(() => {
+    if (vessel && cargo) logEvent("voyage_estimate", { target: `${vessel.id}|${cargo.id}` });
+  }, [vessel, cargo]);
 
   // Measured ECDIS distances (port_routes) for the selected legs. Keyed to the
   // exact pair so a stale fetch never applies to a new selection; any missing
@@ -519,6 +523,9 @@ export function SuezToll({ vessels }: { vessels: VesselView[] }) {
   const [vesselId, setVesselId] = React.useState(vessels[0]?.id || "");
   const [dir, setDir] = React.useState("Southbound");
   const [status, setStatus] = React.useState("Laden");
+  React.useEffect(() => {
+    if (vesselId) logEvent("suez_calc", { target: vesselId, meta: { dir, status } });
+  }, [vesselId, dir, status]);
   if (isCalculatorLocked(tier)) return <Locked title="Suez Canal Toll" />;
 
   const vessel = vessels.find((v) => v.id === vesselId) ?? null;
@@ -535,6 +542,7 @@ export function SuezToll({ vessels }: { vessels: VesselView[] }) {
   return (
     <EconShell title="Suez Canal Toll" subtitle="Proforma transit toll estimate" actionLabel="Export estimate" selector={selector}
       onAction={!vessel ? undefined : () => {
+        logEvent("suez_export", { target: vessel.id });
         const L: string[] = [];
         L.push("ARAB SHIPBROKER · SUEZ CANAL TOLL ESTIMATE");
         L.push(`Generated ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`);

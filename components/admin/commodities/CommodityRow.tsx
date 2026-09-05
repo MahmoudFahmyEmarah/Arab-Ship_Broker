@@ -63,12 +63,12 @@ export function CommodityRow({ commodity: c }: { commodity: AdminCommodityRow })
         {c.is_dg && <span className="adm-badge rejected">DG</span>}
         {c.is_grain && <span className="adm-badge amber">Grain</span>}
         {c.default_sf_m3t != null && (
-          <span className="adm-badge" style={{ background: "#F7F8FA", color: "#8B95A3" }}>
+          <span className="adm-badge" style={{ background: "var(--asb-gray-50)", color: "var(--asb-gray-500)" }}>
             SF {c.default_sf_m3t}
           </span>
         )}
         {c.un_number && (
-          <span className="adm-badge" style={{ background: "#F7F8FA", color: "#8B95A3" }}>
+          <span className="adm-badge" style={{ background: "var(--asb-gray-50)", color: "var(--asb-gray-500)" }}>
             UN {c.un_number}
           </span>
         )}

@@ -25,6 +25,7 @@ import {
 } from "@/lib/portal/format";
 import { IconCaret } from "./icons";
 import { PosterLine } from "./PosterLine";
+import { MatchesPopover } from "./MatchesPopover";
 
 // Route label cascade (owner's rule): LOCODE → port name → zone. A listing
 // from a circular may carry only "Egypt Med" or "Reni or Izmail" — that text
@@ -44,11 +45,17 @@ export function DashCargoRow({
   c,
   focused,
   onClick,
+  matchPool,
+  onFocusMatch,
 }: {
   c: CargoView;
   focused?: boolean;
   onClick?: () => void;
+  /** the vessels this cargo can match against (for the match popover) */
+  matchPool?: VesselView[];
+  onFocusMatch?: (vesselId: string) => void;
 }) {
+  const [matchesOpen, setMatchesOpen] = React.useState(false);
   const { weight } = formatQtyVol(c);
   const laycanStr = formatLaycanRange(c.laycanFrom, c.laycanTo);
   const typeLabel = cargoTypeLabel(c);
@@ -62,14 +69,25 @@ export function DashCargoRow({
     c.route.podName && c.route.podCode ? `${c.route.podName} (${c.route.podCode})` : c.route.podName || c.route.podCode,
   ].filter(Boolean).join(" → ");
   return (
-    <div className={`dash-row strip-${c.scope}${focused ? " is-focused" : ""}`} onClick={onClick}>
-      {c.matches > 0 && <span className="dash-row__badge" title={`${c.matches} vessel ${c.matches === 1 ? "match" : "matches"} for this cargo`}>{c.matches}</span>}
+    <div className={`dash-row strip-${c.scope}${focused ? " is-focused" : ""}`} data-row-id={c.id} onClick={onClick}>
+      {matchesOpen && (
+        <MatchesPopover source={{ kind: "cargo", view: c }} pool={matchPool ?? []} count={c.matches}
+          onClose={() => setMatchesOpen(false)} onFocus={(id) => onFocusMatch?.(id)} />
+      )}
       {postedAgeLabel(c.postedAt) && (
         <span className="dash-row__age mono" title={postedTooltip(c.postedAt, c.laycanTo || null)}>{postedAgeLabel(c.postedAt)}</span>
       )}
       <div className="dash-row__r1 is-left">
         <span className="dash-row__name">{c.cargo}</span>
         <span className="asb-badge tiny cargo-type" title="Cargo category">{typeLabel}</span>
+        {/* match count sits right after the type chip — same spot as on the vessel rows */}
+        {c.matches > 0 && (
+          <button type="button" className="dash-row__badge is-inline is-btn"
+            title={`${c.matches} matching ${c.matches === 1 ? "vessel" : "vessels"} — click to see ${c.matches === 1 ? "it" : "them"}`}
+            onClick={(e) => { e.stopPropagation(); setMatchesOpen(true); }}>
+            {c.matches}
+          </button>
+        )}
       </div>
       <div className="dash-row__r3">
         <span className={`dash-row__route ${pol.level === "code" && pod.level === "code" ? "mono" : ""}`} title={routeTitle || "Load → discharge"}>
@@ -115,27 +133,39 @@ export function DashVesselRow({
   v,
   focused,
   onClick,
+  matchPool,
+  onFocusMatch,
 }: {
   v: VesselView;
   focused?: boolean;
   onClick?: () => void;
+  /** the cargoes this vessel can match against (for the match popover) */
+  matchPool?: CargoView[];
+  onFocusMatch?: (cargoId: string) => void;
 }) {
+  const [matchesOpen, setMatchesOpen] = React.useState(false);
   const urg = v.openDateUrgency || "green";
   const fc = flagCode(v.flag);
   const flagName = v.flag && v.flag !== "—" ? v.flag : null;
   const open = routeLeg(null, v.openPort !== "—" ? v.openPort : null, v.openPortZone !== "—" ? v.openPortZone : null);
   const showZone = open.level !== "zone" && v.openPortZone && v.openPortZone !== "—";
   return (
-    <div className={`dash-row dash-row--inline${focused ? " is-focused" : ""}`} onClick={onClick}>
+    <div className={`dash-row dash-row--inline${focused ? " is-focused" : ""}`} data-row-id={v.id} onClick={onClick}>
       <div className="dash-row__r1 is-left">
         <span className="dash-row__name">{v.name}</span>
         <span className={`asb-badge ${v.status === "open" ? "open" : v.status === "review" ? "review" : "fixed"}`} title="Position status">
           {v.status.toUpperCase()}
         </span>
         {v.matches > 0 && (
-          <span className="dash-row__badge is-inline" title={`${v.matches} cargo ${v.matches === 1 ? "match" : "matches"} for this vessel`}>
+          <button type="button" className="dash-row__badge is-inline is-btn"
+            title={`${v.matches} matching ${v.matches === 1 ? "cargo" : "cargoes"} — click to see ${v.matches === 1 ? "it" : "them"}`}
+            onClick={(e) => { e.stopPropagation(); setMatchesOpen(true); }}>
             {v.matches}
-          </span>
+          </button>
+        )}
+        {matchesOpen && (
+          <MatchesPopover source={{ kind: "vessel", view: v }} pool={matchPool ?? []} count={v.matches}
+            onClose={() => setMatchesOpen(false)} onFocus={(id) => onFocusMatch?.(id)} />
         )}
         {flagName && (
           <span className="dash-row__flag" title={`Flag state: ${flagName}`}>
@@ -187,6 +217,8 @@ export function DashboardPanel<T extends { id: string }>({
   onSelect,
   defaultOpen = true,
   hint,
+  matchPool,
+  onFocusMatch,
   headerAccessory,
   children,
 }: {
@@ -201,11 +233,23 @@ export function DashboardPanel<T extends { id: string }>({
   defaultView?: "list" | "card";
   /** plain-language explanation shown when hovering the panel title */
   hint?: string;
+  /** the OTHER side of the market, for the match popover on each row */
+  matchPool?: T extends CargoView ? VesselView[] : CargoView[];
+  /** focus a matched listing on the chart (same as clicking its own row) */
+  onFocusMatch?: (id: string) => void;
   headerAccessory?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const [filterId, setFilterId] = React.useState<string | null>(null);
+  // Bring the focused row into view — a match chosen from the popup can be
+  // hundreds of rows down, and a highlight you cannot see reads as "nothing happened".
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!focusedId || !scrollRef.current) return;
+    const el = scrollRef.current.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusedId)}"]`);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focusedId]);
 
   const isDataPanel = Array.isArray(data) && Array.isArray(statDefs);
   const counts = isDataPanel
@@ -275,7 +319,7 @@ export function DashboardPanel<T extends { id: string }>({
             </div>
           )}
 
-          <div className="dash-scroll dash-scroll--list">
+          <div ref={scrollRef} className="dash-scroll dash-scroll--list">
             {filtered.length === 0 && <div className="dash-empty">No items match this filter.</div>}
             {filtered.map((item) =>
                 kind === "cargo" ? (
@@ -284,6 +328,8 @@ export function DashboardPanel<T extends { id: string }>({
                     c={item as unknown as CargoView}
                     focused={focusedId === item.id}
                     onClick={() => onSelect?.(item)}
+                    matchPool={matchPool as VesselView[] | undefined}
+                    onFocusMatch={onFocusMatch}
                   />
                 ) : (
                   <DashVesselRow
@@ -291,6 +337,8 @@ export function DashboardPanel<T extends { id: string }>({
                     v={item as unknown as VesselView}
                     focused={focusedId === item.id}
                     onClick={() => onSelect?.(item)}
+                    matchPool={matchPool as CargoView[] | undefined}
+                    onFocusMatch={onFocusMatch}
                   />
                 ),
               )}

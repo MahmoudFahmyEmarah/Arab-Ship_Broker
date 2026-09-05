@@ -174,6 +174,7 @@ export function PlatformSettings({
   const [ai, setAi] = React.useState(initialSettings.ai);
   const [market, setMarket] = React.useState(initialSettings.marketplace);
   const [fields, setFields] = React.useState<Record<string, boolean>>(initialSettings.cardFields);
+  const [appearance, setAppearance] = React.useState(initialSettings.appearance ?? { sidebar: "classic" as const });
   // Market freshness — saved to its own app_settings row (the DB RLS gate
   // reads the same row, so this is live enforcement, not just UI defaults).
   const [vis, setVis] = React.useState<MarketVisibilitySettings>(initialVisibility);
@@ -199,7 +200,7 @@ export function PlatformSettings({
   const [saved, setSaved] = React.useState(false);
 
   const design = designSel;
-  const settings: PlatformSettingsData = { ai, marketplace: market, cardFields: fields };
+  const settings: PlatformSettingsData = { ai, marketplace: market, cardFields: fields, appearance };
   const dirty =
     mode !== baseline.mode ||
     JSON.stringify(design) !== JSON.stringify(baseline.design) ||
@@ -253,6 +254,7 @@ export function PlatformSettings({
     setAi(baseline.settings.ai);
     setMarket(baseline.settings.marketplace);
     setFields(baseline.settings.cardFields);
+    setAppearance(baseline.settings.appearance ?? { sidebar: "classic" });
     setVis(visBaseline);
     setStatus("untested");
     setMsg("");
@@ -359,7 +361,7 @@ export function PlatformSettings({
                 })}
               </div>
               <p className="asd-mode-note" style={{ marginTop: 10 }}>
-                Selected: <strong style={{ color: "#16273A" }}>{designLabel}</strong>. Pick one to
+                Selected: <strong style={{ color: "var(--asb-navy)" }}>{designLabel}</strong>. Pick one to
                 apply it to every gated page, or select several to rotate them page by page.
               </p>
             </div>
@@ -368,6 +370,35 @@ export function PlatformSettings({
       </div>
 
       {/* ── GROUP 2 · AI & AUTOMATION ─────────────────────────────────── */}
+      <div className="asd-group">
+        <h2 className="asd-group__title">Appearance</h2>
+        <p className="asd-group__sub">
+          How the member dashboard looks for every signed-in user. The admin console keeps its own navy rail either way.
+        </p>
+        <hr className="asd-group__rule" />
+
+        <div className="adm-card">
+          <div className="adm-card__head">
+            <span className="adm-card__title">Dashboard sidebar</span>
+            <span className="adn-status-pill is-on">{appearance.sidebar === "navy" ? "Navy rail" : "Classic white"}</span>
+          </div>
+          <div className="asd-mode-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+            {([
+              { id: "classic", name: "Classic", desc: "White rail, grey labels, blue active item — the current look." },
+              { id: "navy", name: "Navy", desc: "Navy rail with white labels and a baby-blue active stripe, matching the admin console." },
+            ] as const).map((o) => (
+              <button key={o.id} type="button" className={`asd-mode${appearance.sidebar === o.id ? " is-on" : ""}`}
+                onClick={() => { setSaved(false); setAppearance({ sidebar: o.id }); }} disabled={!canEdit}>
+                <span className="asd-mode__name">{o.name}</span>
+                <span className="asd-mode__desc">{o.desc}</span>
+                {appearance.sidebar === o.id && <span className="asd-mode__check">✓</span>}
+              </button>
+            ))}
+          </div>
+          <p className="asd-mode-note">Applies on the next page load for members. You can switch back at any time.</p>
+        </div>
+      </div>
+
       <div className="asd-group">
         <h2 className="asd-group__title">AI &amp; automation</h2>
         <p className="asd-group__sub">The model used for AI-assisted analysis across the platform.</p>
@@ -505,7 +536,7 @@ export function PlatformSettings({
                   value={vis.freshDays} disabled={!canEdit}
                   onChange={(e) => setVis((v) => ({ ...v, freshDays: Number(e.target.value) || 0 }))}
                 />
-                <span style={{ fontSize: 11, color: "#8B95A3", marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--asb-gray-500)", marginTop: 4 }}>
                   Everyone&apos;s default market view — listings posted within this many days.
                   The freshness clock is the POSTING date, never the laycan.
                 </span>
@@ -534,7 +565,7 @@ export function PlatformSettings({
                   />
                   Keep a listing visible while its laycan / open date is still ahead
                 </label>
-                <span style={{ fontSize: 11, color: "#8B95A3", marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--asb-gray-500)", marginTop: 4 }}>
                   0 days = that tier sees the live window only. Caps are enforced by the
                   database — a client cannot query past its tier&apos;s reach.
                 </span>
@@ -586,7 +617,7 @@ export function PlatformSettings({
                   disabled={!canEdit}
                   onChange={(e) => setMarket((m) => ({ ...m, spotActiveDays: e.target.value }))}
                 />
-                <span style={{ fontSize: 11, color: "#8B95A3", marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--asb-gray-500)", marginTop: 4 }}>
                   Spot cargoes (no fixed laycan) stay live on the board and in the public
                   “available this week” count for this many days after posting, then age out.
                   Default 14.
@@ -603,7 +634,7 @@ export function PlatformSettings({
                   disabled={!canEdit}
                   onChange={(e) => setMarket((m) => ({ ...m, vesselActiveDays: e.target.value }))}
                 />
-                <span style={{ fontSize: 11, color: "#8B95A3", marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--asb-gray-500)", marginTop: 4 }}>
                   Open vessels with no fixed open date stay live on the board and in the
                   public “open this week” count for this many days after posting, then age
                   out. Vessels with an open date use the ±7-day window. Default 14.
@@ -622,7 +653,7 @@ export function PlatformSettings({
                     setMarket((m) => ({ ...m, insightsOpenLookbackDays: e.target.value }))
                   }
                 />
-                <span style={{ fontSize: 11, color: "#8B95A3", marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--asb-gray-500)", marginTop: 4 }}>
                   Market Insights only: a vessel whose open date falls up to this many days
                   before a report week still counts as “open” that week. Independent of the
                   board’s ±7-day window. Default 14.
@@ -702,11 +733,11 @@ export function PlatformSettings({
                       {(vals as number[]).map((v, i) => (
                         <td key={i} style={{ textAlign: "center" }}>
                           {v === 1 ? (
-                            <span style={{ color: "#2A9962" }}>✓</span>
+                            <span style={{ color: "var(--asb-green)" }}>✓</span>
                           ) : v === 0.5 ? (
-                            <span style={{ color: "#B17311" }}>◐</span>
+                            <span style={{ color: "var(--asb-amber)" }}>◐</span>
                           ) : (
-                            <span style={{ color: "#C8D0DC" }}>○</span>
+                            <span style={{ color: "var(--asb-gray-400)" }}>○</span>
                           )}
                         </td>
                       ))}
@@ -722,7 +753,7 @@ export function PlatformSettings({
             <div className="adm-card__head">
               <span className="adm-card__title">Default card fields</span>
             </div>
-            <p style={{ fontSize: 11, color: "#8B95A3", margin: "0 0 8px" }}>
+            <p style={{ fontSize: 11, color: "var(--asb-gray-500)", margin: "0 0 8px" }}>
               Fields shown by default on new users&apos; cards. Users can override in their own
               Settings.
             </p>
@@ -753,9 +784,9 @@ export function PlatformSettings({
       <div className="asd-savebar">
         <span className="asd-savebar__note">
           {error ? (
-            <span style={{ color: "#C84A4A" }}>{error}</span>
+            <span style={{ color: "var(--asb-red)" }}>{error}</span>
           ) : saved && !dirty ? (
-            <span style={{ color: "#2A9962" }}>✓ Settings saved to the platform.</span>
+            <span style={{ color: "var(--asb-green)" }}>✓ Settings saved to the platform.</span>
           ) : !canEdit ? (
             "View-only access — you cannot change platform settings."
           ) : (

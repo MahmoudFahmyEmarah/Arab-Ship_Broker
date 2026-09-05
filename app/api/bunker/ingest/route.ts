@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { startJobRun, finishJobRun } from "@/lib/jobs/runs";
 
 // Credentialed bunker-price ingestion channel.
 //
@@ -40,14 +42,18 @@ export async function POST(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
+  const log = getSupabaseAdminClient();
+  const runId = await startJobRun(log, "bunker-ingest", { trigger: "webhook", meta: { username, prices: prices.length } });
   const { data, error } = await supabase.rpc("bunker_ingest", {
     p_username: username,
     p_secret: password,
     p_prices: prices,
   });
   if (error) {
+    await finishJobRun(log, runId, { ok: false, error: error.message });
     return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
   }
-  const result = (data ?? { ok: false }) as { ok: boolean; error?: string };
+  const result = (data ?? { ok: false }) as { ok: boolean; error?: string; inserted?: number };
+  await finishJobRun(log, runId, { ok: result.ok, rows: result.inserted ?? null, error: result.ok ? null : result.error ?? "rejected" });
   return NextResponse.json(result, { status: result.ok ? 200 : 401 });
 }
