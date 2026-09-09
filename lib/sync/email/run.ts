@@ -127,7 +127,7 @@ async function classifyAll(
   supabase: SupabaseClient,
   emails: EmailMsg[],
   emit: Emit,
-): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[] }> {
+): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[]; failed: number; firstError: string | null }> {
   const { model, vendor, modelName } = await getActiveModel(supabase);
   const graph = buildClassifierGraph(new LangChainClassifier(model));
   const expanded = emails.flatMap(splitLongEmail);
@@ -139,6 +139,8 @@ async function classifyAll(
   const vessels: VesselRecord[] = [];
   let doneEmails = 0;
   let doneBatches = 0;
+  let failed = 0;
+  let firstError: string | null = null;
   // Array push is safe across these awaits (single-threaded); order doesn't matter.
   await mapLimit(batches, CONCURRENCY, async (batch) => {
     try {
@@ -148,8 +150,10 @@ async function classifyAll(
       doneEmails += batch.length; doneBatches += 1;
       emit({ type: "log", msg: `[${doneEmails}/${expanded.length}] batch ${doneBatches}/${batches.length} → ${res.cargo.length} cargo, ${res.vessels.length} vessel` });
     } catch (e) {
-      doneEmails += batch.length; doneBatches += 1;
-      emit({ type: "log", msg: `[${doneEmails}/${expanded.length}] ✗ batch ${doneBatches}/${batches.length} skipped (${batch.length} email(s)) — ${e instanceof Error ? e.message : "error"}` });
+      doneEmails += batch.length; doneBatches += 1; failed += 1;
+      const msg = e instanceof Error ? e.message : "error";
+      if (!firstError) firstError = msg;
+      emit({ type: "log", msg: `[${doneEmails}/${expanded.length}] ✗ batch ${doneBatches}/${batches.length} skipped (${batch.length} email(s)) — ${msg}` });
     }
   });
   // Collapse duplicates from part overlaps (and identical orders circulated in
@@ -158,7 +162,7 @@ async function classifyAll(
   const uVessels = dedupBy(vessels, vesselKey);
   const dropped = cargo.length - uCargo.length + vessels.length - uVessels.length;
   if (dropped > 0) emit({ type: "log", msg: `deduplicated ${dropped} repeated extraction(s) across email parts` });
-  return { cargo: uCargo, vessels: uVessels };
+  return { cargo: uCargo, vessels: uVessels, failed, firstError };
 }
 
 async function stageAndFinish(
@@ -170,10 +174,7 @@ async function stageAndFinish(
   startedBy: string | null = null,
 ) {
   const sheets = recordsToSheets(cargo, vessels);
-  if (sheets.length === 0) {
-    emit({ type: "empty", message: "No cargo or vessel records were found in these emails." });
-    return;
-  }
+  if (sheets.length === 0) return;
   emit({ type: "log", msg: `staging ${cargo.length} cargo + ${vessels.length} vessel record(s)…` });
   const source = new EmailLlmSource(sheets);
   const label = `Email sync · ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
@@ -185,7 +186,7 @@ async function stageAndFinish(
 
 // Live IMAP sync of the configured circulation inbox.
 export async function runEmailSync(
-  { supabase, limit, emit, startedBy = null }: { supabase: SupabaseClient; limit?: number; emit: Emit; startedBy?: string | null },
+  { supabase, limit, emit, startedBy = null, since: sinceOverride = null }: { supabase: SupabaseClient; limit?: number; emit: Emit; startedBy?: string | null; since?: Date | null },
 ): Promise<void> {
   emit({ type: "log", msg: "reading inbox connection…" });
   const { data: cfg, error } = await supabase
@@ -203,10 +204,15 @@ export async function runEmailSync(
 
   // Incremental: only mail newer than the watermark. Capture the start time up
   // front so mail that arrives during processing is picked up next run, not lost.
+  // The watermark is the start of the last SUCCESSFUL pass: a run whose
+  // classification batches failed (LLM key, quota, "payment required") never
+  // moves it, so the next run re-reads the same mail. The admin can also pick
+  // an explicit start point on the card ("Fetch mail since").
   const startedAt = new Date();
   const watermark = await getWatermark(supabase, "email");
-  const since = watermark ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  emit({ type: "log", msg: `fetching mail newer than ${since.toISOString().slice(0, 16).replace("T", " ")} UTC${watermark ? "" : " (no prior sync — last 7 days)"}` });
+  const since = sinceOverride ?? watermark ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const sinceLabel = since.toISOString().slice(0, 16).replace("T", " ");
+  emit({ type: "log", msg: `fetching mail newer than ${sinceLabel} UTC${sinceOverride ? " (chosen on the card)" : watermark ? " (last successful sync)" : " (no prior sync — last 7 days)"}` });
 
   let emails: EmailMsg[];
   try {
@@ -221,13 +227,22 @@ export async function runEmailSync(
   }
 
   if (emails.length === 0) {
-    emit({ type: "empty", message: `No new circulars since ${since.toISOString().slice(0, 16).replace("T", " ")} UTC.` });
-    await setWatermark(supabase, "email", startedAt);
+    emit({ type: "empty", message: `No new circulars since ${sinceLabel} UTC.` });
+    // Only a natural pass moves the watermark; a chosen start point that finds
+    // nothing must not hide older mail on the next run.
+    if (!sinceOverride) await setWatermark(supabase, "email", startedAt);
     return;
   }
 
-  const { cargo, vessels } = await classifyAll(supabase, emails, emit);
-  await stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy);
+  const { cargo, vessels, failed, firstError } = await classifyAll(supabase, emails, emit);
+  if (cargo.length || vessels.length) await stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy);
+  if (failed > 0) {
+    // Part of the mail was never read by the model: keep the watermark where it
+    // was so the next run fetches the same mail again, and say so plainly.
+    emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync start point stays at ${sinceLabel} UTC — fix the LLM key or budget in Settings and run again; nothing was skipped.` });
+    return;
+  }
+  if (cargo.length === 0 && vessels.length === 0) emit({ type: "empty", message: "No cargo or vessel records were found in these emails." });
   // Advance the watermark only after a successful pass (staging throws → we skip this).
   await setWatermark(supabase, "email", startedAt);
 }

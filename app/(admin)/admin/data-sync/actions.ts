@@ -5,6 +5,7 @@
 // audited, reversible write path is the only way rows reach a live table.
 
 import { revalidatePath } from "next/cache";
+import { validateRow } from "@/lib/dq/gate";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { SHEET_SPECS, specById, ZONES } from "@/lib/sync/sheets";
@@ -104,7 +105,7 @@ export async function editStagedRow(
     const c = await adminClient();
     const { data: row, error: rErr } = await c
       .from("sync_staged_row")
-      .select("sheet, target_table, key_column, business_key, payload, raw, committed")
+      .select("sheet, target_table, key_column, business_key, payload, raw, committed, batch_id, sync_batch ( source )")
       .eq("id", rowId)
       .maybeSingle();
     if (rErr) return { success: false, error: rErr.message };
@@ -152,8 +153,15 @@ export async function editStagedRow(
       .update({ payload, flags, diff, classification, business_key: businessKey })
       .eq("id", rowId);
     if (uErr) return { success: false, error: uErr.message };
+    // The data-quality gate re-checks the edited row on its channel (block →
+    // stays invalid, warn → rides with the row); the class comes back from the DB.
+    const batchSource = (row as { sync_batch?: { source?: string } | { source?: string }[] | null }).sync_batch;
+    const srcKind = Array.isArray(batchSource) ? batchSource[0]?.source : batchSource?.source;
+    const { error: gErr } = await c.rpc("fn_dq_gate_batch", { p_batch_id: (row as { batch_id: string }).batch_id, p_channel: srcKind === "upload" ? "sync" : "pipeline", p_actor: "staged-row edit", p_row_id: rowId });
+    if (gErr) console.error("[data-sync] gate re-check:", gErr.message);
+    const { data: after } = await c.from("sync_staged_row").select("classification").eq("id", rowId).maybeSingle();
     revalidatePath("/admin/data-sync");
-    return { success: true, data: { classification } };
+    return { success: true, data: { classification: (after as { classification?: string } | null)?.classification ?? classification } };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Could not save the edit." };
   }
@@ -931,6 +939,20 @@ export async function resolveVesselReview(
       const { error: uErr } = await c.from("vessel_review_queue").update(upd).eq("id", id);
       if (uErr) return { success: false, error: uErr.message };
     }
+    // The data-quality gate on the review channel: the vessel row the sync is
+    // about to write is checked first; a block-level rule refuses the sync.
+    {
+      const { data: q } = await c.from("vessel_review_queue").select("vessel_name, vessel_type, dwt_grain, built, flag, grt, nrt").eq("id", id).maybeSingle();
+      const qr = (q ?? {}) as { vessel_name?: string; vessel_type?: string | null; dwt_grain?: number | null; built?: number | null; flag?: string | null; grt?: number | null; nrt?: number | null };
+      const gate = await validateRow(c, "vessels", {
+        vessel_name: qr.vessel_name, imo_number: trimmed, vessel_type: qr.vessel_type ?? null, dwt_grain: qr.dwt_grain ?? null, build_year: qr.built ?? null,
+        flag: qr.flag ?? null, gross_tonnage: qr.grt ?? null, scnrt: qr.nrt ?? null,
+      }, "review", { id: actor, name: "Manual Review sync" });
+      if (gate.blocked) {
+        const why = gate.issues.filter((i) => i.mode === "block").map((i) => `${i.rule_code} — ${i.message}`).join("; ");
+        return { success: false, error: `Refused by the data-quality gate: ${why}. Fix it in the form, or relax the rule's review channel in Data quality → Gate.` };
+      }
+    }
     const { data, error } = await c.rpc("resolve_vessel_review", { p_id: id, p_imo: trimmed, p_actor: actor });
     if (error) return { success: false, error: error.message };
     const d = data as { vessel_id: string; op: string; availability_id: string | null; port_resolved: boolean | null };
@@ -954,6 +976,8 @@ export async function resolveVesselReview(
     revalidatePath("/admin/data-sync");
     // The sync now posts the OPEN position too — refresh the market pages.
     revalidatePath("/dashboard", "layout");
+    revalidatePath("/dashboard/vessels");
+    revalidatePath("/");
     return { success: true, data: { vesselId: d.vessel_id, op: d.op, availabilityId: d.availability_id ?? null, portResolved: !!d.port_resolved } };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Could not sync the vessel." };

@@ -12,7 +12,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { logout } from "@/sdk/auth";
 import type { AdminTier } from "@/lib/admin/sections";
 
-export function AdminTopbar({ name, tier }: { name: string; tier: AdminTier }) {
+export function AdminTopbar({ name, tier, children }: { name: string; tier: AdminTier; children?: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [signingOut, setSigningOut] = React.useState(false);
@@ -37,6 +37,7 @@ export function AdminTopbar({ name, tier }: { name: string; tier: AdminTier }) {
         <span className="adm-topbar__pill">Admin</span>
       </Link>
       <div className="adm-topbar__spacer" />
+      {children}
 
       <span className="adm-identity">
         <span className="adm-identity__name">{name}</span>

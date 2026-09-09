@@ -6,7 +6,7 @@
 // admin runs commit_sync_batch (Phase 1).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Cell, SheetCounts, StagedRow, SyncSource } from "./types";
+import type { Cell, SheetCounts, StagedRow, SyncSource, RawRow } from "./types";
 import { specById } from "./sheets";
 import { buildStagedRow, mapRow } from "./diff";
 import { fetchCommodityIndex, resolveCommodity, type CommodityIndex } from "./commodity";
@@ -169,6 +169,8 @@ export interface StageResult {
   counts: Record<string, SheetCounts>;
   totals: SheetCounts;
   errors: { sheet: string; row: number; field?: string; msg: string }[];
+  /** data-quality gate: rows blocked from commit / rows carrying warnings */
+  gate?: { blocked: number; warned: number; rules: number };
 }
 
 export interface StageArgs {
@@ -268,8 +270,28 @@ export async function stageBatch({
         for (const row of data ?? []) existingByKey.set(String(row[spec.keyColumn]), row as Record<string, Cell>);
       }
 
+      // 2c · what this source said last time (latest COMMITTED staged payload
+      // per key) so a re-upload of the same workbook does not overwrite edits
+      // made in the database since (see classify()).
+      const previousByKey = new Map<string, RawRow>();
+      for (const part of chunk(keys, CHUNK)) {
+        if (part.length === 0) continue;
+        const { data, error } = await dbRetry(() => supabase
+          .from("sync_staged_row")
+          .select("business_key, payload, created_at")
+          .eq("target_table", spec.targetTable)
+          .eq("committed", true)
+          .in("business_key", part)
+          .order("created_at", { ascending: false })
+          .limit(part.length * 4));
+        if (error) throw new Error(`reading previous sync of ${spec.targetTable}: ${error.message}`);
+        for (const row of (data ?? []) as { business_key: string; payload: RawRow }[]) {
+          if (!previousByKey.has(row.business_key)) previousByKey.set(row.business_key, row.payload ?? {});
+        }
+      }
+
       // 3 · build + persist staged rows
-      const built: StagedRow[] = rows.map((raw, i) => buildStagedRow(spec, raw, i + 1, existingByKey));
+      const built: StagedRow[] = rows.map((raw, i) => buildStagedRow(spec, raw, i + 1, existingByKey, null, previousByKey));
 
       // Vessels without an IMO have no business key → route them to the vessel
       // review queue (synced later by a name+built+dwt composite key) instead of
@@ -338,10 +360,39 @@ export async function stageBatch({
       }
     }
 
+    // 3c · the data-quality gate (the same rules the audits run): every
+    // staged row is checked on this channel; block-level hits make the row
+    // invalid so commit_sync_batch never writes it, warn-level hits ride with
+    // the row into Review with their DQ code. Never fails the batch by itself.
+    let gate: StageResult["gate"];
+    try {
+      const channel = source.kind === "upload" ? "sync" : "pipeline";
+      const { data: g, error: gErr } = await dbRetry(() => supabase.rpc("fn_dq_gate_batch", { p_batch_id: batchId, p_channel: channel, p_actor: label ?? fileName ?? source.kind }));
+      if (gErr) {
+        errors.push({ sheet: "gate", row: 0, msg: `data-quality gate: ${gErr.message}` });
+      } else {
+        const res = g as { blocked: number; warned: number; rules: number; errors?: string[] };
+        gate = { blocked: res.blocked ?? 0, warned: res.warned ?? 0, rules: res.rules ?? 0 };
+        for (const e of res.errors ?? []) errors.push({ sheet: "gate", row: 0, msg: `data-quality gate: ${e}` });
+        if (gate.blocked > 0) {
+          // rows moved to invalid — recount from the database
+          const { data: rc } = await supabase.from("sync_staged_row").select("sheet, classification").eq("batch_id", batchId);
+          for (const k of Object.keys(counts)) counts[k] = { ...emptyCounts(), errors: counts[k].errors };
+          totals.new = 0; totals.updated = 0; totals.unchanged = 0; totals.invalid = 0;
+          for (const row of (rc ?? []) as { sheet: string; classification: "new" | "updated" | "unchanged" | "invalid" }[]) {
+            if (!counts[row.sheet]) counts[row.sheet] = emptyCounts();
+            counts[row.sheet][row.classification] += 1; totals[row.classification] += 1;
+          }
+        }
+      }
+    } catch (e) {
+      errors.push({ sheet: "gate", row: 0, msg: `data-quality gate: ${e instanceof Error ? e.message : String(e)}` });
+    }
+
     // 4 · record the summary on the batch
     await supabase.from("sync_batch").update({ counts }).eq("id", batchId);
 
-    return { batchId, label, counts, totals, errors };
+    return { batchId, label, counts, totals, errors, gate };
   } catch (err) {
     await supabase
       .from("sync_batch")

@@ -7,6 +7,7 @@
 // comes from calcPortDA and its Suez line from calcSuezToll — identical to
 // opening those pages directly.
 import * as React from "react";
+import { noRouteReason, routeLegs } from "@/lib/portal/route-legs";
 import Link from "next/link";
 import { CargoView, VesselView } from "@/lib/portal/types";
 import { useViewerTier, isCalculatorLocked } from "@/lib/portal/tier";
@@ -183,12 +184,13 @@ export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initia
   // Measured ECDIS distances (port_routes) for the selected legs. Keyed to the
   // exact pair so a stale fetch never applies to a new selection; any missing
   // pair or failed lookup stays null and calcVoyage falls back to its table.
-  const routeKey = `${cargo?.route?.polCode ?? ""}|${cargo?.route?.podCode ?? ""}|${vessel?.openPortLocode ?? ""}`;
+  const cargoLegs = cargo ? routeLegs(cargo) : null;
+  const routeKey = `${cargoLegs?.polCode ?? ""}|${cargoLegs?.podCode ?? ""}|${vessel?.openPortLocode ?? ""}`;
   const [measured, setMeasured] = React.useState<{
     key: string; laden: number | null; ballast: number | null; ladenEcdis: boolean; ballastEcdis: boolean;
   }>({ key: "", laden: null, ballast: null, ladenEcdis: false, ballastEcdis: false });
   React.useEffect(() => {
-    const pol = cargo?.route?.polCode, pod = cargo?.route?.podCode, open = vessel?.openPortLocode;
+    const pol = cargoLegs?.polCode, pod = cargoLegs?.podCode, open = vessel?.openPortLocode;
     const key = routeKey;
     let cancelled = false;
     (async () => {
@@ -224,7 +226,10 @@ export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initia
   const selector = (
     <div className="ve-selector ve-selector--two">
       <VEDropdown label="Vessel" value={vesselId} onChange={setVesselId} options={vesselOpts(vessels)} />
-      <VEDropdown label="Cargo" value={cargoId} onChange={setCargoId} options={cargos.map((c) => ({ value: c.id, label: `${c.refId} · ${c.commodity} · ${c.route.polCode}→${c.route.podCode}` }))} />
+      <VEDropdown label="Cargo" value={cargoId} onChange={setCargoId} options={cargos.map((c) => { const l = routeLegs(c); return { value: c.id, label: `${c.refId} · ${c.commodity} · ${l.pol.label}→${l.pod.label}${l.estimated ? " (est.)" : ""}` }; })} />
+      {cargoLegs && (cargoLegs.note || !cargoLegs.polCode || !cargoLegs.podCode) && (
+        <div className="ve-route-note">{cargoLegs.note ?? noRouteReason(cargoLegs)}</div>
+      )}
     </div>
   );
 
@@ -235,7 +240,8 @@ export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initia
     L.push("");
     L.push(`Vessel:  ${vessel.name} · IMO ${vessel.imo}`);
     L.push(`Cargo:   ${cargo.refId} · ${cargo.commodity} · ${cargo.qtyMt} MT`);
-    L.push(`Route:   ${cargo.route.polName} (${cargo.route.polCode}) -> ${cargo.route.podName} (${cargo.route.podCode})`);
+    L.push(`Route:   ${cargoLegs?.pol.label} (${cargoLegs?.polCode ?? "no port"}) -> ${cargoLegs?.pod.label} (${cargoLegs?.podCode ?? "no port"})`);
+    if (cargoLegs?.note) L.push(`Note:    ${cargoLegs.note}`);
     L.push("");
     L.push(`Distance:        ${fmtNM(calc.totals.nm)} NM`);
     L.push(`Voyage days:     ${fmtDays(calc.totals.days)}`);
@@ -349,10 +355,10 @@ function VoyageBody({ vessel: v, cargo: c, calc, fuel }: { vessel: VesselView; c
 
           <div className="ve-pl-section">Port disbursements</div>
           <div className="ve-pl-row ve-pl-row--linked">
-            <span>POL PDA · {c.route.polName}<small className="ve-linked-src">from Ports DA Calculator</small></span>
+            <span>POL PDA · {routeLegs(c).pol.refName ?? c.route.polName}<small className="ve-linked-src">from Ports DA Calculator</small></span>
             <span className="is-auto">{fmtUSD(calc.costs.polPDA)}</span>
           </div>
-          <div className="ve-pl-row"><span>POD PDA · {c.route.podName}</span><span className="is-amber">{fmtUSD(calc.costs.podPDA)} ⚠ Manual</span></div>
+          <div className="ve-pl-row"><span>POD PDA · {routeLegs(c).pod.refName ?? c.route.podName}</span><span className="is-amber">{fmtUSD(calc.costs.podPDA)} ⚠ Manual</span></div>
           <div className="ve-pl-row ve-pl-row--linked">
             <span>Suez Canal transit{suezApplies && <small className="ve-linked-src">from Suez Canal Toll</small>}</span>
             <span className={suezApplies ? "is-auto" : "is-muted"}>{suezApplies ? fmtUSD(calc.costs.suezTotal) : "Not applicable"}</span>

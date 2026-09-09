@@ -18,7 +18,25 @@ export type TeamMember = {
   status: string;
   added_at: string;
   requested_email_domain: string | null;
+  plan_seat?: boolean;
+  tier?: string | null;
 };
+
+export type SeatSummary = { seats: number; used: number; plan_code: string | null; period_end: string | null };
+
+/** Seats bought by the company vs. seats assigned to members (null when no subscription). */
+export async function getOrgSeatSummary(supabase: SupabaseClient, orgId: string): Promise<SeatSummary | null> {
+  const { data, error } = await supabase.rpc("fn_org_seat_summary", { p_org_id: orgId });
+  if (error) return null;
+  const row = (Array.isArray(data) ? data[0] : data) as SeatSummary | null;
+  return row && row.seats > 0 ? row : null;
+}
+
+/** Give or take a purchased plan seat; the server enforces the seat count and re-syncs tiers. */
+export async function setPlanSeat(supabase: SupabaseClient, orgId: string, userId: string, on: boolean): Promise<void> {
+  const { error } = await supabase.rpc("fn_org_set_plan_seat", { p_org_id: orgId, p_user_id: userId, p_on: on });
+  if (error) throw error;
+}
 
 export type MemberAction = "approve" | "reject" | "remove" | "make_admin" | "make_broker";
 

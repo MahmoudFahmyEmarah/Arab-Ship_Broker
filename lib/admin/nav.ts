@@ -35,6 +35,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { id: "users", label: "All users", href: "/admin/users", icon: "User" },
       { id: "orgmembers", label: "Companies", href: "/admin/org-members", icon: "Globe" },
       { id: "groupmail", label: "Group Mail", href: "/admin/group-mail", icon: "Mail", superOnly: true },
+      { id: "billing", label: "Billing", href: "/admin/billing", icon: "Invoice", countKey: "billing" },
     ],
   },
   {
@@ -52,6 +53,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     section: "Data",
     items: [
       { id: "datasync", label: "Data Sync", href: "/admin/data-sync", icon: "Clock", superOnly: true, countKey: "sync" },
+      { id: "dataquality", label: "Data quality", href: "/admin/data-quality", icon: "Check", countKey: "dq" },
     ],
   },
   {

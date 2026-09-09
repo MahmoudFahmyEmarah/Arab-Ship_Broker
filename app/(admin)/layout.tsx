@@ -6,10 +6,12 @@
 // enforcement; the sidebar/ribbon are the UX layer.
 import "./admin.css";
 import "./admin-dashboard.css";
+import "./admin-dq.css";
 import { requireAdmin, getAdminSupabaseClient } from "@/lib/admin/require-admin";
 import { AdminTopbar } from "@/components/admin/shell/AdminTopbar";
 import { AdminSidebarNav } from "@/components/admin/shell/AdminSidebarNav";
 import { AdminReadonlyRibbon } from "@/components/admin/shell/AdminReadonlyRibbon";
+import { DqRunPill } from "@/components/admin/data-quality/DqRunPill";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +27,15 @@ export default async function AdminLayout({
   const counts: Record<string, number> = {};
   try {
     const supabase = await getAdminSupabaseClient();
-    const [stats, crq, vrq] = await Promise.all([
+    const [stats, crq, vrq, pendingPay, dqOpen] = await Promise.all([
       supabase.rpc("get_admin_stats"),
       supabase.from("commodity_review_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("vessel_review_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("payments").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("dq_issues").select("id", { count: "exact", head: true }).eq("status", "open").eq("severity", "error"),
     ]);
+    counts.billing = pendingPay.count ?? 0;
+    counts.dq = dqOpen.count ?? 0;
     const s = stats.data as { queue_pending?: number; messages_unread?: number } | null;
     counts.review = s?.queue_pending ?? 0;
     counts.messages = s?.messages_unread ?? 0;
@@ -40,7 +46,9 @@ export default async function AdminLayout({
 
   return (
     <div className="adm-shell">
-      <AdminTopbar name={admin.fullName} tier={admin.tier} />
+      <AdminTopbar name={admin.fullName} tier={admin.tier}>
+        <DqRunPill />
+      </AdminTopbar>
       <div className="adm-banner">
         <span aria-hidden>⚠</span>
         Admin panel: changes here affect the live platform immediately.

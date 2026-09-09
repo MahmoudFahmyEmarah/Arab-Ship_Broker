@@ -42,20 +42,29 @@ export function cellEqual(a: Cell, b: Cell): boolean {
   return String(a).trim() === String(b).trim();
 }
 
-/** Compare payload against an existing DB row (or undefined) → class + diff. */
+/** Compare payload against an existing DB row (or undefined) → class + diff.
+ *  `previous` is what the SAME source said for this key at its last committed
+ *  sync: a cell the workbook has not changed since then does not count as an
+ *  update even when the database now differs — an edit made in Manual Review
+ *  or Database Preview wins over a re-upload of the old file (owner, 9 Sep
+ *  2026). Those columns are reported in `kept`. */
 export function classify(
   payload: RawRow,
   existing: Record<string, Cell> | undefined,
-): { classification: "new" | "updated" | "unchanged"; diff: StagedRow["diff"] } {
-  if (!existing) return { classification: "new", diff: null };
+  previous?: RawRow | null,
+): { classification: "new" | "updated" | "unchanged"; diff: StagedRow["diff"]; kept: string[] } {
+  if (!existing) return { classification: "new", diff: null, kept: [] };
 
   const diff: NonNullable<StagedRow["diff"]> = {};
+  const kept: string[] = [];
   for (const [col, next] of Object.entries(payload)) {
     const prev = existing[col] ?? null;
-    if (!cellEqual(prev, next)) diff[col] = { old: prev, new: next };
+    if (cellEqual(prev, next)) continue;
+    if (previous && col in previous && cellEqual(previous[col] as Cell, next)) { kept.push(col); continue; }
+    diff[col] = { old: prev, new: next };
   }
   const changed = Object.keys(diff).length > 0;
-  return { classification: changed ? "updated" : "unchanged", diff: changed ? diff : null };
+  return { classification: changed ? "updated" : "unchanged", diff: changed ? diff : null, kept };
 }
 
 /** Full pipeline for one row: map → diff → validate → StagedRow. */
@@ -65,6 +74,7 @@ export function buildStagedRow(
   rowIndex: number,
   existingByKey: Map<string, Record<string, Cell>>,
   sourceEmailId: string | null = null,
+  previousByKey?: Map<string, RawRow>,
 ): StagedRow {
   const { payload, missingRequired } = mapRow(spec, raw);
   const flags: Flag[] = [];
@@ -79,9 +89,11 @@ export function buildStagedRow(
     flags.push({ level: "error", field: spec.keyColumn, msg: `missing ${spec.keyColumn} — cannot sync without a business key` });
     classification = "invalid";
   } else {
-    const res = classify(payload, existingByKey.get(businessKey));
+    const res = classify(payload, existingByKey.get(businessKey), previousByKey?.get(businessKey) ?? null);
     classification = res.classification;
     diff = res.diff;
+    if (res.kept.length)
+      flags.push({ level: "info", msg: `kept the database value for ${res.kept.join(", ")} — the workbook did not change ${res.kept.length === 1 ? "this cell" : "these cells"} since its last sync` });
 
     // Required (NOT NULL) columns only matter for a brand-new insert.
     if (classification === "new") {

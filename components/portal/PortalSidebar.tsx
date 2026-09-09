@@ -55,7 +55,7 @@ function NavItem({
   const active = href === activeHref;
   if (disabled || comingSoon) {
     // Not navigable: either tier-gated (T3+) or held behind Coming Soon.
-    const tip = comingSoon ? "Coming soon" : "Available from Subscriber tier (T3+)";
+    const tip = `${label} — ${comingSoon ? "coming soon" : "available from Subscriber tier (T3+)"}`;
     const tag = comingSoon ? "SOON" : "T3+";
     return (
       <div
@@ -66,9 +66,9 @@ function NavItem({
       >
         {glyph(false)}
         {!collapsed && (
-          <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
-            {label}
-            <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--asb-gray-500)", border: "0.5px solid var(--asb-gray-300, #cdd5e0)", borderRadius: 3, padding: "0 3px" }}>{tag}</span>
+          <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+            <span className="nav-label">{label}</span>
+            <span style={{ flex: "none", marginLeft: "auto", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--asb-gray-500)", border: "0.5px solid var(--asb-gray-300, #cdd5e0)", borderRadius: 3, padding: "0 3px" }}>{tag}</span>
           </span>
         )}
       </div>
@@ -78,11 +78,11 @@ function NavItem({
     <Link
       href={href}
       className={`nav-item ${action ? "action" : ""} ${active ? "is-active" : ""}`}
-      title={collapsed ? label : undefined}
+      title={label}
       style={collapsed ? { justifyContent: "center", padding: "10px 0" } : undefined}
     >
       {glyph(active)}
-      {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
+      {!collapsed && <span className="nav-label" style={{ flex: 1 }}>{label}</span>}
     </Link>
   );
 }
@@ -148,7 +148,7 @@ export function PortalSidebar({
     ...(isCargo ? [{ href: `${basePath}/cargo`, label: "Cargo Market", glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} /> }] : []),
     ...(isVessel ? [{ href: `${basePath}/vessels/browse`, label: "Tonnage Market", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> }] : []),
     { section: "Economic Calculators" },
-    { href: `${basePath}/voyage-estimator`, label: "Voyage Cost Estimator", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/voyage-estimator`, label: "Voyage Estimator", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
     { href: `${basePath}/ports-da`, label: "Ports DA Calculator", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconPortDA className="nav-icon" size={16} color={c(a)} /> },
     { href: `${basePath}/suez-toll`, label: "Suez Canal Toll", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconSuezToll className="nav-icon" size={16} color={c(a)} /> },
     ...(role === "admin"

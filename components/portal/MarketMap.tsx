@@ -6,6 +6,8 @@
 // focus sync, layer + base controls. (The Voy-OPEX side panel is deferred to
 // the voyage-estimator phase.)
 import * as React from "react";
+import { formatQtyVol } from "@/lib/portal/format";
+import { noRouteReason, routeLegs } from "@/lib/portal/route-legs";
 import L from "leaflet";
 import { toast } from "sonner";
 import "leaflet.markercluster";
@@ -378,7 +380,9 @@ function drawRoute(
 const G = {
   cargo: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /></svg>,
   vessel: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 L20 19 H4 Z" /></svg>,
-  ship: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8V5h8v3" /><path d="M9 5V3h2v2" /><path d="M4 8h13l4 5-2 5H6l-3-5 1-5Z" /><path d="M2 14h2" opacity=".55" /><path d="M1 11h3" opacity=".35" /></svg>,
+  // Route indicator — the dashed track between two ports with our vessel
+  // triangle riding it (the toolbar button that shows / animates the route)
+  ship: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="4" cy="19" r="2" /><circle cx="20" cy="5" r="2" /><path d="M6 17.5C9 14 12 12 17 6.5" strokeDasharray="2.5 2.5" /><path d="M14.5 9.5l-1.2 4.8 4.4-2.2Z" fill="currentColor" stroke="none" /></svg>,
   zones: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><polygon points="3,7 9,4 15,7 21,4 21,17 15,20 9,17 3,20" /></svg>,
   sun: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5" /></svg>,
   moon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>,
@@ -895,7 +899,7 @@ export default function MarketMap({
     if (cargoOn) {
       const state = cargoStateForZoom(map.getZoom());
       visCargos.forEach((c) => {
-        const geo = geoFor(c.route?.polCode);
+        const geo = geoFor(routeLegs(c).polCode);
         if (!geo) return;
         // Cargo anchors LANDWARD of the port (09 §7) — never in the sea.
         const pos = anchoredLL(geo, "land", (c.id || "").charCodeAt(0) || 0, (c.id || "").charCodeAt(1) || 0);
@@ -989,8 +993,14 @@ export default function MarketMap({
     // A new focus (or none) always retires the previous deal card.
     if (!c) { setPopup(null); return; }
     setPopup(null);
-    const pol = coordFor(c.route?.polCode);
-    const pod = coordFor(c.route?.podCode);
+    // Effective ports: the listing's own LOCODEs, or the reference port chosen
+    // from alternatives ("Izmail or Reni" → Izmail) — always labelled estimated.
+    const rl = routeLegs(c);
+    const polC = rl.polCode ?? undefined;
+    const podC = rl.podCode ?? undefined;
+    if (rl.note) setRouteNotice(rl.note);
+    const pol = coordFor(polC);
+    const pod = coordFor(podC);
     let cancelled = false;
     // Open the cargo's deal card at its load port (same card a marker click
     // opens), so focusing from a row or a match popup shows the details too.
@@ -1008,7 +1018,7 @@ export default function MarketMap({
     const finish = (line: [number, number][], exact: boolean, nm: number | null, stored?: string[] | null) => {
       if (cancelled) return;
       drawRoute(map, route, line, exact, nm, true, base, routeShipOn, shipAnimRef);
-      logEvent("route_drawn", { target: `${c.route?.polCode ?? ""}-${c.route?.podCode ?? ""}`, meta: { exact, nm, chokepoints: stored ?? [] } });
+      logEvent("route_drawn", { target: `${polC ?? ""}-${podC ?? ""}`, meta: { exact, nm, chokepoints: stored ?? [] } });
       const alerts = routeAlerts(line, riskAreasRef.current, stored);
       setRouteAlerts(alerts);
       // shade the crossed areas so the warning is visible on the chart itself
@@ -1020,8 +1030,8 @@ export default function MarketMap({
         L.polygon(a.polygon, { color: col, weight: 1.2, dashArray: "4 4", fillColor: col, fillOpacity: 0.12, interactive: false }).addTo(route);
       }
     };
-    const polLabel = c.route?.polName || c.route?.polCode || c.route?.polZone || "load";
-    const podLabel = c.route?.podName || c.route?.podCode || c.route?.podZone || "discharge";
+    const polLabel = rl.pol.refName ?? rl.pol.label;
+    const podLabel = rl.pod.refName ?? rl.pod.label;
 
     // Owner's rule (4 Sep 2026): only true port-to-port routes are drawn. A
     // range / country position ("Egypt Med", "Reni or Izmail") gets no line —
@@ -1034,8 +1044,7 @@ export default function MarketMap({
       const cD = zD ? zoneCentroid(zD) : null;
       const at = pol ?? pod ?? (cP ? ([cP[0], cP[1]] as [number, number]) : null) ?? (cD ? ([cD[0], cD[1]] as [number, number]) : null);
       if (at) map.flyTo(at, 6, { duration: 1.0 });
-      const missing = !pol && !pod ? "Both ends are ranges" : !pol ? `Load side is a range (${polLabel})` : `Discharge side is a range (${podLabel})`;
-      setRouteNotice(`${missing} — no port given, so no route is drawn.`);
+      setRouteNotice(noRouteReason(rl) ?? `No coordinates for ${!pol ? polLabel : podLabel} yet, so no route is drawn.`);
     };
 
     // Consent gate (owner's rule, 4 Sep 2026): ONLY measured ECDIS tracks draw
@@ -1056,9 +1065,9 @@ export default function MarketMap({
     if (!pol || !pod) {
       // A stored route may still know both ends by LOCODE even when the local
       // coordinates table lacks one of them — that is still port-to-port.
-      if (c.route?.polCode && c.route?.podCode) {
+      if (polC && podC) {
         (async () => {
-          const stored = await getPortRoute(getSupabaseBrowserClient(), c.route?.polCode, c.route?.podCode);
+          const stored = await getPortRoute(getSupabaseBrowserClient(), polC, podC);
           if (cancelled) return;
           if (stored && stored.waypoints.length >= 2) {
             const pts = stored.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]);
@@ -1080,8 +1089,8 @@ export default function MarketMap({
     // as a last resort the straight arc, behind the consent prompt.
     const geo =
       routeGeometry({
-        polCode: c.route?.polCode,
-        podCode: c.route?.podCode,
+        polCode: polC,
+        podCode: podC,
         polLL: pol,
         podLL: pod,
         polZone: c.route?.polZone,
@@ -1091,9 +1100,9 @@ export default function MarketMap({
 
     if (geo.exact) {
       finish(estLine, true, geo.nm, null);
-    } else if (c.route?.polCode && c.route?.podCode) {
+    } else if (polC && podC) {
       (async () => {
-        const stored = await getPortRoute(getSupabaseBrowserClient(), c.route?.polCode, c.route?.podCode);
+        const stored = await getPortRoute(getSupabaseBrowserClient(), polC, podC);
         if (cancelled) return;
         if (stored && stored.waypoints.length >= 2 && stored.source.toUpperCase().startsWith("ECDIS")) {
           const pts = stored.waypoints.map((w) => [Number(w[0]), Number(w[1])] as [number, number]);
@@ -1201,13 +1210,14 @@ export default function MarketMap({
         }
         return null;
       };
+      const rlA = routeLegs(c);
       const vOpen = coordFor(v.openPortLocode);
-      const pol = coordFor(c.route?.polCode);
-      const pod = coordFor(c.route?.podCode);
-      const ballast = await lineFor(v.openPortLocode, c.route?.polCode, vOpen, pol);
+      const pol = coordFor(rlA.polCode);
+      const pod = coordFor(rlA.podCode);
+      const ballast = await lineFor(v.openPortLocode, rlA.polCode, vOpen, pol);
       if (ballast) legs.push(...tagLeg(routeAlerts(ballast.pts, riskAreasRef.current, ballast.cps), "Ballast leg"));
       else if (vOpen) legs.push(...tagLeg(positionAlerts(vOpen, riskAreasRef.current), "Ballast leg"));
-      const laden = await lineFor(c.route?.polCode, c.route?.podCode, pol, pod);
+      const laden = await lineFor(rlA.polCode, rlA.podCode, pol, pod);
       if (laden) legs.push(...tagLeg(routeAlerts(laden.pts, riskAreasRef.current, laden.cps), "Laden leg"));
       if (!x) setRouteAlerts(legs);
     })();
@@ -1317,7 +1327,7 @@ export default function MarketMap({
       const c = cargos.find((x) => x.refId === decodeURIComponent(m[2]));
       if (!c) return; // data may still be loading — retry on next change
       hashHandled.current = true;
-      const g = geoFor(c.route?.polCode);
+      const g = geoFor(routeLegs(c).polCode);
       const ll = g ? anchoredLL(g, "land", (c.id || "").charCodeAt(0) || 0, (c.id || "").charCodeAt(1) || 0) : null;
       setPopup({ kind: "cargo", data: c, ll: ll ? L.latLng(ll[0], ll[1]) : L.latLng(24, 40) });
       onSelectCargo?.(c);
@@ -1460,7 +1470,7 @@ export default function MarketMap({
               const next = list[(i + dir + list.length) % list.length];
               if (popup.kind === "cargo") {
                 const c = next as CargoView;
-                const g = geoFor(c.route?.polCode);
+                const g = geoFor(routeLegs(c).polCode);
                 const ll = g ? anchoredLL(g, "land", (c.id || "").charCodeAt(0) || 0, (c.id || "").charCodeAt(1) || 0) : null;
                 setPopup({ kind: "cargo", data: c, ll: ll ? L.latLng(ll[0], ll[1]) : popup.ll });
                 onSelectCargo?.(c);
@@ -1513,7 +1523,7 @@ export default function MarketMap({
           {G.zones}
           {zonesOn && <span className="bar-badge bar-badge--zone" />}
         </BarIcon>
-        <BarIcon on={routeShipOn} onClick={toggleRouteShip} title={routeShipOn ? "Route animation is on: a ship sails the focused cargo's route (click a cargo to see it). Click to turn off" : "Route animation is off — click to animate a ship along the focused cargo's route"}>
+        <BarIcon on={routeShipOn} onClick={toggleRouteShip} title={routeShipOn ? "Route: on — the focused cargo's load → discharge track is drawn and a ship sails it (click a cargo to see it). Click to turn the animation off" : "Route: off — click to draw the focused cargo's load → discharge track and sail a ship along it"}>
           {G.ship}
         </BarIcon>
         <div className="bar-divider" />
@@ -1798,7 +1808,8 @@ function DealCard({
 
       {popup.kind === "cargo" ? (() => {
         const c = popup.data;
-        const hasPorts = !!(c.route.polCode && c.route.podCode);
+        const rl = routeLegs(c);
+        const hasPorts = !!(rl.polCode && rl.podCode);
         return (
           <div className="deal-card__body">
             <div className="deal-card__tags">
@@ -1806,11 +1817,10 @@ function DealCard({
               {c.spot && <span className="deal-card__tag is-spot">SPOT</span>}
               {postedAgeLabel(c.postedAt) && <span className="deal-card__tag is-age">{postedAgeLabel(c.postedAt)}</span>}
             </div>
-            <Row k="Route" v={hasPorts
-              ? <>{c.route.polCode} → {c.route.podCode} <span className="deal-card__dim">{c.route.polZone} → {c.route.podZone}</span></>
-              : <>{c.route.polZone || "—"} → {c.route.podZone || "—"}</>} />
+            <Row k="Route" v={<>{rl.pol.label} → {rl.pod.label} <span className="deal-card__dim">{hasPorts ? `${rl.polCode} → ${rl.podCode}` : `${c.route.polZone || "—"} → ${c.route.podZone || "—"}`}</span></>} />
+            {(rl.note || !hasPorts) && <Row k="Note" v={<span className="deal-card__dim">{rl.note ?? noRouteReason(rl)}</span>} />}
             <Row k="Laycan" v={c.spot ? "SPOT" : formatLaycanRange(c.laycanFrom, c.laycanTo)} />
-            <Row k="Quantity" v={`${c.qtyMt} MT${c.sf != null ? ` · SF ${c.sf} m³/t` : ""}`} />
+            <Row k="Quantity" v={`${formatQtyVol(c).weight}${c.sf != null ? ` · SF ${c.sf} m³/t` : ""}`} />
             {(c.loadRate != null || c.dischRate != null) && (
               <Row k="Rates" v={`${c.loadRate ?? "—"} / ${c.dischRate ?? "—"}${c.loadTerms ? ` · ${c.loadTerms}` : ""}`} />
             )}

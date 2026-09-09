@@ -10,7 +10,11 @@ export type JobName =
   | "groupmail-dispatch"
   | "email-sync"
   | "whatsapp-webhook"
-  | "bunker-ingest";
+  | "bunker-ingest"
+  | "paymob-webhook"
+  | "billing-cron"
+  | "dq-ai-review"
+  | "dq-nightly";
 
 export type JobTrigger = "cron" | "manual" | "webhook" | "pg_cron" | "admin";
 

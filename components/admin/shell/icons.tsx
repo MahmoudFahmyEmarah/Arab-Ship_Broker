@@ -64,6 +64,12 @@ export const ADMIN_ICONS: Record<string, Glyph> = {
   Doc: {
     svg: '<path d="M 6 3 L 16 3 L 19 6 L 19 21 L 6 21 Z"/><line x1="9" y1="9" x2="16" y2="9"/><line x1="9" y1="13" x2="16" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>',
   },
+  Invoice: {
+    svg: '<path d="M 6 3 L 18 3 L 18 21 L 15.5 19.4 L 13 21 L 10.5 19.4 L 8 21 L 6 19.4 Z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="11.5" x2="15" y2="11.5"/><line x1="9" y1="15" x2="12.5" y2="15"/>',
+  },
+  Check: {
+    svg: '<rect x="3" y="3" width="18" height="18" rx="4"/><polyline points="7.5 12.5 10.5 15.5 16.5 9"/>',
+  },
   Settings: {
     svg: '<circle cx="12" cy="12" r="3"/><path d="M 12 2 L 12 5 M 12 19 L 12 22 M 2 12 L 5 12 M 19 12 L 22 12 M 5 5 L 7 7 M 17 17 L 19 19 M 5 19 L 7 17 M 17 7 L 19 5"/>',
   },

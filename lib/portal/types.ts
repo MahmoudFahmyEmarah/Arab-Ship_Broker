@@ -2,6 +2,8 @@
 // the DB row types (lib/schemas/*) so the design layer never depends on
 // Supabase shapes directly — adapters (./adapters.ts) translate between them.
 
+import type { RouteLeg } from "./route-legs";
+
 export type CargoScope = "in" | "partial" | "out" | "fixed";
 
 // Who put the listing on the market — always a platform account, resolved
@@ -32,6 +34,10 @@ export interface CargoView {
     podCode: string;
     podZone: string;
   };
+  // Resolved legs (name first, reference port for alternatives) — set by the
+  // server loader when port names are available; routeLegs() falls back.
+  polLeg?: RouteLeg;
+  podLeg?: RouteLeg;
   // Multi-port range (index 0 = the primary in `route`). Empty/absent = single-port.
   loadPorts?: { locode: string; name: string; zone: string; status: string }[];
   dischPorts?: { locode: string; name: string; zone: string; status: string }[];

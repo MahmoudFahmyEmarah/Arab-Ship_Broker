@@ -1,5 +1,5 @@
 // POST /api/sync/email — run an email→LLM sync and stream progress as SSE.
-// Body: { limit?: number }            → live IMAP sync of the configured inbox
+// Body: { limit?: number, since?: ISO } → live IMAP sync of the configured inbox (since = start point override)
 //       { sample: string }            → dry run: classify one pasted email
 // Owner-only (Data Sync section, edit). Node runtime (imapflow + LangChain).
 
@@ -26,6 +26,8 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const sample = typeof body.sample === "string" ? body.sample : null;
   const limit = Math.min(Math.max(Number(body.limit) || 25, 1), 100);
+  const sinceRaw = typeof body.since === "string" ? new Date(body.since) : null;
+  const since = sinceRaw && !Number.isNaN(sinceRaw.getTime()) && sinceRaw.getTime() < Date.now() ? sinceRaw : null;
   const supabase = getSupabaseAdminClient();
 
   const stream = new ReadableStream({
@@ -33,7 +35,7 @@ export async function POST(req: Request) {
       const enc = new TextEncoder();
       // Live runs leave a job_runs row; the stream's done/error event settles it
       // (IMAP failures included), so the console dashboard can alert on them.
-      const runId = sample ? null : await startJobRun(supabase, "email-sync", { trigger: "admin", meta: { limit } });
+      const runId = sample ? null : await startJobRun(supabase, "email-sync", { trigger: "admin", meta: { limit, since: since?.toISOString() ?? null } });
       let settled = false;
       const emit = (e: SyncEvent) => {
         if (runId != null && !settled && (e.type === "done" || e.type === "error")) {
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
       };
       try {
         if (sample) await runEmailDryRun({ supabase, sampleText: sample, emit });
-        else await runEmailSync({ supabase, limit, emit, startedBy: admin.rowId });
+        else await runEmailSync({ supabase, limit, emit, startedBy: admin.rowId, since });
       } catch (e) {
         emit({ type: "error", error: e instanceof Error ? e.message : "Email sync failed." });
       } finally {
