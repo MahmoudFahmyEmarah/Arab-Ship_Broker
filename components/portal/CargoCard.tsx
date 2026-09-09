@@ -16,13 +16,14 @@ import {
   formatLaycanRange,
   ldRateRender,
 } from "@/lib/portal/format";
+import { legMarker, routeLegs, type RouteLeg } from "@/lib/portal/route-legs";
 import { MarketPartnerTag } from "./MarketPartnerPanel";
 import { PosterLine } from "./PosterLine";
 
 // LOCODE → port name → zone (owner's cascade) so a circular's "Egypt Med"
 // shows as text instead of an empty pair of codes.
-const leg = (code: string | null | undefined, name: string | null | undefined, zone: string | null | undefined) =>
-  code || (name && name.trim()) || zone || "—";
+// Name-first legs with alt / area markers (lib/portal/route-legs.ts).
+const Mark = ({ leg }: { leg: RouteLeg }) => { const m = legMarker(leg); return m ? <span className={`leg-mark is-${m}`} title={leg.tooltip}>{m}</span> : null; };
 
 function CCField({
   label,
@@ -63,6 +64,7 @@ export function CargoCard({
   const canPop = !limited && (c.matches || 0) > 0 && !!matchPool;
   const stripClass = `strip-${cargoStripKey(c)}`;
   const { weight, volume, sfMissing } = formatQtyVol(c);
+  const legs = routeLegs(c);
   const laycanStr = formatLaycanRange(c.laycanFrom, c.laycanTo);
   const isSpot = !!c.spot;
   const isOverdue = c.laycanDays != null && c.laycanDays < 0;
@@ -93,10 +95,10 @@ export function CargoCard({
 
       <div className="cc-line2">
         <div className="cc-route-line">
-          <span className="cc-ports" title={[c.route.polName, c.route.podName].filter(Boolean).join(" → ") || undefined}>
-            <span>{leg(c.route.polCode, c.route.polName, c.route.polZone)}</span>
+          <span className="cc-ports" title={`${legs.pol.tooltip} → ${legs.pod.tooltip}${legs.note ? ` · ${legs.note}` : ""}`}>
+            <span>{legs.pol.label}<Mark leg={legs.pol} /></span>
             <span className="cc-arrow"> → </span>
-            <span>{leg(c.route.podCode, c.route.podName, c.route.podZone)}</span>
+            <span>{legs.pod.label}<Mark leg={legs.pod} /></span>
           </span>
           {(c.route.polCode || c.route.polName || c.route.podCode || c.route.podName) && (
             <>

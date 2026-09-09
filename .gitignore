@@ -43,3 +43,7 @@ next-env.d.ts
 /scripts/ArabShipBroker CargoMap v3 05May2026.xlsx
 .wa-auth/
 .wa-worker.log
+
+# local dev-server logs
+.next-dev.stdout.log
+.next-dev.stderr.log

@@ -18,6 +18,7 @@ import { getTemporalAccess, type TemporalAccess } from "@/lib/temporal";
 import { toCargoView, vesselFromAvailability } from "./adapters";
 import { MOCK_CARGOS, MOCK_VESSELS } from "./mock";
 import { CargoView, VesselView, type PosterView } from "./types";
+import { legInfo, portKey, type PortNames } from "./route-legs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CargoListingRow } from "@/lib/schemas/cargo";
 import type { VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
@@ -153,6 +154,28 @@ async function loadPosters(
   }
 }
 
+// Port names for the route legs: locode → trade name and normalised name →
+// locode, from the ports table (a few hundred rows; one query per request).
+async function loadPortNames(): Promise<PortNames | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const supabase = await getSupabaseServerClient();
+    const { data, error } = await supabase.from("ports").select("locode, trade_name").eq("is_active", true);
+    if (error || !data) return null;
+    const names: PortNames = { byCode: {}, byName: {} };
+    for (const p of data as { locode: string; trade_name: string | null }[]) {
+      const code = (p.locode ?? "").replace(/\s+/g, "").toUpperCase();
+      if (!code) continue;
+      if (p.trade_name) { names.byCode[code] = p.trade_name; const k = portKey(p.trade_name); if (k && !names.byName[k]) names.byName[k] = code; }
+    }
+    return names;
+  } catch { return null; }
+}
+
+function withLegs(v: CargoView, names: PortNames | null): CargoView {
+  return { ...v, polLeg: legInfo(v.route.polCode, v.route.polName, v.route.polZone, names), podLeg: legInfo(v.route.podCode, v.route.podName, v.route.podZone, names) };
+}
+
 export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<CargoView>> {
   if (isSupabaseConfigured()) {
     try {
@@ -178,10 +201,11 @@ export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<Carg
       }
       const counts = rows.length ? await cargoMatchCounts(supabase, rows) : {};
       const posters = rows.length ? await loadPosters(supabase, "cargo", rows.map((r) => r.id)) : {};
+      const names = rows.length ? await loadPortNames() : null;
       // Configured = real environment: return live results even when empty so
       // members see a proper empty state, never mock listings.
       return {
-        views: rows.map((r) => ({ ...toCargoView(r, counts[r.id] ?? 0), poster: posters[r.id] ?? null })),
+        views: rows.map((r) => withLegs({ ...toCargoView(r, counts[r.id] ?? 0), poster: posters[r.id] ?? null }, names)),
         source: "live",
         archiveLabel,
       };
@@ -190,7 +214,7 @@ export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<Carg
     }
   }
   return {
-    views: MOCK_CARGOS.map((r, i) => toCargoView(r, CARGO_MATCHES[i] ?? 0)),
+    views: MOCK_CARGOS.map((r, i) => withLegs(toCargoView(r, CARGO_MATCHES[i] ?? 0), null)),
     source: "sample",
   };
 }

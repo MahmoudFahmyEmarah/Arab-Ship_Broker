@@ -5,6 +5,7 @@
 // admin gated at the DB (fn_org_manage_member). If the viewer isn't an org
 // admin, it shows their own membership state instead.
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
@@ -15,6 +16,9 @@ import {
   type TeamMember,
   type Membership,
   type MemberAction,
+  getOrgSeatSummary,
+  setPlanSeat,
+  type SeatSummary,
 } from "@/sdk/app/org";
 import { IconDoc } from "./icons";
 
@@ -33,6 +37,7 @@ export function TeamBoard() {
   const [orgId, setOrgId] = React.useState<string | null>(null);
   const [membership, setMembership] = React.useState<Membership | null>(null);
   const [team, setTeam] = React.useState<TeamMember[]>([]);
+  const [seats, setSeats] = React.useState<SeatSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -41,9 +46,26 @@ export function TeamBoard() {
     setMembership(mem);
     if (adminOrg) {
       try { setTeam(await getOrgTeam(supabase, adminOrg)); } catch { setTeam([]); }
+      setSeats(await getOrgSeatSummary(supabase, adminOrg));
     }
     setLoading(false);
   }, [supabase]);
+
+  // Plan seats: the company's subscription buys N seats; the admin decides who holds them.
+  const toggleSeat = async (m: TeamMember) => {
+    if (!orgId) return;
+    setBusy(m.user_id + "seat");
+    try {
+      await setPlanSeat(supabase, orgId, m.user_id, !m.plan_seat);
+      setTeam(await getOrgTeam(supabase, orgId));
+      setSeats(await getOrgSeatSummary(supabase, orgId));
+      toast.success(m.plan_seat ? "Seat freed" : "Seat assigned — their plan updates on next page load");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not change the seat");
+    } finally {
+      setBusy(null);
+    }
+  };
   React.useEffect(() => { void load(); }, [load]);
 
   const act = async (userId: string, action: MemberAction) => {
@@ -104,6 +126,12 @@ export function TeamBoard() {
         <div style={{ fontSize: 11, color: "var(--asb-gray-500)" }}>{m.email}{m.requested_email_domain ? ` · @${m.requested_email_domain}` : ""}</div>
       </div>
       {!isPending && <RoleBadge role={m.member_role} />}
+      {!isPending && seats && (
+        <button className={`asb-btn${m.plan_seat ? " primary" : ""}`} disabled={busy === m.user_id + "seat"} onClick={() => toggleSeat(m)} style={{ fontSize: 11 }}
+          title={m.plan_seat ? `Holds a ${seats.plan_code ?? ""} seat — click to free it` : "Assign one of the company's plan seats"}>
+          {m.plan_seat ? `${seats.plan_code ?? "Plan"} seat ✓` : "Assign seat"}
+        </button>
+      )}
       <div style={{ display: "flex", gap: 6 }}>
         {isPending ? (
           <>
@@ -130,6 +158,18 @@ export function TeamBoard() {
       <div style={{ fontSize: 12, color: "var(--asb-gray-500)", marginTop: 2 }}>
         Approve teammates, set their seat (admin / broker), or remove them. You’re the company admin.
       </div>
+      {seats ? (
+        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, background: "var(--asb-blue-light)", borderRadius: 10, padding: "8px 12px", fontSize: 12.5 }}>
+          <b style={{ color: "var(--asb-navy)" }}>{seats.used} / {seats.seats} plan seats assigned</b>
+          <span style={{ color: "var(--asb-gray-500)" }}>{seats.plan_code} · renews {seats.period_end ? new Date(seats.period_end).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
+          <span style={{ flex: 1 }} />
+          <Link href="/dashboard/account?tab=billing" style={{ fontSize: 12 }}>Billing →</Link>
+        </div>
+      ) : (
+        <div style={{ marginTop: 10, fontSize: 12, color: "var(--asb-gray-500)" }}>
+          No plan seats yet — <Link href="/dashboard/account?tab=billing">subscribe for your company</Link> and assign seats here.
+        </div>
+      )}
 
       {pending.length > 0 && (
         <div style={{ marginTop: 16 }}>

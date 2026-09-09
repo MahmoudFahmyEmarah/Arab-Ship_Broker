@@ -92,7 +92,7 @@
   --bd-focus: 1px solid var(--asb-blue);
 
   /* ── Sidebar ───────────────────────────────────────────────── */
-  --sidebar-w: 180px;
+  --sidebar-w: 220px;   /* 180 → 220 (9 Sep 2026): every page name fits on one line at 13 px */
   --sidebar-w-collapsed: 48px;
 
   /* ── Transition ────────────────────────────────────────────── */
@@ -930,6 +930,9 @@ button { font: inherit; cursor: pointer; }
   font-weight: 500;
 }
 .nav-item .nav-icon { width: 16px; height: 16px; flex-shrink: 0; }
+/* One line per item, always: a label that outgrows the rail ellipsises instead
+   of wrapping (locked items also carry a SOON / T3+ tag on the same line). */
+.nav-item .nav-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nav-item.is-active .nav-icon { color: var(--asb-blue); }
 /* Action items (Post Cargo / Post Position) stay grey like every other item —
    only the active page is blue. The "+" glyph still marks them as create actions. */
@@ -1466,7 +1469,7 @@ button { font: inherit; cursor: pointer; }
 
 /* Sidebar type scale (09 §3) — scoped to .asb-sidebar so tokens stay global. */
 .asb-sidebar .nav-item { font-size: 13px; }
-.asb-sidebar .nav-item.action { font-size: 11px; }
+.asb-sidebar .nav-item.action { font-size: 13px; }   /* one size for every page name (owner, 9 Sep 2026) */
 .asb-sidebar .nav-section { font-size: 9px; }
 .dash-row__name {
   font-size: 12.5px;
@@ -3631,14 +3634,26 @@ button { font: inherit; cursor: pointer; }
 .asb-map .zone-flyout__foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 10.5px; color: rgba(255,255,255,.6); }
 .asb-map .zone-flyout__foot button { background: none; border: none; color: #F5D48A; cursor: pointer; font: inherit; font-size: 10.5px; padding: 0; }
 
-/* ── Three-line rows, always: line 2 never wraps; it ellipsises instead ── */
+/* ── Rows: line 2 wraps onto a 4th line when the figures need it (owner,
+   9 Sep 2026: a clipped quantity is worse than an extra line) ── */
 .dash-row .dash-row__r3 {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: 2px;
+  white-space: normal;
+  overflow: visible;
   padding-right: 28px;
 }
+.dash-row .dash-row__r3 > * { white-space: nowrap; }
+/* leg markers: alternatives ("Izmail or Reni") and areas ("Spain Med") */
+.leg-mark {
+  display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 0 4px; border-radius: 4px; margin-left: 3px; vertical-align: 1px; line-height: 1.5; font-family: var(--asb-font);
+}
+.leg-mark.is-alt { background: var(--asb-blue-light, #E6F1FB); color: var(--asb-steel, #2C5F8A); }
+.leg-mark.is-area { background: var(--asb-gray-100, #EEF2F7); color: var(--asb-gray-500, #6B7A99); }
+.ve-route-note { grid-column: 1 / -1; font-size: 11px; color: var(--asb-steel, #2C5F8A); background: var(--asb-blue-light, #E6F1FB); border-radius: 8px; padding: 6px 10px; margin-top: 6px; }
 .dash-row .dash-row__r3 > * { vertical-align: baseline; }
 .dash-row .dash-row__r3 .dash-row__sep { margin: 0 4px; }
 .dash-row .dash-row__r3 .dash-row__zones { margin-left: 5px; }

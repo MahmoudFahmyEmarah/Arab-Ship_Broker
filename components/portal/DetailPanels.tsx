@@ -3,6 +3,7 @@
 // Sliding detail panels for cargo + vessel, ported from the Claude design
 // (asb/detail-panel.jsx). Real values from the view models; "—" where the
 // source row has no value (no invented data). Rules-engine tooltips deferred.
+import { routeLegs } from "@/lib/portal/route-legs";
 import * as React from "react";
 import Link from "next/link";
 import { CargoView, VesselView, VesselOwnershipView } from "@/lib/portal/types";
@@ -99,6 +100,7 @@ function PortRange({ label, ports }: { label: string; ports: { locode: string; n
 }
 
 export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose: () => void }) {
+  const legs = routeLegs(cargo);
   const typeLabel = cargo.type === "Dry Bulk" ? "DRY BULK" : cargo.type === "Break Bulk" ? "BREAK BULK" : cargo.type.toUpperCase();
   return (
     <div className="detail-panel">
@@ -130,8 +132,8 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
         <div className="section">
           <h4>Route</h4>
           <div className="grid-2">
-            <FieldRow label="Load port" value={`${cargo.route.polName} · ${cargo.route.polCode}`} />
-            <FieldRow label="Discharge port" value={`${cargo.route.podName} · ${cargo.route.podCode}`} />
+            <FieldRow label={legs.pol.kind === "alt" ? "Load port (alternatives)" : legs.pol.kind === "area" ? "Load area" : "Load port"} value={`${legs.pol.label}${legs.pol.code ? ` · ${legs.pol.code}` : legs.pol.refCode ? ` · est. ${legs.pol.refName} (${legs.pol.refCode})` : ""}`} />
+            <FieldRow label={legs.pod.kind === "alt" ? "Discharge port (alternatives)" : legs.pod.kind === "area" ? "Discharge area" : "Discharge port"} value={`${legs.pod.label}${legs.pod.code ? ` · ${legs.pod.code}` : legs.pod.refCode ? ` · est. ${legs.pod.refName} (${legs.pod.refCode})` : ""}`} />
             <FieldRow label="Zone direction" value={`${cargo.route.polZone} → ${cargo.route.podZone}`} />
           </div>
           {((cargo.loadPorts?.length ?? 0) > 1 || (cargo.dischPorts?.length ?? 0) > 1) && (

@@ -5,10 +5,18 @@
 // resulting review batch. Also offers a dry run against a pasted email so the
 // classifier can be validated without live credentials.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Mail, Loader2, Play, FlaskConical, ChevronDown } from "lucide-react";
+import { Mail, Loader2, Play, FlaskConical, ChevronDown, RotateCcw } from "lucide-react";
+import { getSyncWatermarks } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { C, btn } from "./ui";
+
+// datetime-local wants local wall time without the zone
+const toLocalInput = (iso: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso); const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 interface DoneEvent { type: "done"; batchId: string; totals: { new: number; updated: number } }
 type Evt =
@@ -23,6 +31,14 @@ export function EmailSyncCard({ onDone }: { onDone: (batchId: string) => void })
   const [showSample, setShowSample] = useState(false);
   const [sample, setSample] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
+  // Start point for the fetch. Default = the last SUCCESSFUL sync (a failed
+  // run never moves it); the admin can move it back to re-read older mail.
+  const [watermark, setWatermark] = useState<string | null>(null);
+  const [since, setSince] = useState("");
+  const loadWatermark = async () => { const r = await getSyncWatermarks(); if (r.success) { setWatermark(r.data.email); setSince(toLocalInput(r.data.email)); } };
+  useEffect(() => { void loadWatermark(); }, []);
+  const sinceIso = since ? new Date(since).toISOString() : null;
+  const sinceChanged = (sinceIso ?? "") !== (watermark ? new Date(watermark).toISOString() : "");
 
   const append = (line: string) => {
     setLog((l) => [...l, line]);
@@ -65,6 +81,7 @@ export function EmailSyncCard({ onDone }: { onDone: (batchId: string) => void })
           }
         }
       }
+      await loadWatermark();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Email sync failed.";
       append(`✗ ${msg}`);
@@ -86,7 +103,7 @@ export function EmailSyncCard({ onDone }: { onDone: (batchId: string) => void })
             Fetch recent circulars and classify them locally through the active LLM key into a review batch.
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-            <button onClick={() => run({ limit: 25 })} disabled={running} style={btn("dark")}>
+            <button onClick={() => run({ limit: 25, since: sinceChanged ? sinceIso : undefined })} disabled={running} style={btn("dark")}>
               {running ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Play size={15} />} Sync now
             </button>
             <button onClick={() => setShowSample((s) => !s)} disabled={running} style={btn("ghost")}>
@@ -95,6 +112,20 @@ export function EmailSyncCard({ onDone }: { onDone: (batchId: string) => void })
             </button>
           </div>
         </div>
+      </div>
+
+      <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: C.ink3 }}>
+        <label htmlFor="email-since" style={{ fontWeight: 600, color: C.ink }}>Fetch mail since</label>
+        <input id="email-since" type="datetime-local" value={since} onChange={(e) => setSince(e.target.value)} disabled={running}
+          style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${sinceChanged ? C.brass : C.line}`, font: "inherit", fontSize: 12.5, background: "#fff", color: C.ink }} />
+        {sinceChanged && (
+          <button type="button" onClick={() => setSince(toLocalInput(watermark))} disabled={running} title="Back to the last successful sync" style={{ ...btn("ghost"), padding: "4px 8px", fontSize: 12 }}>
+            <RotateCcw size={12} /> Reset
+          </button>
+        )}
+        <span>
+          {watermark ? `Last successful sync ${new Date(watermark).toLocaleString()}` : "No successful sync yet (default: last 7 days)"} · a run whose classification fails never moves this point.
+        </span>
       </div>
 
       {showSample && (

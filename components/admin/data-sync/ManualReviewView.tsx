@@ -479,17 +479,14 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
             Flag <span style={{ color: C.ink3, fontWeight: 400 }}>(ship register)</span>
             {!flagKnown && <span style={{ color: C.red, fontWeight: 600 }}> · \u201c{flag}\u201d is not a known register — pick one</span>}
           </label>
-          <select value={flag} onChange={(e) => setFlag(e.target.value)} style={{ ...field, borderColor: flagKnown ? C.line : C.red }}>
-            <option value="">—</option>
-            {!flagKnown && <option value={flag}>{flag} (unrecognised)</option>}
-            <optgroup label="Open registries">
-              {flagOptions.filter((f) => f.category === "open").map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
-            </optgroup>
-            <optgroup label="National registers">
-              {flagOptions.filter((f) => f.category === "national").map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
-            </optgroup>
-            {flagOptions.filter((f) => f.category === "unknown").map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
-          </select>
+          <input list="dsq-flags" value={flag} onChange={(e) => setFlag(e.target.value)}
+            onBlur={() => { const n = normalizeFlag(flag); if (n && n !== flag) setFlag(n); }}
+            placeholder={`type to search ${flagOptions.length || 192} registers — e.g. Gambia`}
+            style={{ ...field, borderColor: flagKnown ? C.line : C.red }} />
+          <datalist id="dsq-flags">
+            {flagOptions.map((f) => <option key={f.name} value={f.name}>{f.category === "open" ? "open registry" : f.category === "national" ? "national register" : ""}</option>)}
+          </datalist>
+          <div style={{ fontSize: 11, color: C.ink3, marginTop: 3 }}>Every register on the Equasis flag list; spellings like &quot;Marshal Islands&quot; are normalised when you leave the field.</div>
         </div>
         <div>
           <label style={lab}>Open port {row.open_country && <span style={{ color: C.ink3, fontWeight: 400 }}>({row.open_country})</span>}</label>

@@ -24,9 +24,11 @@ export const ADMIN_SECTIONS: { id: string; href: string }[] = [
   { id: "users", href: "/admin/users" },
   { id: "orgmembers", href: "/admin/org-members" },
   { id: "groupmail", href: "/admin/group-mail" },
+  { id: "billing", href: "/admin/billing" },
   { id: "messages", href: "/admin/messages" },
   { id: "bunker", href: "/admin/bunker" },
   { id: "datasync", href: "/admin/data-sync" },
+  { id: "dataquality", href: "/admin/data-quality" },
   { id: "eta", href: "/admin/eta" },
   { id: "admins", href: "/admin/admins" },
   { id: "settings", href: "/admin/settings" },
@@ -57,12 +59,18 @@ export const ADMIN_PRESETS: Record<
       review: "edit", cargo: "edit", vesselavail: "edit",
       vessels: "view", users: "view", commodities: "view", ports: "view",
       bunker: "view", safety: "view", orgmembers: "view", risk: "view",
+      dataquality: "view",
     },
   },
   accountant: {
     label: "Admin · Accountant",
     blurb: "Billing oversight. No tax-credential (ETA) access.",
-    perms: { users: "view", messages: "view", bunker: "view" },
+    perms: { users: "view", messages: "view", bunker: "view", billing: "view" },
+  },
+  billing: {
+    label: "Admin · Billing",
+    blurb: "Sees invoices, customers and subscriptions; records bank transfers. Issuing, crediting, refunding and settings stay with the owner.",
+    perms: { billing: "edit", users: "view", orgmembers: "view" },
   },
   it: {
     label: "Admin · IT",
@@ -70,11 +78,12 @@ export const ADMIN_PRESETS: Record<
     perms: {
       ports: "edit", commodities: "edit", safety: "edit",
       bunker: "edit", vessels: "edit", messages: "view", risk: "edit",
+      dataquality: "edit",
     },
   },
 };
 
-export const ADMIN_PRESET_ORDER = ["sales", "broker", "accountant", "it"];
+export const ADMIN_PRESET_ORDER = ["sales", "broker", "accountant", "billing", "it"];
 
 // The authorization gate (same semantics as the design's admCanAccess).
 export function canAccess(

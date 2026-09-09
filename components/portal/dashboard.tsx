@@ -24,17 +24,19 @@ import {
   formatShortDate,
 } from "@/lib/portal/format";
 import { IconCaret } from "./icons";
+import { legInfo, legMarker, routeLegs, type RouteLeg } from "@/lib/portal/route-legs";
 import { PosterLine } from "./PosterLine";
 import { MatchesPopover } from "./MatchesPopover";
 
-// Route label cascade (owner's rule): LOCODE → port name → zone. A listing
-// from a circular may carry only "Egypt Med" or "Reni or Izmail" — that text
-// is more useful than a bare zone, and a zone is more useful than a dash.
-function routeLeg(code: string | null | undefined, name: string | null | undefined, zone: string | null | undefined): { label: string; level: "code" | "name" | "zone" | "none" } {
-  if (code) return { label: code, level: "code" };
-  if (name && name.trim()) return { label: name.trim(), level: "name" };
-  if (zone && zone.trim()) return { label: zone.trim(), level: "zone" };
-  return { label: "—", level: "none" };
+// Route legs (owner's rule, 9 Sep 2026): port NAME first — a bare LOCODE
+// resolves to its trade name, the code rides in the tooltip. "Izmail or Reni"
+// is shown as written with an "alt" marker (the first alternative that
+// resolves feeds distance and costs); "Spain Med" is shown with an "area"
+// marker and feeds nothing. See lib/portal/route-legs.ts.
+export function LegMark({ leg }: { leg: RouteLeg }) {
+  const m = legMarker(leg);
+  if (!m) return null;
+  return <span className={`leg-mark is-${m}`} title={leg.tooltip}>{m}</span>;
 }
 
 // ── Dense list row · CARGO ────────────────────────────────────────────────
@@ -59,15 +61,12 @@ export function DashCargoRow({
   const { weight } = formatQtyVol(c);
   const laycanStr = formatLaycanRange(c.laycanFrom, c.laycanTo);
   const typeLabel = cargoTypeLabel(c);
-  const pol = routeLeg(c.route.polCode, c.route.polName, c.route.polZone);
-  const pod = routeLeg(c.route.podCode, c.route.podName, c.route.podZone);
+  const legs = routeLegs(c);
+  const pol = legs.pol, pod = legs.pod;
   // Zones ride along unless both legs already fell back to the zone itself.
-  const showZones = !(pol.level === "zone" && pod.level === "zone") && (c.route.polZone || c.route.podZone);
+  const showZones = !(pol.kind === "none" && pod.kind === "none") && (c.route.polZone || c.route.podZone);
   const hasVol = c.vol && c.vol !== "—";
-  const routeTitle = [
-    c.route.polName && c.route.polCode ? `${c.route.polName} (${c.route.polCode})` : c.route.polName || c.route.polCode,
-    c.route.podName && c.route.podCode ? `${c.route.podName} (${c.route.podCode})` : c.route.podName || c.route.podCode,
-  ].filter(Boolean).join(" → ");
+  const routeTitle = `${pol.tooltip} → ${pod.tooltip}${legs.note ? ` · ${legs.note}` : ""}`;
   return (
     <div className={`dash-row strip-${c.scope}${focused ? " is-focused" : ""}`} data-row-id={c.id} onClick={onClick}>
       {matchesOpen && (
@@ -90,8 +89,8 @@ export function DashCargoRow({
         )}
       </div>
       <div className="dash-row__r3">
-        <span className={`dash-row__route ${pol.level === "code" && pod.level === "code" ? "mono" : ""}`} title={routeTitle || "Load → discharge"}>
-          <strong>{pol.label}</strong> → <strong>{pod.label}</strong>
+        <span className="dash-row__route" title={routeTitle || "Load → discharge"}>
+          <strong>{pol.label}</strong><LegMark leg={pol} /> → <strong>{pod.label}</strong><LegMark leg={pod} />
         </span>
         {showZones && (
           <span className="dash-row__zones" title="Trading zones: load → discharge">
@@ -147,8 +146,8 @@ export function DashVesselRow({
   const urg = v.openDateUrgency || "green";
   const fc = flagCode(v.flag);
   const flagName = v.flag && v.flag !== "—" ? v.flag : null;
-  const open = routeLeg(null, v.openPort !== "—" ? v.openPort : null, v.openPortZone !== "—" ? v.openPortZone : null);
-  const showZone = open.level !== "zone" && v.openPortZone && v.openPortZone !== "—";
+  const open = legInfo(null, v.openPort !== "—" ? v.openPort : null, v.openPortZone !== "—" ? v.openPortZone : null);
+  const showZone = open.kind !== "none" && v.openPortZone && v.openPortZone !== "—";
   return (
     <div className={`dash-row dash-row--inline${focused ? " is-focused" : ""}`} data-row-id={v.id} onClick={onClick}>
       <div className="dash-row__r1 is-left">
@@ -190,7 +189,7 @@ export function DashVesselRow({
         <span title="Cargo gear on board">{v.geared ? "Geared" : "Gearless"}</span>
         <span className="dash-row__sep">·</span>
         <span className={`asb-dot ${urg} ${urg === "red" ? "pulse" : ""}`} title={urg === "red" ? "Open date overdue / imminent" : urg === "amber" ? "Opens within days" : "Opens later"} />
-        <strong title="Open position">{open.label}</strong>
+        <strong title={open.tooltip}>{open.label}</strong><LegMark leg={open} />
         {showZone && <span className="dash-row__zones" title="Trading zone of the open position">{v.openPortZone}</span>}
         <span className="dash-row__sep">·</span>
         <span title="Open date">{formatShortDate(v.openDate)}</span>
