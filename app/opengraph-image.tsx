@@ -1,12 +1,18 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ImageResponse } from "next/og";
-
-import logo from "@/public/logo.png";
 
 export const alt = "Arab ShipBroker — Connecting shippers with shipowners";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function OpenGraphImage() {
+export default async function OpenGraphImage() {
+  // ImageResponse cannot resolve Next's generated /_next/static/... URL while
+  // this route is prerendered. Embedding the existing logo makes the image
+  // self-contained and avoids a build-time network request.
+  const logo = await readFile(join(process.cwd(), "public", "logo.png"));
+  const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
+
   return new ImageResponse(
     (
       <div
@@ -35,10 +41,10 @@ export default function OpenGraphImage() {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={logo.src}
+            src={logoSrc}
             alt=""
-            width="270"
-            height="270"
+            width={270}
+            height={270}
             style={{ objectFit: "contain" }}
           />
         </div>
