@@ -106,6 +106,8 @@ export async function middleware(request: NextRequest) {
 
   const isPublicRoute =
     pathname === "/" ||
+    pathname.startsWith("/share") ||
+    pathname.startsWith("/opengraph-image") ||
     pathname.startsWith("/services") ||
     pathname.startsWith("/contact") ||
     pathname.startsWith("/market-insights") ||
