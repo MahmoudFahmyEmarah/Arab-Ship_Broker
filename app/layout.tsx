@@ -30,9 +30,27 @@ const notoArabic = Noto_Sans_Arabic({
   weight: ["400", "500", "600"],
 });
 
+const SITE_TITLE = "Arab ShipBroker Maritime Brokerage for MENA";
+const SITE_DESCRIPTION = "Connecting shippers with shipowners";
+
 export const metadata: Metadata = {
-  title: "Arab ShipBroker Maritime Brokerage for MENA",
-  description: "Connecting Buyers and Sellers in the MENA Maritime Market",
+  metadataBase: new URL("https://www.arabshipbroker.com"),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  // Link previews (WhatsApp, LinkedIn, Slack…) read the Open Graph tags first
+  // and only fall back to <meta name="description"> when they are missing.
+  openGraph: {
+    type: "website",
+    siteName: "Arab ShipBroker",
+    url: "https://www.arabshipbroker.com",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function RootLayout({
