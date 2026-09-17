@@ -31,9 +31,10 @@ const notoArabic = Noto_Sans_Arabic({
 });
 
 const SITE_TITLE = "Arab ShipBroker Maritime Brokerage for MENA";
+const SOCIAL_TITLE = "Arab ShipBroker | MENA Brokerage";
 const SITE_DESCRIPTION =
   "Connecting shippers with shipowners across MENA through trusted maritime brokerage and intelligent cargo-vessel matching.";
-const SITE_IMAGE = "/opengraph-image";
+const SITE_IMAGE = "/logo.png";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.arabshipbroker.com"),
@@ -45,20 +46,20 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "Arab ShipBroker",
     url: "https://www.arabshipbroker.com",
-    title: SITE_TITLE,
+    title: SOCIAL_TITLE,
     description: SITE_DESCRIPTION,
     images: [
       {
         url: SITE_IMAGE,
-        width: 1200,
-        height: 630,
-        alt: "Arab ShipBroker — Connecting shippers with shipowners",
+        width: 1024,
+        height: 1024,
+        alt: "Arab ShipBroker logo",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: SITE_TITLE,
+    title: SOCIAL_TITLE,
     description: SITE_DESCRIPTION,
     images: [SITE_IMAGE],
   },
