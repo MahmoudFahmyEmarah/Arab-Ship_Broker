@@ -10,6 +10,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { XlsxSource, stageBatch } from "@/lib/sync";
 import { setWatermark } from "@/lib/sync/state";
+import { logAudit, requestContext } from "@/lib/admin/data-sync-audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,8 +18,15 @@ export const dynamic = "force-dynamic";
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(req: Request) {
-  // Admin gate (redirects non-admins). Section-level perms arrive with the UI in Phase 3.
-  await requireAdmin();
+  // Owner-only, edit seat: the same gate every Data Sync server action uses. A
+  // view-only sub-admin (or a member) gets JSON, not a redirect — this is an
+  // API route the upload card calls with fetch().
+  let admin: Awaited<ReturnType<typeof requireAdmin>>;
+  try {
+    admin = await requireAdmin({ section: "datasync", edit: true });
+  } catch {
+    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  }
 
   let form: FormData;
   try {
@@ -63,10 +71,16 @@ export async function POST(req: Request) {
     // upload still processes the whole file in batches — the watermark is not
     // used to limit rows).
     try { await setWatermark(supabase, "upload", new Date()); } catch { /* non-critical */ }
+    await logAudit(supabase, {
+      actor: { id: admin.rowId, name: admin.fullName }, ctx: requestContext(req.headers), action: "run.upload", targetKind: "batch", targetId: result.batchId, batchId: result.batchId,
+      summary: `Uploaded ${file.name} — ${result.totals.new} new · ${result.totals.updated} updated · ${result.totals.invalid} blocked`,
+      detail: { file: file.name, bytes: file.size, totals: result.totals, gate: result.gate ?? null },
+    });
 
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to parse the workbook.";
+    await logAudit(getSupabaseAdminClient(), { actor: { id: admin.rowId, name: admin.fullName }, ctx: requestContext(req.headers), action: "run.upload", targetKind: "batch", summary: `Workbook upload failed — ${message}`, ok: false, detail: { file: file.name, bytes: file.size } });
     return NextResponse.json({ error: message }, { status: 422 });
   }
 }

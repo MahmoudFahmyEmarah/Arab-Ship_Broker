@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import type { Classifier, ClassifyResult, EmailMsg } from "./types";
 
 // Cap each email's text inside a batch. Long digests are pre-split into
@@ -129,13 +130,13 @@ function emailBlock(e: EmailMsg, i: number): string {
 }
 
 export class LangChainClassifier implements Classifier {
-  constructor(private model: BaseChatModel) {}
+  constructor(private model: BaseChatModel, private callbacks: BaseCallbackHandler[] = []) {}
 
   async classifyBatch(emails: EmailMsg[]): Promise<ClassifyResult[]> {
     if (emails.length === 0) return [];
     const m = this.model.withStructuredOutput(BatchSchema, { name: "classify_batch" });
     const body = emails.map((e, i) => emailBlock(e, i)).join("\n\n");
-    const r = (await m.invoke(`${batchSysPrompt(emails.length)}\n\n${body}`)) as z.infer<typeof BatchSchema>;
+    const r = (await m.invoke(`${batchSysPrompt(emails.length)}\n\n${body}`, { callbacks: this.callbacks })) as z.infer<typeof BatchSchema>;
 
     // Map results back by their declared index (robust to reordering / omissions).
     const out: ClassifyResult[] = emails.map(() => ({ category: "irrelevant", reason: "", cargo: [], vessels: [] }));

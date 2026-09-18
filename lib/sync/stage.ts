@@ -11,6 +11,8 @@ import { specById } from "./sheets";
 import { buildStagedRow, mapRow } from "./diff";
 import { fetchCommodityIndex, resolveCommodity, type CommodityIndex } from "./commodity";
 import { fetchPortIndex, resolvePortLocode } from "./ports";
+import { gateChannelFor } from "./batch-status";
+import { referencedPortCodes, unknownPortCodes } from "./ports-check";
 
 const CHUNK = 500;
 
@@ -36,7 +38,7 @@ async function dbRetry<T>(fn: () => PromiseLike<T>, tries = 3): Promise<T> {
 }
 
 function emptyCounts(): SheetCounts {
-  return { new: 0, updated: 0, unchanged: 0, invalid: 0, errors: 0 };
+  return { new: 0, updated: 0, unchanged: 0, invalid: 0, errors: 0, queued: 0 };
 }
 
 const asInt = (v: Cell): number | null => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : null);
@@ -76,7 +78,7 @@ async function enqueueVessels(
   rows: StagedRow[],
   sourceKind: string,
   batchId: string,
-): Promise<void> {
+): Promise<number> {
   const seen = new Set<string>();
   const queue: Record<string, unknown>[] = [];
   const incoming: { name: string; built: number | null; dwt: number | null }[] = [];
@@ -119,17 +121,18 @@ async function enqueueVessels(
       first_batch_id: batchId, status: "pending", resolved_vessel_id: null, resolved_at: null,
     });
   }
-  if (!queue.length) return;
+  if (!queue.length) return 0;
   try {
     // Near-duplicate guard: a PENDING row for the same ship (same name, built
     // compatible, DWT within ~5%) absorbs the new sighting — position fields
     // refresh, missing scalars fill in — instead of spawning a second entry.
-    const { data: pending } = await supabase
+    const { data: pending, error: pErr } = await supabase
       .from("vessel_review_queue")
       .select("id, vessel_name, built, dwt_grain, posted_at")
       .eq("status", "pending")
       .in("vessel_name", incoming.map((i) => i.name))
       .limit(400);
+    if (pErr) throw new Error(`vessel review queue: ${pErr.message}`);
     const updates: { id: string; patch: Record<string, unknown> }[] = [];
     const inserts: Record<string, unknown>[] = [];
     for (const q of queue) {
@@ -153,13 +156,23 @@ async function enqueueVessels(
         inserts.push(q);
       }
     }
-    for (const u of updates)
-      await supabase.from("vessel_review_queue").update(u.patch).eq("id", u.id);
-    if (inserts.length)
+    if (updates.length) {
+      // one round trip for every refreshed sighting (phase 5)
+      const { error } = await supabase.from("vessel_review_queue").upsert(updates.map((u) => ({ id: u.id, ...u.patch })), { onConflict: "id" });
+      if (error) throw new Error(`vessel review queue: ${error.message}`);
+    }
+    if (inserts.length) {
       // Re-surface (re-open) a previously-resolved vessel when it's sighted again.
-      await supabase.from("vessel_review_queue").upsert(inserts, { onConflict: "composite_key" });
-  } catch {
-    /* queue is advisory — never fail the batch */
+      const { error } = await supabase.from("vessel_review_queue").upsert(inserts, { onConflict: "composite_key" });
+      if (error) throw new Error(`vessel review queue: ${error.message}`);
+    }
+    return queue.length;
+  } catch (e) {
+    // Phase 4 (18 Sep 2026): the queue is where these vessels LIVE — a failed
+    // write used to drop them silently (the client returns {error}, it does
+    // not throw). Now staging fails and says so; nothing is lost because the
+    // batch is marked failed and can be staged again.
+    throw new Error(`${queue.length} vessel(s) without an IMO could not be queued for Manual Review — ${e instanceof Error ? e.message : String(e)}. Fix the queue and stage the batch again.`);
   }
 }
 
@@ -206,6 +219,13 @@ export async function stageBatch({
 
   try {
     const parsed = await source.parse();
+    // ports staged in this same workbook count as known for its cargo rows
+    const portsSpec = specById("ports");
+    const batchPortCodes = new Set<string>(
+      portsSpec
+        ? parsed.filter((p) => p.sheet === "ports").flatMap((p) => p.rows.map((r) => String(mapRow(portsSpec, r).payload[portsSpec.keyColumn] ?? "").trim().toUpperCase()).filter(Boolean))
+        : [],
+    );
 
     for (const { sheet, rows } of parsed) {
       const spec = specById(sheet);
@@ -254,20 +274,24 @@ export async function stageBatch({
       }
 
       // 2 · fetch existing live rows for this sheet's keys (chunked .in)
+      const mappedPayloads = rows.map((r) => mapRow(spec, r).payload);
       const keys = Array.from(
         new Set(
-          rows
-            .map((r) => mapRow(spec, r).payload[spec.keyColumn])
+          mappedPayloads
+            .map((p) => p[spec.keyColumn])
             .filter((k): k is string | number => k != null && k !== "")
             .map(String),
         ),
       );
+      // Phase 5: read only the columns the comparison looks at — the key, the
+      // sheet's columns and whatever the mapper derived — instead of every column.
+      const compareColumns = Array.from(new Set([spec.keyColumn, ...spec.columns.map((c) => c.column), ...mappedPayloads.flatMap((p) => Object.keys(p))])).join(", ");
       const existingByKey = new Map<string, Record<string, Cell>>();
       for (const part of chunk(keys, CHUNK)) {
         if (part.length === 0) continue;
-        const { data, error } = await dbRetry(() => supabase.from(spec.targetTable).select("*").in(spec.keyColumn, part));
+        const { data, error } = await dbRetry(() => supabase.from(spec.targetTable).select(compareColumns).in(spec.keyColumn, part));
         if (error) throw new Error(`reading ${spec.targetTable}: ${error.message}`);
-        for (const row of data ?? []) existingByKey.set(String(row[spec.keyColumn]), row as Record<string, Cell>);
+        for (const row of (data ?? []) as unknown as Record<string, Cell>[]) existingByKey.set(String(row[spec.keyColumn]), row);
       }
 
       // 2c · what this source said last time (latest COMMITTED staged payload
@@ -276,22 +300,34 @@ export async function stageBatch({
       const previousByKey = new Map<string, RawRow>();
       for (const part of chunk(keys, CHUNK)) {
         if (part.length === 0) continue;
-        const { data, error } = await dbRetry(() => supabase
-          .from("sync_staged_row")
-          .select("business_key, payload, created_at")
-          .eq("target_table", spec.targetTable)
-          .eq("committed", true)
-          .in("business_key", part)
-          .order("created_at", { ascending: false })
-          .limit(part.length * 4));
+        // Phase 4: scoped to THIS source (a circular's payload is no baseline
+        // for a workbook upload), latest committed payload per key, one call.
+        const { data, error } = await dbRetry(() => supabase.rpc("fn_sync_previous_payloads", { p_table: spec.targetTable, p_source: source.kind, p_keys: part }));
         if (error) throw new Error(`reading previous sync of ${spec.targetTable}: ${error.message}`);
-        for (const row of (data ?? []) as { business_key: string; payload: RawRow }[]) {
-          if (!previousByKey.has(row.business_key)) previousByKey.set(row.business_key, row.payload ?? {});
-        }
+        for (const row of (data ?? []) as { business_key: string; payload: RawRow }[]) previousByKey.set(row.business_key, row.payload ?? {});
       }
 
       // 3 · build + persist staged rows
       const built: StagedRow[] = rows.map((raw, i) => buildStagedRow(spec, raw, i + 1, existingByKey, null, previousByKey));
+
+      // Phase 4: a port code the registry does not know makes the row invalid
+      // HERE, with the field named — commit used to drop the code silently.
+      if (sheet === "cargo") {
+        const codes = referencedPortCodes(built.map((s) => s.payload));
+        const known = new Set<string>();
+        for (const part of chunk(codes, CHUNK)) {
+          if (!part.length) continue;
+          const { data, error } = await dbRetry(() => supabase.from("ports").select("locode").in("locode", part));
+          if (error) throw new Error(`reading ports: ${error.message}`);
+          for (const p of (data ?? []) as { locode: string }[]) known.add(String(p.locode).toUpperCase());
+        }
+        for (const s of built) {
+          for (const u of unknownPortCodes(s.payload, known, batchPortCodes)) {
+            s.flags.push({ level: "error", field: u.field, msg: `port code ${u.code} is not in the registry — place it in Admin → Ports or correct the code` });
+          }
+          if (s.classification !== "invalid" && s.flags.some((f) => f.level === "error")) s.classification = "invalid";
+        }
+      }
 
       // Vessels without an IMO have no business key → route them to the vessel
       // review queue (synced later by a name+built+dwt composite key) instead of
@@ -300,7 +336,11 @@ export async function stageBatch({
       if (sheet === "vessels") {
         const noImo = built.filter((s) => !s.businessKey);
         staged = built.filter((s) => s.businessKey);
-        if (noImo.length) await enqueueVessels(supabase, noImo, source.kind, batchId);
+        if (noImo.length) {
+          const queued = await enqueueVessels(supabase, noImo, source.kind, batchId);
+          counts[sheet].queued = (counts[sheet].queued ?? 0) + queued;
+          totals.queued = (totals.queued ?? 0) + queued;
+        }
       }
 
       for (const s of staged) {
@@ -325,6 +365,7 @@ export async function stageBatch({
         flags: s.flags,
         source_email_id: s.sourceEmailId,
         row_index: s.rowIndex,
+        source: source.kind,
       }));
 
       for (const part of chunk(records, CHUNK)) {
@@ -366,7 +407,7 @@ export async function stageBatch({
     // the row into Review with their DQ code. Never fails the batch by itself.
     let gate: StageResult["gate"];
     try {
-      const channel = source.kind === "upload" ? "sync" : "pipeline";
+      const channel = gateChannelFor(source.kind);
       const { data: g, error: gErr } = await dbRetry(() => supabase.rpc("fn_dq_gate_batch", { p_batch_id: batchId, p_channel: channel, p_actor: label ?? fileName ?? source.kind }));
       if (gErr) {
         errors.push({ sheet: "gate", row: 0, msg: `data-quality gate: ${gErr.message}` });
@@ -389,8 +430,10 @@ export async function stageBatch({
       errors.push({ sheet: "gate", row: 0, msg: `data-quality gate: ${e instanceof Error ? e.message : String(e)}` });
     }
 
-    // 4 · record the summary on the batch
-    await supabase.from("sync_batch").update({ counts }).eq("id", batchId);
+    // 4 · record the summary on the batch, and its state (phase 2, 18 Sep
+    //     2026): 'gated' when the data-quality gate ran, 'gate_failed' when it
+    //     could not — commit_sync_batch refuses the latter until it is re-run.
+    await supabase.from("sync_batch").update({ counts, status: gate ? "gated" : "gate_failed" }).eq("id", batchId);
 
     return { batchId, label, counts, totals, errors, gate };
   } catch (err) {

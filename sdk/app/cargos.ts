@@ -62,7 +62,10 @@ export async function submitCargo(
     })
     .single();
 
-  if (cargoError) throw cargoError;
+  if (cargoError) {
+    // the database's own gates speak plain language behind a prefix
+    throw new Error(cargoError.message.replace(/^(ROUTE_GATE|DQ_GATE):\s*/, ""));
+  }
   const typedCargo = cargo as CargoListingRow;
 
   const answers = payload.safety_answers ?? {};

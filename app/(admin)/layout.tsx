@@ -7,6 +7,7 @@
 import "./admin.css";
 import "./admin-dashboard.css";
 import "./admin-dq.css";
+import "./admin-data-sync.css";
 import { requireAdmin, getAdminSupabaseClient } from "@/lib/admin/require-admin";
 import { AdminTopbar } from "@/components/admin/shell/AdminTopbar";
 import { AdminSidebarNav } from "@/components/admin/shell/AdminSidebarNav";

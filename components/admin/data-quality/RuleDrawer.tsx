@@ -63,7 +63,7 @@ export function RuleDrawer({ rule, isNew, onClose, onSaved, onToggle, onDuplicat
   const costHint = test?.cost?.length ? test.cost.map((c) => c.error ? `${tableLabel(c.table)}: ${c.error}` : `${tableLabel(c.table)}: ${c.node} · cost ${Number(c.total_cost).toFixed(0)} · ~${c.rows} rows`).join(" · ") : d.kind === "ai" ? "~1.1k tokens per sampled row" : "run a test to see the EXPLAIN cost";
 
   return (
-    <Drawer label="Rule editor" onClose={onClose} title={<input className="adm-input" value={d.name} disabled={!canEdit} onChange={(e) => upd({ name: e.target.value })} style={{ width: "100%", fontSize: 17, fontWeight: 600, color: "var(--asb-navy)", border: 0, padding: 0, background: "transparent" }} />}
+    <Drawer guard={() => !dirty || window.confirm("Discard unsaved changes to this rule?")} label="Rule editor" onClose={onClose} title={<input className="adm-input" value={d.name} disabled={!canEdit} onChange={(e) => upd({ name: e.target.value })} style={{ width: "100%", fontSize: 17, fontWeight: 600, color: "var(--asb-navy)", border: 0, padding: 0, background: "transparent" }} />}
       head={<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         {isNew ? <input className="adm-input" placeholder="DQ-N01 (auto)" value={d.code} onChange={(e) => upd({ code: e.target.value.toUpperCase() })} style={{ width: 110, fontSize: 11, padding: "2px 6px" }} /> : <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--asb-steel)", letterSpacing: ".04em" }}>{d.code}</span>}
         <Badge cls={SEVERITY_BADGE[d.severity]}>{d.severity}</Badge><Badge cls={SOURCE_BADGE[d.source]}>{d.source}</Badge>

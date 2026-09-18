@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { withJobRun } from "@/lib/jobs/runs";
+import { cronAuthorized, cronTrigger } from "@/lib/cron/auth";
 
 // Recompute the precomputed `matches` cache table (Vercel Cron, see vercel.json).
 // Calls the SECURITY DEFINER fn_refresh_matches() via the service role, which
@@ -8,15 +9,13 @@ import { withJobRun } from "@/lib/jobs/runs";
 // matching RPCs. The dashboard/board match badges read counts from this table;
 // the per-listing "view matches" drill-down still uses the live RPCs.
 //
-//   GET /api/cron/refresh-matches        (Vercel Cron, or manual with the secret)
-//   Authorization: Bearer <CRON_SECRET>  (required unless Vercel's cron header is present)
+//   GET /api/cron/refresh-matches        (Vercel Cron sends the secret; manual calls must too)
+//   Authorization: Bearer <CRON_SECRET>  (Vercel sends it on its own cron calls)
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization");
-  const isVercelCron = req.headers.get("x-vercel-cron") != null;
-  if (secret && !isVercelCron && auth !== `Bearer ${secret}`) {
+  const isVercelCron = cronTrigger(req.headers) === "cron"; // label only
+  if (!cronAuthorized(req.headers.get("authorization"))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 

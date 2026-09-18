@@ -7,6 +7,7 @@
 // /api/dq/engine so long runs survive the caller. Runs never lock member
 // tables: every batch is a plain SELECT over a key range.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cronAuthorized } from "@/lib/cron/auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { startJobRun, finishJobRun } from "@/lib/jobs/runs";
 import { runAiReview } from "./ai";
@@ -31,11 +32,10 @@ async function aiBudgetLeft(sb: SupabaseClient, settings: DqSettings): Promise<{
   return { used, left: Math.max(0, Number(settings.ai_daily_tokens) - used) };
 }
 
+// One atomic statement (insert … on conflict do update set tokens = tokens + …)
+// so two batches in flight cannot lose each other's tokens (audit C3).
 async function meterAi(sb: SupabaseClient, tokens: number, cost: number) {
-  const day = new Date().toISOString().slice(0, 10);
-  const { data } = await sb.from("dq_ai_usage").select("tokens, cost, calls").eq("day", day).maybeSingle();
-  const cur = (data as { tokens: number; cost: number; calls: number } | null) ?? { tokens: 0, cost: 0, calls: 0 };
-  await sb.from("dq_ai_usage").upsert({ day, tokens: Number(cur.tokens) + tokens, cost: Number(cur.cost) + cost, calls: Number(cur.calls) + 1 });
+  await sb.rpc("fn_dq_meter_ai", { p_tokens: Math.round(tokens), p_cost: cost });
 }
 
 /** AI review of the batch that fn_dq_process_batch just finished. Writes proposals only. */
@@ -69,6 +69,11 @@ async function aiStep(sb: SupabaseClient, run: DqRun, step: Extract<BatchStep, {
   }
   const cost = (result.tokens / 1_000_000) * Number(settings.ai_price_per_mtok);
   await meterAi(sb, result.tokens, cost);
+  if (result.parseFailed) {
+    const note = `AI reply on batch ${step.n} (${step.table}) was not JSON — tokens spent, no findings recorded.`;
+    await sb.from("dq_runs").update({ note: run.note ? `${run.note} · ${note}`.slice(0, 2000) : note }).eq("id", run.id);
+    await sb.from("dq_run_batches").update({ error: "AI reply was not JSON" }).eq("id", step.batch_id);
+  }
 
   // issues → dq_issues (source ai); fixes grouped into one approval card
   const ruleByCode = new Map(ruleList.map((r) => [r.code, r.id]));
@@ -107,9 +112,7 @@ async function aiStep(sb: SupabaseClient, run: DqRun, step: Extract<BatchStep, {
     await sb.from("dq_ai_suggestions").insert({ kind: "rule", title: sr.title, nl: sr.nl, sql: sr.sql, category: sr.category, severity: sr.severity, tables: [step.table], hits: 0, evidence: [], model: result.model, confidence: sr.confidence, run_id: run.id });
   }
 
-  const { data: fresh } = await sb.from("dq_runs").select("tokens, cost, ai_issues").eq("id", run.id).single();
-  const f = fresh as { tokens: number; cost: number; ai_issues: number } | null;
-  await sb.from("dq_runs").update({ tokens: Number(f?.tokens ?? 0) + result.tokens, cost: Number(f?.cost ?? 0) + cost, ai_issues: Number(f?.ai_issues ?? 0) + result.issues.length }).eq("id", run.id);
+  await sb.rpc("fn_dq_run_add_ai", { p_run_id: run.id, p_tokens: Math.round(result.tokens), p_cost: cost, p_issues: result.issues.length });
   await sb.from("dq_run_batches").update({ ai_tokens: result.tokens, ai_issues: result.issues.length }).eq("id", step.batch_id);
   await finishJobRun(sb, jobId, { ok: true, rows: rows.length, meta: { tokens: result.tokens, cost, issues: result.issues.length, rules: result.suggestedRules.length, model: result.model } });
 }
@@ -119,7 +122,9 @@ export async function processOneBatch(sb: SupabaseClient, runId: string): Promis
   const { data: run, error } = await sb.from("dq_runs").select("*").eq("id", runId).single();
   if (error || !run) throw new Error(error?.message ?? "run not found");
   const r = run as DqRun;
-  if (r.status === "queued") {
+  // queued → first batch; paused → resume from the saved cursor (audit C1:
+  // only "queued" prepared before, so Resume silently did nothing)
+  if (r.status === "queued" || r.status === "paused") {
     const { error: pErr } = await sb.rpc("fn_dq_prepare_run", { p_run_id: runId });
     if (pErr) throw new Error(pErr.message);
   } else if (r.status !== "running") {
@@ -145,13 +150,34 @@ export async function processOneBatch(sb: SupabaseClient, runId: string): Promis
 }
 
 /** Drive a run until it finishes, pauses, or the time budget is spent. */
-export async function driveRun(runId: string, budgetMs = 45_000): Promise<{ done: boolean; status: string; batches: number }> {
+const consecutiveErrors = new Map<string, number>();
+
+export async function driveRun(runId: string, budgetMs = 45_000): Promise<{ done: boolean; status: string; batches: number; error?: string }> {
   const sb = dqDb();
   const t0 = Date.now();
   let batches = 0;
   let last: BatchStep = { done: false } as BatchStep;
   while (Date.now() - t0 < budgetMs) {
-    last = await processOneBatch(sb, runId);
+    try {
+      last = await processOneBatch(sb, runId);
+    } catch (e) {
+      // A lost connection or an RPC timeout used to escape as a bare 500 and
+      // leave the run "running" until the stall timer noticed (audit C9).
+      // Record it on the run, let the caller re-kick, and stop after three
+      // failures in a row so a persistent fault cannot loop forever.
+      const msg = e instanceof Error ? e.message : String(e);
+      const n = (consecutiveErrors.get(runId) ?? 0) + 1;
+      consecutiveErrors.set(runId, n);
+      const note = `engine error (${n}/3): ${msg}`;
+      await sb.from("dq_runs").update({ note }).eq("id", runId).then(() => undefined, () => undefined);
+      if (n >= 3) {
+        consecutiveErrors.delete(runId);
+        await sb.rpc("fn_dq_finish_run", { p_run_id: runId, p_status: "failed", p_error: msg }).then(() => undefined, () => undefined);
+        return { done: true, status: "failed", batches, error: msg };
+      }
+      return { done: false, status: "running", batches, error: msg };
+    }
+    consecutiveErrors.delete(runId);
     if (last.done) return { done: true, status: last.status, batches };
     batches += 1;
   }
@@ -159,11 +185,11 @@ export async function driveRun(runId: string, budgetMs = 45_000): Promise<{ done
   return { done: false, status: (data as { status: string } | null)?.status ?? "running", batches };
 }
 
-export function engineSecretOk(authorization: string | null, vercelCron: boolean): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  if (vercelCron) return true;
-  return authorization === `Bearer ${secret}`;
+// Bearer CRON_SECRET only (phase 0, 18 Sep 2026): the x-vercel-cron header
+// used to be accepted as proof of origin; it is a plain header any caller can
+// add. lib/cron/auth.ts holds the one rule for every scheduled endpoint.
+export function engineSecretOk(authorization: string | null): boolean {
+  return cronAuthorized(authorization);
 }
 
 /** Fire-and-forget POST to the engine route so the run continues server-side. */

@@ -7,6 +7,8 @@ export interface EmailMsg {
   from: string;
   subject: string;
   date: string | null;
+  /** the server's INTERNALDATE (ISO) — the checkpoint clock; the header date can be anything */
+  receivedAt?: string | null;
   text: string;
 }
 
@@ -84,9 +86,31 @@ export interface Classifier {
   classifyBatch(emails: EmailMsg[]): Promise<ClassifyResult[]>;
 }
 
+// The five stages every channel run passes through. The UI's run panel keys
+// on these, so a run reads the same whether it came from the inbox, a pasted
+// sample or the WhatsApp sweep.
+export type SyncStepKey = "connect" | "fetch" | "classify" | "stage" | "gate";
+export type SyncStepState = "waiting" | "running" | "done" | "skipped" | "failed";
+
 // Progress events streamed to the browser over SSE.
 export type SyncEvent =
   | { type: "log"; msg: string }
-  | { type: "done"; batchId: string; totals: { new: number; updated: number; unchanged: number; invalid: number; errors: number } }
+  | { type: "step"; key: SyncStepKey; state: SyncStepState; detail?: string }
+  | { type: "usage"; tokens: number; cost: number; calls: number }
+  | { type: "done"; batchId: string; totals: { new: number; updated: number; unchanged: number; invalid: number; errors: number; gateBlocked?: number; queued?: number } }
   | { type: "empty"; message: string }
+  /** the run did not start — another run holds the source's lease (phase 1) */
+  | { type: "skipped"; message: string }
   | { type: "error"; error: string };
+
+/** How a run's job_runs row should be settled for a terminal event, or null
+ *  when the event is not terminal. `empty` is a SUCCESSFUL pass that found
+ *  nothing — logging it as a failure (the pre-10 Sep behaviour) made every
+ *  quiet night show up on the failed-jobs tile. */
+export function settleFor(e: SyncEvent): { ok: boolean; rows: number | null; error?: string; meta?: Record<string, unknown> } | null {
+  if (e.type === "done") return { ok: true, rows: e.totals.new + e.totals.updated, meta: { batch_id: e.batchId, ...e.totals } };
+  if (e.type === "empty") return { ok: true, rows: 0, meta: { empty: true, message: e.message } };
+  if (e.type === "skipped") return { ok: true, rows: 0, meta: { skipped: true, message: e.message } };
+  if (e.type === "error") return { ok: false, rows: null, error: e.error };
+  return null;
+}

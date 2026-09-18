@@ -28,7 +28,8 @@ export function RunWizard() {
   const scope = React.useMemo<DqScope>(() => (scopeKind === "db" ? { kind: "db" } : scopeKind === "tables" ? { kind: "tables", tables } : { kind: "filter", filter }), [scopeKind, tables, filter]);
 
   React.useEffect(() => { listRules().then((r) => { if (r.success) setRules(r.data.filter((x) => x.enabled)); }); }, []);
-  React.useEffect(() => { let alive = true; setEst(null); estimateScope(scope, batch).then((r) => { if (alive && r.success) setEst(r.data); }); return () => { alive = false; }; }, [scope, batch, scopeKey]);
+  // settle the slider / chips for 300 ms before counting every table in scope (audit P6)
+  React.useEffect(() => { let alive = true; setEst(null); const t = setTimeout(() => { estimateScope(scope, batch).then((r) => { if (alive && r.success) setEst(r.data); }); }, 300); return () => { alive = false; clearTimeout(t); }; }, [scope, batch, scopeKey]);
 
   const scopeTables = est?.table_names ?? [];
   const applicable = rules.filter((r) => r.tables.some((t) => scopeTables.includes(t)));
@@ -102,7 +103,7 @@ export function RunWizard() {
           {step === 4 && (<>
             <div style={{ fontSize: 15, fontWeight: 600, color: "var(--asb-navy)" }}>Execution</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
-              <div className="adm-field"><label className="adm-field__label">Batch size · {fmtInt(batch)} rows</label><input type="range" min={500} max={1000} step={100} value={batch} onChange={(e) => setBatch(+e.target.value)} title="Rows per batch — each batch runs within the 60 s budget and re-schedules itself" /><span className="dq-muted">{batches} batches for {fmtInt(est?.total_rows ?? 0)} rows</span></div>
+              <div className="adm-field"><label className="adm-field__label">Batch size · {fmtInt(batch)} rows</label><input type="range" min={100} max={5000} step={100} value={batch} onChange={(e) => setBatch(+e.target.value)} title="Rows per batch — each batch runs within the 60 s budget and re-schedules itself" /><span className="dq-muted">{batches} batches for {fmtInt(est?.total_rows ?? 0)} rows</span></div>
               <div className="adm-field"><label className="adm-field__label">When</label><Seg options={[{ id: "now", label: "Run now" }, { id: "nightly", label: `Schedule nightly ${boot.settings.nightly_time}` }]} value={when} onChange={setWhen} /></div>
               <div className="adm-field"><label className="adm-field__label">Notify on completion</label><label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}><Toggle on={notify} onChange={setNotify} />{(boot.settings.notify.recipients ?? []).join(" · ") || "recipients in Settings"}</label></div>
             </div>

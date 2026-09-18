@@ -77,7 +77,7 @@ export function DataQualityConsole({ boot: initial }: { boot: DqBootstrap }) {
         </div>
       )}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", marginTop: -8 }} className="dq-noprint">
-        <button type="button" className="adm-btn" title="Print or save the Overview as PDF for the weekly ops review" onClick={() => { nav({ tab: "overview" }); setTimeout(() => window.print(), 300); }}>Export overview</button>
+        <button type="button" className="adm-btn" title="Print or save the Overview as PDF for the weekly ops review" onClick={() => { nav({ tab: "overview" }); /* the overview loads its data after the route change (audit U12) */ setTimeout(() => window.print(), 900); }}>Export overview</button>
         <button type="button" className="adm-btn primary" title="Start a rule-based or AI audit run over a chosen scope" onClick={() => nav({ tab: "newrun" })}>+ New run</button>
       </div>
       <div className="dq-tabs dq-noprint" role="tablist">

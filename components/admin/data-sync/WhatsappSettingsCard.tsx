@@ -14,9 +14,8 @@ import {
   startWhatsappWorker, stopWhatsappWorker,
   type WhatsappConfigMeta, type WhatsappRuntimeView,
 } from "@/app/(admin)/admin/data-sync/settings-actions";
-import { C, btn } from "./ui";
+import { Seg, C, btn } from "./ui";
 
-const field: React.CSSProperties = { width: "100%", padding: "8px 10px", borderRadius: 7, border: `1px solid ${C.line}`, font: "inherit", fontSize: 13.5, color: C.ink, background: "#fff" };
 const lab: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: C.ink2, marginBottom: 5, display: "block" };
 
 export function WhatsappSettingsCard() {
@@ -118,22 +117,20 @@ export function WhatsappSettingsCard() {
   };
 
   if (cfg === undefined) {
-    return <div style={{ padding: 30, textAlign: "center", color: C.ink3 }}><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /></div>;
+    return <div className="ds-empty" style={{ padding: 30 }}><Loader2 size={18} className="ds-spin" /></div>;
   }
 
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff", padding: 18 }}>
+    <div>
       {/* provider toggle */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-        {(["unofficial", "meta"] as const).map((p) => {
-          const on = provider === p;
-          return (
-            <button key={p} onClick={() => setProvider(p)}
-              style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${on ? C.brass : C.line}`, background: on ? C.brassBg : "#fff", color: on ? C.brassDeep : C.ink2, cursor: "pointer", font: "inherit", fontSize: 13, fontWeight: on ? 600 : 500 }}>
-              {p === "meta" ? "Meta Cloud API (official)" : "QR-linked number (testing)"}
-            </button>
-          );
-        })}
+      <div style={{ marginBottom: 14 }}>
+        <Seg
+          value={provider} onChange={setProvider}
+          options={[
+            { value: "unofficial", label: "QR-linked number (testing)" },
+            { value: "meta", label: "Meta Cloud API (official)" },
+          ] as const}
+        />
       </div>
 
       {provider === "unofficial" ? (
@@ -142,6 +139,7 @@ export function WhatsappSettingsCard() {
             <AlertTriangle size={15} color={C.amber} style={{ flex: "none", marginTop: 1 }} />
             <span style={{ fontSize: 12.5, color: C.brassDeep, lineHeight: 1.5 }}>
               Linking a normal number automates a personal WhatsApp account, which WhatsApp&apos;s terms disallow — numbers can be banned. Use for testing; switch to Meta Cloud API for production.
+              The companion worker is a <strong>local process</strong> on the machine hosting the console — it is not available on Vercel. The Meta Cloud API path needs no worker.
             </span>
           </div>
           {/* pairing pane */}
@@ -154,7 +152,7 @@ export function WhatsappSettingsCard() {
                   <div style={{ fontSize: 12.5, color: C.ink3, fontFamily: C.mono }}>{runtime.linked_as ?? ""}</div>
                 </div>
                 <button onClick={stopWorker} disabled={workerBusy} style={{ ...btn("danger"), marginLeft: "auto" }}>
-                  {workerBusy ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Square size={13} />} Stop worker
+                  {workerBusy ? <Loader2 size={14} className="ds-spin" /> : <Square size={13} />} Stop worker
                 </button>
               </>
             ) : runtime?.state === "pairing" && qrUrl ? (
@@ -174,7 +172,7 @@ export function WhatsappSettingsCard() {
               </>
             ) : runtime?.worker_alive || workerBusy ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: C.ink2 }}>
-                <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Worker starting — waiting for the pairing QR…
+                <Loader2 size={16} className="ds-spin" /> Worker starting — waiting for the pairing QR…
               </div>
             ) : (
               <>
@@ -182,7 +180,7 @@ export function WhatsappSettingsCard() {
                   <b style={{ color: C.navy }}>Worker offline.</b> Start the connection worker to receive messages and get the pairing QR. It runs on the application server — no terminal needed.
                 </div>
                 <button onClick={startWorker} disabled={workerBusy} style={btn("dark")}>
-                  {workerBusy ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Play size={14} />} Start worker
+                  {workerBusy ? <Loader2 size={14} className="ds-spin" /> : <Play size={14} />} Start worker
                 </button>
               </>
             )}
@@ -190,14 +188,14 @@ export function WhatsappSettingsCard() {
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, marginBottom: 6 }}>
-          <div><label style={lab}>Phone-number ID</label><input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="from Meta → WhatsApp → API setup" style={field} /></div>
-          <div><label style={lab}>Business (WABA) ID <span style={{ color: C.ink3, fontWeight: 400 }}>(optional)</span></label><input value={businessId} onChange={(e) => setBusinessId(e.target.value)} style={field} /></div>
-          <div><label style={lab}>Access token {cfg?.has_token && <span style={{ color: C.ink3, fontWeight: 400 }}>(stored — blank keeps it)</span>}</label><input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" style={field} /></div>
-          <div><label style={lab}>App secret {cfg?.has_app_secret && <span style={{ color: C.ink3, fontWeight: 400 }}>(stored)</span>}</label><input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} autoComplete="off" style={field} /></div>
-          <div><label style={lab}>Webhook verify token {cfg?.has_verify && <span style={{ color: C.ink3, fontWeight: 400 }}>(stored)</span>}</label><input type="password" value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} autoComplete="off" style={field} /></div>
+          <div><label style={lab}>Phone-number ID</label><input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="from Meta → WhatsApp → API setup" className="ds-input" /></div>
+          <div><label style={lab}>Business (WABA) ID <span style={{ color: C.ink3, fontWeight: 400 }}>(optional)</span></label><input value={businessId} onChange={(e) => setBusinessId(e.target.value)} className="ds-input" /></div>
+          <div><label style={lab}>Access token {cfg?.has_token && <span style={{ color: C.ink3, fontWeight: 400 }}>(stored — blank keeps it)</span>}</label><input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" className="ds-input" /></div>
+          <div><label style={lab}>App secret {cfg?.has_app_secret && <span style={{ color: C.ink3, fontWeight: 400 }}>(stored)</span>}</label><input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} autoComplete="off" className="ds-input" /></div>
+          <div><label style={lab}>Webhook verify token {cfg?.has_verify && <span style={{ color: C.ink3, fontWeight: 400 }}>(stored)</span>}</label><input type="password" value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} autoComplete="off" className="ds-input" /></div>
           <div>
             <label style={lab}>Webhook URL (paste in Meta console)</label>
-            <div style={{ ...field, background: C.sunken, fontFamily: C.mono, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div className="ds-input" style={{ background: C.sunken, fontFamily: C.mono, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {origin || "https://<your-domain>"}/api/whatsapp/webhook
             </div>
           </div>
@@ -209,7 +207,7 @@ export function WhatsappSettingsCard() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
           <div>
             <label style={lab}>Platform URL (in replies)</label>
-            <input value={platformUrl} onChange={(e) => setPlatformUrl(e.target.value)} style={field} />
+            <input value={platformUrl} onChange={(e) => setPlatformUrl(e.target.value)} className="ds-input" />
           </div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 22, paddingBottom: 4 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: C.ink2, cursor: "pointer" }}>
@@ -222,18 +220,19 @@ export function WhatsappSettingsCard() {
         </div>
         <div style={{ marginTop: 12 }}>
           <label style={lab}>Auto-reply template <span style={{ color: C.ink3, fontWeight: 400 }}>placeholders: {"{{name}} {{summary}} {{url}}"}</span></label>
-          <textarea value={replyTemplate} onChange={(e) => setReplyTemplate(e.target.value)} rows={5} style={{ ...field, resize: "vertical", fontFamily: C.mono, fontSize: 12.5 }} />
+          <textarea className="ds-input ds-textarea" value={replyTemplate} rows={5}
+            onChange={(e) => setReplyTemplate(e.target.value)}
+            style={{ fontFamily: C.mono, fontSize: 12.5 }} />
         </div>
         <div style={{ display: "flex", marginTop: 14 }}>
           <button onClick={save} disabled={saving} style={{ ...btn("primary"), marginLeft: "auto" }}>
-            {saving ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={15} />} Save WhatsApp settings
+            {saving ? <Loader2 size={15} className="ds-spin" /> : <Check size={15} />} Save WhatsApp settings
           </button>
         </div>
         <p style={{ fontSize: 12, color: C.ink3, marginTop: 12, marginBottom: 0, lineHeight: 1.5 }}>
           <MessageCircle size={12} style={{ verticalAlign: "-2px" }} /> Replies never include commission, freight ideas, rates, broker names or notes — only the operational shape of the enquiry.
         </p>
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }

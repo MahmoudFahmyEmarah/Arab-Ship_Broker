@@ -72,8 +72,15 @@ async function probeTcp(host: string, port: number): Promise<{ reachable: boolea
 
 /** namecheap.domains.getList for one domain — only when the API is configured. */
 async function namecheap(domain: string, errors: string[]): Promise<DomainSnapshot["namecheap"]> {
+  const blank = { auto_renew: null, locked: null, whois_guard: null, expired: null };
   const user = process.env.NAMECHEAP_API_USER, key = process.env.NAMECHEAP_API_KEY, ip = process.env.NAMECHEAP_CLIENT_IP;
-  if (!user || !key || !ip) return { connected: false, auto_renew: null, locked: null, whois_guard: null, expired: null };
+  if (!user || !key || !ip) {
+    return { connected: false, configured: false, error: null, ...blank };
+  }
+  const fail = (msg: string) => {
+    errors.push(`Namecheap: ${msg}`);
+    return { connected: false, configured: true, error: msg, ...blank };
+  };
   try {
     const q = new URLSearchParams({
       ApiUser: user, ApiKey: key, UserName: process.env.NAMECHEAP_USERNAME ?? user, ClientIp: ip,
@@ -81,19 +88,33 @@ async function namecheap(domain: string, errors: string[]): Promise<DomainSnapsh
     });
     const res = await withTimeout(fetch(`https://api.namecheap.com/xml.response?${q}`, { cache: "no-store" }), 6000, "Namecheap");
     const xml = await res.text();
+
+    // Namecheap answers 200 OK even when it refuses. Read its own error first —
+    // 1011150 ("Invalid request IP") means the caller's address is not on the
+    // API whitelist, which is the usual cause after an ISP hands out a new IP.
+    const apiErr = /<Error Number="(\d+)"[^>]*>([^<]*)<\/Error>/.exec(xml);
+    if (apiErr) {
+      const [, num, msg] = apiErr;
+      return fail(num === "1011150"
+        ? `${msg.trim()} — whitelist this address in Namecheap → Profile → Tools → API Access, and set NAMECHEAP_CLIENT_IP to match`
+        : `${msg.trim()} (error ${num})`);
+    }
+    if (!/Status="OK"/.test(xml)) return fail("the API did not return an OK status");
+
     const row = xml.split("<Domain ").find((s) => s.includes(`Name="${domain}"`));
-    if (!row) { errors.push("Namecheap: domain not in this account"); return { connected: true, auto_renew: null, locked: null, whois_guard: null, expired: null }; }
+    if (!row) return fail(`${domain} is not in this Namecheap account`);
     const attr = (n: string) => new RegExp(`${n}="([^"]*)"`).exec(row)?.[1] ?? null;
     return {
       connected: true,
+      configured: true,
+      error: null,
       auto_renew: attr("AutoRenew") === "true",
       locked: attr("IsLocked") === "true",
       whois_guard: attr("WhoisGuard") === "ENABLED",
       expired: attr("IsExpired") === "true",
     };
   } catch (e) {
-    errors.push(`Namecheap: ${e instanceof Error ? e.message : String(e)}`);
-    return { connected: true, auto_renew: null, locked: null, whois_guard: null, expired: null };
+    return fail(e instanceof Error ? e.message : String(e));
   }
 }
 

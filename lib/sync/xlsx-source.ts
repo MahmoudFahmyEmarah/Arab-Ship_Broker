@@ -12,6 +12,25 @@ import type { SyncSource } from "./types";
 
 const norm = (s: unknown) => String(s ?? "").trim().toUpperCase();
 
+// Phase 5 (18 Sep 2026): a 10 MB upload cap alone said nothing about what it
+// unpacks to. These bound the parse: rows are capped at read time
+// (sheetRows), the rest is checked per sheet before any row is mapped.
+export const WORKBOOK_LIMITS = { sheets: 40, rows: 50_000, cols: 200, cellChars: 2_000 } as const;
+
+/** Why a parsed sheet grid is refused, or null when it is within limits. */
+export function checkGrid(sheetName: string, grid: unknown[][]): string | null {
+  if (grid.length > WORKBOOK_LIMITS.rows + 2) return `Sheet ${sheetName} has more than ${WORKBOOK_LIMITS.rows.toLocaleString()} rows — split the workbook and upload it in parts.`;
+  for (let i = 0; i < grid.length; i += 1) {
+    const row = grid[i] ?? [];
+    if (row.length > WORKBOOK_LIMITS.cols) return `Sheet ${sheetName} has more than ${WORKBOOK_LIMITS.cols} columns (row ${i + 1}) — remove the extra columns.`;
+    for (let j = 0; j < row.length; j += 1) {
+      const c = row[j];
+      if (typeof c === "string" && c.length > WORKBOOK_LIMITS.cellChars) return `Sheet ${sheetName}, row ${i + 1}, column ${j + 1} holds more than ${WORKBOOK_LIMITS.cellChars.toLocaleString()} characters — shorten it.`;
+    }
+  }
+  return null;
+}
+
 /** Count how many cells in a candidate header row match the spec's known headers. */
 function headerScore(spec: SheetSpec, row: unknown[]): number {
   const index = headerIndex(spec);
@@ -27,12 +46,13 @@ export class XlsxSource implements SyncSource {
   async parse(): Promise<ParsedSheet[]> {
     let wb: XLSX.WorkBook;
     try {
-      wb = XLSX.read(this.data, { type: "buffer", dense: true });
+      wb = XLSX.read(this.data, { type: "buffer", dense: true, sheetRows: WORKBOOK_LIMITS.rows + 3 });
     } catch {
       // Corrupt / not-really-xlsx / password-protected → a clear, non-crashing error.
       throw new Error("Could not read the workbook — it may be corrupt, empty, or not a valid .xlsx file.");
     }
     if (!wb.SheetNames?.length) throw new Error("The workbook has no sheets.");
+    if (wb.SheetNames.length > WORKBOOK_LIMITS.sheets) throw new Error(`The workbook has ${wb.SheetNames.length} sheets — more than the ${WORKBOOK_LIMITS.sheets} we accept.`);
     const out: ParsedSheet[] = [];
 
     for (const sheetName of wb.SheetNames) {
@@ -47,6 +67,8 @@ export class XlsxSource implements SyncSource {
         defval: null,
       });
       if (grid.length < 2) continue;
+      const why = checkGrid(sheetName, grid);
+      if (why) throw new Error(why);
 
       // Choose the header row: prefer row 2 (index 1) per the reference, but fall
       // back to row 1 if that scores more header matches.

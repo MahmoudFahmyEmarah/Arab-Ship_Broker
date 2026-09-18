@@ -20,7 +20,7 @@ function baseUrl(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
-  if (!engineSecretOk(req.headers.get("authorization"), req.headers.get("x-vercel-cron") != null)) {
+  if (!engineSecretOk(req.headers.get("authorization"))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   let runId: string | null = null;

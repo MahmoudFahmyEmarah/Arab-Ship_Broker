@@ -22,7 +22,10 @@ export function IssuesView() {
   const rule = params.get("rule");
   const severity = params.get("severity");
   const issueId = params.get("issue");
+  const [qLive, setQLive] = React.useState("");
   const [q, setQ] = React.useState("");
+  // the search box fires the page + chip queries per keystroke — settle for 300 ms first (audit P2)
+  React.useEffect(() => { const t = setTimeout(() => setQ(qLive), 300); return () => clearTimeout(t); }, [qLive]);
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<Awaited<ReturnType<typeof listIssues>> extends infer R ? (R extends { success: true; data: infer D } ? D : never) : never>();
   const [loading, setLoading] = React.useState(true);
@@ -70,7 +73,7 @@ export function IssuesView() {
       let i = Math.max(0, rows.findIndex((x) => x.id === issueId));
       if (e.key === "j") { i = Math.min(rows.length - 1, i + 1); nav({ issue: rows[i].id }, true); }
       else if (e.key === "k") { i = Math.max(0, i - 1); nav({ issue: rows[i].id }, true); }
-      else if (e.key === "f" && issueId && canEdit) { const it = rows.find((x) => x.id === issueId); if (it && it.status === "open") fixOne(it); }
+      else if (e.key === "f" && issueId && canEdit) { const it = rows.find((x) => x.id === issueId); if (it && it.status === "open") confirm({ title: `Apply the suggested fix to ${it.row_label ?? it.row_key}?`, label: "Apply fix", body: "Written to the live database through the audited edit RPC under your name.", undo: "The toast, or Data Sync → Recent edits → Undo.", run: async () => { await fixOne(it); } }); }
       else if (e.key === "i" && issueId && canEdit) { const it = rows.find((x) => x.id === issueId); if (it && it.status === "open") setReason({ status: "ignored", ids: [it.id] }); }
     };
     window.addEventListener("keydown", onKey);
@@ -87,7 +90,7 @@ export function IssuesView() {
         <select className="adm-select" value={table} onChange={(e) => nav({ table: e.target.value === "all" ? null : e.target.value }, true)} title="Filter by table" style={{ fontSize: 12, padding: "4px 8px" }}><option value="all">All tables</option>{boot.tables.map((t) => <option key={t.table_name} value={t.table_name}>{t.label}</option>)}</select>
         <select className="adm-select" value={severity ?? "all"} onChange={(e) => nav({ severity: e.target.value === "all" ? null : e.target.value }, true)} title="Severity" style={{ fontSize: 12, padding: "4px 8px" }}><option value="all">All severities</option><option value="error">Error</option><option value="warn">Warn</option><option value="info">Info</option></select>
         {rule && <button type="button" className="adm-filter-chip is-on" title="Clear the rule filter" onClick={() => nav({ rule: null }, true)}>rule {rule} ✕</button>}
-        <input className="adm-search" style={{ minWidth: 160, flex: "0 1 260px", padding: "4px 8px", fontSize: 12 }} placeholder="Search row, field, value…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="adm-search" style={{ minWidth: 160, flex: "0 1 260px", padding: "4px 8px", fontSize: 12 }} placeholder="Search row, field, value…" value={qLive} onChange={(e) => setQLive(e.target.value)} />
         <span className="dq-muted dq-hide-phone" style={{ marginLeft: "auto", color: "var(--asb-slate)" }}>Keyboard · <kbd className="dq-kbd">j</kbd>/<kbd className="dq-kbd">k</kbd> move · <kbd className="dq-kbd">f</kbd> fix · <kbd className="dq-kbd">i</kbd> ignore</span>
       </div>
       {selIds.length > 0 && (

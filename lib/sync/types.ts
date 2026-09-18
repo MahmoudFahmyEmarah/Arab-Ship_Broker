@@ -81,6 +81,8 @@ export interface SyncSource {
 
 /** Per-sheet tally shown in the batch summary. */
 export interface SheetCounts {
+  /** vessels without an IMO routed to Manual Review instead of being staged (phase 4) */
+  queued?: number;
   new: number;
   updated: number;
   unchanged: number;

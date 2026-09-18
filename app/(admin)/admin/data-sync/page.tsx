@@ -1,7 +1,7 @@
 import { requireAdmin, getAdminSupabaseClient } from "@/lib/admin/require-admin";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { DataSyncClient } from "@/components/admin/data-sync/DataSyncClient";
-import { countCommodityQueuePending, countVesselQueuePending, type BatchMeta } from "./actions";
+import { countCommodityQueuePending, countPortQueuePending, countVesselQueuePending, type BatchMeta } from "./actions";
 import { SHEET_SPECS } from "@/lib/sync/sheets";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function DataSyncPage() {
   await requireAdmin({ section: "datasync" });
   const supabase = await getAdminSupabaseClient();
 
-  const [{ data: batches }, commodityPending, vesselPending] = await Promise.all([
+  const [{ data: batches }, commodityPending, vesselPending, portPending] = await Promise.all([
     supabase
       .from("sync_batch")
       .select("id, label, source, status, counts, file_name, created_at, committed_at")
@@ -18,8 +18,10 @@ export default async function DataSyncPage() {
       .limit(12),
     countCommodityQueuePending(),
     countVesselQueuePending(),
+    countPortQueuePending(),
   ]);
-  const queuePending = commodityPending + vesselPending;
+  // every queue the Queues view shows: commodities, vessels without IMO, ports (phase 6)
+  const queuePending = commodityPending + vesselPending + portPending;
 
   const sheets = SHEET_SPECS.map((s) => ({ id: s.id, label: s.label, table: s.targetTable }));
 
@@ -27,7 +29,7 @@ export default async function DataSyncPage() {
     <div className="adm-page">
       <AdminPageHeader
         title="Data Sync"
-        subtitle="Upload the CargoMap workbook, review only what changed, then commit to the database."
+        subtitle="The intake room: circulars, workbook and WhatsApp arrive, are staged, checked by the data-quality gate and committed with a full undo trail."
         warn={
           <span>
             Commits write to live tables — but every commit is reversible with{" "}

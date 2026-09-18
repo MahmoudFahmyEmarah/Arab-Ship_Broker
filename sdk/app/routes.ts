@@ -13,6 +13,17 @@ export interface MeasuredRoute {
   chokepoints: string[];
   /** [lat, lon, cumulative_nm|null] ordered in the requested direction. */
   waypoints: [number, number, number | null][];
+  /**
+   * True when this answer came from the pair's track surveyed the OTHER way
+   * and was reversed (same water, distances re-based). Verified 10 Sep 2026:
+   * the ECDIS master holds no reciprocal pairs, so a reversal never
+   * contradicts a surveyed track — but the flag lets a caller say so.
+   */
+  reversed: boolean;
+  /** True when the stored track applies to this direction only (one-way TSS, canal convoy). */
+  directionSpecific: boolean;
+  /** The direction the track was actually surveyed in, e.g. "EGPSD → TNSFA". */
+  surveyedAs: string | null;
 }
 
 export async function getPortRoute(
@@ -26,7 +37,11 @@ export async function getPortRoute(
       p_pol: polLocode,
       p_pod: podLocode,
     });
-    const d = data as { found?: boolean; total_nm?: number; verified?: boolean; source?: string; chokepoints?: string[]; waypoints?: [number, number, number | null][] } | null;
+    const d = data as {
+      found?: boolean; total_nm?: number; verified?: boolean; source?: string;
+      chokepoints?: string[]; waypoints?: [number, number, number | null][];
+      reversed?: boolean; direction_specific?: boolean; surveyed_as?: string;
+    } | null;
     if (error || !d?.found || !Number.isFinite(Number(d.total_nm))) return null;
     return {
       totalNm: Number(d.total_nm),
@@ -34,6 +49,9 @@ export async function getPortRoute(
       source: d.source ?? "ECDIS voyage plan",
       chokepoints: Array.isArray(d.chokepoints) ? d.chokepoints.map(String) : [],
       waypoints: Array.isArray(d.waypoints) ? d.waypoints : [],
+      reversed: !!d.reversed,
+      directionSpecific: !!d.direction_specific,
+      surveyedAs: d.surveyed_as ?? null,
     };
   } catch {
     return null; // never let a route lookup break a page

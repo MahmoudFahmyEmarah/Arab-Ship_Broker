@@ -1,20 +1,24 @@
 "use client";
 
-// Sync Workspace → WhatsApp intake card: sweep controls + a pasted-message dry
-// run. Messages are NOT listed inline — the "Inbox" button opens a WhatsApp-
-// styled popup where relevant messages can be reviewed, deleted, or cleared.
+// Intake → WhatsApp intake card: sweep controls + a pasted-message dry run.
+// Messages are NOT listed inline — the "Inbox" button opens a WhatsApp-styled
+// popup where relevant messages can be reviewed, deleted, or cleared.
+//
+// Sweeping, simulation and inbox handling are unchanged; the card body is the
+// design's ChannelCard so all three intake sources read alike.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   MessageCircle, Loader2, RefreshCcw, FlaskConical, ChevronDown, Play, Inbox, Trash2, X,
 } from "lucide-react";
+import { ChannelCard, SamplePanel, RunLog } from "./ChannelCard";
+import { Btn, relTime } from "./ui";
 import {
   listWhatsappMessages, processWhatsapp, simulateWhatsapp, getBatch,
   deleteWhatsappMessage, clearWhatsappInbox,
   type WhatsappMessageRow, type BatchMeta,
 } from "@/app/(admin)/admin/data-sync/actions";
-import { C, btn } from "./ui";
 
 const WA = { header: "#075e54", bg: "#e5ddd5", bubble: "#ffffff", meta: "#667781", accent: "#25d366" };
 
@@ -24,7 +28,14 @@ const STATUS_META: Record<string, { c: string; bg: string }> = {
   failed: { c: "var(--asb-red)", bg: "var(--asb-red-bg)" },
 };
 
-export function WhatsappCard({ onOpenBatch }: { onOpenBatch: (b: BatchMeta) => void }) {
+type Sweep = Awaited<ReturnType<typeof processWhatsapp>>;
+export function WhatsappCard({ onOpenBatch, linked, onRun }: {
+  onOpenBatch: (b: BatchMeta) => void;
+  /** Worker pairing state from whatsapp_runtime, or null while it loads. */
+  linked: boolean | null;
+  /** Sweep lifecycle for the Intake run panel. */
+  onRun?: (phase: "start" | "finish", title: string, result?: Sweep) => void;
+}) {
   const [rows, setRows] = useState<WhatsappMessageRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showSample, setShowSample] = useState(false);
@@ -40,8 +51,10 @@ export function WhatsappCard({ onOpenBatch }: { onOpenBatch: (b: BatchMeta) => v
 
   const sweep = async (includeFailed: boolean) => {
     setBusy("sweep");
+    onRun?.("start", includeFailed ? "WhatsApp · retry failed" : "WhatsApp · process pending");
     const r = await processWhatsapp(includeFailed);
     setBusy(null);
+    onRun?.("finish", "WhatsApp sweep", r);
     if (!r.success) { toast.error(r.error); return; }
     setLog(r.data.log);
     toast.success(`Processed ${r.data.processed} · staged ${r.data.staged}${r.data.failed ? ` · ${r.data.failed} failed` : ""}`);
@@ -50,8 +63,10 @@ export function WhatsappCard({ onOpenBatch }: { onOpenBatch: (b: BatchMeta) => v
 
   const simulate = async () => {
     setBusy("sim");
+    onRun?.("start", "Dry run · pasted WhatsApp message");
     const r = await simulateWhatsapp(sample);
     setBusy(null);
+    onRun?.("finish", "WhatsApp dry run", r.success ? { success: true, data: { processed: 1, staged: 0, irrelevant: 0, failed: 0, log: r.data.log, steps: r.data.steps, usage: r.data.usage } } : r);
     if (!r.success) { toast.error(r.error); return; }
     setLog(r.data.log);
     toast.success("Sample classified — open the Inbox or Review.");
@@ -62,60 +77,65 @@ export function WhatsappCard({ onOpenBatch }: { onOpenBatch: (b: BatchMeta) => v
   const failedCount = rows?.filter((r) => r.status === "failed").length ?? 0;
   const pendingCount = rows?.filter((r) => r.status === "pending").length ?? 0;
 
+  const lastSeen = rows?.[0]?.received_at ?? null;
+
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "22px 24px", background: C.card }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <span style={{ width: 40, height: 40, borderRadius: 9, background: "var(--asb-green-bg)", color: "var(--asb-green)", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
-          <MessageCircle size={20} />
-        </span>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 15.5, fontWeight: 600, color: C.navy }}>WhatsApp intake</div>
-          <div style={{ fontSize: 13, color: C.ink3, marginTop: 3, lineHeight: 1.45 }}>
-            Inbound broker messages classify automatically into review batches, with an instant acknowledgment reply. Configure in Settings.
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-        <button onClick={() => setInboxOpen(true)} style={btn("primary")}>
-          <Inbox size={14} /> Inbox{rows?.length ? ` (${rows.length})` : ""}
-        </button>
-        <button onClick={() => sweep(false)} disabled={!!busy} style={btn("dark")} title="Classify any pending messages">
-          {busy === "sweep" ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Play size={14} />} Process pending{pendingCount ? ` (${pendingCount})` : ""}
-        </button>
-        {failedCount > 0 && (
-          <button onClick={() => sweep(true)} disabled={!!busy} style={btn("danger")}>
-            <RefreshCcw size={14} /> Retry failed ({failedCount})
-          </button>
-        )}
-        <button onClick={() => setShowSample((s) => !s)} disabled={!!busy} style={btn("ghost")}>
-          <FlaskConical size={14} /> Test with a pasted message
-          <ChevronDown size={13} style={{ transform: showSample ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
-        </button>
-      </div>
-
-      {showSample && (
-        <div style={{ marginTop: 14 }}>
-          <textarea value={sample} onChange={(e) => setSample(e.target.value)} rows={4}
+    <>
+      <ChannelCard
+        abbr="WA"
+        icon={<MessageCircle size={19} />}
+        iconBg="var(--asb-blue-light)"
+        iconColor="var(--asb-steel-deep)"
+        name="WhatsApp intake"
+        status={linked === null ? "Checking" : linked ? "Linked" : "Paused"}
+        statusTone={linked === null ? "neutral" : linked ? "new" : "updated"}
+        desc="Circulars from the linked number classify into review batches, with an instant acknowledgement reply."
+        last={lastSeen ? `${relTime(lastSeen)} · ${rows?.length ?? 0} message${rows?.length === 1 ? "" : "s"} held` : "No messages received"}
+        lastTone={!linked && pendingCount ? "var(--asb-amber)" : undefined}
+        next={linked ? "Continuous" : pendingCount ? `Paused · ${pendingCount} queued` : "Paused"}
+        actions={
+          <>
+            <Btn kind="accent" icon={<Play size={15} />} busy={busy === "sweep"} disabled={!!busy}
+              title="Classify the queued messages into a batch"
+              onClick={() => sweep(false)}>
+              Process pending{pendingCount ? ` (${pendingCount})` : ""}
+            </Btn>
+            <Btn kind="ghost" icon={<Inbox size={14} />} onClick={() => setInboxOpen(true)}>
+              Inbox{rows?.length ? ` (${rows.length})` : ""}
+            </Btn>
+            {failedCount > 0 && (
+              <Btn kind="danger" icon={<RefreshCcw size={14} />} disabled={!!busy} onClick={() => sweep(true)}>
+                Retry failed ({failedCount})
+              </Btn>
+            )}
+            <Btn kind="ghost" icon={<FlaskConical size={14} />} disabled={!!busy}
+              onClick={() => setShowSample((v) => !v)}>
+              Test a message
+              <ChevronDown size={13} style={{ transform: showSample ? "rotate(180deg)" : "none", transition: "transform var(--t-fast) var(--ease)" }} />
+            </Btn>
+          </>
+        }
+        footer={<div className="ds-note">Personal chats are never stored. Pair the number in Connections.</div>}
+      >
+        {showSample && (
+          <SamplePanel
+            value={sample} onChange={setSample}
             placeholder="Paste a WhatsApp circulation message here — classified without any WhatsApp connection…"
-            style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.line}`, font: "inherit", fontSize: 13, resize: "vertical", background: "#fff", color: C.ink }} />
-          <button onClick={simulate} disabled={!!busy || !sample.trim()} style={{ ...btn("primary"), marginTop: 8, opacity: busy || !sample.trim() ? 0.5 : 1 }}>
-            {busy === "sim" ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FlaskConical size={15} />} Classify sample
-          </button>
-        </div>
-      )}
-
-      {log.length > 0 && (
-        <div style={{ marginTop: 14, maxHeight: 120, overflowY: "auto", background: C.navy, color: "#cfe0d6", borderRadius: 8, padding: "10px 14px", fontFamily: C.mono, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-          {log.map((l, i) => <div key={i} style={{ color: l.startsWith("✗") ? "#f0b4b4" : l.startsWith("✓") ? "#9fe0b8" : "#cfe0d6" }}>{l}</div>)}
-        </div>
-      )}
+            action={
+              <Btn kind="primary" busy={busy === "sim"} disabled={!!busy || !sample.trim()}
+                icon={<FlaskConical size={15} />} onClick={simulate}>
+                Classify sample
+              </Btn>
+            }
+          />
+        )}
+        {!onRun && <RunLog lines={log} max={130} />}
+      </ChannelCard>
 
       {inboxOpen && (
         <WhatsappInbox rows={rows ?? []} onClose={() => setInboxOpen(false)} onChanged={reload} onOpenBatch={onOpenBatch} />
       )}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
+    </>
   );
 }
 

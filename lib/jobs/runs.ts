@@ -10,6 +10,7 @@ export type JobName =
   | "groupmail-dispatch"
   | "email-sync"
   | "whatsapp-webhook"
+  | "whatsapp-sweep"
   | "bunker-ingest"
   | "paymob-webhook"
   | "billing-cron"

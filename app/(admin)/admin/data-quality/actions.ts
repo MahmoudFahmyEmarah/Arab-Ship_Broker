@@ -7,6 +7,7 @@
 // touches a dq_* table. Fixes go through dq_apply_fix (audited, gated, undoable).
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
 import { after } from "next/server";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { canAccess } from "@/lib/admin/sections";
@@ -17,7 +18,12 @@ import type {
 } from "@/lib/dq/types";
 
 type Result<T = undefined> = ({ success: true } & (T extends undefined ? object : { data: T })) | { success: false; error: string };
-const fail = (e: unknown, fallback: string): { success: false; error: string } => ({ success: false, error: e instanceof Error ? e.message : fallback });
+// requireAdmin denies by redirect(), which throws. Re-throw it so the bounce
+// happens instead of a toast reading "NEXT_REDIRECT" (audit C2).
+const fail = (e: unknown, fallback: string): { success: false; error: string } => {
+  unstable_rethrow(e);
+  return { success: false, error: e instanceof Error ? e.message : fallback };
+};
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function gate(level: "view" | "edit") {
@@ -77,7 +83,7 @@ export async function getOverview(): Promise<Result<DqOverview>> {
     const { sb } = await gate("view");
     const since14 = new Date(Date.now() - 14 * 86_400_000).toISOString();
     const [healthRes, snaps, sev, runs, sugg, flags, crq, vrq, sanctioned, syncFlags] = await Promise.all([
-      sb.rpc("fn_dq_health"),
+      sb.rpc("fn_dq_health_cached"),
       sb.from("dq_health_snapshots").select("table_name, at, score").gte("at", since14).order("at"),
       sb.from("dq_issues").select("severity").eq("status", "open"),
       sb.from("dq_runs").select("*").in("status", ["completed", "failed", "cancelled"]).order("created_at", { ascending: false }).limit(2),
@@ -128,9 +134,10 @@ export async function getOverview(): Promise<Result<DqOverview>> {
     const { data: recentRules } = await sb.from("dq_rules").select("code, name, created_at").is("deleted_at", null).gte("created_at", since14).order("created_at", { ascending: false }).limit(2);
     for (const r of (recentRules ?? []) as { code: string; name: string }[]) changes.push({ kind: "rule", title: `New rule ${r.code}`, meta: r.name, rule: r.code });
     // noisy rules (false-positive rate > 10 %)
-    const { data: fpRows } = await sb.from("dq_issues").select("rule_code, status").in("status", ["open", "fixed", "false_positive", "ignored", "escalated"]).limit(5000);
-    const fpBy = new Map<string, { raised: number; fp: number }>();
-    for (const r of (fpRows ?? []) as { rule_code: string; status: string }[]) { const c = fpBy.get(r.rule_code) ?? { raised: 0, fp: 0 }; c.raised += 1; if (r.status === "false_positive") c.fp += 1; fpBy.set(r.rule_code, c); }
+    const { data: statsData } = await sb.rpc("fn_dq_rule_stats");
+    const fpBy = new Map<string, { raised: number; fp: number }>(
+      Object.entries((statsData ?? {}) as Record<string, { raised: number; fp: number }>).map(([k, v]) => [k, { raised: v.raised, fp: v.fp }]),
+    );
     const { data: names } = await sb.from("dq_rules").select("code, name");
     const nameBy = new Map(((names ?? []) as { code: string; name: string }[]).map((r) => [r.code, r.name]));
     const noisyRules = Array.from(fpBy.entries()).filter(([, c]) => c.raised >= 5 && c.fp / c.raised > 0.1).map(([code, c]) => ({ code, name: nameBy.get(code) ?? code, fp: Math.round((c.fp / c.raised) * 100) }));
@@ -146,14 +153,15 @@ export async function listRules(): Promise<Result<DqRule[]>> {
     const [rules, channels, stats, lastRun] = await Promise.all([
       sb.from("dq_rules").select("*").is("deleted_at", null).order("code"),
       sb.from("dq_rule_channels").select("rule_id, channel, mode"),
-      sb.from("dq_issues").select("rule_code, status").limit(10000),
+      sb.rpc("fn_dq_rule_stats"),
       sb.from("dq_runs").select("scope, total_rows, tables").eq("status", "completed").order("finished_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (rules.error) throw new Error(rules.error.message);
     const chBy = new Map<string, Partial<Record<DqChannel, DqMode>>>();
     for (const c of (channels.data ?? []) as { rule_id: string; channel: DqChannel; mode: DqMode }[]) { const m = chBy.get(c.rule_id) ?? {}; m[c.channel] = c.mode; chBy.set(c.rule_id, m); }
-    const st = new Map<string, { open: number; raised: number; fp: number }>();
-    for (const i of (stats.data ?? []) as { rule_code: string; status: string }[]) { const s = st.get(i.rule_code) ?? { open: 0, raised: 0, fp: 0 }; s.raised += 1; if (i.status === "open") s.open += 1; if (i.status === "false_positive") s.fp += 1; st.set(i.rule_code, s); }
+    const st = new Map<string, { open: number; raised: number; fp: number }>(
+      Object.entries((stats.data ?? {}) as Record<string, { raised: number; open: number; fp: number }>).map(([k, v]) => [k, { open: v.open, raised: v.raised, fp: v.fp }]),
+    );
     const counts = new Map<string, number>();
     for (const c of ((lastRun.data as { scope?: DqScope } | null)?.scope?.counts ?? [])) counts.set(c.table, c.rows);
     const out = (rules.data as DqRule[]).map((r) => ({
@@ -281,15 +289,18 @@ export async function estimateScope(scope: DqScope, batch: number): Promise<Resu
 
 export async function createRun(input: { scope: DqScope; mode: DqRunMode; batch: number; ruleIds: string[] | null; when: "now" | "nightly"; notify: boolean }): Promise<Result<DqRun>> {
   try {
-    const { sb, actor, actorName } = await gate("view"); // every admin with access may run audits
+    const batch = Math.max(100, Math.min(5000, input.batch));
     if (input.when === "nightly") {
-      const { error } = await sb.from("dq_settings").update({ nightly_enabled: true, nightly_mode: input.mode, batch_size: input.batch, updated_at: new Date().toISOString() }).eq("id", 1);
-      if (error) throw new Error(error.message);
-      const { data, error: rErr } = await sb.from("dq_runs").insert({ scope: input.scope, mode: input.mode, batch_size: input.batch, rule_ids: input.ruleIds, status: "queued", trigger: "scheduler", started_by: actor, started_by_name: `${actorName} (scheduled)`, notify: input.notify, scheduled_for: nextNightly() }).select("*").single();
+      // Scheduling is a write, so it takes the edit seat (audit S3). It no
+      // longer touches dq_settings — the schedule switch lives in Settings;
+      // this only queues ONE run that the nightly cron drives when due.
+      const { sb, actor, actorName } = await gate("edit");
+      const { data, error: rErr } = await sb.from("dq_runs").insert({ scope: input.scope, mode: input.mode, batch_size: batch, rule_ids: input.ruleIds, status: "queued", trigger: "scheduler", started_by: actor, started_by_name: `${actorName} (scheduled)`, notify: input.notify, scheduled_for: nextNightly() }).select("*").single();
       if (rErr) throw new Error(rErr.message);
       bust(); return { success: true, data: data as DqRun };
     }
-    const { data, error } = await sb.from("dq_runs").insert({ scope: input.scope, mode: input.mode, batch_size: Math.max(100, Math.min(5000, input.batch)), rule_ids: input.ruleIds, status: "queued", trigger: "admin", started_by: actor, started_by_name: actorName, notify: input.notify }).select("*").single();
+    const { sb, actor, actorName } = await gate("view"); // every admin with access may run audits
+    const { data, error } = await sb.from("dq_runs").insert({ scope: input.scope, mode: input.mode, batch_size: batch, rule_ids: input.ruleIds, status: "queued", trigger: "admin", started_by: actor, started_by_name: actorName, notify: input.notify }).select("*").single();
     if (error) throw new Error(error.message);
     const run = data as DqRun;
     // first batch synchronously (instant feedback), the rest server-side
@@ -386,11 +397,10 @@ export async function listIssues(f: IssueFilter = {}): Promise<Result<{ rows: Dq
     const { data, error, count } = await q.range((page - 1) * pageSize, page * pageSize - 1);
     if (error) throw new Error(error.message);
     const t = f.table && f.table !== "all" ? f.table : null;
-    const c = (filters: Record<string, string>) => { let b = sb.from("dq_issues").select("id", { count: "exact", head: true }); if (t) b = b.eq("table_name", t); for (const [k, v] of Object.entries(filters)) b = b.eq(k, v); return b; };
-    const [all, open, blocks, cls, ai, fixed] = await Promise.all([
-      c({}), c({ status: "open" }), c({ status: "open", severity: "error" }), c({ status: "open", category: "classification" }), c({ source: "ai" }), c({ status: "fixed" }),
-    ]);
-    return { success: true, data: { rows: data as DqIssue[], total: count ?? 0, counts: { all: all.count ?? 0, open: open.count ?? 0, blocks: blocks.count ?? 0, class: cls.count ?? 0, ai: ai.count ?? 0, fixed: fixed.count ?? 0 } } };
+    // six chip counts in one grouped statement instead of six exact counts (audit P2)
+    const { data: cnt } = await sb.rpc("fn_dq_issue_counts", { p_table: t });
+    const k = (cnt ?? {}) as Partial<Record<"all" | "open" | "blocks" | "class" | "ai" | "fixed", number>>;
+    return { success: true, data: { rows: data as DqIssue[], total: count ?? 0, counts: { all: k.all ?? 0, open: k.open ?? 0, blocks: k.blocks ?? 0, class: k.class ?? 0, ai: k.ai ?? 0, fixed: k.fixed ?? 0 } } };
   } catch (e) { return fail(e, "Could not load issues"); }
 }
 
@@ -437,14 +447,11 @@ export async function applyFixes(ids: string[], minConfidence?: number): Promise
     const { sb, actor, actorName } = await gate("edit");
     const settings = await getSettings(sb);
     const threshold = minConfidence ?? Number(settings.auto_apply_threshold);
-    const { data: rows } = await sb.from("dq_issues").select("id, fix, status, row_label").in("id", ids.slice(0, 500));
-    let applied = 0, skipped = 0; const errors: string[] = [];
-    for (const r of (rows ?? []) as { id: string; fix: { confidence?: number; value?: string | null } | null; status: string; row_label: string | null }[]) {
-      if (r.status !== "open" || !r.fix || r.fix.value == null || Number(r.fix.confidence ?? 1) < threshold) { skipped += 1; continue; }
-      const { error } = await sb.rpc("dq_apply_fix", { p_issue_id: r.id, p_actor: actor, p_actor_name: actorName, p_value: null, p_field: null });
-      if (error) errors.push(`${r.row_label ?? r.id}: ${error.message}`); else applied += 1;
-    }
-    bust(); return { success: true, data: { applied, skipped, errors } };
+    // one round trip; the database loops and isolates each failure (audit P5)
+    const { data, error } = await sb.rpc("dq_apply_fixes", { p_issue_ids: ids.slice(0, 500), p_actor: actor, p_actor_name: actorName, p_threshold: threshold });
+    if (error) throw new Error(error.message);
+    const out = (data ?? {}) as { applied?: number; skipped?: number; errors?: string[] };
+    bust(); return { success: true, data: { applied: out.applied ?? 0, skipped: out.skipped ?? 0, errors: out.errors ?? [] } };
   } catch (e) { return fail(e, "Could not apply the fixes"); }
 }
 
@@ -466,7 +473,8 @@ export async function exportIssuesCsv(ids: string[] | null, f: IssueFilter = {})
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     const cols = ["rule_code", "table_name", "row_label", "row_key", "field", "observed", "expected", "severity", "source", "confidence", "status", "assignee", "first_seen", "why"];
-    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    // a leading = + - @ (or tab/CR) would execute as a formula in Excel (audit S7)
+    const esc = (v: unknown) => { const s = String(v ?? ""); return `"${(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`; };
     return { success: true, data: [cols.join(","), ...((data ?? []) as Record<string, unknown>[]).map((r) => cols.map((c) => esc(r[c])).join(","))].join("\n") };
   } catch (e) { return fail(e, "Export failed"); }
 }
@@ -507,7 +515,7 @@ export async function acceptSuggestion(id: string): Promise<Result<{ ruleCode?: 
       await sb.from("dq_ai_suggestions").update({ status: "accepted", accepted_rule_id: rule.id, resolved_at: new Date().toISOString(), resolved_by: actor, resolved_by_name: actorName }).eq("id", id);
       bust(); return { success: true, data: { ruleCode: rule.code } };
     }
-    const res = await applyFixes(sg.issue_ids, 0);
+    const res = await applyFixes(sg.issue_ids); // settings threshold, as the card says (audit S5)
     if (!res.success) throw new Error(res.error);
     await sb.from("dq_ai_suggestions").update({ status: "accepted", resolved_at: new Date().toISOString(), resolved_by: actor, resolved_by_name: actorName, reason: `${res.data.applied} applied · ${res.data.skipped} skipped` }).eq("id", id);
     bust(); return { success: true, data: res.data };
@@ -536,6 +544,17 @@ export async function approveAllFixes(): Promise<Result<{ applied: number; skipp
     }
     bust(); return { success: true, data: { applied, skipped, errors, suggestions: (data ?? []).length } };
   } catch (e) { return fail(e, "Bulk approval failed"); }
+}
+
+/** Counter-only: the rule keeps scoring the table but files no issues (audit U2). */
+export async function setRuleQueue(ruleId: string, queue: boolean): Promise<Result> {
+  if (!UUID_RE.test(ruleId)) return { success: false, error: "Invalid rule id." };
+  try {
+    const { sb, actor, actorName } = await gate("edit");
+    const { error } = await sb.rpc("dq_set_rule_queue", { p_rule_id: ruleId, p_queue: queue, p_actor: actor, p_actor_name: actorName });
+    if (error) throw new Error(error.message);
+    bust(); return { success: true };
+  } catch (e) { return fail(e, "Could not change the rule"); }
 }
 
 // ── gate ─────────────────────────────────────────────────────────────────
@@ -603,7 +622,7 @@ export async function savePortException(locode: string, reason: string, action: 
 export async function saveSettings(patch: Partial<DqSettings>): Promise<Result<DqSettings>> {
   try {
     const { sb, actor } = await gate("edit");
-    const allowed: (keyof DqSettings)[] = ["batch_size", "ai_sample", "ai_daily_tokens", "ai_price_per_mtok", "auto_apply_threshold", "weights", "nightly_enabled", "nightly_time", "nightly_mode", "notify"];
+    const allowed: (keyof DqSettings)[] = ["batch_size", "ai_sample", "ai_daily_tokens", "ai_price_per_mtok", "auto_apply_threshold", "weights", "nightly_enabled", "gate_forms_enforce", "nightly_time", "nightly_mode", "notify"];
     const clean: Record<string, unknown> = {};
     for (const k of allowed) if (k in patch) clean[k] = patch[k];
     if (typeof clean.batch_size === "number") clean.batch_size = Math.max(100, Math.min(5000, clean.batch_size));

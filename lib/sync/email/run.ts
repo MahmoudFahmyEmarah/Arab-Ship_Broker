@@ -7,15 +7,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { stageBatch } from "../stage";
 import { EmailLlmSource } from "../email-source";
-import { getWatermark, setWatermark } from "../state";
+import { checkpointAfterPage, claimSyncRun, getEmailCheckpoint, releaseSyncRun, setEmailCheckpoint } from "../state";
 import { buildClassifierGraph } from "./graph";
 import { LangChainClassifier } from "./classifier";
 import { getActiveModel } from "./llm";
+import { UsageMeter, aiBudgetToday, meterUsage } from "./usage";
 import { fetchCirculars } from "./imap";
 import { recordsToSheets } from "./to-rows";
-import type { CargoRecord, EmailMsg, SyncEvent, VesselRecord } from "./types";
+import type { CargoRecord, EmailMsg, SyncEvent, SyncStepKey, SyncStepState, VesselRecord } from "./types";
 
 type Emit = (e: SyncEvent) => void;
+const step = (emit: Emit, key: SyncStepKey, state: SyncStepState, detail?: string) => emit({ type: "step", key, state, detail });
 
 const CONCURRENCY = 5;             // batches classified in parallel
 const RETRIES = 2;                 // attempts per batch
@@ -128,8 +130,15 @@ async function classifyAll(
   emails: EmailMsg[],
   emit: Emit,
 ): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[]; failed: number; firstError: string | null }> {
+  // Daily token budget — shared with Data quality. Refusing here keeps the
+  // watermark where it was, so nothing is skipped once the cap resets.
+  const budget = await aiBudgetToday(supabase);
+  if (budget.left <= 0) {
+    throw new Error(`AI budget exhausted — ${budget.used.toLocaleString()} of ${budget.cap.toLocaleString()} tokens used today. Raise the cap in Data quality → Settings or run again tomorrow.`);
+  }
   const { model, vendor, modelName } = await getActiveModel(supabase);
-  const graph = buildClassifierGraph(new LangChainClassifier(model));
+  const meter = new UsageMeter();
+  const graph = buildClassifierGraph(new LangChainClassifier(model, [meter]));
   const expanded = emails.flatMap(splitLongEmail);
   const batches = batchEmails(expanded);
   const nSplit = expanded.length - emails.length;
@@ -162,6 +171,13 @@ async function classifyAll(
   const uVessels = dedupBy(vessels, vesselKey);
   const dropped = cargo.length - uCargo.length + vessels.length - uVessels.length;
   if (dropped > 0) emit({ type: "log", msg: `deduplicated ${dropped} repeated extraction(s) across email parts` });
+  // Meter what the model actually consumed, at the configured price.
+  const totals = meter.totals();
+  const cost = await meterUsage(supabase, totals, budget.pricePerMtok);
+  if (totals.tokens > 0) {
+    emit({ type: "usage", tokens: totals.tokens, cost, calls: totals.calls });
+    emit({ type: "log", msg: `model usage · ${totals.tokens.toLocaleString()} tokens · USD ${cost.toFixed(4)} · ${totals.calls} call(s)` });
+  }
   return { cargo: uCargo, vessels: uVessels, failed, firstError };
 }
 
@@ -172,79 +188,173 @@ async function stageAndFinish(
   fileName: string,
   emit: Emit,
   startedBy: string | null = null,
+  announce = true,
 ) {
   const sheets = recordsToSheets(cargo, vessels);
-  if (sheets.length === 0) return;
+  if (sheets.length === 0) { step(emit, "stage", "skipped", "nothing to stage"); step(emit, "gate", "skipped"); return null; }
   emit({ type: "log", msg: `staging ${cargo.length} cargo + ${vessels.length} vessel record(s)…` });
+  step(emit, "stage", "running", `${cargo.length} cargo · ${vessels.length} vessel`);
   const source = new EmailLlmSource(sheets);
   const label = `Email sync · ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
   // startedBy = the admin running the sync — credited as the poster on the
   // market cards (get_listing_posters), never the circular's sender.
   const result = await stageBatch({ supabase, source, fileName, label, startedBy });
-  emit({ type: "done", batchId: result.batchId, totals: result.totals });
+  step(emit, "stage", "done", `${result.totals.new} new · ${result.totals.updated} updated`);
+  step(emit, "gate", "done", result.gate ? `${result.gate.blocked} blocked · ${result.gate.warned} warned · ${result.gate.rules} rules` : "gate did not run");
+  if (announce) emit({ type: "done", batchId: result.batchId, totals: { ...result.totals, gateBlocked: result.gate?.blocked ?? 0, queued: result.totals.queued ?? 0 } });
+  return result;
 }
 
+type Totals = { new: number; updated: number; unchanged: number; invalid: number; errors: number; gateBlocked?: number; queued?: number };
+const addTotals = (a: Totals, b: Totals): Totals => ({
+  new: a.new + b.new, updated: a.updated + b.updated, unchanged: a.unchanged + b.unchanged, invalid: a.invalid + b.invalid, errors: a.errors + b.errors,
+  gateBlocked: (a.gateBlocked ?? 0) + (b.gateBlocked ?? 0), queued: (a.queued ?? 0) + (b.queued ?? 0),
+});
+
 // Live IMAP sync of the configured circulation inbox.
+//
+// Phase 1 (18 Sep 2026): one run at a time per inbox (claimSyncRun), read
+// OLDEST first from the IMAP UID checkpoint page by page until the inbox is
+// drained, the page budget is used or the time budget is spent, and move the
+// checkpoint only after each page is staged. A classification batch that
+// fails stops the run with the checkpoint where it was, so that mail is read
+// again next time.
 export async function runEmailSync(
-  { supabase, limit, emit, startedBy = null, since: sinceOverride = null }: { supabase: SupabaseClient; limit?: number; emit: Emit; startedBy?: string | null; since?: Date | null },
+  { supabase, limit, emit, startedBy = null, since: sinceOverride = null, owner = "admin", budgetMs = 240_000, maxPages = 6 }:
+  { supabase: SupabaseClient; limit?: number; emit: Emit; startedBy?: string | null; since?: Date | null; owner?: string; budgetMs?: number; maxPages?: number },
 ): Promise<void> {
   emit({ type: "log", msg: "reading inbox connection…" });
+  step(emit, "connect", "running");
   const { data: cfg, error } = await supabase
     .from("email_ingest_config")
     .select("imap_host, imap_port, username, folder, search_query, is_enabled")
     .maybeSingle();
-  if (error) { emit({ type: "error", error: error.message }); return; }
-  if (!cfg) { emit({ type: "error", error: "No circulation inbox configured — set it up in Settings." }); return; }
-  if (!cfg.is_enabled) { emit({ type: "error", error: "The circulation inbox is disabled. Enable it in Settings." }); return; }
-  if (!cfg.imap_host || !cfg.username) { emit({ type: "error", error: "Inbox host/username missing in Settings." }); return; }
+  const fail = (msg: string) => { step(emit, "connect", "failed", msg); emit({ type: "error", error: msg }); };
+  if (error) { fail(error.message); return; }
+  if (!cfg) { fail("No circulation inbox configured — set it up in Connections."); return; }
+  if (!cfg.is_enabled) { fail("The circulation inbox is disabled. Enable it in Connections."); return; }
+  if (!cfg.imap_host || !cfg.username) { fail("Inbox host/username missing in Connections."); return; }
 
   const { data: password, error: pErr } = await supabase.rpc("get_email_password");
-  if (pErr) { emit({ type: "error", error: pErr.message }); return; }
-  if (!password) { emit({ type: "error", error: "No inbox password stored. Add it in Settings." }); return; }
+  if (pErr) { fail(pErr.message); return; }
+  if (!password) { fail("No inbox password stored. Add it in Connections."); return; }
+  step(emit, "connect", "done", `${cfg.username} @ ${cfg.imap_host}`);
 
-  // Incremental: only mail newer than the watermark. Capture the start time up
-  // front so mail that arrives during processing is picked up next run, not lost.
-  // The watermark is the start of the last SUCCESSFUL pass: a run whose
-  // classification batches failed (LLM key, quota, "payment required") never
-  // moves it, so the next run re-reads the same mail. The admin can also pick
-  // an explicit start point on the card ("Fetch mail since").
-  const startedAt = new Date();
-  const watermark = await getWatermark(supabase, "email");
-  const since = sinceOverride ?? watermark ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const sinceLabel = since.toISOString().slice(0, 16).replace("T", " ");
-  emit({ type: "log", msg: `fetching mail newer than ${sinceLabel} UTC${sinceOverride ? " (chosen on the card)" : watermark ? " (last successful sync)" : " (no prior sync — last 7 days)"}` });
-
-  let emails: EmailMsg[];
+  // One run per inbox. The lease outlives the time budget by a margin so a
+  // run that is still staging its last page is not taken over.
+  const t0 = Date.now();
+  const startedAt = new Date(t0);
+  let lease: Awaited<ReturnType<typeof claimSyncRun>>;
   try {
-    emails = await fetchCirculars(
-      { host: cfg.imap_host, port: cfg.imap_port, user: cfg.username, folder: cfg.folder, query: cfg.search_query },
-      password as string,
-      { limit, since, onLog: (m) => emit({ type: "log", msg: m }) },
-    );
+    lease = await claimSyncRun(supabase, "email", owner, budgetMs / 1000 + 120);
   } catch (e) {
-    emit({ type: "error", error: `IMAP: ${e instanceof Error ? e.message : "fetch failed"}` });
-    return; // don't advance the watermark on a fetch failure
+    fail(e instanceof Error ? e.message : "run lease unavailable"); return;
   }
-
-  if (emails.length === 0) {
-    emit({ type: "empty", message: `No new circulars since ${sinceLabel} UTC.` });
-    // Only a natural pass moves the watermark; a chosen start point that finds
-    // nothing must not hide older mail on the next run.
-    if (!sinceOverride) await setWatermark(supabase, "email", startedAt);
+  if (!lease.claimed) {
+    const until = lease.leaseUntil ? lease.leaseUntil.toISOString().slice(11, 16) : "soon";
+    const msg = `Another inbox sync (${lease.leaseOwner ?? "unknown"}) is still running — its lease expires at ${until} UTC. Nothing was fetched; try again after it finishes.`;
+    step(emit, "fetch", "skipped", "another run holds the inbox");
+    emit({ type: "skipped", message: msg });
     return;
   }
 
-  const { cargo, vessels, failed, firstError } = await classifyAll(supabase, emails, emit);
-  if (cargo.length || vessels.length) await stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy);
-  if (failed > 0) {
-    // Part of the mail was never read by the model: keep the watermark where it
-    // was so the next run fetches the same mail again, and say so plainly.
-    emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync start point stays at ${sinceLabel} UTC — fix the LLM key or budget in Settings and run again; nothing was skipped.` });
-    return;
+  try {
+    let cp: Awaited<ReturnType<typeof getEmailCheckpoint>>;
+    try { cp = await getEmailCheckpoint(supabase); } catch (e) { fail(e instanceof Error ? e.message : "checkpoint unreadable"); return; }
+    // An explicit start point chosen on the card reads by date from there and
+    // never moves the UID checkpoint; a natural run continues from the UID.
+    let since = sinceOverride ?? cp.lastSyncAt ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    let uidValidity = sinceOverride ? null : cp.uidValidity;
+    let lastUid = sinceOverride ? null : cp.lastUid;
+    const sinceLabel = since.toISOString().slice(0, 16).replace("T", " ");
+    emit({ type: "log", msg: sinceOverride
+      ? `fetching mail newer than ${sinceLabel} UTC (chosen on the card)`
+      : lastUid != null ? `continuing from IMAP UID ${lastUid} (last successful sync ${sinceLabel} UTC)`
+      : cp.lastSyncAt ? `fetching mail newer than ${sinceLabel} UTC (last successful sync) — the UID checkpoint starts after this pass`
+      : `no prior sync — reading the last 7 days` });
+
+    const totals: Totals = { new: 0, updated: 0, unchanged: 0, invalid: 0, errors: 0, gateBlocked: 0, queued: 0 };
+    let lastBatchId: string | null = null;
+    let pages = 0;
+    for (let page = 1; page <= maxPages; page += 1) {
+      if (page > 1 && Date.now() - t0 > budgetMs) {
+        emit({ type: "log", msg: `time budget used after ${page - 1} page(s) — the rest is picked up by the next run` });
+        break;
+      }
+      step(emit, "fetch", "running", `page ${page} · since ${since.toISOString().slice(0, 16).replace("T", " ")} UTC`);
+      let fetched: Awaited<ReturnType<typeof fetchCirculars>>;
+      try {
+        fetched = await fetchCirculars(
+          { host: cfg.imap_host, port: cfg.imap_port, user: cfg.username, folder: cfg.folder, query: cfg.search_query },
+          password as string,
+          { limit, since, uidValidity, lastUid, onLog: (m) => emit({ type: "log", msg: m }) },
+        );
+      } catch (e) {
+        const msg = `IMAP: ${e instanceof Error ? e.message : "fetch failed"}`;
+        step(emit, "fetch", "failed", msg);
+        emit({ type: "error", error: msg });
+        return; // checkpoint stays where the last staged page left it
+      }
+      const emails: EmailMsg[] = fetched.messages;
+      step(emit, "fetch", "done", `${emails.length} email(s)${fetched.hasMore ? " · more waiting" : ""}${page > 1 ? ` · page ${page}` : ""}`);
+
+      if (emails.length === 0) {
+        if (page === 1) {
+          step(emit, "classify", "skipped", "nothing to classify"); step(emit, "stage", "skipped"); step(emit, "gate", "skipped");
+          emit({ type: "empty", message: `No new circulars since ${sinceLabel} UTC.` });
+          // Only a natural pass moves the clock; a chosen start point that finds
+          // nothing must not hide older mail on the next run. The UID epoch is
+          // recorded so the next run can read by UID.
+          if (!sinceOverride) await setEmailCheckpoint(supabase, owner, { uidValidity: fetched.uidValidity, lastUid: lastUid ?? (fetched.mode === "date" ? null : lastUid), lastSyncAt: startedAt });
+        }
+        break;
+      }
+      pages += 1;
+
+      step(emit, "classify", "running", `${emails.length} email(s)`);
+      let classified: Awaited<ReturnType<typeof classifyAll>>;
+      try {
+        classified = await classifyAll(supabase, emails, emit);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "classification failed";
+        step(emit, "classify", "failed", msg);
+        emit({ type: "error", error: msg });
+        return; // checkpoint stays — nothing was read by the model
+      }
+      const { cargo, vessels, failed, firstError } = classified;
+      step(emit, "classify", failed > 0 ? "failed" : "done", `${cargo.length} cargo · ${vessels.length} vessel${failed ? ` · ${failed} batch(es) failed` : ""}`);
+      if (failed > 0) {
+        // Part of the mail was never read by the model: keep the checkpoint
+        // where it was so the next run fetches the same mail again, and say so.
+        // (Records from the batches that did succeed are NOT staged either —
+        // staging half a page and re-reading it would duplicate the rest.)
+        emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync checkpoint stays at ${since.toISOString().slice(0, 16).replace("T", " ")} UTC — fix the LLM key or budget in Settings and run again; nothing was skipped.` });
+        return;
+      }
+      if (cargo.length || vessels.length) {
+        const result = await stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy, false);
+        if (result) { lastBatchId = result.batchId; Object.assign(totals, addTotals(totals, { ...result.totals, gateBlocked: result.gate?.blocked ?? 0 })); }
+      } else {
+        emit({ type: "log", msg: `page ${page}: no cargo or vessel records in these ${emails.length} email(s)` });
+      }
+
+      // The page is staged: move the checkpoint through it. Throws when the
+      // lease expired mid-run — rows are kept, the next run re-reads them.
+      const next = checkpointAfterPage(fetched, startedAt, !!sinceOverride);
+      await setEmailCheckpoint(supabase, owner, next);
+      since = next.lastSyncAt;
+      if (next.uidValidity != null) { uidValidity = next.uidValidity; lastUid = next.lastUid; }
+      if (!fetched.hasMore) break;
+      emit({ type: "log", msg: `checkpoint moved to ${next.lastUid != null ? `UID ${next.lastUid}` : `${next.lastSyncAt.toISOString().slice(0, 19).replace("T", " ")} UTC`} — reading the next page` });
+    }
+
+    if (pages > 0) {
+      if (lastBatchId) emit({ type: "done", batchId: lastBatchId, totals });
+      else emit({ type: "empty", message: `No cargo or vessel records were found in the ${pages} page(s) read.` });
+    }
+  } finally {
+    await releaseSyncRun(supabase, "email", owner);
   }
-  if (cargo.length === 0 && vessels.length === 0) emit({ type: "empty", message: "No cargo or vessel records were found in these emails." });
-  // Advance the watermark only after a successful pass (staging throws → we skip this).
-  await setWatermark(supabase, "email", startedAt);
 }
 
 // Dry run: classify a single pasted email (no IMAP) — lets an admin validate the
@@ -255,7 +365,19 @@ export async function runEmailDryRun(
   const text = sampleText.trim();
   if (!text) { emit({ type: "error", error: "Paste an email to classify." }); return; }
   emit({ type: "log", msg: "dry run — classifying pasted email" });
+  step(emit, "connect", "skipped", "pasted sample"); step(emit, "fetch", "skipped");
   const email: EmailMsg = { id: "sample", from: "(pasted)", subject: "(pasted sample)", date: null, text };
-  const { cargo, vessels } = await classifyAll(supabase, [email], emit);
-  await stageAndFinish(supabase, cargo, vessels, "pasted sample", emit);
+  step(emit, "classify", "running", "1 sample");
+  let res: Awaited<ReturnType<typeof classifyAll>>;
+  try {
+    res = await classifyAll(supabase, [email], emit);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "classification failed";
+    step(emit, "classify", "failed", msg);
+    emit({ type: "error", error: msg });
+    return;
+  }
+  step(emit, "classify", res.failed ? "failed" : "done", `${res.cargo.length} cargo · ${res.vessels.length} vessel`);
+  if (res.failed && !res.cargo.length && !res.vessels.length) { emit({ type: "error", error: res.firstError ?? "classification failed" }); return; }
+  await stageAndFinish(supabase, res.cargo, res.vessels, "pasted sample", emit);
 }

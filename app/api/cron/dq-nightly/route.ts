@@ -3,9 +3,10 @@
 // is enabled, then drives it (re-kicking through /api/dq/engine). Also resumes
 // any run left "running" with no batch for 10 minutes (a broken chain).
 //
-//   GET /api/cron/dq-nightly   Authorization: Bearer <CRON_SECRET> unless Vercel's cron header is present
+//   GET /api/cron/dq-nightly   Authorization: Bearer <CRON_SECRET> (Vercel sends it on its own cron calls)
 import { NextRequest, NextResponse, after } from "next/server";
 import { dqDb, driveRun, engineSecretOk, getSettings, kickEngine } from "@/lib/dq/engine";
+import { cronTrigger } from "@/lib/cron/auth";
 import { withJobRun } from "@/lib/jobs/runs";
 
 export const runtime = "nodejs";
@@ -13,8 +14,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  const isVercelCron = req.headers.get("x-vercel-cron") != null;
-  if (!engineSecretOk(req.headers.get("authorization"), isVercelCron)) {
+  const isVercelCron = cronTrigger(req.headers) === "cron"; // label only
+  if (!engineSecretOk(req.headers.get("authorization"))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   const sb = dqDb();
@@ -24,7 +25,26 @@ export async function GET(req: NextRequest) {
 
   const summary = await withJobRun(sb, "dq-nightly", { trigger: isVercelCron ? "cron" : "manual" }, async () => {
     const settings = await getSettings(sb);
-    const out: { created: string | null; resumed: string[]; skipped?: string } = { created: null, resumed: [] };
+    const out: { created: string | null; resumed: string[]; queuedPorts?: number; skipped?: string } = { created: null, resumed: [] };
+
+    // Port identity (10 Sep 2026): queue any port text nobody has placed yet,
+    // so Manual Review → Ports shows tonight's arrivals even when the audit
+    // run itself is switched off.
+    const { data: swept } = await sb.rpc("fn_port_review_sweep");
+    if (swept != null) out.queuedPorts = Number(swept);
+
+    // Retention (audit P7): resolved issues, gate-log lines and snapshots age out.
+    await sb.rpc("fn_dq_retention").then(() => undefined, () => undefined);
+
+    // A run the wizard scheduled ("Schedule nightly") sits queued with a
+    // scheduled_for; nothing drove it before (audit C10). Drive every due one.
+    const { data: due } = await sb.from("dq_runs").select("id").eq("status", "queued").eq("trigger", "scheduler").lte("scheduled_for", new Date().toISOString()).order("scheduled_for").limit(3);
+    for (const r of (due ?? []) as { id: string }[]) {
+      const d = await driveRun(r.id, 30_000);
+      if (!d.done) after(() => kickEngine(r.id, base));
+      out.resumed.push(r.id);
+    }
+    if (due?.length) return { result: { ...out, skipped: "drove the scheduled run(s) instead of creating one" }, rows: due.length };
 
     // resume stalled runs first
     const stale = new Date(Date.now() - 10 * 60_000).toISOString();

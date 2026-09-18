@@ -57,6 +57,8 @@ export interface DqRule {
   tables: string[];
   autofix: DqAutofix;
   enabled: boolean;
+  /** false = counter only: scored, never queued (audit U2) */
+  queue: boolean;
   source: DqSource;
   owner: string | null;
   version: number;
@@ -227,6 +229,8 @@ export interface DqSettings {
   auto_apply_threshold: number;
   weights: { error: number; warn: number; info: number };
   nightly_enabled: boolean;
+  /** member-form gate: false = shadow (log only), true = refuse + fail closed */
+  gate_forms_enforce: boolean;
   nightly_time: string;
   nightly_mode: DqRunMode;
   notify: { recipients: string[]; on_complete: boolean; on_errors: boolean; digest: boolean; budget80: boolean };
@@ -253,6 +257,8 @@ export interface DqHealthTile {
 export interface DqGateResult {
   ok: boolean;
   blocked: boolean;
+  /** rules that threw while evaluating — the gate failed open for them (audit C5) */
+  errors?: number;
   issues: { rule_code: string; name: string; severity: DqSeverity; field: string | null; mode: DqMode; message: string }[];
 }
 

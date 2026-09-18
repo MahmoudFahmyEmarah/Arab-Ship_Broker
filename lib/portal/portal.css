@@ -3745,3 +3745,44 @@ button { font: inherit; cursor: pointer; }
 .asb-portal[data-sidebar="navy"] .icon-navy { display: block !important; }
 .asb-portal[data-sidebar="navy"] .icon-classic { display: none !important; }
 
+
+/* ── Route state line (17 Sep 2026): the reference route under an area /
+   alternatives leg — "≈ Estimated via Piraeus → Lattakia" — or the amber
+   "! Reference port required" when a side cannot be placed. The listing's own
+   wording stays on the main line; this never replaces it. ── */
+.route-est {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--asb-font);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--asb-steel, #2C5F8A);
+  line-height: 1.3;
+  white-space: normal;
+  min-width: 0;
+}
+.route-est__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--asb-blue-light, #E6F1FB);
+  color: var(--asb-steel, #2C5F8A);
+}
+.route-est__text { min-width: 0; overflow-wrap: anywhere; }
+.route-est.is-invalid { color: var(--asb-amber, #854F0B); }
+.route-est.is-invalid .route-est__mark { background: #FAEEDA; color: var(--asb-amber, #854F0B); }
+/* card: sits directly under line 2, before the figures grid */
+.cargo-card .cc-route-est { display: flex; margin: -4px 0 8px; }
+.cargo-card.is-compact .cc-route-est { margin-bottom: 6px; }
+/* dense row: takes the whole width so it reads as its own line under the figures */
+.dash-row .dash-row__r3 .dash-row__est { flex-basis: 100%; white-space: normal; margin-top: 1px; }
+.dash-right .route-est { font-size: 11px; }
+.dash-right .route-est__mark { width: 15px; height: 15px; font-size: 10px; }

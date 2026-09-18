@@ -70,7 +70,7 @@ export function RunProgress() {
         </div>
         <div style={{ marginTop: 14, display: "flex", alignItems: "baseline", gap: 10 }}>
           <span className="num" style={{ fontSize: 27, fontWeight: 600, color: "var(--asb-navy)", letterSpacing: "-.02em" }}>{pct}%</span>
-          <span className="num" style={{ fontSize: 13, color: "var(--asb-ink-secondary)" }}>{run.batches_done} of {run.total_batches} batches · {fmtInt(run.rows_done)} of {fmtInt(run.total_rows)} rows</span>
+          <span className="num" aria-live="polite" style={{ fontSize: 13, color: "var(--asb-ink-secondary)" }}>{run.batches_done} of {run.total_batches} batches · {fmtInt(run.rows_done)} of {fmtInt(run.total_rows)} rows</span>
           <span className="num dq-muted" style={{ marginLeft: "auto", fontSize: 12 }}>{rps} rows/s · ETA {eta}</span>
         </div>
         <div style={{ height: 10, borderRadius: 5, background: "var(--asb-gray-100)", overflow: "hidden", marginTop: 8 }}>

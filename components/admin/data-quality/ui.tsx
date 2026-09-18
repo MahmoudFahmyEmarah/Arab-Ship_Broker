@@ -15,15 +15,16 @@ export function Sev({ s }: { s: DqSeverity }) { return <Badge cls={SEVERITY_BADG
 export function sevColor(s: DqSeverity): string { return ({ error: "var(--asb-red)", warn: "var(--asb-amber)", info: "var(--asb-slate)" })[s]; }
 export function scoreColor(n: number): string { return n >= 85 ? "var(--asb-green)" : n >= 60 ? "var(--asb-amber)" : "var(--asb-red)"; }
 
-export function Drawer({ head, title, onClose, children, narrow, label }: { head?: React.ReactNode; title: React.ReactNode; onClose: () => void; children: React.ReactNode; narrow?: boolean; label: string }) {
+export function Drawer({ head, title, onClose, children, narrow, label, guard }: { head?: React.ReactNode; title: React.ReactNode; onClose: () => void; children: React.ReactNode; narrow?: boolean; label: string; /** return false to keep the drawer open (unsaved edits — audit U5) */ guard?: () => boolean }) {
+  const tryClose = React.useCallback(() => { if (!guard || guard()) onClose(); }, [guard, onClose]);
   React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") tryClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [tryClose]);
   return (
     <>
-      <div className="dq-scrim" onMouseDown={onClose} />
+      <div className="dq-scrim" onMouseDown={tryClose} />
       <aside className={`dq-drawer${narrow ? " dq-drawer--narrow" : ""}`} role="dialog" aria-modal="true" aria-label={label}>
         <div className="dq-drawer__head">
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -40,6 +41,8 @@ export function Drawer({ head, title, onClose, children, narrow, label }: { head
 
 export interface ConfirmSpec { title: string; body: React.ReactNode; undo: string; label: string; danger?: boolean; run: () => void | Promise<void> }
 export function ConfirmDialog({ c, onClose }: { c: ConfirmSpec | null; onClose: () => void }) {
+  // Escape closes it like the drawer beside it (audit U6)
+  React.useEffect(() => { if (!c) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [c, onClose]);
   const [busy, setBusy] = React.useState(false);
   if (!c) return null;
   return (

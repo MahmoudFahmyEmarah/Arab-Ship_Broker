@@ -36,10 +36,17 @@ export interface AiReviewResult {
   tokens: number;
   model: string;
   vendor: string;
+  /** the reply was not parseable JSON — tokens were spent, nothing was learned (audit C8) */
+  parseFailed: boolean;
 }
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-const PHONE_RE = /(?<!\d)(\+?\d[\d\s().-]{7,}\d)(?!\d)/g;
+// A phone has a phone-shaped prefix: an international "+"/"00", or a
+// tel / mob / whatsapp label in front. Bare digit runs are left alone — the
+// old greedy pattern masked "laycan 12-18.10.2026" to "laycan [phone]" and the
+// model was then asked to check dates it could not see (audit C4). PII
+// columns are already dropped in the database; this is the second belt.
+const PHONE_RE = /(?:(?:\+|\b00)\d[\d\s().-]{6,}\d|(?<=\b(?:tel|mob|mobile|phone|whatsapp|wa|cell|call)\.?\s*:?\s*)\+?\d[\d\s().-]{6,}\d)/gi;
 
 /** Belt-and-braces masking: PII columns were already dropped in the DB (fn_dq_sample_rows); this scrubs free text. */
 export function maskPii(v: unknown): unknown {
@@ -115,7 +122,8 @@ export async function runAiReview(
   const tokens = (usage?.total_tokens ?? ((usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0))) || Math.ceil((system.length + human.length + text.length) / 4);
 
   let parsed: { issues?: unknown[]; suggested_rules?: unknown[] } = {};
-  try { parsed = extractJson(text) as typeof parsed; } catch { parsed = {}; }
+  let parseFailed = false;
+  try { parsed = extractJson(text) as typeof parsed; } catch { parsed = {}; parseFailed = true; }
 
   const keys = new Set(rows.map((r) => String(r.__key)));
   const cols = new Set(columns);
@@ -128,7 +136,7 @@ export async function runAiReview(
     const sev = SEVS.has(String(raw.severity)) ? (String(raw.severity) as DqSeverity) : "warn";
     issues.push({
       row_key: key,
-      field: field && cols.has(field) ? field : field,
+      field: field && cols.has(field) ? field : null,
       observed: str(raw.observed, 300),
       expected: str(raw.expected, 300),
       severity: sev,
@@ -150,5 +158,5 @@ export async function runAiReview(
       confidence: clamp01(raw.confidence),
     });
   }
-  return { issues, suggestedRules, tokens, model: modelName, vendor };
+  return { issues, suggestedRules, tokens, model: modelName, vendor , parseFailed };
 }
