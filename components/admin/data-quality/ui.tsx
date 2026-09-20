@@ -15,7 +15,7 @@ export function Sev({ s }: { s: DqSeverity }) { return <Badge cls={SEVERITY_BADG
 export function sevColor(s: DqSeverity): string { return ({ error: "var(--asb-red)", warn: "var(--asb-amber)", info: "var(--asb-slate)" })[s]; }
 export function scoreColor(n: number): string { return n >= 85 ? "var(--asb-green)" : n >= 60 ? "var(--asb-amber)" : "var(--asb-red)"; }
 
-export function Drawer({ head, title, onClose, children, narrow, label, guard }: { head?: React.ReactNode; title: React.ReactNode; onClose: () => void; children: React.ReactNode; narrow?: boolean; label: string; /** return false to keep the drawer open (unsaved edits — audit U5) */ guard?: () => boolean }) {
+export function Drawer({ head, title, onClose, children, narrow, label, guard, testId }: { head?: React.ReactNode; title: React.ReactNode; onClose: () => void; children: React.ReactNode; narrow?: boolean; label: string; /** return false to keep the drawer open (unsaved edits — audit U5) */ guard?: () => boolean; /** a stable hook for the browser suite; presentation carries no meaning for a test */ testId?: string }) {
   const tryClose = React.useCallback(() => { if (!guard || guard()) onClose(); }, [guard, onClose]);
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") tryClose(); };
@@ -25,7 +25,7 @@ export function Drawer({ head, title, onClose, children, narrow, label, guard }:
   return (
     <>
       <div className="dq-scrim" onMouseDown={tryClose} />
-      <aside className={`dq-drawer${narrow ? " dq-drawer--narrow" : ""}`} role="dialog" aria-modal="true" aria-label={label}>
+      <aside className={`dq-drawer${narrow ? " dq-drawer--narrow" : ""}`} role="dialog" aria-modal="true" aria-label={label} data-testid={testId}>
         <div className="dq-drawer__head">
           <div style={{ flex: 1, minWidth: 0 }}>
             {head}

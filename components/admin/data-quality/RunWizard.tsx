@@ -10,7 +10,7 @@ import { useConsole } from "./DataQualityConsole";
 type Est = { tables: { table: string; rows: number }[]; table_names: string[]; total_rows: number; batches: number };
 
 export function RunWizard() {
-  const { boot, nav, tableLabel, toast } = useConsole();
+  const { boot, nav, tableLabel, toast, canRun } = useConsole();
   const [step, setStep] = React.useState(1);
   const [scopeKind, setScopeKind] = React.useState<DqScope["kind"]>("db");
   const [tables, setTables] = React.useState<string[]>(["cargo_listings", "vessel_availability"]);
@@ -114,7 +114,7 @@ export function RunWizard() {
             <span style={{ flex: 1 }} />
             <button type="button" className="adm-btn ghost" onClick={() => nav({ tab: "overview" })}>Cancel</button>
             {step < 4 && <button type="button" className="adm-btn primary" onClick={() => setStep((s) => Math.min(4, s + 1))}>Continue</button>}
-            {step === 4 && <button type="button" className="adm-btn primary" onClick={start} disabled={starting || !est} title="Runs in batches within the 60 s budget; never locks member tables">{starting ? "Starting…" : when === "now" ? "Start run" : "Schedule"}</button>}
+            {step === 4 && <button type="button" className="adm-btn primary" onClick={start} disabled={starting || !est || !canRun} title={canRun ? "Runs in batches within the 60 s budget; never locks member tables" : "Starting audits needs the run permission on Data quality"}>{starting ? "Starting…" : when === "now" ? "Start run" : "Schedule"}</button>}
           </div>
         </div>
         <aside className="adm-card" style={{ background: "var(--asb-gray-50)", alignSelf: "start" }}>

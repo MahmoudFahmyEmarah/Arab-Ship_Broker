@@ -25,6 +25,7 @@ export interface ConsoleCtx {
   boot: DqBootstrap;
   refreshBoot: () => Promise<void>;
   canEdit: boolean;
+  canRun: boolean;
   tableLabel: (t: string) => string;
   nav: (patch: Record<string, string | null | undefined>, replace?: boolean) => void;
   params: URLSearchParams;
@@ -64,7 +65,7 @@ export function DataQualityConsole({ boot: initial }: { boot: DqBootstrap }) {
   const refreshBoot = React.useCallback(async () => { const r = await getDqBootstrap(); if (r.success) setBoot(r.data); }, []);
   const labels = React.useMemo(() => new Map(boot.tables.map((t) => [t.table_name, t.label])), [boot.tables]);
   const ctx: ConsoleCtx = React.useMemo(() => ({
-    boot, refreshBoot, canEdit: boot.canEdit, tableLabel: (t) => labels.get(t) ?? t, nav, params, toast, confirm: setConfirm,
+    boot, refreshBoot, canEdit: boot.canEdit, canRun: boot.canRun, tableLabel: (t) => labels.get(t) ?? t, nav, params, toast, confirm: setConfirm,
   }), [boot, refreshBoot, labels, nav, params, toast]);
 
   const activeTab = screen === "progress" ? "runs" : screen === "newrun" ? "overview" : screen;

@@ -49,6 +49,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/mailparser": "^3.4.6",
     "@types/node": "^20.19.39",

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { dqDb } from "@/lib/dq/engine";
 import { parseRegistryCsv, tradingCountries, upsertRegistry } from "@/lib/dq/registry";
+import { REGISTRY_LIMITS, contentTypeAllowed, readCapped, redirectAllowed, registryUrlProblem } from "@/lib/dq/registry-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,13 +23,39 @@ export async function POST(req: NextRequest) {
       const fd = await req.formData();
       const file = fd.get("file");
       if (!(file instanceof File)) return NextResponse.json({ ok: false, error: "No file uploaded." }, { status: 400 });
+      if (file.size > REGISTRY_LIMITS.bytes) return NextResponse.json({ ok: false, error: `The file is larger than ${Math.round(REGISTRY_LIMITS.bytes / 1024 / 1024)} MB.` }, { status: 413 });
       text = await file.text(); release = String(fd.get("release") ?? "").trim(); all = fd.get("all") === "true";
     } else {
+      // Workstream A (19 Sep 2026): UNECE hosts only, redirects only within
+      // them, a deadline, a CSV body, and a byte ceiling read as a stream.
       const body = (await req.json()) as { url?: string; release?: string; all?: boolean };
-      if (!body.url || !/^https:\/\//.test(body.url)) return NextResponse.json({ ok: false, error: "A https URL to a CSV export is required." }, { status: 400 });
-      const res = await fetch(body.url, { cache: "no-store" });
-      if (!res.ok) return NextResponse.json({ ok: false, error: `Download failed: HTTP ${res.status}` }, { status: 400 });
-      text = await res.text(); release = (body.release ?? "").trim(); all = !!body.all;
+      const problem = registryUrlProblem(body.url ?? "");
+      if (problem) return NextResponse.json({ ok: false, error: problem }, { status: 400 });
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), REGISTRY_LIMITS.timeoutMs);
+      try {
+        let url = new URL(body.url as string);
+        let res: Response | null = null;
+        for (let hop = 0; hop <= REGISTRY_LIMITS.redirects; hop += 1) {
+          res = await fetch(url, { cache: "no-store", redirect: "manual", signal: ctl.signal });
+          if (res.status >= 300 && res.status < 400) {
+            const loc = res.headers.get("location");
+            if (!loc || !redirectAllowed(loc, url)) return NextResponse.json({ ok: false, error: "The download redirected outside the UN/LOCODE hosts; import the file by upload instead." }, { status: 400 });
+            url = new URL(loc, url);
+            continue;
+          }
+          break;
+        }
+        if (!res || !res.ok) return NextResponse.json({ ok: false, error: `Download failed: HTTP ${res?.status ?? "no response"}` }, { status: 400 });
+        if (!contentTypeAllowed(res.headers.get("content-type"))) return NextResponse.json({ ok: false, error: `Expected a CSV, got ${res.headers.get("content-type")}. The UNECE zip must be unpacked and uploaded as the CSV.` }, { status: 400 });
+        text = await readCapped(res.body, REGISTRY_LIMITS.bytes);
+      } catch (e) {
+        const aborted = e instanceof Error && e.name === "AbortError";
+        return NextResponse.json({ ok: false, error: aborted ? `The download took longer than ${REGISTRY_LIMITS.timeoutMs / 1000} s.` : (e instanceof Error ? e.message : "Download failed.") }, { status: aborted ? 504 : 400 });
+      } finally {
+        clearTimeout(timer);
+      }
+      release = (body.release ?? "").trim(); all = !!body.all;
     }
     if (!release) release = new Date().toISOString().slice(0, 7);
     const countries = all ? undefined : await tradingCountries(sb);

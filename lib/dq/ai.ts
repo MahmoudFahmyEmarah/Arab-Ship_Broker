@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { getActiveModel } from "@/lib/sync/email/llm";
+import { isTransientAiError, withDeadline } from "./ai-budget";
 import type { DqRule, DqSeverity } from "./types";
 
 export interface AiIssue {
@@ -86,9 +87,9 @@ const str = (v: unknown, max = 600): string | null => (v == null || v === "" ? n
 
 export async function runAiReview(
   sb: SupabaseClient,
-  input: { table: string; tableLabel: string; rows: Record<string, unknown>[]; rules: Pick<DqRule, "code" | "name" | "description" | "ai_prompt" | "kind" | "severity">[]; knownColumns?: string[] },
+  input: { table: string; tableLabel: string; rows: Record<string, unknown>[]; rules: Pick<DqRule, "code" | "name" | "description" | "ai_prompt" | "kind" | "severity">[]; maxOutputTokens?: number; knownColumns?: string[] },
 ): Promise<AiReviewResult> {
-  const { model, vendor, modelName } = await getActiveModel(sb);
+  const { model, vendor, modelName } = await getActiveModel(sb, { maxOutputTokens: input.maxOutputTokens });
   const rows = input.rows.map((r) => maskPii(r)) as Record<string, unknown>[];
   const columns = input.knownColumns ?? Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).filter((k) => !k.startsWith("__"));
 
@@ -116,7 +117,15 @@ export async function runAiReview(
     JSON.stringify(rows),
   ].join("\n");
 
-  const res = await model.invoke([new SystemMessage(system), new HumanMessage(human)]);
+  // workstream F: a 90 s deadline, one retry on a transient failure, never on a refusal
+  const call = () => withDeadline(model.invoke([new SystemMessage(system), new HumanMessage(human)]), 90_000, "AI review");
+  let res;
+  try { res = await call(); } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!isTransientAiError(msg)) throw e;
+    await new Promise((r) => setTimeout(r, 2_000));
+    res = await call();
+  }
   const text = contentToText(res.content);
   const usage = (res as { usage_metadata?: { total_tokens?: number; input_tokens?: number; output_tokens?: number } }).usage_metadata;
   const tokens = (usage?.total_tokens ?? ((usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0))) || Math.ceil((system.length + human.length + text.length) / 4);

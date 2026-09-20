@@ -80,7 +80,8 @@ export function RulesView() {
                 {g.rules.map((r) => {
                   const st = r.stats ?? { open: 0, raised: 0, fp: 0, checked: 0 };
                   return (
-                    <tr key={r.id} className={r.code === ruleCode ? "is-selected" : ""} onClick={() => { setDraft(null); nav({ rule: r.code }, true); }} title={r.description} style={r.enabled ? undefined : { opacity: .6 }}>
+                    <tr key={r.id} className={r.code === ruleCode ? "is-selected" : ""} onClick={() => { setDraft(null); nav({ rule: r.code }, true); }} title={r.description} style={r.enabled ? undefined : { opacity: .6 }}
+                      tabIndex={0} role="button" aria-label={`Open rule ${r.code}`} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setDraft(null); nav({ rule: r.code }, true); } }}>
                       <td className="mono" style={{ color: "var(--asb-navy)", fontWeight: 600 }}>{r.code}</td>
                       <td><div style={{ fontWeight: 500, color: "var(--asb-navy)" }}>{r.name}</div><div className="dq-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 420 }}>{r.tables.map(tableLabel).join(" · ")}</div></td>
                       <td style={{ textTransform: "capitalize" }}>{r.category}</td>

@@ -1,0 +1,24 @@
+# Data Quality hardening release (workstreams A–H) — migration manifest
+# One migration per line, in the order they apply.
+#
+#   scripts/release-check.sh supabase/releases/dq-20260919.txt --isolated
+#       every file here still pending, nothing older pending behind it
+#   scripts/release-apply.sh supabase/releases/dq-20260919.txt --apply
+#       applies exactly this list, one file per transaction, recording each
+#       version; the pending Data Sync files (20260920*) are not touched
+#
+# THIS RELEASE GOES FIRST, before supabase/releases/sync-20260920.txt. These
+# versions are the older ones, and the Supabase CLI refuses to insert a
+# migration older than the newest applied: apply Data Sync first and this
+# release can no longer be pushed at all. Without --isolated, release-check
+# asks the stricter question — whether a plain `supabase db push` is safe —
+# which it is not while the Data Sync files are also pending.
+20260919100000_dq_a_evaluator_boundary.sql
+20260919110000_dq_d_fix_undo_safety.sql
+20260919120000_dq_b_finding_lifecycle.sql
+20260919130000_dq_c_run_integrity.sql
+20260919140000_dq_e_policy_and_audit.sql
+20260919150000_dq_f_performance.sql
+20260919160000_dq_g_notifications.sql
+20260919170000_dq_h_scaling.sql
+20260919180000_dq_i_restricted_paths.sql

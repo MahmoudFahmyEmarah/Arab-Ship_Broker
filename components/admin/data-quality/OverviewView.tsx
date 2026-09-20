@@ -25,9 +25,10 @@ export function OverviewView() {
     <section style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 18px", alignItems: "center" }} className="dq-muted">
         <span><strong style={{ color: "var(--asb-ink)", fontWeight: 600 }}>Last run</strong> {ov.lastRun ? `${ov.lastRun.code} · ${fmtDateTime(ov.lastRun.finished_at)} · ${fmtDur(ov.lastRun.duration_ms)} · ${fmtInt(ov.lastRun.rows_done)} rows · ${fmtInt(ov.lastRun.found.error + ov.lastRun.found.warn + ov.lastRun.found.info)} issues` : "none yet"}</span>
-        <span><strong style={{ color: "var(--asb-ink)", fontWeight: 600 }}>Next scheduled</strong> {boot.settings.nightly_enabled ? `Nightly ${boot.settings.nightly_time} UTC · whole database · ${boot.settings.nightly_mode === "both" ? "rules + AI" : boot.settings.nightly_mode}` : "not scheduled"}</span>
+        <span><strong style={{ color: "var(--asb-ink)", fontWeight: 600 }}>Next scheduled</strong> {ov.schedule?.enabled && ov.schedule.next_at ? `${fmtDateTime(ov.schedule.next_at)} (${boot.settings.nightly_time} UTC) · whole database · ${boot.settings.nightly_mode === "both" ? "rules + AI" : boot.settings.nightly_mode}` : "not scheduled"}{ov.schedule?.missed ? <strong style={{ color: "var(--asb-amber)", marginLeft: 6 }}>· missed — the scheduler catches up on its next tick</strong> : null}{ov.schedule?.catch_up ? <span style={{ marginLeft: 6 }}>{"· tonight's run started late (catch-up)"}</span> : null}</span>
+        <span><strong style={{ color: "var(--asb-ink)", fontWeight: 600 }}>Last scheduled run</strong> {ov.schedule?.last_scheduled ? `${ov.schedule.last_scheduled.code} · ${ov.schedule.last_scheduled.status} · ${fmtDateTime(ov.schedule.last_scheduled.created_at)}` : "none yet"}{ov.schedule?.last_successful && ov.schedule.last_successful.id !== ov.schedule.last_scheduled?.id ? ` · last successful ${ov.schedule.last_successful.code} · ${fmtDateTime(ov.schedule.last_successful.finished_at)}` : ""}</span>
         <span><strong style={{ color: "var(--asb-ink)", fontWeight: 600 }}>Registry</strong> {boot.settings.registry_release ? `UN/LOCODE ${boot.settings.registry_release}` : "no release imported"}</span>
-        <span style={{ marginLeft: "auto" }}>Health = 100 − Σ(open issues × weight) ÷ rows × 100 · weights error {w.error} · warn {w.warn} · info {w.info}</span>
+        <span style={{ marginLeft: "auto" }}>Health = 100 − Σ(worst open severity per row × weight) ÷ (rows × error weight) × 100 · weights error {w.error} · warn {w.warn} · info {w.info}{ov.health.some((t) => t.partial) ? <strong style={{ color: "var(--asb-amber)", marginLeft: 8 }}>· partial — the last run had rule errors, scores may under-count</strong> : null}</span>
       </div>
 
       {noRuns && total === 0 ? (
@@ -36,7 +37,7 @@ export function OverviewView() {
         </Empty>
       ) : (
         <>
-          <div className="dq-grid">
+          <div className="dq-grid" data-testid="health-tiles">
             {ov.health.map((t) => {
               const delta = t.trend.length > 1 ? Math.round(t.score - t.trend[0]) : 0;
               const color = scoreColor(t.score);
@@ -62,7 +63,7 @@ export function OverviewView() {
             <div className="adm-card">
               <div className="adm-card__head"><span className="adm-card__title">Open issues by severity</span><a href="#" className="adm-link" style={{ fontSize: 11 }} onClick={(e) => { e.preventDefault(); goIssues({ view: "open" }); }}>All issues →</a></div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 10 }}>
-                {([["error", "Error", "Blocks the market", "var(--asb-red-bg)", "rejected", "blocks"], ["warn", "Warn", "Visible but allowed", "var(--asb-amber-bg)", "pending", "open"], ["info", "Info", "Advisory", "var(--asb-gray-100)", "draft", "open"]] as const).map(([k, label, note, bg, badge, view]) => (
+                {([["error", "Error", "Refused only where the Gate mode says block", "var(--asb-red-bg)", "rejected", "blocks"], ["warn", "Warn", "Visible but allowed", "var(--asb-amber-bg)", "pending", "open"], ["info", "Info", "Advisory", "var(--asb-gray-100)", "draft", "open"]] as const).map(([k, label, note, bg, badge, view]) => (
                   <button key={k} type="button" className="dq-card-btn" style={{ background: bg }} onClick={() => goIssues({ view, severity: k })} title={`Open Issues filtered to ${label}`}>
                     <Badge cls={badge}>{label}</Badge>
                     <div className="num" style={{ fontSize: 27, fontWeight: 600, color: sevColor(k), letterSpacing: "-.02em", marginTop: 6, lineHeight: 1 }}>{fmtInt(ov.sev[k])}</div>

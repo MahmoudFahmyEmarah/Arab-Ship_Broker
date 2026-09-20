@@ -1,0 +1,14 @@
+# Data Quality release — the last two, after a second interruption (21 Sep 2026).
+#
+# The read-back of the recorded version failed to parse twice during this
+# release (after 20260919110000 and after 20260919160000). Both times
+# `supabase migration list --linked` confirmed the version WAS recorded: the
+# interruption is in the verification, not in the release. The script refusing
+# to continue on an unparseable answer is the behaviour we want — "could not
+# tell" must never be read as "it is recorded".
+#
+# Applied and recorded before this file: 20260919100000, 20260919110000,
+# 20260919120000, 20260919130000, 20260919140000, 20260919150000,
+# 20260919160000.
+20260919170000_dq_h_scaling.sql
+20260919180000_dq_i_restricted_paths.sql

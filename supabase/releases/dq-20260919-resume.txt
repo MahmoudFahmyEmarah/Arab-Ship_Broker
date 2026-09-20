@@ -1,0 +1,27 @@
+# Data Quality release — the part that was still pending after an interruption
+# (21 Sep 2026).
+#
+# scripts/release-apply.sh stopped partway through supabase/releases/dq-20260919.txt:
+# 20260919100000 and 20260919110000 applied and recorded cleanly, then the
+# read-back of the second version could not parse the CLI's output and the
+# script refused to continue — "could not tell" is not "it is recorded", and
+# carrying on would have risked a release that is applied but not in the
+# history.
+#
+# `npx supabase migration list --linked` then confirmed both versions ARE
+# recorded, so the interruption was in the verification, not in the release.
+#
+# This manifest is the remainder. release-check.sh --isolated is still the
+# gate: it refuses if any entry here has already been applied, and it still
+# refuses if anything older is pending behind it.
+#
+# Keep this file. It is the record of how this release actually went out, and
+# the rehearsal (scripts/dq-release-rehearsal.sh) proves a stop at any point
+# can be resumed or rolled back.
+20260919120000_dq_b_finding_lifecycle.sql
+20260919130000_dq_c_run_integrity.sql
+20260919140000_dq_e_policy_and_audit.sql
+20260919150000_dq_f_performance.sql
+20260919160000_dq_g_notifications.sql
+20260919170000_dq_h_scaling.sql
+20260919180000_dq_i_restricted_paths.sql
