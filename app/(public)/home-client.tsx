@@ -11,7 +11,7 @@ import {
   FlaskConical,
 } from "lucide-react";
 
-import { Clock, Vessel, Voyage, Swivel, Shackle, ShieldLine, Globe, TrendUp, CargoVesselPair, MarketBars } from "@/components/icons";
+import { Clock, Vessel, Voyage, Swivel, Shackle, ShieldLine, Globe, TrendUp, CargoVesselPair, MarketBars, VoyCalc, PortDA } from "@/components/icons";
 import { FoundersCarousel } from "@/components/FoundersCarousel";
 import { ScrollZoomBackground } from "@/components/ScrollZoomBackground";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -23,7 +23,7 @@ const features = [
     icon: Vessel,
     title: "Expert Dry-Bulk Brokerage",
     description:
-      "Specialized brokerage for dry-bulk and break-bulk commodities. Every deal backed by hands-on shipboard experience and a deep MENA operator network.",
+      "Specialized brokerage for dry-bulk and break-bulk commodities, backed by hands-on shipboard experience and a deep MENA operator network.",
     accent: "from-ocean-400 to-ocean-600",
     iconBg:
       "bg-ocean-50 text-ocean-600 group-hover:bg-ocean-600 group-hover:text-white",
@@ -32,7 +32,7 @@ const features = [
     icon: MarketBars,
     title: "Live Market Intelligence",
     description:
-      "Real-time freight rate signals across the Red Sea, Arabian Gulf, and East Mediterranean, so you negotiate from a position of knowledge, not guesswork.",
+      "Cargo, tonnage, route and risk signals across the trade lanes we serve help you negotiate from a position of knowledge, not guesswork.",
     accent: "from-foam-400 to-foam-600",
     iconBg:
       "bg-foam-50 text-foam-600 group-hover:bg-foam-600 group-hover:text-white",
@@ -41,7 +41,7 @@ const features = [
     icon: Globe,
     title: "MENA-Native Coverage",
     description:
-      "14 trade zones. 120+ ports. Every major Red Sea and Arabian Gulf hub covered. Deep cultural and regulatory knowledge built from years in-market.",
+      "7 trade zones. Every major Red Sea and Arabian Gulf hub covered. Deep cultural and regulatory knowledge built from years in-market.",
     accent: "from-ocean-300 to-foam-500",
     iconBg:
       "bg-slate-50 text-slate-600 group-hover:bg-slate-700 group-hover:text-white",
@@ -65,11 +65,19 @@ const steps = [
   },
   {
     number: "03",
-    title: "Close the Fixture",
+    title: "Estimate & Close",
     description:
-      "We handle charter party negotiations and pre-hire inspections so your deal closes cleanly and profitably.",
+      "Price the voyage, port DAs and canal tolls, then we handle pre-fixture and charter party negotiations so your deal closes cleanly.",
     icon: TrendUp,
   },
+];
+
+// The three calculators that orbit step 03. All three are live behind the
+// dashboard, so a visitor who follows one lands on sign-in and then the tool.
+const calculators = [
+  { label: "Voyage Cost", href: "/dashboard/voyage-estimator", icon: VoyCalc },
+  { label: "Port DA", href: "/dashboard/ports-da", icon: PortDA },
+  { label: "Canal Toll", href: "/dashboard/suez-toll", icon: Globe },
 ];
 
 const trustSignals = [
@@ -177,7 +185,7 @@ function EyebrowLabel({
   return (
     <span
       className={cn(
-        "inline-block text-[10px] font-bold tracking-[0.18em] uppercase mb-5 px-3.5 py-1.5 rounded-full border",
+        "inline-block text-[13px] max-sm:text-[12px] font-bold tracking-[0.16em] uppercase mb-5 px-5 py-2 rounded-full border",
         light
           ? "bg-white/8 text-foam-300 border-white/10"
           : "bg-ocean-50 text-ocean-600 border-ocean-100",
@@ -185,6 +193,102 @@ function EyebrowLabel({
     >
       {label}
     </span>
+  );
+}
+
+/**
+ * Step 03 with the three calculators on a ring around its icon — the "orbit
+ * while hovering" study (2b). The ring reveals and turns while the pointer is
+ * over the step, or after a tap on the icon pins it open for touch; otherwise
+ * it freezes where it is. The centre block is the same markup as the other
+ * two steps, so the three icons sit on one line.
+ */
+function CalculatorStep({ step }: { step: (typeof steps)[number] }) {
+  const [hover, setHover] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const open = hover || pinned;
+  const play = open ? "running" : "paused";
+  const RADIUS = 100; // px — the ring is 200 across
+
+  return (
+    <div
+      className="flex flex-col items-center text-center"
+      // touch also fires pointerenter and never pointerleave, which would wedge
+      // the ring open — so only a mouse counts as hovering; touch uses the tap
+      onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }}
+      onPointerLeave={(e) => { if (e.pointerType === "mouse") setHover(false); }}
+    >
+      {/* 250 square, pulled up 81 so its centre lands where the other steps'
+          88px icons sit. The title waits below the whole square: the ring
+          turns, so each satellite passes the bottom, 138px under the centre —
+          this column's title sits lower than its neighbours' on purpose */}
+      <div className="relative w-[250px] h-[250px] -mt-[81px] mb-2 flex items-center justify-center">
+        <div
+          className="absolute left-1/2 top-1/2 w-[200px] h-[200px] -ml-[100px] -mt-[100px] rounded-full border border-dashed border-foam-400/35 transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(.2,.8,.2,1)] pointer-events-none"
+          style={{ opacity: open ? 1 : 0, transform: open ? "scale(1)" : "scale(0.6)" }}
+          aria-hidden
+        />
+
+        <div className="relative z-10">
+          <div className="absolute inset-0 bg-foam-500/15 rounded-2xl blur-xl group-hover:bg-foam-400/25 transition-colors duration-500" />
+          <button
+            type="button"
+            onClick={() => setPinned((p) => !p)}
+            aria-expanded={open}
+            aria-label={open ? "Hide the calculators" : "Show the calculators"}
+            className="hiw-pulse relative w-22 h-22 max-sm:w-20 max-sm:h-20 bg-ocean-900 border border-ocean-700/80 rounded-2xl flex items-center justify-center shadow-2xl group-hover:border-foam-500/40 transition-all duration-400 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foam-400/60"
+          >
+            <step.icon className="w-9 h-9 max-sm:w-8 max-sm:h-8 text-foam-400 group-hover:text-foam-300 transition-colors" />
+          </button>
+          <div className="absolute -top-3 -right-3 w-7 h-7 bg-foam-500 text-ocean-950 font-bold rounded-full flex items-center justify-center text-xs shadow-lg z-20">
+            {step.number}
+          </div>
+        </div>
+
+        {/* pointer-events-none: this layer sits over the centre button; only the
+            satellites themselves take the pointer, and only while open */}
+        <div className="hiw-orbit absolute inset-0 z-20 pointer-events-none" style={{ animationPlayState: play }}>
+          {calculators.map((c, i) => {
+            const angle = -90 + (i * 360) / calculators.length;
+            return (
+              <div
+                key={c.label}
+                className="absolute left-1/2 top-1/2 w-0 h-0"
+                style={{ transform: `rotate(${angle}deg) translate(${RADIUS}px) rotate(${-angle}deg)` }}
+              >
+                <div className="hiw-orbit hiw-orbit--counter" style={{ animationPlayState: play }}>
+                  <Link
+                    href={c.href}
+                    tabIndex={open ? 0 : -1}
+                    aria-hidden={!open}
+                    className="group/sat flex flex-col items-center gap-1.5 w-[120px] -mt-[38px] -ml-[60px] transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(.2,.8,.2,1)]"
+                    style={{
+                      opacity: open ? 1 : 0,
+                      transform: open ? "scale(1)" : "scale(0.3)",
+                      pointerEvents: open ? "auto" : "none",
+                    }}
+                  >
+                    <span className="w-14 h-14 rounded-full bg-ocean-950 border border-foam-400 text-foam-400 flex items-center justify-center shadow-[0_6px_18px_rgba(0,0,0,0.4)] transition-colors group-hover/sat:bg-ocean-700/60">
+                      <c.icon width={24} height={24} />
+                    </span>
+                    <span className="text-[11px] font-semibold text-foam-100 whitespace-nowrap">
+                      {c.label}
+                    </span>
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <h3 className="text-[17px] font-bold text-white mb-3.5 tracking-tight leading-snug group-hover:text-foam-100 transition-colors">
+        {step.title}
+      </h3>
+      <p className="text-[14px] text-ocean-200/65 leading-relaxed px-2">
+        {step.description}
+      </p>
+    </div>
   );
 }
 
@@ -196,11 +300,15 @@ function SectionHeader({
   subtitleClassName = "max-w-2xl",
 }: {
   eyebrow: string;
-  title: string;
-  subtitle: string;
+  title: React.ReactNode;
+  /** a sentence, or several paragraphs — a string stays a single <p> */
+  subtitle: React.ReactNode;
   light?: boolean;
   subtitleClassName?: string;
 }) {
+  // a string is one paragraph; anything richer brings its own <p>s and
+  // cannot sit inside one, so it gets a plain block with the same styling
+  const SubtitleTag: "p" | "div" = typeof subtitle === "string" ? "p" : "div";
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -218,7 +326,7 @@ function SectionHeader({
       >
         {title}
       </h2>
-      <p
+      <SubtitleTag
         className={cn(
           "text-[17px] max-sm:text-base mx-auto leading-relaxed",
           subtitleClassName,
@@ -226,7 +334,7 @@ function SectionHeader({
         )}
       >
         {subtitle}
-      </p>
+      </SubtitleTag>
     </motion.div>
   );
 }
@@ -394,12 +502,13 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
         </div>
       </section>
 
-      <section className="py-20 max-lg:py-16 max-sm:py-14 bg-slate-50">
+      <section id="why-arab-shipbroker" className="bg-slate-50 py-20 max-lg:py-16 max-sm:py-14">
         <div className="container">
           <SectionHeader
             eyebrow="Why Arab ShipBroker"
             title="Built for the MENA Market"
-            subtitle="We don't offer generic maritime services. Every feature, from zone-aware matching to sanctions screening, is purpose-built for the Red Sea and Arabian Gulf trade lanes."
+            subtitle="We do not offer generic maritime services. We came from the deck, not the training desk, and years of loading, stowing and sailing the cargoes we now fix shape how we judge vessel suitability, cargo handling and berth risk. With maritime technology specialists, we built tools for the trade lanes we serve that put the market picture behind every recommendation. On every fixture, we act for the party that appoints us and tell both sides where we stand before we quote."
+            subtitleClassName="max-w-4xl !text-[15px] !leading-7 max-sm:!text-[14px] max-sm:!leading-6"
           />
 
           <div className="grid grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1 gap-7 max-sm:gap-5">
@@ -414,7 +523,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                   ease: [0.2, 0, 0, 1],
                 }}
                 viewport={{ once: true }}
-                className="group relative bg-white rounded-3xl p-9 max-sm:p-7 border border-slate-200/70 shadow-[0_1px_3px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_28px_rgba(45,109,168,0.1)] transition-all duration-400 hover:-translate-y-1"
+                className="group relative h-full bg-white rounded-3xl p-9 max-sm:p-7 border border-slate-200/70 shadow-[0_1px_3px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_28px_rgba(45,109,168,0.1)] transition-all duration-400 hover:-translate-y-1"
               >
                 <div
                   className={cn(
@@ -442,6 +551,7 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
               </motion.div>
             ))}
           </div>
+
         </div>
       </section>
 
@@ -466,14 +576,14 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                 <p>
                   Our boutique approach delivers personalized service without
                   sacrificing reach. We specialize in dry-bulk and break-bulk
-                  commodities across the MENA region: from chartering to vessel
-                  S&P.
+                  commodities across the MENA region: from ship broking to
+                  vessel S&P brokerage.
                 </p>
                 <p>
                   Every fixture we close is underpinned by first-hand shipboard
                   knowledge, real-time market data, and relationships built over
-                  years on the water and in trading offices from Egypt to the
-                  UAE.
+                  years on the water &mdash; and a presence that has grown from
+                  Egypt to the UAE, and now Saudi Arabia.
                 </p>
               </div>
               <Link
@@ -516,10 +626,17 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                     </div>
                     <div>
                       <p className="font-bold text-white text-base leading-tight tracking-tight">
-                        Covering Major MENA Ports
+                        The trading areas we serve
                       </p>
                       <p className="text-xs text-ocean-100/70 font-medium mt-0.5">
-                        Egypt · UAE · Saudi Arabia · Oman · Kuwait
+                        Mediterranean · Red Sea · Black Sea · Arabian Gulf · Arabian Sea
+                      </p>
+                      {/* Next, not now — dimmer on purpose. WCAF, ECAF and WCI
+                          already exist in lib/zones.ts; this line goes the day
+                          they move into the list above. */}
+                      <p className="text-[11px] text-ocean-100/45 font-medium mt-1.5">
+                        <span className="uppercase tracking-[0.12em] text-[10px]">Expanding to</span>{" "}
+                        West Africa · East Africa · West Coast of India
                       </p>
                     </div>
                   </div>
@@ -548,7 +665,9 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
             light
           />
 
-          <div className="relative max-w-4xl mx-auto mt-16">
+          {/* lg:mt-28 — the top satellite of step 03 reaches 94px above the
+              row; the header's own margin only cleared 64 */}
+          <div className="relative max-w-4xl mx-auto mt-16 lg:mt-28">
             <div
               className="absolute top-11 left-[12%] right-[12%] h-px hidden lg:block pointer-events-none"
               style={{
@@ -570,24 +689,39 @@ export function HomeClient({ cargoCount, vesselCount, zoneCount }: HomeStats) {
                     ease: [0.2, 0, 0, 1],
                   }}
                   viewport={{ once: true }}
-                  className="flex flex-col items-center text-center group"
+                  className={cn(
+                    "flex flex-col items-center text-center group",
+                    // stacked on small screens, step 03's ring would reach into
+                    // step 02's text without this extra room
+                    index === steps.length - 1 && "max-lg:mt-12",
+                  )}
                 >
-                  <div className="relative mb-7">
-                    <div className="absolute inset-0 bg-foam-500/15 rounded-2xl blur-xl group-hover:bg-foam-400/25 transition-colors duration-500" />
-                    <div className="relative w-22 h-22 max-sm:w-20 max-sm:h-20 bg-ocean-900 border border-ocean-700/80 rounded-2xl flex items-center justify-center shadow-2xl group-hover:border-foam-500/40 group-hover:-translate-y-2 transition-all duration-400 z-10">
-                      <step.icon className="w-9 h-9 max-sm:w-8 max-sm:h-8 text-foam-400 group-hover:text-foam-300 transition-colors" />
-                    </div>
-                    <div className="absolute -top-3 -right-3 w-7 h-7 bg-foam-500 text-ocean-950 font-bold rounded-full flex items-center justify-center text-xs shadow-lg z-20">
-                      {step.number}
-                    </div>
-                  </div>
+                  {index === steps.length - 1 ? (
+                    <CalculatorStep step={step} />
+                  ) : (
+                    <>
+                      {/* lg:mb-[89px] — step 03's satellites sweep 94px below
+                          its icon, so its title sits that far down; the other
+                          two match it at desktop so all three titles share a
+                          line. Stacked below lg there is nothing to align to. */}
+                      <div className="relative mb-7 lg:mb-[89px]">
+                        <div className="absolute inset-0 bg-foam-500/15 rounded-2xl blur-xl group-hover:bg-foam-400/25 transition-colors duration-500" />
+                        <div className="relative w-22 h-22 max-sm:w-20 max-sm:h-20 bg-ocean-900 border border-ocean-700/80 rounded-2xl flex items-center justify-center shadow-2xl group-hover:border-foam-500/40 group-hover:-translate-y-2 transition-all duration-400 z-10">
+                          <step.icon className="w-9 h-9 max-sm:w-8 max-sm:h-8 text-foam-400 group-hover:text-foam-300 transition-colors" />
+                        </div>
+                        <div className="absolute -top-3 -right-3 w-7 h-7 bg-foam-500 text-ocean-950 font-bold rounded-full flex items-center justify-center text-xs shadow-lg z-20">
+                          {step.number}
+                        </div>
+                      </div>
 
-                  <h3 className="text-[17px] font-bold text-white mb-3.5 tracking-tight leading-snug group-hover:text-foam-100 transition-colors">
-                    {step.title}
-                  </h3>
-                  <p className="text-[14px] text-ocean-200/65 leading-relaxed px-2">
-                    {step.description}
-                  </p>
+                      <h3 className="text-[17px] font-bold text-white mb-3.5 tracking-tight leading-snug group-hover:text-foam-100 transition-colors">
+                        {step.title}
+                      </h3>
+                      <p className="text-[14px] text-ocean-200/65 leading-relaxed px-2">
+                        {step.description}
+                      </p>
+                    </>
+                  )}
                 </motion.div>
               ))}
             </div>

@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import {
   FileSpreadsheet, RotateCcw, Trash2, Mail, Database,
   Layers, FileSearch, Filter, Clock, SlidersHorizontal,
-  MessageSquare, Sparkles, ShieldAlert,
+  MessageSquare, Sparkles, ShieldAlert, Activity,
 } from "lucide-react";
 import {
   commitSheet, commitAll, commitSelection, undoBatch, discardBatch, regateBatch, listStaged, getBatch,
@@ -35,9 +35,11 @@ import { SettingsView } from "./SettingsView";
 import { EmailSyncCard } from "./EmailSyncCard";
 import { WhatsappCard } from "./WhatsappCard";
 import { HistoryView } from "./HistoryView";
+import { HealthView } from "./HealthView";
 import { UploadCard } from "./UploadCard";
 import { Badge, Btn, Card, SectionLabel, toneForStatus, relTime, C } from "./ui";
-import { batchActions, batchStatusLabel, describeUndoConflicts, hasCommittedRows, isGateStale, isOpenBatch, isTerminalBatch } from "@/lib/sync/batch-status";
+import { batchActions, batchStatusLabel, describeUndoConflicts, hasCommittedRows, isGateStale, isOpenBatch, isTerminalBatch, describeCommit, sheetsFullyCommitted } from "@/lib/sync/batch-status";
+import { explainJobFailure } from "@/lib/sync/job-failure";
 
 type SheetInfo = { id: string; label: string; table: string };
 type SheetCount = { new: number; updated: number; unchanged: number; invalid: number; errors: number };
@@ -62,9 +64,9 @@ function LocalTime({ iso }: { iso: string }) {
   return <>{local ?? `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`}</>;
 }
 
-type ViewId = "intake" | "review" | "database" | "queues" | "history" | "connections";
+type ViewId = "intake" | "review" | "database" | "queues" | "history" | "health" | "connections";
 
-// The module's six views, in pipeline order. `badge` is filled in at render
+// The module's seven views, in pipeline order. `badge` is filled in at render
 // time from live counts; a view is never hidden, only disabled when it has
 // nothing to show (Review with no open batch).
 const TABS: { id: ViewId; label: string; icon: LucideIcon; tip: string }[] = [
@@ -73,6 +75,7 @@ const TABS: { id: ViewId; label: string; icon: LucideIcon; tip: string }[] = [
   { id: "database",    label: "Database",    icon: Database,           tip: "The live tables" },
   { id: "queues",      label: "Queues",      icon: Filter,             tip: "Commodities to map and vessels without IMO" },
   { id: "history",     label: "History",     icon: Clock,              tip: "Batches, runs and edit groups" },
+  { id: "health",      label: "Health",      icon: Activity,           tip: "Health conditions, alerting and queued uploads" },
   { id: "connections", label: "Connections", icon: SlidersHorizontal,  tip: "Inbox, LLM and WhatsApp" },
 ];
 
@@ -170,16 +173,17 @@ export function DataSyncClient({
   const goToSheet = (id: string) => { setActiveSheet(id); setReviewOffset(0); };
   const toggleChangesOnly = (v: boolean) => { setChangesOnly(v); setReviewOffset(0); };
 
-  const refreshBatch = useCallback(async (id: string) => {
+  const refreshBatch = useCallback(async (id: string): Promise<BatchMeta | null> => {
     const res = await getBatch(id);
-    if (res.success && res.data) setBatch(res.data);
+    if (res.success && res.data) { setBatch(res.data); return res.data; }
+    return null;
   }, []);
 
   // ── upload ────────────────────────────────────────────────────────────────
   const openBatch = useCallback(
     async (b: BatchMeta) => {
       setBatch(b);
-      setCommitted(b.status === "committed" ? new Set(sheets.map((s) => s.id)) : new Set());
+      setCommitted(sheetsFullyCommitted(b.status, b.counts, sheets.map((s) => s.id)));
       const first =
         sheets.find((s) => { const c = b.counts?.[s.id] ?? ZERO; return c.new + c.updated > 0; })?.id ??
         sheets[0]?.id ?? "cargo";
@@ -205,6 +209,12 @@ export function DataSyncClient({
           return;
         }
         setUploadState("idle");
+        if (json.queued) {
+          // P1-3: too large for one request — the upload-jobs cron stages it
+          toast.message(json.message ?? "The workbook is queued and will be staged in the background.");
+          router.refresh();
+          return;
+        }
         toast.success(`Staged ${json.totals.new + json.totals.updated} changes for review.`);
         const meta = await getBatch(json.batchId);
         if (meta.success && meta.data) { await openBatch(meta.data); router.refresh(); }
@@ -225,9 +235,12 @@ export function DataSyncClient({
     const r = await commitSheet(batch.id, sheetId);
     setBusy(null);
     if (!r.success) { toast.error(isGateStale(r.error) ? `${r.error} — use “Run the gate” on this batch.` : r.error); return; }
-    toast.success(`${r.data.inserted + r.data.updated} rows → ${tableFor[sheetId]} · ${r.data.inserted} new · ${r.data.updated} updated`);
-    setCommitted((s) => new Set(s).add(sheetId));
-    await refreshBatch(batch.id);
+    const d = describeCommit(r.data, false);
+    if (d.ok) toast.success(`${r.data.inserted + r.data.updated} rows → ${tableFor[sheetId]} · ${d.text}`);
+    else toast.warning(`${r.data.inserted + r.data.updated} rows → ${tableFor[sheetId]} · ${d.text}`);
+    // what counts as "committed" comes from the refreshed batch, never assumed
+    const fresh = await refreshBatch(batch.id);
+    setCommitted(sheetsFullyCommitted(fresh?.status ?? r.data.status ?? batch.status, fresh?.counts ?? batch.counts, sheets.map((s) => s.id)));
     await loadRows(batch.id, activeSheet, changesOnly, reviewOffset);
     router.refresh();
   };
@@ -238,8 +251,10 @@ export function DataSyncClient({
     setBusy("regate");
     const r = await regateBatch(b.id);
     setBusy(null);
-    if (!r.success) { toast.error(r.error); return; }
-    if (r.data.errors.length) toast.error(`Gate ran with ${r.data.errors.length} rule error(s): ${r.data.errors[0]}${r.data.errors.length > 1 ? " …" : ""} — those rows stay refused until the rule is fixed.`);
+    // the action inspects regate_sync_batch's ok flag: ok=false means the batch is now
+    // gate_failed with the reason on it — refresh what is shown either way
+    if (!r.success) toast.error(r.error);
+    else if (r.data.errors.length) toast.error(`Gate ran with ${r.data.errors.length} rule error(s): ${r.data.errors[0]}${r.data.errors.length > 1 ? " …" : ""} — those rows stay refused until the rule is fixed.`);
     else toast.success(`Gate ran · ${r.data.blocked} blocked · ${r.data.warned} warned · ${r.data.rules} rules`);
     if (batch?.id === b.id) { await refreshBatch(b.id); await loadRows(b.id, activeSheet, changesOnly, reviewOffset); }
     router.refresh();
@@ -251,9 +266,11 @@ export function DataSyncClient({
     const r = await commitAll(batch.id);
     setBusy(null);
     if (!r.success) { toast.error(isGateStale(r.error) ? `${r.error} — use “Run the gate” on this batch.` : r.error); return; }
-    toast.success(`Batch committed · ${r.data.inserted} inserted · ${r.data.updated} updated`);
-    setCommitted(new Set(sheets.map((s) => s.id)));
-    await refreshBatch(batch.id);
+    // "Sync all" says what actually happened: committed, or partly committed with what remains
+    const d = describeCommit(r.data, true);
+    if (d.ok) toast.success(d.text); else toast.warning(d.text);
+    const fresh = await refreshBatch(batch.id);
+    setCommitted(sheetsFullyCommitted(fresh?.status ?? r.data.status ?? batch.status, fresh?.counts ?? batch.counts, sheets.map((s) => s.id)));
     await loadRows(batch.id, activeSheet, changesOnly, reviewOffset);
     router.refresh();
   };
@@ -271,8 +288,11 @@ export function DataSyncClient({
     const r = await commitSelection(batch.id, activeSheet, ids);
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
-    toast.success(`${r.data.inserted + r.data.updated} selected row(s) → ${tableFor[activeSheet]} · ${r.data.inserted} new · ${r.data.updated} updated`);
-    await refreshBatch(batch.id);
+    const d = describeCommit(r.data, false);
+    if (d.ok) toast.success(`${r.data.inserted + r.data.updated} selected row(s) → ${tableFor[activeSheet]} · ${d.text}`);
+    else toast.warning(`${r.data.inserted + r.data.updated} selected row(s) → ${tableFor[activeSheet]} · ${d.text}`);
+    const fresh = await refreshBatch(batch.id);
+    setCommitted(sheetsFullyCommitted(fresh?.status ?? r.data.status ?? batch.status, fresh?.counts ?? batch.counts, sheets.map((s) => s.id)));
     await reloadCurrent();
     router.refresh();
   };
@@ -435,6 +455,9 @@ export function DataSyncClient({
         <HistoryView batches={initialBatches} onOpenBatch={openBatch} onChanged={() => router.refresh()}
           onOpenBatchId={async (id) => { const m = await getBatch(id); if (m.success && m.data) { await openBatch(m.data); router.refresh(); } }} />
       )}
+      {view === "health" && (
+        <HealthView onOpenBatchId={async (id) => { const m = await getBatch(id); if (m.success && m.data) { await openBatch(m.data); router.refresh(); } }} />
+      )}
       {view === "connections" && <SettingsView />}
 
       <input ref={fileRef} type="file" accept=".xlsx" hidden
@@ -517,6 +540,9 @@ function IntakeView(props: {
   }, [batches]);
 
   const pct = h && Number.isFinite(h.budget.cap) && h.budget.cap > 0 ? Math.min(100, Math.round((h.budget.used / h.budget.cap) * 100)) : null;
+  const lastFailure = h?.jobs.lastFailed
+    ? explainJobFailure(h.jobs.lastFailed.error, h.jobs.lastFailed.job)
+    : null;
   const tiles = [
     {
       label: "Circulation inbox", icon: Mail,
@@ -542,9 +568,13 @@ function IntakeView(props: {
     {
       label: "Failed jobs · 7 d", icon: ShieldAlert,
       value: !h ? "…" : String(h.jobs.failed7d),
-      sub: h?.jobs.lastFailed ? `${relTime(h.jobs.lastFailed.started_at)} · ${h.jobs.lastFailed.error ?? h.jobs.lastFailed.job}` : "No failed runs this week",
+      sub: h?.jobs.lastFailed && lastFailure
+        ? `${relTime(h.jobs.lastFailed.started_at)} · ${lastFailure.summary} ${lastFailure.action ?? ""}`.trim()
+        : "No failed runs this week",
       tone: !h ? C.ink3 : h.jobs.failed7d > 0 ? C.amber : C.green,
-      tip: "job_runs rows for email-sync / whatsapp-webhook that ended in an error",
+      tip: h?.jobs.lastFailed?.error
+        ? `Full technical error: ${h.jobs.lastFailed.error}`
+        : "job_runs rows for email-sync / whatsapp-webhook that ended in an error",
     },
   ];
 
@@ -565,7 +595,7 @@ function IntakeView(props: {
                 <div style={{ minWidth: 0 }}>
                   <div className="ds-tile__label">{t.label}</div>
                   <div className="ds-tile__value" style={{ color: t.tone === C.green ? C.navy : t.tone, overflowWrap: "anywhere" }}>{t.value}</div>
-                  <div className="ds-tile__sub">{t.sub}</div>
+                  <div className="ds-tile__sub" title={t.tip}>{t.sub}</div>
                 </div>
               </div>
             </Card>

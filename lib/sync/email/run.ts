@@ -211,6 +211,19 @@ const addTotals = (a: Totals, b: Totals): Totals => ({
   gateBlocked: (a.gateBlocked ?? 0) + (b.gateBlocked ?? 0), queued: (a.queued ?? 0) + (b.queued ?? 0),
 });
 
+// The collaborators a run uses; every one can be replaced in a check script
+// so the run's rules (lease, checkpoint, backfill) are testable without an
+// inbox, a model or a database.
+export interface RunDeps {
+  fetchCirculars: typeof fetchCirculars;
+  classifyAll: typeof classifyAll;
+  stageAndFinish: typeof stageAndFinish;
+  claimSyncRun: typeof claimSyncRun;
+  getEmailCheckpoint: typeof getEmailCheckpoint;
+  setEmailCheckpoint: typeof setEmailCheckpoint;
+  releaseSyncRun: typeof releaseSyncRun;
+}
+
 // Live IMAP sync of the configured circulation inbox.
 //
 // Phase 1 (18 Sep 2026): one run at a time per inbox (claimSyncRun), read
@@ -219,10 +232,17 @@ const addTotals = (a: Totals, b: Totals): Totals => ({
 // checkpoint only after each page is staged. A classification batch that
 // fails stops the run with the checkpoint where it was, so that mail is read
 // again next time.
+//
+// Lease v2 (20 Sep 2026): the claim returns an opaque token; the checkpoint
+// moves and the lease is released only with that token, so a run whose
+// lease expired or was taken over can never move another run's checkpoint.
+// A manual backfill (an explicit start point) never touches the natural
+// checkpoint at all — not the clock, not the UID (P1-1).
 export async function runEmailSync(
-  { supabase, limit, emit, startedBy = null, since: sinceOverride = null, owner = "admin", budgetMs = 240_000, maxPages = 6 }:
-  { supabase: SupabaseClient; limit?: number; emit: Emit; startedBy?: string | null; since?: Date | null; owner?: string; budgetMs?: number; maxPages?: number },
+  { supabase, limit, emit, startedBy = null, since: sinceOverride = null, owner = "admin", budgetMs = 240_000, maxPages = 6, deps = {} }:
+  { supabase: SupabaseClient; limit?: number; emit: Emit; startedBy?: string | null; since?: Date | null; owner?: string; budgetMs?: number; maxPages?: number; deps?: Partial<RunDeps> },
 ): Promise<void> {
+  const d: RunDeps = { fetchCirculars, classifyAll, stageAndFinish, claimSyncRun, getEmailCheckpoint, setEmailCheckpoint, releaseSyncRun, ...deps };
   emit({ type: "log", msg: "reading inbox connection…" });
   step(emit, "connect", "running");
   const { data: cfg, error } = await supabase
@@ -246,11 +266,11 @@ export async function runEmailSync(
   const startedAt = new Date(t0);
   let lease: Awaited<ReturnType<typeof claimSyncRun>>;
   try {
-    lease = await claimSyncRun(supabase, "email", owner, budgetMs / 1000 + 120);
+    lease = await d.claimSyncRun(supabase, "email", owner, budgetMs / 1000 + 120);
   } catch (e) {
     fail(e instanceof Error ? e.message : "run lease unavailable"); return;
   }
-  if (!lease.claimed) {
+  if (!lease.claimed || !lease.leaseToken) {
     const until = lease.leaseUntil ? lease.leaseUntil.toISOString().slice(11, 16) : "soon";
     const msg = `Another inbox sync (${lease.leaseOwner ?? "unknown"}) is still running — its lease expires at ${until} UTC. Nothing was fetched; try again after it finishes.`;
     step(emit, "fetch", "skipped", "another run holds the inbox");
@@ -260,7 +280,7 @@ export async function runEmailSync(
 
   try {
     let cp: Awaited<ReturnType<typeof getEmailCheckpoint>>;
-    try { cp = await getEmailCheckpoint(supabase); } catch (e) { fail(e instanceof Error ? e.message : "checkpoint unreadable"); return; }
+    try { cp = await d.getEmailCheckpoint(supabase); } catch (e) { fail(e instanceof Error ? e.message : "checkpoint unreadable"); return; }
     // An explicit start point chosen on the card reads by date from there and
     // never moves the UID checkpoint; a natural run continues from the UID.
     let since = sinceOverride ?? cp.lastSyncAt ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -284,7 +304,7 @@ export async function runEmailSync(
       step(emit, "fetch", "running", `page ${page} · since ${since.toISOString().slice(0, 16).replace("T", " ")} UTC`);
       let fetched: Awaited<ReturnType<typeof fetchCirculars>>;
       try {
-        fetched = await fetchCirculars(
+        fetched = await d.fetchCirculars(
           { host: cfg.imap_host, port: cfg.imap_port, user: cfg.username, folder: cfg.folder, query: cfg.search_query },
           password as string,
           { limit, since, uidValidity, lastUid, onLog: (m) => emit({ type: "log", msg: m }) },
@@ -305,7 +325,7 @@ export async function runEmailSync(
           // Only a natural pass moves the clock; a chosen start point that finds
           // nothing must not hide older mail on the next run. The UID epoch is
           // recorded so the next run can read by UID.
-          if (!sinceOverride) await setEmailCheckpoint(supabase, owner, { uidValidity: fetched.uidValidity, lastUid: lastUid ?? (fetched.mode === "date" ? null : lastUid), lastSyncAt: startedAt });
+          if (!sinceOverride) await d.setEmailCheckpoint(supabase, lease.leaseToken, { uidValidity: fetched.uidValidity, lastUid: lastUid ?? (fetched.mode === "date" ? null : lastUid), lastSyncAt: startedAt });
         }
         break;
       }
@@ -314,7 +334,7 @@ export async function runEmailSync(
       step(emit, "classify", "running", `${emails.length} email(s)`);
       let classified: Awaited<ReturnType<typeof classifyAll>>;
       try {
-        classified = await classifyAll(supabase, emails, emit);
+        classified = await d.classifyAll(supabase, emails, emit);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "classification failed";
         step(emit, "classify", "failed", msg);
@@ -332,7 +352,7 @@ export async function runEmailSync(
         return;
       }
       if (cargo.length || vessels.length) {
-        const result = await stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy, false);
+        const result = await d.stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy, false);
         if (result) { lastBatchId = result.batchId; Object.assign(totals, addTotals(totals, { ...result.totals, gateBlocked: result.gate?.blocked ?? 0 })); }
       } else {
         emit({ type: "log", msg: `page ${page}: no cargo or vessel records in these ${emails.length} email(s)` });
@@ -340,12 +360,17 @@ export async function runEmailSync(
 
       // The page is staged: move the checkpoint through it. Throws when the
       // lease expired mid-run — rows are kept, the next run re-reads them.
+      // A manual backfill (start point chosen on the card) moves NOTHING in
+      // the database — not last_sync_at, not the UID — so the next natural
+      // run resumes exactly where it was; its page cursor lives in this run.
       const next = checkpointAfterPage(fetched, startedAt, !!sinceOverride);
-      await setEmailCheckpoint(supabase, owner, next);
+      if (!sinceOverride) await d.setEmailCheckpoint(supabase, lease.leaseToken, next);
       since = next.lastSyncAt;
       if (next.uidValidity != null) { uidValidity = next.uidValidity; lastUid = next.lastUid; }
       if (!fetched.hasMore) break;
-      emit({ type: "log", msg: `checkpoint moved to ${next.lastUid != null ? `UID ${next.lastUid}` : `${next.lastSyncAt.toISOString().slice(0, 19).replace("T", " ")} UTC`} — reading the next page` });
+      emit({ type: "log", msg: sinceOverride
+        ? `start point moved to ${next.lastSyncAt.toISOString().slice(0, 19).replace("T", " ")} UTC for this backfill only — reading the next page`
+        : `checkpoint moved to ${next.lastUid != null ? `UID ${next.lastUid}` : `${next.lastSyncAt.toISOString().slice(0, 19).replace("T", " ")} UTC`} — reading the next page` });
     }
 
     if (pages > 0) {
@@ -353,7 +378,7 @@ export async function runEmailSync(
       else emit({ type: "empty", message: `No cargo or vessel records were found in the ${pages} page(s) read.` });
     }
   } finally {
-    await releaseSyncRun(supabase, "email", owner);
+    await d.releaseSyncRun(supabase, "email", lease.leaseToken);
   }
 }
 

@@ -13,6 +13,7 @@ import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-sett
 import { getWatermark, setWatermark } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
+import { llmModelsEndpoint, llmProviderFamily } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
 
@@ -151,20 +152,19 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
     // or over plain http, even if a stored override says so.
     const safe = isSafeBaseUrl(override);
     if (!safe.ok) return { success: false, error: `Stored base URL rejected — ${safe.reason}. Edit the key and fix it.` };
-    const isAnthropic = vendor.includes("anthropic") || vendor.includes("claude");
-    const isGoogle = vendor.includes("google") || vendor.includes("gemini");
+    const family = llmProviderFamily(vendor);
 
     // Each provider gets a cheap, read-only models-list call to prove the key auths.
     let url: string;
     let headers: Record<string, string>;
-    if (isAnthropic) {
-      url = `${override ?? "https://api.anthropic.com"}/v1/models`;
+    if (family === "anthropic") {
+      url = llmModelsEndpoint(vendor, override);
       headers = { "x-api-key": secret as string, "anthropic-version": "2023-06-01" };
-    } else if (isGoogle) {
-      url = `${override ?? "https://generativelanguage.googleapis.com"}/v1beta/models`;
+    } else if (family === "google") {
+      url = llmModelsEndpoint(vendor, override);
       headers = { "x-goog-api-key": secret as string };
     } else {
-      url = `${override ?? "https://api.openai.com"}/v1/models`;
+      url = llmModelsEndpoint(vendor, override);
       headers = { Authorization: `Bearer ${secret as string}` };
     }
 

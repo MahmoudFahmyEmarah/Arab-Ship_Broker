@@ -5,8 +5,10 @@
 // sidebar consume the SAME registry — never two definitions.
 
 export type AdminTier = "super" | "sub";
-export type Access = "edit" | "view" | "none";
-export type AdminPerms = Record<string, "edit" | "view">;
+// "run" (Data quality only): may view, and start / pause / resume / cancel
+// audit runs — compute and AI spend — without editing rules or settings.
+export type Access = "edit" | "run" | "view" | "none";
+export type AdminPerms = Record<string, "edit" | "run" | "view">;
 
 // Section ids → routes. Owner-only sections are NEVER exposed to sub-admins
 // (ETA holds tax credentials; Admins manages other admins).

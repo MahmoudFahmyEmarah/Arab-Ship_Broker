@@ -192,6 +192,18 @@ export interface StageArgs {
   fileName?: string | null;
   startedBy?: string | null;
   label?: string | null;
+  /** Execution budget (ms) for the whole staging; the batch is marked failed when it runs out (P1-3). */
+  budgetMs?: number;
+  /**
+   * Stage into THIS batch instead of opening a new one (workstream B,
+   * 21 Sep 2026). An upload job reserves its batch inside the transaction
+   * that claims it, so every attempt of that job stages into the same batch
+   * and a worker that dies between staging and finalisation cannot leave a
+   * second one behind. Resuming clears the previous attempt's UNCOMMITTED
+   * rows and is refused outright once anything in the batch is committed or
+   * an administrator has acted on it.
+   */
+  reuseBatchId?: string | null;
 }
 
 export async function stageBatch({
@@ -200,18 +212,50 @@ export async function stageBatch({
   fileName = null,
   startedBy = null,
   label = null,
+  budgetMs,
+  reuseBatchId = null,
 }: StageArgs): Promise<StageResult> {
-  // 1 · open the batch (retried — a transient network drop here otherwise loses
-  // the whole classified batch)
-  const { data: batch, error: batchErr } = await dbRetry(() =>
-    supabase
-      .from("sync_batch")
-      .insert({ source: source.kind, file_name: fileName, started_by: startedBy, label, status: "draft" })
-      .select("id")
-      .single(),
-  );
-  if (batchErr) throw new Error(`could not open sync batch: ${batchErr.message}`);
-  const batchId = batch.id as string;
+  const deadline = budgetMs ? Date.now() + budgetMs : null;
+  const checkBudget = (where: string) => {
+    if (deadline && Date.now() > deadline) throw new Error(`Staging exceeded its ${Math.round((budgetMs ?? 0) / 1000)} s budget while ${where} — upload a smaller workbook, or the background job will take it`);
+  };
+  // 1 · the batch. Either the one an upload job reserved (resume) or a new one.
+  let batchId: string;
+  if (reuseBatchId) {
+    // B: resume into the reserved batch. The database decides whether that is
+    // allowed; reviewed or committed work is never rebuilt.
+    const { data: res, error: rErr } = await dbRetry(() => supabase.rpc("fn_sync_upload_batch_resumable", { p_batch_id: reuseBatchId }));
+    if (rErr) throw new Error(`could not check the reserved batch: ${rErr.message}`);
+    const r = (res ?? {}) as { resumable?: boolean; reason?: string };
+    if (!r.resumable) {
+      // the prefix is what classifyStagingFailure() reads to park the job
+      // permanently instead of retrying into an administrator's work
+      throw new Error(`BATCH_NOT_RESUMABLE: ${r.reason ?? "the reserved batch cannot be rebuilt"}`);
+    }
+    // clear what a previous attempt staged, so a retry leaves exactly one
+    // logical copy of every row rather than a second set beside the first
+    const { error: dErr } = await dbRetry(() => supabase.from("sync_staged_row").delete().eq("batch_id", reuseBatchId).eq("committed", false));
+    if (dErr) throw new Error(`could not clear the previous attempt: ${dErr.message}`);
+    const { error: uErr } = await dbRetry(() =>
+      supabase.from("sync_batch")
+        .update({ source: source.kind, file_name: fileName, started_by: startedBy, label, status: "draft", counts: null, error: null })
+        .eq("id", reuseBatchId),
+    );
+    if (uErr) throw new Error(`could not reset the reserved batch: ${uErr.message}`);
+    batchId = reuseBatchId;
+  } else {
+    // open a new batch (retried — a transient network drop here otherwise
+    // loses the whole classified batch)
+    const { data: batch, error: batchErr } = await dbRetry(() =>
+      supabase
+        .from("sync_batch")
+        .insert({ source: source.kind, file_name: fileName, started_by: startedBy, label, status: "draft" })
+        .select("id")
+        .single(),
+    );
+    if (batchErr) throw new Error(`could not open sync batch: ${batchErr.message}`);
+    batchId = batch.id as string;
+  }
 
   const counts: Record<string, SheetCounts> = {};
   const totals = emptyCounts();
@@ -273,6 +317,7 @@ export async function stageBatch({
         }
       }
 
+      checkBudget(`reading ${sheet}`);
       // 2 · fetch existing live rows for this sheet's keys (chunked .in)
       const mappedPayloads = rows.map((r) => mapRow(spec, r).payload);
       const keys = Array.from(
@@ -369,6 +414,7 @@ export async function stageBatch({
       }));
 
       for (const part of chunk(records, CHUNK)) {
+        checkBudget(`staging ${sheet}`);
         const { error } = await dbRetry(() => supabase.from("sync_staged_row").insert(part));
         if (error) throw new Error(`staging ${sheet}: ${error.message}`);
       }

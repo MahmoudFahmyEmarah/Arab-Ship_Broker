@@ -5,7 +5,7 @@
 // module). Filter by family, actor, free text and date; export the current
 // view as CSV. Read-only by construction: nothing here can change history.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Download, Loader2, RefreshCcw } from "lucide-react";
 import { listDataSyncAudit } from "@/app/(admin)/admin/data-sync/actions";
@@ -111,8 +111,8 @@ export function AuditTrail({ onOpenBatch }: { onOpenBatch: (batchId: string) => 
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <>
-                    <tr key={r.id} onClick={() => setOpen(open === r.id ? null : r.id)} title="Click for detail">
+                  <Fragment key={r.id}>
+                    <tr onClick={() => setOpen(open === r.id ? null : r.id)} title="Click for detail">
                       <td style={{ whiteSpace: "nowrap" }}>
                         <div style={{ fontSize: 13 }}>{relTime(r.at)}</div>
                         <div className="ds-table__meta">{utcShort(r.at)}</div>
@@ -136,7 +136,7 @@ export function AuditTrail({ onOpenBatch }: { onOpenBatch: (batchId: string) => 
                       <td><Badge tone={r.ok ? "new" : "invalid"}>{r.ok ? "ok" : "failed"}</Badge></td>
                     </tr>
                     {open === r.id && (
-                      <tr key={`${r.id}-d`}>
+                      <tr>
                         <td colSpan={6} style={{ background: C.sunken }}>
                           <pre style={{ margin: 0, fontFamily: C.mono, fontSize: 12, whiteSpace: "pre-wrap", color: C.ink }}>
                             {JSON.stringify({ id: r.id, at: r.at, actor_id: r.actor_id, ip: r.ip, target_kind: r.target_kind, target_id: r.target_id, detail: r.detail }, null, 2)}
@@ -144,7 +144,7 @@ export function AuditTrail({ onOpenBatch }: { onOpenBatch: (batchId: string) => 
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

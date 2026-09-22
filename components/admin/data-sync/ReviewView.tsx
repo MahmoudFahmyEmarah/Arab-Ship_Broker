@@ -509,7 +509,14 @@ function DiffTable({ rows, sel, onToggle, selectable, onEdit, onOpen }: {
             if (!prev || (prev.level === "warn" && f.level === "error")) cellFlag.set(f.field, { level: f.level, msg: f.msg });
           }
           return (
-            <tr key={r.id} style={{ background: bg, borderLeft: `3px solid ${bar}`, opacity: r.committed ? 0.6 : 1 }}>
+            <tr key={r.id} style={{ background: bg, borderLeft: `3px solid ${bar}`, opacity: r.committed ? 0.6 : 1 }}
+              tabIndex={0} role="button" aria-label={`Open ${r.business_key ?? r.id} — ${r.classification}${r.committed ? ", committed" : ""}`}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(r); }
+                else if ((e.key === "e" || e.key === "E") && !r.committed) { e.preventDefault(); onEdit(r); }
+                else if ((e.key === "x" || e.key === "X") && selectable(r)) { e.preventDefault(); onToggle(r.id); }
+              }}>
               <td style={{ position: "sticky", left: 0, background: bg, zIndex: 2 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <input

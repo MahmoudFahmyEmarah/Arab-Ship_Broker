@@ -57,6 +57,42 @@ export function nextRunAt(spec: ScheduleSpec, from: Date = new Date(), anchor: D
   return new Date(t);
 }
 
+/**
+ * What a scheduled wake-up actually did (workstream F, 21 Sep 2026). The cron
+ * used to advance next_run_at "whatever the outcome", so a transient IMAP
+ * failure on a weekly schedule waited a week, and a run refused because
+ * another lease was active spent the slot without doing any work.
+ *
+ *   success        rows were staged
+ *   empty          the inbox had nothing new — a real, complete run
+ *   skipped_lease  another run held the inbox; nothing was fetched
+ *   failed         the run reported an error
+ *   forced         a manual ?force=1 call that was not due
+ */
+export type ScheduleOutcome = "success" | "empty" | "skipped_lease" | "failed" | "forced";
+
+/**
+ * Classify a RunSettler outcome. `skipped` is only emitted by the lease
+ * refusal in runEmailSync, which is why it maps to skipped_lease.
+ */
+export function classifyRunOutcome(
+  settle: { ok: boolean; rows: number | null; error?: string | null; meta?: Record<string, unknown> | null } | null | undefined,
+  opts: { forced?: boolean; due?: boolean } = {},
+): ScheduleOutcome {
+  if (!settle) return "failed";
+  if (!settle.ok) return "failed";
+  if (settle.meta && (settle.meta as { skipped?: boolean }).skipped === true) return "skipped_lease";
+  // a forced run that was NOT due does not own the slot, so it must not move it
+  if (opts.forced && opts.due === false) return "forced";
+  if (settle.meta && (settle.meta as { empty?: boolean }).empty === true) return "empty";
+  return (settle.rows ?? 0) > 0 ? "success" : "empty";
+}
+
+/** Does this outcome move the normal cadence forward? */
+export function outcomeAdvancesSchedule(o: ScheduleOutcome): boolean {
+  return o === "success" || o === "empty";
+}
+
 /** Has a scheduled run come due? (tolerates the cron firing a little late) */
 export function isDue(nextRun: Date | null | undefined, now: Date = new Date()): boolean {
   return !!nextRun && nextRun.getTime() <= now.getTime();

@@ -2,12 +2,17 @@
 // Body: { limit?: number, since?: ISO } → live IMAP sync of the configured inbox (since = start point override)
 //       { sample: string }            → dry run: classify one pasted email
 // Owner-only (Data Sync section, edit). Node runtime (imapflow + LangChain).
+//
+// P1-2 (20 Sep 2026): the job's terminal status and the audit entry are
+// written once, awaited, in the finalisation path — whether the client is
+// still listening or went away mid-stream. A run never stays "running".
 
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { runEmailSync, runEmailDryRun } from "@/lib/sync/email/run";
-import { settleFor, type SyncEvent } from "@/lib/sync/email/types";
-import { startJobRun, finishJobRun } from "@/lib/jobs/runs";
+import { RunSettler } from "@/lib/sync/email/finalize";
+import type { SyncEvent } from "@/lib/sync/email/types";
+import { startJobRun } from "@/lib/jobs/runs";
 import { logAudit, requestContext } from "@/lib/admin/data-sync-audit";
 
 export const runtime = "nodejs";
@@ -34,31 +39,19 @@ export async function POST(req: Request) {
   const sinceRaw = typeof body.since === "string" ? new Date(body.since) : null;
   const since = sinceRaw && !Number.isNaN(sinceRaw.getTime()) && sinceRaw.getTime() < Date.now() ? sinceRaw : null;
   const supabase = getSupabaseAdminClient();
+  const ctx = requestContext(req.headers);
 
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
-      // Live runs leave a job_runs row; the stream's done/error event settles it
-      // (IMAP failures included), so the console dashboard can alert on them.
+      // Live runs leave a job_runs row; the settler records the first
+      // done / empty / skipped / error event and writes it once at the end.
       const runId = sample ? null : await startJobRun(supabase, "email-sync", { trigger: "admin", meta: { limit, since: since?.toISOString() ?? null } });
-      let settled = false;
+      const settler = new RunSettler();
       const emit = (e: SyncEvent) => {
-        // done / empty / error all settle the run; `empty` is a success with
-        // zero rows, not a failure (it used to fall through to the finally).
-        const settle = settleFor(e);
-        if (!settled && settle) {
-          settled = true;
-          if (runId != null) void finishJobRun(supabase, runId, settle);
-          void logAudit(supabase, {
-            actor: { id: admin.rowId, name: admin.fullName }, ctx: requestContext(req.headers),
-            action: sample ? "run.email.dry_run" : "run.email", targetKind: "run", targetId: runId != null ? String(runId) : null,
-            batchId: (settle.meta as { batch_id?: string } | undefined)?.batch_id ?? null,
-            summary: sample
-              ? (settle.ok ? `Dry run on a pasted email — ${settle.rows ?? 0} record(s) staged` : `Dry run on a pasted email failed — ${settle.error}`)
-              : (settle.ok ? `Inbox sync — ${settle.rows ?? 0} record(s) staged${since ? ` (start point ${since.toISOString().slice(0, 16).replace("T", " ")} UTC)` : ""}` : `Inbox sync failed — ${settle.error}`),
-            ok: settle.ok, detail: { limit, since: since?.toISOString() ?? null, rows: settle.rows, error: settle.error ?? null },
-          });
-        }
+        settler.note(e);
+        // A closed stream (client gone) does not stop the run: it finishes and
+        // is finalised below all the same.
         try { controller.enqueue(enc.encode(`data: ${JSON.stringify(e)}\n\n`)); } catch { /* closed */ }
       };
       try {
@@ -67,8 +60,17 @@ export async function POST(req: Request) {
       } catch (e) {
         emit({ type: "error", error: e instanceof Error ? e.message : "Email sync failed." });
       } finally {
-        if (runId != null && !settled) await finishJobRun(supabase, runId, { ok: false, error: "sync ended without a result" });
-        controller.close();
+        const settle = await settler.finish(supabase, runId);
+        await logAudit(supabase, {
+          actor: { id: admin.rowId, name: admin.fullName }, ctx,
+          action: sample ? "run.email.dry_run" : "run.email", targetKind: "run", targetId: runId != null ? String(runId) : null,
+          batchId: (settle.meta as { batch_id?: string } | undefined)?.batch_id ?? null,
+          summary: sample
+            ? (settle.ok ? `Dry run on a pasted email — ${settle.rows ?? 0} record(s) staged` : `Dry run on a pasted email failed — ${settle.error}`)
+            : (settle.ok ? `Inbox sync — ${settle.rows ?? 0} record(s) staged${since ? ` (start point ${since.toISOString().slice(0, 16).replace("T", " ")} UTC)` : ""}` : `Inbox sync failed — ${settle.error}`),
+          ok: settle.ok, detail: { limit, since: since?.toISOString() ?? null, rows: settle.rows, error: settle.error ?? null },
+        });
+        try { controller.close(); } catch { /* already closed */ }
       }
     },
   });

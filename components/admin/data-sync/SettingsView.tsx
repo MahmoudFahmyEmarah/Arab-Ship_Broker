@@ -26,8 +26,9 @@ import {
   type LlmCredentialMeta, type EmailConfigMeta,
 } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { Badge, Btn, Card, Switch, C, btn } from "./ui";
+import { GROQ_API_BASE_URL, GROQ_STRUCTURED_OUTPUT_MODELS } from "@/lib/sync/llm-provider";
 
-const VENDORS = ["anthropic", "openai", "google", "mistral", "other"];
+const VENDORS = ["anthropic", "openai", "google", "groq", "mistral", "other"];
 
 // Suggested current text models per vendor (editable — the field stays free-text).
 // Google list reflects the live generativelanguage models endpoint.
@@ -39,6 +40,7 @@ const MODEL_SUGGESTIONS: Record<string, string[]> = {
   ],
   anthropic: ["claude-sonnet-4-5", "claude-opus-4-1", "claude-3-5-haiku-latest"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+  groq: [...GROQ_STRUCTURED_OUTPUT_MODELS],
   mistral: ["mistral-large-latest", "mistral-small-latest"],
   other: [],
 };
@@ -216,6 +218,8 @@ function KeyModal({ cred, onClose, onSaved }: {
             <select value={vendor} onChange={(e) => {
               const v = e.target.value; setVendor(v);
               const sug = MODEL_SUGGESTIONS[v]; if (sug && sug.length) setModel(sug[0]);
+              if (v === "groq") setBaseUrl(GROQ_API_BASE_URL);
+              else if (baseUrl.trim() === GROQ_API_BASE_URL) setBaseUrl("");
             }} className="ds-input">
               {VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}
             </select>
@@ -228,7 +232,11 @@ function KeyModal({ cred, onClose, onSaved }: {
             </datalist>
           </div>
         </div>
-        <div><label style={lab}>Base URL <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — for proxies/self-host)</span></label><input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.anthropic.com" className="ds-input" /></div>
+        <div>
+          <label style={lab}>Base URL <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — Groq is filled automatically)</span></label>
+          <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={vendor === "groq" ? GROQ_API_BASE_URL : "https://api.anthropic.com"} className="ds-input" />
+          {vendor === "groq" && <span className="ds-rowsub">OpenAI-compatible Groq endpoint. Choose a suggested model because Data Sync requires structured output.</span>}
+        </div>
         <div>
           <label style={lab}>API key {cred && <span style={{ color: C.ink3, fontWeight: 400 }}>(leave blank to keep ••••{cred.key_hint})</span>}</label>
           <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={cred ? "•••••••••••••••" : "sk-…"} autoComplete="off" className="ds-input" />

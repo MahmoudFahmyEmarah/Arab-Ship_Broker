@@ -39,6 +39,17 @@ export interface FetchResult {
 }
 
 /** UID-mode page: the lowest UIDs first, exactly `limit` of them. */
+/**
+ * UID mode reads metadata for the first page only (P2, 20 Sep 2026): the
+ * lowest `limit` UIDs above the checkpoint plus ONE more, which is all that
+ * is needed to know whether more mail waits. The whole backlog used to be
+ * fetched (envelope + internal date) on every page.
+ */
+export function uidCandidates(uids: number[], from: number, limit: number): { fetch: number[]; waiting: number } {
+  const all = uids.filter((u) => u >= from).sort((a, b) => a - b);
+  return { fetch: all.slice(0, limit + 1), waiting: all.length };
+}
+
 export function pickUidPage<T extends { uid: number }>(metas: T[], limit: number): { page: T[]; hasMore: boolean; lastUid: number | null } {
   const sorted = [...metas].sort((a, b) => a.uid - b.uid);
   const page = sorted.slice(0, limit);
@@ -121,16 +132,19 @@ export async function fetchCirculars(
       out.mode = "uid";
       const from = (opts.lastUid as number) + 1;
       // `n:*` also returns the highest-UID message when n is past the end — filter it
-      const uids = ((await client.search({ uid: `${from}:*`, ...filter }, { uid: true })) || []).filter((u) => u >= from);
-      if (uids.length === 0) { log(`no messages above UID ${opts.lastUid} (UIDVALIDITY ${out.uidValidity})`); return out; }
-      for await (const m of client.fetch(uids, { envelope: true, internalDate: true }, { uid: true })) {
+      const found = (await client.search({ uid: `${from}:*`, ...filter }, { uid: true })) || [];
+      const cand = uidCandidates(found, from, limit);
+      out.waiting = cand.waiting;
+      if (cand.waiting === 0) { log(`no messages above UID ${opts.lastUid} (UIDVALIDITY ${out.uidValidity})`); return out; }
+      // metadata for the page plus one row — never for the whole backlog
+      for await (const m of client.fetch(cand.fetch, { envelope: true, internalDate: true }, { uid: true })) {
         const when = (m.internalDate as Date | undefined) ?? m.envelope?.date ?? new Date();
         metas.push({ uid: m.uid as number, when });
       }
       const pick = pickUidPage(metas, limit);
-      page = pick.page; out.hasMore = pick.hasMore; out.lastUid = pick.lastUid;
+      page = pick.page; out.hasMore = pick.hasMore || cand.waiting > page.length; out.lastUid = pick.lastUid;
       out.newestAt = page.length ? new Date(Math.max(...page.map((m) => m.when.getTime()))) : null;
-      log(`${page.length} of ${metas.length} message(s) above UID ${opts.lastUid}${pick.hasMore ? ` — ${metas.length - page.length} more wait for the next page` : ""}`);
+      log(`${page.length} of ${cand.waiting} message(s) above UID ${opts.lastUid}${out.hasMore ? ` — ${cand.waiting - page.length} more wait for the next page` : ""}`);
     } else {
       out.mode = "date";
       if (opts.lastUid != null && opts.uidValidity != null && out.uidValidity !== opts.uidValidity) log(`folder UIDVALIDITY changed (${opts.uidValidity} → ${out.uidValidity}) — reading by date once, then the UID checkpoint restarts`);
@@ -147,7 +161,7 @@ export async function fetchCirculars(
       out.lastUid = page.length ? Math.max(...page.map((m) => m.uid)) : null;
       log(`${page.length} of ${metas.length} new message(s) since ${since.toISOString().slice(0, 16).replace("T", " ")} UTC${pick.hasMore ? ` — ${metas.length - page.length} more wait for the next page` : ""}`);
     }
-    out.waiting = metas.length;
+    out.waiting = out.mode === "uid" ? Math.max(out.waiting, metas.length) : metas.length;
     const whenByUid = new Map(page.map((m) => [m.uid, m.when]));
     if (page.length === 0) return out;
 

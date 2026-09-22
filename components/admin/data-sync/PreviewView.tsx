@@ -488,7 +488,7 @@ function HistoryDrawer({ onClose, onUndone }: { onClose: () => void; onUndone: (
 
   const reload = useCallback(async () => {
     const res = await listEditAudit(20);
-    setRows(res.success ? res.data : []);
+    setRows(res.success ? res.data.rows : []);
     if (!res.success) toast.error(res.error);
   }, []);
   useEffect(() => { let c = false; (async () => { await Promise.resolve(); if (!c) await reload(); })(); return () => { c = true; }; }, [reload]);

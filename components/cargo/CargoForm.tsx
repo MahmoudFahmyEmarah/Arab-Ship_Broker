@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { reportGateRefusal, validateMemberDraft } from "@/lib/dq/member-gate";
+import { cargoFormDraftRow, draftIssuesMessage, draftRefused } from "@/lib/dq/member-draft";
 
 import {
   cargoFormSchema,
@@ -318,6 +320,7 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
 
   const onSubmit = async (data: CargoFormValues) => {
     setIsSubmitting(true);
+    let correlationId: string | null = null;
     try {
       const supabase = getSupabaseBrowserClient();
       const portRows = (calls: PortCall[]) =>
@@ -337,6 +340,17 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
         disch_ports: portRows(podCalls),
       };
 
+      // Data-quality pre-check (workstream E): the same rules the gate applies,
+      // shown before the post instead of after it. Refuses only when the forms
+      // channel is enforcing; otherwise it warns.
+      const verdict = await validateMemberDraft("cargo_listings", cargoFormDraftRow(payload as unknown as Record<string, unknown>));
+      if (verdict.ok) correlationId = verdict.data.correlation_id;
+      if (verdict.ok && verdict.data.issues.length) {
+        const msg = draftIssuesMessage(verdict.data);
+        if (draftRefused(verdict.data)) { toast.error(msg, { duration: 12000 }); setIsSubmitting(false); return; }
+        toast.warning(msg, { duration: 10000 });
+      }
+
       if (mode === "edit" && initialData?.id) {
         await updateCargo(supabase, initialData.id, payload);
         toast.success("Cargo updated successfully.");
@@ -352,6 +366,9 @@ export function CargoForm({ initialData, mode = "create" }: CargoFormProps) {
     } catch (err) {
       console.error(err);
       toast.error(formatCargoSubmissionError(err));
+      // the database refused the post: record the attempt in its own transaction, tagged with the pre-check's id
+      const text = err instanceof Error ? err.message : String(err);
+      if (correlationId && /DQ_GATE/.test(text)) void reportGateRefusal("cargo_listings", correlationId, text);
     } finally {
       setIsSubmitting(false);
     }

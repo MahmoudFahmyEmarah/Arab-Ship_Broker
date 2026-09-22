@@ -64,6 +64,9 @@ export function HistoryView({ batches, onOpenBatch, onOpenBatchId, onChanged }: 
 }) {
   const [mode, setMode] = useState<"timeline" | "audit">("timeline");
   const [edits, setEdits] = useState<EditAuditRow[]>([]);
+  // P1-4: record edits page by cursor (edited_at, id) — never "the last 50"
+  const [editCursor, setEditCursor] = useState<string | null>(null);
+  const [loadingEdits, setLoadingEdits] = useState(false);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<SourceFilter>("all");
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
@@ -88,11 +91,22 @@ export function HistoryView({ batches, onOpenBatch, onOpenBatchId, onChanged }: 
 
   const load = useCallback(async () => {
     setLoading(true);
-    const r = await listEditAudit(50);
+    const r = await listEditAudit({ limit: 50 });
     setLoading(false);
     if (!r.success) { toast.error(r.error); return; }
-    setEdits(r.data);
+    setEdits(r.data.rows);
+    setEditCursor(r.data.nextCursor);
   }, []);
+  const loadOlderEdits = async () => {
+    if (!editCursor) return;
+    setLoadingEdits(true);
+    const r = await listEditAudit({ limit: 50, before: editCursor });
+    setLoadingEdits(false);
+    if (!r.success) { toast.error(r.error); return; }
+    const seen = new Set(edits.map((e) => e.id));
+    setEdits((cur) => [...cur, ...r.data.rows.filter((e) => !seen.has(e.id))]);
+    setEditCursor(r.data.nextCursor);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -235,7 +249,7 @@ export function HistoryView({ batches, onOpenBatch, onOpenBatchId, onChanged }: 
           ] as const}
         />
         <span className="ds-note ds-push">
-          Batches from this page · last 50 record edits
+          {allBatches.length} batch{allBatches.length === 1 ? "" : "es"}{moreLeft ? " (older not loaded)" : ""} · {edits.length} record edit{edits.length === 1 ? "" : "s"}{editCursor ? " (older not loaded)" : ""}
         </span>
       </div>
 
@@ -253,7 +267,7 @@ export function HistoryView({ batches, onOpenBatch, onOpenBatchId, onChanged }: 
                   const Icon = i.kind === "edit"
                     ? OP_ICON[i.type === "Insert" ? "insert" : i.type === "Delete" ? "delete" : "update"]
                     : (SOURCE_ICON[i.source] ?? FileSpreadsheet);
-                  const batch = i.kind === "batch" ? batches.find((b) => `b:${b.id}` === i.key) : undefined;
+                  const batch = i.kind === "batch" ? allBatches.find((b) => `b:${b.id}` === i.key) : undefined;
                   return (
                     <div key={i.key} className="ds-timeline__item">
                       <div className="ds-timeline__rail">
@@ -291,10 +305,13 @@ export function HistoryView({ batches, onOpenBatch, onOpenBatchId, onChanged }: 
           ))}
         </div>
       )}
-      <div className="ds-row" style={{ justifyContent: "center", paddingTop: 6 }}>
+      <div className="ds-row" style={{ justifyContent: "center", paddingTop: 6, gap: 12 }}>
         {moreLeft
           ? <Btn size="sm" kind="ghost" busy={loadingOlder} onClick={loadOlder}>Show older batches</Btn>
           : <span className="ds-note">Every batch is shown.</span>}
+        {editCursor
+          ? <Btn size="sm" kind="ghost" busy={loadingEdits} onClick={loadOlderEdits}>Show older record edits</Btn>
+          : <span className="ds-note">Every record edit is shown.</span>}
       </div>
       </>)}
     </div>

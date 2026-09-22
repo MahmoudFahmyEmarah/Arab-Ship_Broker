@@ -31,6 +31,11 @@ Deploy the database first, then the app: the new code calls the new
 functions. Rolling back goes the other way round (old app, then the down
 files, newest first).
 
+Round 2 (20 Sep 2026, `docs/data-sync-hardening-2.md`) made every DOWN file
+in `supabase/rollback/20260918_*` fully executable (verbatim function
+bodies, exact index names), added the missing DOWN for 20260918160000, and
+rehearsed the whole chain on a disposable database.
+
 ## Phase 0 — stop the bleeding (`20260918100000_sync_phase0_failed_status.sql`)
 
 - **Cron auth.** `lib/cron/auth.ts` is the one rule: `Authorization: Bearer

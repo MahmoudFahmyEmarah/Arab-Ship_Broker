@@ -48,11 +48,35 @@ export function batchActions(status: string): BatchActions {
     case "gate_failed": return { commit: false, undo: false, discard: true,  regate: true };
     case "committing":  return { commit: false, undo: false, discard: false, regate: false };
     case "committed":   return { commit: false, undo: true,  discard: false, regate: false };
-    case "partial":     return { commit: true,  undo: true,  discard: false, regate: false };
+    case "partial":     return { commit: true,  undo: true,  discard: false, regate: true };
     case "undone":      return { commit: false, undo: false, discard: false, regate: false };
     case "failed":      return { commit: true,  undo: false, discard: true,  regate: false };
     default:            return { commit: false, undo: false, discard: false, regate: false };
   }
+}
+
+/** Commit result of commit_sync_batch (20 Sep 2026): the status the batch ended in and what is left. */
+export interface CommitRemaining { unresolved: number; pending: number; invalid: number; blocked: number; error: number }
+export interface CommitOutcome { inserted: number; updated: number; skipped: number; raced?: number; status?: string; remaining?: CommitRemaining }
+
+/** The one-line truth for a commit toast: committed, or partly committed with what remains. */
+export function describeCommit(o: CommitOutcome, whole: boolean): { ok: boolean; text: string } {
+  const wrote = `${o.inserted} inserted · ${o.updated} updated`;
+  const r = o.remaining;
+  if (o.status === "committed") return { ok: true, text: whole ? `Batch committed · ${wrote}` : `${wrote} — every row of the batch is now committed` };
+  if (o.status === "partial" && r) {
+    const why = [r.blocked ? `${r.blocked} blocked by the gate` : null, r.error ? `${r.error} the gate could not evaluate` : null,
+                 r.invalid - r.blocked - r.error > 0 ? `${r.invalid - r.blocked - r.error} invalid` : null, r.pending ? `${r.pending} not yet committed` : null].filter(Boolean).join(", ");
+    return { ok: false, text: `Partly committed · ${wrote} — ${r.unresolved} row(s) remain (${why || "unresolved"}). Fix them in Review, run the gate and commit again.` };
+  }
+  return { ok: true, text: wrote };
+}
+
+/** Sheets whose rows are all settled (nothing new / updated / invalid left) in a batch that has committed rows. */
+export function sheetsFullyCommitted(status: string, counts: Record<string, { new: number; updated: number; invalid: number }> | null | undefined, sheetIds: string[]): Set<string> {
+  if (!hasCommittedRows(status)) return new Set();
+  if (status === "committed") return new Set(sheetIds);
+  return new Set(sheetIds.filter((id) => { const c = counts?.[id]; return c ? c.new + c.updated + c.invalid === 0 : false; }));
 }
 
 /** Still has rows waiting to be committed (the "open batches" lists). */

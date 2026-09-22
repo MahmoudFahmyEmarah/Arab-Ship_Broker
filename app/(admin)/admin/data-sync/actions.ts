@@ -1,7 +1,7 @@
 "use server";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { OPEN_BATCH_STATUSES, batchActions, friendlyBatchError, gateChannelFor, type UndoConflict } from "@/lib/sync/batch-status";
+import { OPEN_BATCH_STATUSES, batchActions, friendlyBatchError, gateChannelFor, type UndoConflict, type CommitOutcome } from "@/lib/sync/batch-status";
 // Data Sync server actions. Every mutation is gated by requireAdmin({ edit }) and
 // runs through the service-role client; commits/undo call the Phase 1 RPCs so the
 // audited, reversible write path is the only way rows reach a live table.
@@ -72,7 +72,7 @@ async function markBatchFailed(c: SupabaseClient, batchId: string, error: string
 export async function commitSheet(
   batchId: string,
   sheet: string,
-): Promise<Result<{ inserted: number; updated: number; skipped: number }>> {
+): Promise<Result<CommitOutcome>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   if (!SHEET_IDS.has(sheet)) return { success: false, error: `Unknown sheet "${sheet}".` };
@@ -82,7 +82,7 @@ export async function commitSheet(
     if (error) { await markBatchFailed(c, batchId, error.message); return { success: false, error: friendlyBatchError(error.message) }; }
     await logAudit(c, { actor: who, action: "batch.commit", targetKind: "batch", targetId: batchId, batchId, summary: `Committed sheet ${sheet} — ${(data as { inserted: number }).inserted} inserted · ${(data as { updated: number }).updated} updated`, detail: { sheet, ...(data as object) } });
     revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { inserted: number; updated: number; skipped: number } };
+    return { success: true, data: data as CommitOutcome };
   } catch (e) {
     return fail(e, "Commit failed.");
   }
@@ -93,7 +93,7 @@ export async function commitSelection(
   batchId: string,
   sheet: string,
   rowIds: string[],
-): Promise<Result<{ inserted: number; updated: number; skipped: number }>> {
+): Promise<Result<CommitOutcome>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   if (!SHEET_IDS.has(sheet)) return { success: false, error: `Unknown sheet "${sheet}".` };
@@ -106,7 +106,7 @@ export async function commitSelection(
     if (error) { await markBatchFailed(c, batchId, error.message); return { success: false, error: friendlyBatchError(error.message) }; }
     await logAudit(c, { actor: who, action: "batch.commit_selection", targetKind: "batch", targetId: batchId, batchId, summary: `Committed ${rowIds.length} selected row(s) of ${sheet} — ${(data as { inserted: number }).inserted} inserted · ${(data as { updated: number }).updated} updated`, detail: { sheet, rowIds: rowIds.slice(0, 50), ...(data as object) } });
     revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { inserted: number; updated: number; skipped: number } };
+    return { success: true, data: data as CommitOutcome };
   } catch (e) {
     return fail(e, "Commit failed.");
   }
@@ -197,7 +197,7 @@ export async function editStagedRow(
 
 export async function commitAll(
   batchId: string,
-): Promise<Result<{ inserted: number; updated: number; skipped: number }>> {
+): Promise<Result<CommitOutcome>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   try {
@@ -206,7 +206,7 @@ export async function commitAll(
     if (error) { await markBatchFailed(c, batchId, error.message); return { success: false, error: friendlyBatchError(error.message) }; }
     await logAudit(c, { actor: who, action: "batch.commit", targetKind: "batch", targetId: batchId, batchId, summary: `Committed whole batch — ${(data as { inserted: number }).inserted} inserted · ${(data as { updated: number }).updated} updated`, detail: data as Record<string, unknown> });
     revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { inserted: number; updated: number; skipped: number } };
+    return { success: true, data: data as CommitOutcome };
   } catch (e) {
     return fail(e, "Commit failed.");
   }
@@ -810,18 +810,248 @@ export interface EditAuditRow {
   undone: boolean;
 }
 
-export async function listEditAudit(limit = 15): Promise<Result<EditAuditRow[]>> {
+export interface EditAuditPage { rows: EditAuditRow[]; /** pass back as `before` to read the next (older) page; null when this was the last page */ nextCursor: string | null }
+
+// P1-4 (20 Sep 2026): keyset pagination (edited_at, id) instead of "the last 50".
+export async function listEditAudit(opts: number | { limit?: number; before?: string | null } = 50): Promise<Result<EditAuditPage>> {
+  const o = typeof opts === "number" ? { limit: opts } : opts;
+  const limit = Math.min(Math.max(o.limit ?? 50, 1), 100);
   try {
     const c = await adminClient();
-    const { data, error } = await c
+    let q = c
       .from("record_edit_audit")
       .select("id, table_name, business_key, op, group_id, edited_at, undone")
       .order("edited_at", { ascending: false })
-      .limit(Math.min(Math.max(limit, 1), 50));
+      .order("id", { ascending: false })
+      .limit(limit + 1);
+    if (o.before) {
+      const [at, id] = o.before.split("|");
+      if (!at || !id || !UUID_RE.test(id) || Number.isNaN(new Date(at).getTime())) return { success: false, error: "Invalid history cursor." };
+      q = q.or(`edited_at.lt.${at},and(edited_at.eq.${at},id.lt.${id})`);
+    }
+    const { data, error } = await q;
     if (error) return { success: false, error: error.message };
-    return { success: true, data: (data ?? []) as EditAuditRow[] };
+    const all = (data ?? []) as EditAuditRow[];
+    const rows = all.slice(0, limit);
+    const last = rows[rows.length - 1];
+    return { success: true, data: { rows, nextCursor: all.length > limit && last ? `${last.edited_at}|${last.id}` : null } };
   } catch (e) {
     return fail(e, "Could not read edit history.");
+  }
+}
+
+// ── background upload jobs (P1-3; panel and actions 21 Sep 2026) ────────────
+export interface UploadJobRow {
+  id: string;
+  file_name: string;
+  status: "queued" | "running" | "retry_wait" | "done" | "failed" | "cancelled";
+  rows_parsed: number | null;
+  size: number;
+  attempts: number;
+  max_attempts: number;
+  batch_id: string | null;
+  failure_kind: "transient" | "permanent" | "timeout" | "lost_lease" | null;
+  error: string | null;
+  totals: Record<string, number> | null;
+  next_attempt_at: string | null;
+  lease_until: string | null;
+  storage_path: string | null;
+  payload_expires_at: string | null;
+  payload_deleted_at: string | null;
+  started_by: string | null;
+  uploader: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  /** false once an administrator has committed or edited the batch: a retry must not rebuild it */
+  batch_resumable: boolean | null;
+}
+
+const UPLOAD_COLS = "id, file_name, status, rows_parsed, size, attempts, max_attempts, batch_id, failure_kind, error, totals, next_attempt_at, lease_until, storage_path, payload_expires_at, payload_deleted_at, started_by, created_at, started_at, finished_at";
+
+/**
+ * One page of upload jobs, newest first, with the uploader's name resolved
+ * and (for a parked job) whether a retry would be allowed. Server-side
+ * pagination: the panel asks for a page, not "the latest ten".
+ */
+export async function listUploadJobs(opts: { page?: number; pageSize?: number; status?: string | null } = {}): Promise<Result<{ rows: UploadJobRow[]; total: number; page: number; pageSize: number }>> {
+  try {
+    const c = await adminClient();
+    const pageSize = Math.min(Math.max(opts.pageSize ?? 10, 5), 100);
+    const page = Math.max(opts.page ?? 1, 1);
+    const from = (page - 1) * pageSize;
+    let q = c.from("sync_upload_job").select(UPLOAD_COLS, { count: "exact" }).order("created_at", { ascending: false });
+    if (opts.status && opts.status !== "all") {
+      const allowed = ["queued", "running", "retry_wait", "done", "failed", "cancelled"];
+      if (!allowed.includes(opts.status)) return { success: false, error: "Unknown status filter." };
+      q = q.eq("status", opts.status);
+    }
+    const { data, error, count } = await q.range(from, from + pageSize - 1);
+    if (error) return { success: false, error: error.message };
+    const rows = (data ?? []) as unknown as UploadJobRow[];
+
+    // uploader names in one round trip
+    const ids = Array.from(new Set(rows.map((r) => r.started_by).filter((x): x is string => !!x)));
+    const names = new Map<string, string>();
+    if (ids.length) {
+      const { data: us } = await c.from("users").select("id, full_name").in("id", ids);
+      for (const u of (us ?? []) as { id: string; full_name: string | null }[]) names.set(u.id, u.full_name ?? "");
+    }
+    // a parked job: would a retry be allowed, or has its batch been worked on?
+    for (const r of rows) {
+      r.uploader = r.started_by ? (names.get(r.started_by) || null) : null;
+      r.batch_resumable = null;
+      if ((r.status === "failed" || r.status === "cancelled") && r.payload_deleted_at == null) {
+        const { data: res } = await c.rpc("fn_sync_upload_batch_resumable", { p_batch_id: r.batch_id });
+        r.batch_resumable = !!(res as { resumable?: boolean } | null)?.resumable;
+      }
+    }
+    return { success: true, data: { rows, total: count ?? rows.length, page, pageSize } };
+  } catch (e) {
+    return fail(e, "Could not read upload jobs.");
+  }
+}
+
+/** Queue a parked job again. Refused when its workbook is gone or its batch has been worked on. */
+export async function retryUploadJob(id: string): Promise<Result<{ status: string }>> {
+  try {
+    if (!UUID_RE.test(id)) return { success: false, error: "Invalid job id." };
+    const { c, actor, who } = await adminWrite();
+    const { data, error } = await c.rpc("retry_sync_upload_job", { p_id: id, p_actor: actor });
+    if (error) return { success: false, error: error.message };
+    const r = (data ?? {}) as { ok?: boolean; status?: string; reason?: string; detail?: string };
+    if (!r.ok) {
+      const why = r.detail ?? r.reason ?? "the job cannot be queued again";
+      await logAudit(c, { actor: who, action: "run.upload", targetKind: "upload_job", targetId: id, summary: `Retry of upload job refused \u2014 ${why}`, ok: false, detail: { job: id, reason: r.reason ?? null } });
+      return { success: false, error: why };
+    }
+    await logAudit(c, { actor: who, action: "run.upload", targetKind: "upload_job", targetId: id, summary: "Queued a parked upload job again", detail: { job: id } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { status: r.status ?? "queued" } };
+  } catch (e) {
+    return fail(e, "Could not queue the job again.");
+  }
+}
+
+/** Cancel a job that has not started (queued, or waiting to retry). */
+export async function cancelUploadJob(id: string): Promise<Result<{ status: string }>> {
+  try {
+    if (!UUID_RE.test(id)) return { success: false, error: "Invalid job id." };
+    const { c, actor, who } = await adminWrite();
+    const { data, error } = await c.rpc("cancel_sync_upload_job", { p_id: id, p_actor: actor });
+    if (error) return { success: false, error: error.message };
+    const r = (data ?? {}) as { ok?: boolean; status?: string; reason?: string; detail?: string };
+    if (!r.ok) return { success: false, error: r.detail ?? r.reason ?? "the job cannot be cancelled" };
+    await logAudit(c, { actor: who, action: "run.upload", targetKind: "upload_job", targetId: id, summary: "Cancelled a queued upload job", detail: { job: id } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { status: r.status ?? "cancelled" } };
+  } catch (e) {
+    return fail(e, "Could not cancel the job.");
+  }
+}
+
+/**
+ * Forget a finished job and its stored workbook. Only a terminal job, and
+ * only once its retention window has passed \u2014 a failed upload is kept for
+ * troubleshooting until then.
+ */
+export async function removeUploadJob(id: string): Promise<Result<{ removed: boolean }>> {
+  try {
+    if (!UUID_RE.test(id)) return { success: false, error: "Invalid job id." };
+    const { c, actor, who } = await adminWrite();
+    void actor;
+    const { data, error } = await c.from("sync_upload_job").select("id, file_name, status, storage_bucket, storage_path, payload_expires_at, payload_deleted_at").eq("id", id).maybeSingle();
+    if (error) return { success: false, error: error.message };
+    const job = data as { id: string; file_name: string; status: string; storage_bucket: string | null; storage_path: string | null; payload_expires_at: string | null; payload_deleted_at: string | null } | null;
+    if (!job) return { success: false, error: "No such upload job." };
+    if (!["failed", "cancelled", "done"].includes(job.status)) return { success: false, error: `The job is ${job.status} \u2014 only a finished job can be removed.` };
+    const expires = job.payload_expires_at ? new Date(job.payload_expires_at).getTime() : 0;
+    if (job.payload_deleted_at == null && job.storage_path && expires > Date.now()) {
+      return { success: false, error: `Its workbook is kept for troubleshooting until ${new Date(expires).toISOString().slice(0, 16).replace("T", " ")} UTC.` };
+    }
+    if (job.storage_path && job.payload_deleted_at == null) {
+      const { error: sErr } = await c.storage.from(job.storage_bucket || "sync-uploads").remove([job.storage_path]);
+      if (sErr) return { success: false, error: `The stored workbook could not be removed: ${sErr.message}` };
+    }
+    const { error: dErr } = await c.from("sync_upload_job").delete().eq("id", id);
+    if (dErr) return { success: false, error: dErr.message };
+    await logAudit(c, { actor: who, action: "run.upload", targetKind: "upload_job", targetId: id, summary: `Removed the upload job for ${job.file_name} and its stored workbook`, detail: { job: id, status: job.status } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { removed: true } };
+  } catch (e) {
+    return fail(e, "Could not remove the job.");
+  }
+}
+
+// ── health (workstream I) ───────────────────────────────────────────────────
+export interface SyncAlertStateRow {
+  kind: string; ref: string; consecutive: number; detail: string | null;
+  first_seen: string; last_seen: string; notified_at: string | null; cleared_at: string | null;
+}
+export interface SyncHealth {
+  summary: Record<string, number>;
+  alerts: SyncAlertStateRow[];
+  config: { enabled: boolean; recipients: string[]; min_consecutive: number; updated_at: string | null };
+  /** the last time the health cron actually ran, and what it did */
+  lastCheck: { at: string | null; status: string | null; rows: number | null; meta: Record<string, unknown> | null };
+}
+
+export async function getSyncHealth(): Promise<Result<SyncHealth>> {
+  try {
+    const c = await adminClient();
+    const [sum, state, cfg, job] = await Promise.all([
+      c.rpc("fn_sync_health_summary"),
+      c.from("sync_alert_state").select("kind, ref, consecutive, detail, first_seen, last_seen, notified_at, cleared_at").order("last_seen", { ascending: false }).limit(200),
+      c.from("sync_alert_config").select("enabled, recipients, min_consecutive, updated_at").eq("id", 1).maybeSingle(),
+      c.from("job_runs").select("finished_at, started_at, status, rows, meta").eq("job", "sync-health").order("id", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (sum.error) return { success: false, error: sum.error.message };
+    const j = (job.data ?? null) as { finished_at: string | null; started_at: string | null; status: string | null; rows: number | null; meta: Record<string, unknown> | null } | null;
+    const k = (cfg.data ?? null) as { enabled: boolean; recipients: string[]; min_consecutive: number; updated_at: string } | null;
+    return { success: true, data: {
+      summary: (sum.data ?? {}) as Record<string, number>,
+      alerts: (state.data ?? []) as SyncAlertStateRow[],
+      config: { enabled: !!k?.enabled, recipients: k?.recipients ?? [], min_consecutive: Number(k?.min_consecutive ?? 2), updated_at: k?.updated_at ?? null },
+      lastCheck: { at: j?.finished_at ?? j?.started_at ?? null, status: j?.status ?? null, rows: j?.rows ?? null, meta: j?.meta ?? null },
+    } };
+  } catch (e) {
+    return fail(e, "Could not read the health state.");
+  }
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function saveAlertConfig(patch: { enabled?: boolean; recipients?: string[]; min_consecutive?: number }): Promise<Result<{ enabled: boolean; recipients: string[]; min_consecutive: number }>> {
+  try {
+    const { c, actor, who } = await adminWrite();
+    const row: Record<string, unknown> = { id: 1, updated_at: new Date().toISOString(), updated_by: actor };
+    if (patch.enabled !== undefined) row.enabled = !!patch.enabled;
+    if (patch.recipients !== undefined) {
+      const list = (patch.recipients ?? []).map((r) => String(r).trim()).filter(Boolean);
+      const bad = list.filter((r) => !EMAIL_RE.test(r));
+      if (bad.length) return { success: false, error: `Not an email address: ${bad.join(", ")}` };
+      if (list.length > 20) return { success: false, error: "At most twenty recipients." };
+      row.recipients = list;
+    }
+    if (patch.min_consecutive !== undefined) {
+      const n = Number(patch.min_consecutive);
+      if (!Number.isInteger(n) || n < 1 || n > 20) return { success: false, error: "Consecutive checks must be a whole number between 1 and 20." };
+      row.min_consecutive = n;
+    }
+    if (row.enabled === true) {
+      const recips = (row.recipients as string[] | undefined) ?? (await c.from("sync_alert_config").select("recipients").eq("id", 1).maybeSingle()).data?.recipients ?? [];
+      if (!recips.length) return { success: false, error: "Add at least one recipient before switching alerting on." };
+    }
+    const { data, error } = await c.from("sync_alert_config").upsert(row, { onConflict: "id" }).select("enabled, recipients, min_consecutive").single();
+    if (error) return { success: false, error: error.message };
+    const saved = data as { enabled: boolean; recipients: string[]; min_consecutive: number };
+    await logAudit(c, { actor: who, action: "settings.health.save", targetKind: "settings", targetId: "sync_alert_config",
+      summary: `Health alerting ${saved.enabled ? "on" : "off"} \u2014 ${saved.recipients.length} recipient(s), after ${saved.min_consecutive} consecutive check(s)`,
+      detail: { enabled: saved.enabled, recipients: saved.recipients, min_consecutive: saved.min_consecutive } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: saved };
+  } catch (e) {
+    return fail(e, "Could not save the alert settings.");
   }
 }
 
@@ -890,6 +1120,14 @@ export async function resolveCommodityReview(
   if (!input.cargoType || !input.imsbc) return { success: false, error: "Cargo type and IMSBC category are required." };
   try {
     const { c, actor, who } = await adminWrite();
+    // review gate: commodity (workstream E) — the mapping is a publication, strict and fail-closed
+    {
+      const gate = await validateRow(c, "commodities", { canonical_name: input.canonical.trim(), category_label: input.category ?? null, is_grain: input.isGrain ?? false, is_dg: input.isDg ?? false }, "review", { id: actor, name: "Manual Review commodity" }, true, { strict: true });
+      if (gate.blocked) {
+        const why = gate.issues.filter((i) => i.mode === "block").map((i) => `${i.rule_code} — ${i.message}`).join("; ");
+        return { success: false, error: `Refused by the data-quality gate: ${why}` };
+      }
+    }
     const { data, error } = await c.rpc("resolve_commodity_review", {
       p_id: id,
       p_canonical: input.canonical.trim(),
@@ -1052,6 +1290,16 @@ export async function resolvePortReview(id: string, input: ResolvePortInput): Pr
   }
   try {
     const { c, who } = await adminWrite();
+    // review gate: port (workstream E) — the port a name or an area is placed on must itself pass the gate
+    if (input.locode) {
+      const { data: port } = await c.from("ports").select("*").eq("locode", input.locode).maybeSingle();
+      if (!port) return { success: false, error: `${input.locode} is not in the ports registry.` };
+      const gate = await validateRow(c, "ports", port as Record<string, unknown>, "review", { id: null, name: "Manual Review port" }, true, { strict: true });
+      if (gate.blocked) {
+        const why = gate.issues.filter((i) => i.mode === "block").map((i) => `${i.rule_code} — ${i.message}`).join("; ");
+        return { success: false, error: `Refused by the data-quality gate: ${input.locode} — ${why}` };
+      }
+    }
     const { data, error } = await c.rpc("resolve_port_review", {
       p_id: id,
       p_kind: input.kind,
