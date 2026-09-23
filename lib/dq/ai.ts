@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { getActiveModel } from "@/lib/sync/email/llm";
+import { isTransientAiError, withDeadline } from "./ai-budget";
 import type { DqRule, DqSeverity } from "./types";
 
 export interface AiIssue {
@@ -36,10 +37,17 @@ export interface AiReviewResult {
   tokens: number;
   model: string;
   vendor: string;
+  /** the reply was not parseable JSON — tokens were spent, nothing was learned (audit C8) */
+  parseFailed: boolean;
 }
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-const PHONE_RE = /(?<!\d)(\+?\d[\d\s().-]{7,}\d)(?!\d)/g;
+// A phone has a phone-shaped prefix: an international "+"/"00", or a
+// tel / mob / whatsapp label in front. Bare digit runs are left alone — the
+// old greedy pattern masked "laycan 12-18.10.2026" to "laycan [phone]" and the
+// model was then asked to check dates it could not see (audit C4). PII
+// columns are already dropped in the database; this is the second belt.
+const PHONE_RE = /(?:(?:\+|\b00)\d[\d\s().-]{6,}\d|(?<=\b(?:tel|mob|mobile|phone|whatsapp|wa|cell|call)\.?\s*:?\s*)\+?\d[\d\s().-]{6,}\d)/gi;
 
 /** Belt-and-braces masking: PII columns were already dropped in the DB (fn_dq_sample_rows); this scrubs free text. */
 export function maskPii(v: unknown): unknown {
@@ -79,9 +87,9 @@ const str = (v: unknown, max = 600): string | null => (v == null || v === "" ? n
 
 export async function runAiReview(
   sb: SupabaseClient,
-  input: { table: string; tableLabel: string; rows: Record<string, unknown>[]; rules: Pick<DqRule, "code" | "name" | "description" | "ai_prompt" | "kind" | "severity">[]; knownColumns?: string[] },
+  input: { table: string; tableLabel: string; rows: Record<string, unknown>[]; rules: Pick<DqRule, "code" | "name" | "description" | "ai_prompt" | "kind" | "severity">[]; maxOutputTokens?: number; knownColumns?: string[] },
 ): Promise<AiReviewResult> {
-  const { model, vendor, modelName } = await getActiveModel(sb);
+  const { model, vendor, modelName } = await getActiveModel(sb, { maxOutputTokens: input.maxOutputTokens });
   const rows = input.rows.map((r) => maskPii(r)) as Record<string, unknown>[];
   const columns = input.knownColumns ?? Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).filter((k) => !k.startsWith("__"));
 
@@ -109,13 +117,22 @@ export async function runAiReview(
     JSON.stringify(rows),
   ].join("\n");
 
-  const res = await model.invoke([new SystemMessage(system), new HumanMessage(human)]);
+  // workstream F: a 90 s deadline, one retry on a transient failure, never on a refusal
+  const call = () => withDeadline(model.invoke([new SystemMessage(system), new HumanMessage(human)]), 90_000, "AI review");
+  let res;
+  try { res = await call(); } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!isTransientAiError(msg)) throw e;
+    await new Promise((r) => setTimeout(r, 2_000));
+    res = await call();
+  }
   const text = contentToText(res.content);
   const usage = (res as { usage_metadata?: { total_tokens?: number; input_tokens?: number; output_tokens?: number } }).usage_metadata;
   const tokens = (usage?.total_tokens ?? ((usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0))) || Math.ceil((system.length + human.length + text.length) / 4);
 
   let parsed: { issues?: unknown[]; suggested_rules?: unknown[] } = {};
-  try { parsed = extractJson(text) as typeof parsed; } catch { parsed = {}; }
+  let parseFailed = false;
+  try { parsed = extractJson(text) as typeof parsed; } catch { parsed = {}; parseFailed = true; }
 
   const keys = new Set(rows.map((r) => String(r.__key)));
   const cols = new Set(columns);
@@ -128,7 +145,7 @@ export async function runAiReview(
     const sev = SEVS.has(String(raw.severity)) ? (String(raw.severity) as DqSeverity) : "warn";
     issues.push({
       row_key: key,
-      field: field && cols.has(field) ? field : field,
+      field: field && cols.has(field) ? field : null,
       observed: str(raw.observed, 300),
       expected: str(raw.expected, 300),
       severity: sev,
@@ -150,5 +167,5 @@ export async function runAiReview(
       confidence: clamp01(raw.confidence),
     });
   }
-  return { issues, suggestedRules, tokens, model: modelName, vendor };
+  return { issues, suggestedRules, tokens, model: modelName, vendor , parseFailed };
 }

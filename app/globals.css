@@ -457,6 +457,25 @@ textarea:invalid {
   }
 }
 
+/* How It Works — the three calculators orbit step 03 (CalculatorStep in
+   home-client). Authored paused: the component releases it while the step is
+   hovered or pinned. The counter class undoes the spin on each satellite so
+   its glyph and label stay upright while the ring turns. */
+@keyframes hiw-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes hiw-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 163, 188, 0.35); }
+  50% { box-shadow: 0 0 0 14px rgba(16, 163, 188, 0); }
+}
+.hiw-orbit { animation: hiw-orbit 18s linear infinite; }
+.hiw-orbit--counter { animation-direction: reverse; }
+.hiw-pulse { animation: hiw-pulse 3s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .hiw-orbit, .hiw-pulse { animation: none; }
+}
+
 @keyframes ping-slow {
   0% {
     transform: scale(1);

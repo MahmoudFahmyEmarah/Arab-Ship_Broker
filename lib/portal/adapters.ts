@@ -81,6 +81,12 @@ export function toCargoView(
       podCode: row.disch_port_locode,
       podZone: row.disch_zone,
     },
+    portScope: {
+      polScope: row.load_port_scope ?? null,
+      podScope: row.disch_port_scope ?? null,
+      polRef: row.load_ref_locode ?? row.load_port_2_locode ?? null,
+      podRef: row.disch_ref_locode ?? row.disch_port_2_locode ?? null,
+    },
     loadPorts: portList(row.load_ports),
     dischPorts: portList(row.disch_ports),
     qty: { min: row.qty_min_mt, max: row.qty_max_mt },

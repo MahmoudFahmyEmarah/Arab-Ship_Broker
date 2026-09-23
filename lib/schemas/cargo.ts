@@ -439,6 +439,14 @@ export type CargoListingRow = {
   disch_port_name: string;
   disch_zone: ZoneCode;
   disch_country: string;
+  // Port identity resolved by the database (migration 20260910100000):
+  // what each side names, and the reference port that feeds distance / costs.
+  load_port_scope?: "port" | "options" | "area" | "none" | null;
+  disch_port_scope?: "port" | "options" | "area" | "none" | null;
+  load_ref_locode?: string | null;
+  disch_ref_locode?: string | null;
+  load_port_2_locode?: string | null;
+  disch_port_2_locode?: string | null;
   load_ports?: { locode: string; name: string; zone: string; country: string; status: string }[] | null;
   disch_ports?: { locode: string; name: string; zone: string; country: string; status: string }[] | null;
   laycan_from: string | null;

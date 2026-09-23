@@ -1,71 +1,76 @@
 "use client";
 
-// Manual Review — two queues:
+// Manual Review — the queues:
 //   • Commodities — UNMAPPED market names → assign an ASB regime (commodities dict)
 //   • Vessels — IMO-less circular positions → sync by a name+built+dwt composite
 //     key, or by IMO if the admin supplies one.
+//   • Ports — port text the resolver cannot place (10 Sep 2026). DQ-P03 refuses
+//     these on the way in, because a cargo with no identifiable port feeds no
+//     distance, no Voy OPEX and no Ports DA. Map the text to an existing port
+//     (an alias) or declare it an area with a nominated reference port.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Check, X, ArrowRight, Ban, PackageSearch, Ship, Mail, Wrench, ExternalLink, Clipboard } from "lucide-react";
+import { Loader2, Check, X, ArrowRight, Ban, PackageSearch, Ship, Mail, Wrench, ExternalLink, Clipboard, Anchor, RefreshCw } from "lucide-react";
 import { ENUMS } from "@/lib/sync/preview";
 import { normalizeFlag } from "@/lib/geo/flag-states";
 import { isValidImo } from "@/lib/sync/imo";
 import { parseEquasisPaste, equasisPasteHasData } from "@/lib/sync/equasis-paste";
 import {
-  listCommodityQueue, resolveCommodityReview, ignoreCommodityReview, countCommodityQueuePending,
-  listVesselQueue, resolveVesselReview, ignoreVesselReview, countVesselQueuePending,
-  resolveVesselQueuePatchOnly, findVesselQueueMatches, sendVesselQueueTeaser,
-  listInvalidStaged, countInvalidStagedPending, listFlagStates, listOrganizationNames,
+  listCommodityQueue, resolveCommodityReview, ignoreCommodityReview, listVesselQueue, resolveVesselReview, ignoreVesselReview, resolveVesselQueuePatchOnly, findVesselQueueMatches, sendVesselQueueTeaser,
+  listInvalidStaged, listFlagStates, listOrganizationNames,
+  listPortQueue, resolvePortReview, ignorePortReview, sweepPortQueue, listPortsForPicker,
   type CommodityQueueRow, type VesselQueueRow, type MatchView, type InvalidStagedRow,
-  type FlagStateOpt, type OrganizationOpt,
+  type FlagStateOpt, type OrganizationOpt, type PortQueueRow, type PortOpt,
+  countQueues,
 } from "@/app/(admin)/admin/data-sync/actions";
 import { StagedEditDrawer } from "./StagedEditDrawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { C, btn } from "./ui";
+import { Badge, Btn, Card, Seg, C, btn } from "./ui";
 
 type Status = "pending" | "mapped" | "ignored";
 
-type Queue = "commodities" | "vessels" | "invalid";
+type Queue = "commodities" | "vessels" | "ports" | "invalid";
 
 export function ManualReviewView({ onPendingChange }: { onPendingChange?: (n: number) => void }) {
   const [queue, setQueue] = useState<Queue>("commodities");
   const [invalidCount, setInvalidCount] = useState(0);
+  const [portCount, setPortCount] = useState(0);
 
   const refreshBadge = useCallback(async () => {
-    const [cc, vc, ic] = await Promise.all([
-      countCommodityQueuePending(), countVesselQueuePending(), countInvalidStagedPending(),
-    ]);
+    const r = await countQueues();
+    if (!r.success) return;
+    const { commodities: cc, vessels: vc, invalid: ic, ports: pc } = r.data;
     setInvalidCount(ic);
-    onPendingChange?.(cc + vc + ic);
+    setPortCount(pc);
+    onPendingChange?.(cc + vc + ic + pc);
   }, [onPendingChange]);
   useEffect(() => { let c = false; (async () => { await Promise.resolve(); if (!c) await refreshBadge(); })(); return () => { c = true; }; }, [refreshBadge]);
 
-  const tabs: { id: Queue; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "commodities", label: "Commodities", icon: <PackageSearch size={15} /> },
-    { id: "vessels", label: "Vessels (no IMO)", icon: <Ship size={15} /> },
-    { id: "invalid", label: "Needs fixing", icon: <Wrench size={15} />, badge: invalidCount },
-  ];
+  const HINT: Record<Queue, string> = {
+    commodities: "Commodity names the classifier could not map to an ASB regime.",
+    vessels: "Ships circulated without an IMO — confirm identity against Equasis, then sync.",
+    ports: "Port names with no LOCODE yet. Resolving one reclassifies every row that used it.",
+    invalid: "Staged rows the data-quality gate blocked. Fix the flagged field to release them.",
+  };
 
   return (
-    <div style={{ maxWidth: 900 }}>
-      <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
-        {tabs.map((t) => {
-          const on = t.id === queue;
-          return (
-            <button key={t.id} onClick={() => setQueue(t.id)}
-              style={{ padding: "8px 15px", borderRadius: 8, border: `1px solid ${on ? C.brass : C.line}`,
-                background: on ? C.brassBg : "#fff", color: on ? C.brassDeep : C.ink2, cursor: "pointer",
-                font: "inherit", fontSize: 13.5, fontWeight: on ? 600 : 500, display: "inline-flex", alignItems: "center", gap: 7 }}>
-              {t.icon}
-              {t.label}
-              {t.badge ? <span style={{ minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: C.redBg, color: C.red, fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{t.badge}</span> : null}
-            </button>
-          );
-        })}
+    <div className="ds-stack" style={{ maxWidth: 980 }}>
+      <div className="ds-row">
+        <Seg
+          value={queue} onChange={setQueue}
+          options={[
+            { value: "commodities", label: "Commodities" },
+            { value: "vessels", label: "Vessels (no IMO)" },
+            { value: "ports", label: "Ports", count: portCount },
+            { value: "invalid", label: "Needs fixing", count: invalidCount },
+          ] as const}
+        />
+        <span className="ds-note ds-push" style={{ flex: "1 1 220px", textAlign: "right" }}>{HINT[queue]}</span>
       </div>
       {queue === "commodities" ? <CommodityQueue onChange={refreshBadge} />
         : queue === "vessels" ? <VesselQueue onChange={refreshBadge} />
+        : queue === "ports" ? <PortQueue onChange={refreshBadge} />
         : <InvalidQueue onChange={refreshBadge} />}
     </div>
   );
@@ -151,7 +156,6 @@ function InvalidQueue({ onChange }: { onChange: () => void }) {
           onSaved={async () => { setEditing(null); await reload(); }}
         />
       )}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </>
   );
 }
@@ -209,7 +213,6 @@ function CommodityQueue({ onChange }: { onChange: () => void }) {
         </div>
       )}
       {resolving && <CommodityModal row={resolving} onClose={() => setResolving(null)} onDone={async () => { setResolving(null); await reload(); }} />}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </>
   );
 }
@@ -264,17 +267,22 @@ function VesselQueue({ onChange }: { onChange: () => void }) {
                   {r.imo_hint ? ` · IMO ${r.imo_hint} (workbook)` : " · no IMO"}
                 </div>
               </div>
+              <IdentityLadder
+                present={[r.imo_hint, r.dwt_grain, r.built, r.vessel_type, r.flag].filter(Boolean).length}
+                total={5} label="identity fields"
+              />
               {status === "pending" ? (
                 <>
-                  <button onClick={(e) => { e.stopPropagation(); ignore(r); }} disabled={busy === r.id} style={btn("ghost")}>
-                    {busy === r.id ? <Loader2 size={14} style={spin} /> : <Ban size={14} />} Ignore
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); setResolving(r); }} style={btn("primary")}>Review &amp; edit <ArrowRight size={14} /></button>
+                  <Btn kind="ghost" busy={busy === r.id} icon={<Ban size={14} />}
+                    onClick={(e) => { e.stopPropagation(); ignore(r); }}>Ignore</Btn>
+                  <Btn kind="primary" onClick={(e) => { e.stopPropagation(); setResolving(r); }}>
+                    Review &amp; edit <ArrowRight size={14} />
+                  </Btn>
                 </>
               ) : (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   {r.status === "synced" && r.resolved_with_imo === false && (
-                    <span title="Synced by name + built + DWT — add the IMO when known" style={{ fontSize: 10, fontWeight: 700, color: C.amber, border: `1px solid ${C.amber}`, borderRadius: 3, padding: "1px 5px" }}>IMO PENDING</span>
+                    <Badge tone="updated" title="Synced by name + built + DWT — add the IMO when known">Temporary</Badge>
                   )}
                   <StatusPill status={r.status} good="synced" />
                 </span>
@@ -284,7 +292,6 @@ function VesselQueue({ onChange }: { onChange: () => void }) {
         </div>
       )}
       {resolving && <VesselModal row={resolving} onClose={() => setResolving(null)} onDone={async () => { setResolving(null); await reload(); }} />}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </>
   );
 }
@@ -708,48 +715,280 @@ function CommodityModal({ row, onClose, onDone }: { row: CommodityQueueRow; onCl
   );
 }
 
+// ── Ports queue ──────────────────────────────────────────────────────────────
+// Port text nobody has placed yet. Two ways out: it is a spelling of a port we
+// already hold (an alias), or it is an area that nominates a reference port.
+const SIDE_LABEL: Record<string, string> = { load: "load port", disch: "discharge port", open: "open position" };
+
+function PortQueue({ onChange }: { onChange: () => void }) {
+  const [status, setStatus] = useState<Status>("pending");
+  const [rows, setRows] = useState<PortQueueRow[] | null>(null);
+  const [resolving, setResolving] = useState<PortQueueRow | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [sweeping, setSweeping] = useState(false);
+
+  const reload = useCallback(async () => {
+    const res = await listPortQueue(status);
+    if (!res.success) { toast.error(res.error); setRows([]); return; }
+    setRows(res.data);
+    onChange();
+  }, [status, onChange]);
+  useEffect(() => { let c = false; (async () => { await Promise.resolve(); if (!c) await reload(); })(); return () => { c = true; }; }, [reload]);
+
+  const ignore = async (r: PortQueueRow) => {
+    setBusy(r.id);
+    const res = await ignorePortReview(r.id);
+    setBusy(null);
+    if (!res.success) { toast.error(res.error); return; }
+    toast.success(`"${r.raw_name}" moved out of the queue.`);
+    await reload();
+  };
+
+  const sweep = async () => {
+    setSweeping(true);
+    const res = await sweepPortQueue();
+    setSweeping(false);
+    if (!res.success) { toast.error(res.error); return; }
+    toast.success(res.data.queued ? `${res.data.queued} port name(s) queued.` : "Nothing new — every port name is placed.");
+    await reload();
+  };
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ flex: 1 }}><StatusFilter status={status} setStatus={setStatus as (s: string) => void} mapped="mapped" /></div>
+        <button onClick={sweep} disabled={sweeping} style={btn("ghost")} title="Re-scan live listings and uncommitted staged rows for port text nobody has placed yet">
+          {sweeping ? <Loader2 size={14} style={spin} /> : <RefreshCw size={14} />} Re-scan
+        </button>
+      </div>
+      <p style={{ fontSize: 12.5, color: C.ink3, margin: "0 0 14px", lineHeight: 1.55, maxWidth: 680 }}>
+        Port text the resolver cannot place as a port, a list of ports, or a known area. A cargo in this
+        state is refused on the way in, because it can feed no distance, no Voy OPEX and no Ports DA.
+        Map the name to a port we already hold, or declare it an area and nominate the port its estimates come from.
+      </p>
+      {rows === null ? <Loading /> : rows.length === 0 ? (
+        <Empty icon={<Anchor size={26} />} text={status === "pending" ? "Nothing to review — every port name resolves to a port or a known area." : `No ${status} port names.`} />
+      ) : (
+        <div style={listStyle}>
+          {rows.map((r, i) => (
+            <div key={r.id} style={rowStyle(i)}>
+              <span style={iconChip}><Anchor size={17} /></span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.navy }}>
+                  {r.raw_name}
+                  {r.hits > 1 && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 600, color: C.ink3 }}>&times;{r.hits}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: C.ink3, fontFamily: C.mono }}>
+                  {SIDE_LABEL[r.side] ?? r.side}
+                  {r.suggested_zone ? ` · ${r.suggested_zone}` : ""}
+                  {r.source ? ` · ${r.source === "sync_staged_row" ? "not yet committed" : "live listing"}` : ""}
+                  {r.sample_ref ? ` · ${r.sample_ref}` : ""}
+                </div>
+              </div>
+              {status === "pending" ? (
+                <>
+                  <button onClick={() => ignore(r)} disabled={busy === r.id} style={btn("ghost")}>
+                    {busy === r.id ? <Loader2 size={14} style={spin} /> : <Ban size={14} />} Ignore
+                  </button>
+                  <button onClick={() => setResolving(r)} style={btn("primary")}>Place this name <ArrowRight size={14} /></button>
+                </>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {r.mapped_locode && <span style={{ fontSize: 12, fontFamily: C.mono, color: C.ink3 }}>{r.mapped_locode}</span>}
+                  {r.mapped_area_key && !r.mapped_locode && <span style={{ fontSize: 12, color: C.ink3 }}>area</span>}
+                  <StatusPill status={r.status} good="mapped" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {resolving && <PortModal row={resolving} onClose={() => setResolving(null)} onDone={async () => { setResolving(null); await reload(); }} />}
+    </>
+  );
+}
+
+function PortModal({ row, onClose, onDone }: { row: PortQueueRow; onClose: () => void; onDone: () => void }) {
+  const [kind, setKind] = useState<"alias" | "area">("alias");
+  const [locode, setLocode] = useState("");
+  const [areaName, setAreaName] = useState(row.raw_name);
+  const [areaKind, setAreaKind] = useState<"country" | "area" | "range">("area");
+  const [zone, setZone] = useState(row.suggested_zone ?? "");
+  const [ports, setPorts] = useState<PortOpt[]>([]);
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  useEffect(() => { let c = false; (async () => { const res = await listPortsForPicker(); if (!c && res.success) setPorts(res.data); })(); return () => { c = true; }; }, []);
+
+  // Ports in the suggested zone first — the likely candidates for this name.
+  const sorted = useMemo(() => {
+    if (!zone) return ports;
+    return [...ports].sort((a, b) => Number(b.zone === zone) - Number(a.zone === zone));
+  }, [ports, zone]);
+
+  const incomplete = !locode || (kind === "area" && !areaName.trim());
+
+  const submit = async () => {
+    setSaving(true);
+    const res = await resolvePortReview(row.id, {
+      kind,
+      locode: locode || null,
+      areaName: kind === "area" ? areaName : null,
+      areaKind,
+      zone: zone || null,
+      candidates: kind === "area" && locode ? [locode] : [],
+    });
+    setSaving(false);
+    if (!res.success) { toast.error(res.error); return; }
+    const tail = res.data.reclassified ? ` — ${res.data.reclassified} listing(s) re-classified.` : ".";
+    toast.success(kind === "alias"
+      ? `"${row.raw_name}" now resolves to ${locode}${tail}`
+      : `"${areaName}" saved as an area, estimates from ${locode}${tail}`);
+    onDone();
+  };
+
+  const field: React.CSSProperties = { width: "100%", padding: "8px 10px", borderRadius: 7, border: `1px solid ${C.line}`, font: "inherit", fontSize: 13.5, color: C.ink, background: "#fff" };
+  const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: C.ink2, marginBottom: 5, display: "block" };
+  const choice = (on: boolean): React.CSSProperties => ({
+    flex: 1, padding: "11px 13px", borderRadius: 9, cursor: "pointer", textAlign: "left",
+    border: `1px solid ${on ? C.brass : C.line}`, background: on ? C.brassBg : "#fff", font: "inherit",
+  });
+
+  return (
+    <ModalShell innerRef={ref} onClose={onClose}
+      title={`Place "${row.raw_name}"`}
+      subtitle={`Seen as a ${SIDE_LABEL[row.side] ?? row.side}${row.hits > 1 ? ` on ${row.hits} rows` : ""}. Choose what this name means.`}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button type="button" onClick={() => setKind("alias")} style={choice(kind === "alias")}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: kind === "alias" ? C.brassDeep : C.navy }}>It is one port</div>
+            <div style={{ fontSize: 12, color: C.ink3, marginTop: 3, lineHeight: 1.45 }}>A spelling or shorthand for a port already in the registry. Saved as an alias.</div>
+          </button>
+          <button type="button" onClick={() => setKind("area")} style={choice(kind === "area")}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: kind === "area" ? C.brassDeep : C.navy }}>It is an area</div>
+            <div style={{ fontSize: 12, color: C.ink3, marginTop: 3, lineHeight: 1.45 }}>A country, range or region. Keeps its text; estimates come from a reference port.</div>
+          </button>
+        </div>
+
+        {kind === "area" && (
+          <>
+            <div><label style={label}>Area name</label><input value={areaName} onChange={(e) => setAreaName(e.target.value)} style={field} /></div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
+              <div><label style={label}>Kind</label>
+                <select value={areaKind} onChange={(e) => setAreaKind(e.target.value as "country" | "area" | "range")} style={field}>
+                  <option value="area">Area / region</option>
+                  <option value="country">Country</option>
+                  <option value="range">Named range</option>
+                </select>
+              </div>
+              <div><label style={label}>Trading zone</label>
+                <select value={zone} onChange={(e) => setZone(e.target.value)} style={field}>
+                  <option value="">&mdash;</option>
+                  {ENUMS.zone.map((z) => <option key={z} value={z}>{z}</option>)}
+                </select>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div>
+          <label style={label}>{kind === "alias" ? "The port it refers to" : "Reference port for distance and costs"}</label>
+          <select value={locode} onChange={(e) => setLocode(e.target.value)} style={field}>
+            <option value="">Pick a port&hellip;</option>
+            {sorted.map((p) => (
+              <option key={p.locode} value={p.locode}>
+                {p.trade_name} · {p.locode}{p.zone ? ` · ${p.zone}` : ""}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 12, color: C.ink3, marginTop: 6, lineHeight: 1.5 }}>
+            {kind === "alias"
+              ? "Every listing using this name takes this port's LOCODE, name and zone."
+              : "The listing keeps showing the area as written. Distance, Voy OPEX and Ports DA are drawn from this port and always labelled an estimate."}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+        <button onClick={submit} disabled={saving || incomplete} style={{ ...btn("primary"), opacity: saving || incomplete ? 0.5 : 1 }}>
+          {saving ? <Loader2 size={15} style={spin} /> : <Check size={15} />} {kind === "alias" ? "Save alias" : "Save area"}
+        </button>
+        <button onClick={onClose} style={btn("ghost")}>Cancel</button>
+      </div>
+    </ModalShell>
+  );
+}
+
 // ── shared bits ──────────────────────────────────────────────────────────────
-const spin: React.CSSProperties = { animation: "spin 1s linear infinite" };
-const listStyle: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", background: "#fff" };
-const iconChip: React.CSSProperties = { width: 34, height: 34, borderRadius: 8, background: C.brassBg, color: C.brassDeep, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" };
-const rowStyle = (i: number): React.CSSProperties => ({ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderTop: i ? `1px solid ${C.line}` : "none" });
+const spin: React.CSSProperties = { animation: "ds-spin 1s linear infinite" };
+const listStyle: React.CSSProperties = {
+  border: "2px ridge var(--asb-line)", borderRadius: "var(--r-soft-16)", overflow: "hidden",
+  background: C.card, boxShadow: "var(--sh-card)",
+};
+const iconChip: React.CSSProperties = {
+  width: 34, height: 34, borderRadius: "var(--r-soft-10)", background: C.brassBg, color: C.brassDeep,
+  display: "flex", alignItems: "center", justifyContent: "center", flex: "none",
+};
+const rowStyle = (i: number): React.CSSProperties => ({
+  display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
+  padding: "12px 16px", borderTop: i ? "1px solid var(--ccx-line2)" : "none",
+});
+
+/** How much of a queued row's identity is actually filled in. Not a model
+ *  confidence — there is no such score — just which fields arrived. */
+function IdentityLadder({ present, total, label }: { present: number; total: number; label: string }) {
+  const tone = present >= total - 1 ? "" : present >= total / 2 ? "--mid" : "--low";
+  return (
+    <div style={{ flex: "none" }} title={`${present} of ${total} identity fields present`}>
+      <div className="ds-ladder">
+        {Array.from({ length: total }, (_, i) => (
+          <span key={i} className={`ds-ladder__rung${i < present ? ` is-on is-on${tone}` : ""}`} />
+        ))}
+      </div>
+      <div className="ds-ladder__label">{label}</div>
+    </div>
+  );
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function StatusFilter({ status, setStatus, mapped }: { status: string; setStatus: (s: string) => void; mapped: string }) {
   return (
-    <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-      {["pending", mapped, "ignored"].map((s) => {
-        const on = s === status;
-        return (
-          <button key={s} onClick={() => setStatus(s)}
-            style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${on ? C.brass : C.line}`, background: on ? C.brassBg : "#fff", color: on ? C.brassDeep : C.ink2, cursor: "pointer", font: "inherit", fontSize: 12.5, fontWeight: on ? 600 : 500, textTransform: "capitalize" }}>
-            {s}
-          </button>
-        );
-      })}
+    <div style={{ marginBottom: 12 }}>
+      <Seg
+        value={status} onChange={setStatus}
+        options={["pending", mapped, "ignored"].map((s) => ({ value: s, label: cap(s) }))}
+      />
     </div>
   );
 }
 
 function StatusPill({ status, good }: { status: string; good: string }) {
-  return <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: status === good ? C.green : C.ink3 }}>{status}</span>;
+  return <Badge tone={status === good ? "new" : "neutral"}>{status}</Badge>;
 }
 
-function Loading() { return <div style={{ padding: 40, textAlign: "center", color: C.ink3 }}><Loader2 size={20} style={spin} /></div>; }
+function Loading() { return <div className="ds-empty"><Loader2 size={20} className="ds-spin" /></div>; }
 function Empty({ icon, text }: { icon: React.ReactNode; text: string }) {
-  return <div style={{ padding: "40px 20px", textAlign: "center", color: C.ink3, fontSize: 14, border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}><div style={{ opacity: 0.5, marginBottom: 8 }}>{icon}</div>{text}</div>;
+  return (
+    <Card>
+      <div className="ds-empty">
+        <div style={{ opacity: 0.4, marginBottom: 8 }}>{icon}</div>
+        {text}
+      </div>
+    </Card>
+  );
 }
 
 function ModalShell({ innerRef, title, subtitle, onClose, children }: { innerRef: React.RefObject<HTMLDivElement | null>; title: string; subtitle?: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div ref={innerRef} onMouseDown={(e) => { if (e.target === innerRef.current) onClose(); }}
       style={{ position: "fixed", inset: 0, background: "rgba(10,26,47,.34)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ width: "min(520px, 96vw)", maxHeight: "92vh", overflowY: "auto", background: "#fff", borderRadius: 14, boxShadow: "0 24px 60px rgba(0,0,0,.28)" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 22px", borderBottom: `1px solid ${C.line}` }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 600, color: C.navy }}>{title}</div>
-            {subtitle && <div style={{ fontSize: 12.5, color: C.ink3, marginTop: 2 }}>{subtitle}</div>}
+      <div style={{ width: "min(560px, 96vw)", maxHeight: "92vh", overflowY: "auto", background: C.card, borderRadius: "var(--r-soft-16)", border: "2px ridge var(--asb-line)", boxShadow: "var(--sh-dropdown)" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--ccx-line2)" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="ds-drawer__title">{title}</div>
+            {subtitle && <div className="ds-drawer__sub">{subtitle}</div>}
           </div>
-          <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.ink2, padding: 4 }} aria-label="Close"><X size={18} /></button>
+          <button type="button" onClick={onClose} className="ds-close" aria-label="Close"><X size={16} /></button>
         </div>
         <div style={{ padding: "20px 22px" }}>{children}</div>
       </div>

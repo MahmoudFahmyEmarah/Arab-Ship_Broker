@@ -36,14 +36,14 @@ export function IssueDrawer({ id, onClose, onChanged, onFix, onStatus }: { id: s
       const r = await applyFix(i.id, value, i.field ?? undefined);
       setBusy(false);
       if (!r.success) { toast(r.error); return; }
-      toast(`${i.row_label ?? i.row_key} · ${i.field} set to "${value}". Audited in record_edit_audit.`, async () => { const u = await undoFix(i.id); if (!u.success) throw new Error(u.error); await onChanged(); await load(); });
+      toast(`${i.row_label ?? i.row_key} · ${i.field} set to "${value}". Audited in record_edit_audit.`, async () => { const u = await undoFix(i.id); if (!u.success) throw new Error(u.error); if (!u.data.ok) throw new Error(`${u.data.message}. Use "Undo fix" in the drawer to force it.`); await onChanged(); await load(); });
       setManual(null); await onChanged(); await load(); return;
     }
     await onFix(i); setBusy(false); await load();
   };
 
   return (
-    <Drawer label="Issue detail" narrow onClose={onClose}
+    <Drawer label="Issue detail" narrow onClose={onClose} testId="issue-drawer"
       head={<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}><Badge cls={SEVERITY_BADGE[i.severity]}>{i.severity}</Badge><Badge cls={ISSUE_BADGE[i.status]}>{ISSUE_LABEL[i.status]}</Badge><Badge cls={i.source === "ai" ? "amber" : "closed"}>{i.source === "ai" ? "AI-found" : "rule"}</Badge><span className="dq-muted">{fmtAgo(i.first_seen)} old · {tableLabel(i.table_name)}{i.reason ? ` · ${i.reason}` : ""}</span></div>}
       title={<>{i.row_label ?? i.row_key} <span style={{ color: "var(--asb-gray-400)", fontWeight: 400 }}>·</span> <span className="mono" style={{ fontSize: 13, color: "var(--asb-steel)" }}>{i.field ?? "row"}</span></>}>
       <div className="dq-drawer__body" style={{ gap: 16 }}>
@@ -77,7 +77,18 @@ export function IssueDrawer({ id, onClose, onChanged, onFix, onStatus }: { id: s
                 <button type="button" className="adm-btn small" disabled={!canEdit || i.status !== "open"} onClick={() => onStatus([i.id], "ignored")}>Ignore…</button>
                 <button type="button" className="adm-btn small" disabled={!canEdit || i.status !== "open"} title={`Feeds ${i.rule_code}'s false-positive rate`} onClick={() => onStatus([i.id], "false_positive")}>False positive</button>
                 <button type="button" className="adm-btn small ghost" disabled={!canEdit || i.status !== "open"} onClick={() => onStatus([i.id], "escalated")}>Escalate</button>
-                {i.status === "fixed" && i.fixed_audit_id && <button type="button" className="adm-btn small" disabled={!canEdit} onClick={async () => { const u = await undoFix(i.id); if (!u.success) { toast(u.error); return; } toast("Fix undone — the row is back to its before-image."); await onChanged(); await load(); }}>Undo fix</button>}
+                {i.status === "fixed" && i.fixed_audit_id && <button type="button" className="adm-btn small" disabled={!canEdit} onClick={async () => {
+                  let u = await undoFix(i.id);
+                  if (u.success && !u.data.ok) {
+                    // the field was edited after the fix: the database touched nothing and said what it saw
+                    const reason = window.prompt(`${u.data.message}.\n\nTo overwrite that later edit anyway, give a reason (it is recorded on the issue):`);
+                    if (reason == null || !reason.trim()) { toast("Undo cancelled — nothing was changed."); return; }
+                    u = await undoFix(i.id, true, reason.trim());
+                  }
+                  if (!u.success) { toast(u.error); return; }
+                  toast(u.data.forced ? `Fix undone — ${u.data.field} restored to "${u.data.restored_to ?? "—"}", overriding the later edit (reason recorded).` : `Fix undone — ${u.data.field} restored to "${u.data.restored_to ?? "—"}".`);
+                  await onChanged(); await load();
+                }}>Undo fix</button>}
                 {i.status !== "open" && i.status !== "fixed" && <button type="button" className="adm-btn small" disabled={!canEdit} onClick={() => onStatus([i.id], "open")}>Reopen</button>}
               </div>
             )}

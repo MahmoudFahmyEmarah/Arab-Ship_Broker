@@ -1,9 +1,13 @@
 "use client";
 
-// Database Preview — browse the live tables, edit one or many records, delete,
-// and undo. Every mutation goes through the audited RPCs (record_edit_audit),
-// so nothing here is unrecoverable. Server-paginated: the browser only ever
-// holds one page of rows.
+// Database — browse the live tables, edit one or many records, delete, and undo.
+// Every mutation goes through the audited RPCs (record_edit_audit), so nothing
+// here is unrecoverable. Server-paginated: the browser only ever holds one page
+// of rows.
+//
+// The design's layout: a table rail on the left, the grid on the right. Only
+// the active table's row count is fetched — counting all ten on every render
+// would be ten queries for a number nobody reads.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -17,7 +21,15 @@ import {
   listRecords, editRecord, bulkEditRecords, deleteRecord, bulkDeleteRecords, insertRecord, undoEdit, listEditAudit,
   type PreviewRow, type EditAuditRow,
 } from "@/app/(admin)/admin/data-sync/actions";
-import { C, btn, cell } from "./ui";
+import { Btn, Card, Chip, SectionLabel, C, btn, cell } from "./ui";
+import { describeUndoConflicts } from "@/lib/sync/batch-status";
+
+// Saved views are a per-viewer convenience (name → search string, per table),
+// kept in localStorage — nothing server-side, nothing shared.
+type SavedView = { name: string; search: string };
+const viewsKey = (tableId: string) => `ds:views:${tableId}`;
+const readViews = (tableId: string): SavedView[] => { try { return JSON.parse(localStorage.getItem(viewsKey(tableId)) ?? "[]") as SavedView[]; } catch { return []; } };
+const writeViews = (tableId: string, v: SavedView[]) => { try { localStorage.setItem(viewsKey(tableId), JSON.stringify(v.slice(0, 12))); } catch { /* private mode */ } };
 
 const PAGE = 50;
 
@@ -38,6 +50,19 @@ export function PreviewView() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [views, setViews] = useState<SavedView[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => { await Promise.resolve(); if (!cancelled) setViews(readViews(tableId)); })();
+    return () => { cancelled = true; };
+  }, [tableId]);
+  const saveView = () => {
+    const name = prompt("Name this view", search.slice(0, 30) || t.label)?.trim();
+    if (!name) return;
+    const next = [{ name, search }, ...views.filter((v) => v.name !== name)];
+    setViews(next); writeViews(tableId, next);
+  };
+  const removeView = (name: string) => { const next = views.filter((v) => v.name !== name); setViews(next); writeViews(tableId, next); };
 
   // debounce the search box
   useEffect(() => {
@@ -104,113 +129,144 @@ export function PreviewView() {
   };
 
   return (
-    <div>
-      {/* table selector */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-        {PREVIEW_TABLES.map((pt) => {
-          const on = pt.id === tableId;
-          return (
-            <button key={pt.id} onClick={() => setTableId(pt.id)}
-              style={{ padding: "7px 13px", borderRadius: 7, border: `1px solid ${on ? C.brass : C.line}`,
-                background: on ? C.brassBg : "#fff", color: on ? C.brassDeep : C.ink2, cursor: "pointer",
-                font: "inherit", fontSize: 13, fontWeight: on ? 600 : 500 }}>
-              {pt.label}
+    <div className="ds-dbsplit">
+      {/* ── table rail ─────────────────────────────────────────────────── */}
+      <div>
+        <div className="ds-rail__head">Live tables</div>
+        <div className="ds-rail">
+          {PREVIEW_TABLES.map((pt) => (
+            <button
+              key={pt.id} type="button" onClick={() => setTableId(pt.id)}
+              className={`ds-rail__item${pt.id === tableId ? " is-active" : ""}`}
+              title={`→ ${pt.table}`}
+            >
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{pt.label}</span>
+              {pt.id === tableId && <span className="ds-rail__count">{total.toLocaleString()}</span>}
             </button>
-          );
-        })}
-        <button onClick={() => setHistoryOpen(true)} style={{ ...btn("ghost"), marginLeft: "auto" }}>
-          <History size={14} /> Recent edits
-        </button>
+          ))}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <Btn size="sm" kind="ghost" icon={<History size={14} />} onClick={() => setHistoryOpen(true)}>
+            Recent edits
+          </Btn>
+        </div>
       </div>
 
-      {/* toolbar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: "1 1 260px", maxWidth: 360 }}>
-          <Search size={15} color={C.ink3} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)" }} />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search ${t.searchCols.join(" / ")}…`}
-            style={{ width: "100%", padding: "9px 12px 9px 34px", borderRadius: 8, border: `1px solid ${C.line}`,
-              font: "inherit", fontSize: 13.5, color: C.ink, background: "#fff" }} />
-        </div>
-        <div style={{ fontSize: 12.5, color: C.ink3, fontFamily: C.mono }}>→ {t.table}</div>
-        {t.insertable !== false && (
-          <button onClick={() => setAdding(true)} style={{ ...btn("primary"), marginLeft: "auto" }}>
-            <Plus size={15} /> Add record
-          </button>
-        )}
-      </div>
-
-      {/* bulk action bar */}
-      {selected.size > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", marginBottom: 12,
-          background: C.brassBg, border: `1px solid ${C.brass}`, borderRadius: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.brassDeep }}>{selected.size} selected</span>
-          <button onClick={() => setBulkOpen(true)} style={btn("dark")}><Pencil size={14} /> Edit a field on all</button>
-          <button onClick={doBulkDelete} disabled={bulkDeleting} style={btn("danger")}>
-            {bulkDeleting ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={14} />} Delete selected
-          </button>
-          <button onClick={() => setSelected(new Set())} style={{ ...btn("ghost"), marginLeft: "auto" }}>Clear</button>
-        </div>
-      )}
-
-      {/* grid */}
-      <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", background: "#fff" }}>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720 }}>
-            <thead>
-              <tr>
-                <th style={{ ...THL, width: 38, textAlign: "center" }}>
-                  <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll} aria-label="Select all on page" />
-                </th>
-                {t.columns.map((c) => (
-                  <th key={c.col} style={{ ...THL, width: c.w }}>{c.label}</th>
-                ))}
-                <th style={{ ...THL, width: 84, textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={t.columns.length + 2} style={{ padding: 40, textAlign: "center", color: C.ink3 }}>
-                  <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} />
-                </td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={t.columns.length + 2} style={{ padding: "44px 20px", textAlign: "center", color: C.ink3, fontSize: 14 }}>
-                  {debounced ? "No records match your search." : "No records in this table yet."}
-                </td></tr>
-              ) : rows.map((r) => {
-                const sel = selected.has(r.key);
-                return (
-                  <tr key={r.key} style={{ background: sel ? C.brassBg : C.card }}>
-                    <td style={{ ...TDL, textAlign: "center" }}>
-                      <input type="checkbox" checked={sel} onChange={() => toggleOne(r.key)} aria-label={`Select ${r.key}`} />
-                    </td>
-                    {t.columns.map((c) => (
-                      <td key={c.col} style={{ ...TDL, ...(c.editable === false ? { fontFamily: C.mono, fontWeight: 600, color: C.navy } : {}) }}>
-                        {cell(r.data[c.col])}
-                      </td>
-                    ))}
-                    <td style={{ ...TDL, textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button onClick={() => setEditing(r)} title="Edit" style={ICON}><Pencil size={15} /></button>
-                      <button onClick={() => doDelete(r.key)} disabled={busyKey === r.key} title="Delete" style={{ ...ICON, color: C.red }}>
-                        {busyKey === r.key ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={15} />}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* pager */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderTop: `1px solid ${C.line}`, fontSize: 12.5, color: C.ink3 }}>
-          <span><Database size={13} style={{ verticalAlign: "-2px" }} /> {total === 0 ? "0" : `${offset + 1}–${Math.min(offset + PAGE, total)}`} of {total}</span>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-            <button onClick={() => setOffset((o) => Math.max(0, o - PAGE))} disabled={offset === 0 || loading}
-              style={{ ...btn("ghost"), padding: "6px 10px", opacity: offset === 0 ? 0.4 : 1 }}><ChevronLeft size={14} /></button>
-            <button onClick={() => setOffset((o) => o + PAGE)} disabled={offset + PAGE >= total || loading}
-              style={{ ...btn("ghost"), padding: "6px 10px", opacity: offset + PAGE >= total ? 0.4 : 1 }}><ChevronRight size={14} /></button>
+      {/* ── grid ───────────────────────────────────────────────────────── */}
+      <div className="ds-stack" style={{ gap: 12 }}>
+        <div className="ds-row">
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.navy }}>{t.label}</div>
+            <div className="ds-rowsub">→ {t.table}</div>
           </div>
+          <div className="ds-push" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ position: "relative", flex: "1 1 220px", minWidth: 200 }}>
+              <Search size={15} color={C.ink3} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }} />
+              <input
+                className="ds-input" value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search ${t.searchCols.join(" / ")}…`}
+                style={{ paddingLeft: 32 }}
+              />
+            </div>
+            {t.insertable !== false && (
+              <Btn kind="primary" icon={<Plus size={15} />} onClick={() => setAdding(true)}>Add record</Btn>
+            )}
+          </div>
+        </div>
+
+        {/* saved views */}
+        <div className="ds-row">
+          <SectionLabel>Saved views</SectionLabel>
+          <Chip active={!search} onClick={() => setSearch("")}>All rows</Chip>
+          {views.map((v) => (
+            <Chip key={v.name} active={search === v.search && !!search} onClick={() => setSearch(v.search)} title={`Search: ${v.search || "(none)"}`}
+              icon={<span role="button" aria-label={`Remove view ${v.name}`} onClick={(e) => { e.stopPropagation(); removeView(v.name); }} style={{ color: C.ink3, marginLeft: 2 }}>✕</span>}>
+              {v.name}
+            </Chip>
+          ))}
+          {search && <Btn size="sm" kind="ghost" onClick={saveView}>Save current search</Btn>}
+        </div>
+
+        {/* bulk action bar */}
+        {selected.size > 0 && (
+          <div className="ds-selbar">
+            <span className="ds-selbar__n">
+              {selected.size} selected · one transaction, one undo group
+            </span>
+            <Btn kind="accent" icon={<Pencil size={14} />} onClick={() => setBulkOpen(true)}>Bulk field edit</Btn>
+            <Btn kind="danger" icon={<Trash2 size={14} />} busy={bulkDeleting} onClick={doBulkDelete}>Delete selected</Btn>
+            <Btn kind="ghost" className="ds-push" onClick={() => setSelected(new Set())}>Clear</Btn>
+          </div>
+        )}
+
+        <Card flush>
+          <div className="ds-scroll-x">
+            <table className="ds-table ds-table--dense" style={{ minWidth: 720 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 38, textAlign: "center" }}>
+                    <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll} aria-label="Select all on page" />
+                  </th>
+                  {t.columns.map((c) => (
+                    <th key={c.col} style={{ width: c.w }}>
+                      {c.label}{c.editable === false ? " ·" : ""}
+                    </th>
+                  ))}
+                  <th style={{ width: 84, textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={t.columns.length + 2} className="ds-empty">
+                    <Loader2 size={20} className="ds-spin" />
+                  </td></tr>
+                ) : rows.length === 0 ? (
+                  <tr><td colSpan={t.columns.length + 2} className="ds-empty">
+                    {debounced ? "No records match your search." : "No records in this table yet."}
+                  </td></tr>
+                ) : rows.map((r) => {
+                  const sel = selected.has(r.key);
+                  return (
+                    <tr key={r.key} style={{ background: sel ? C.brassBg : undefined }}>
+                      <td style={{ textAlign: "center" }}>
+                        <input type="checkbox" checked={sel} onChange={() => toggleOne(r.key)} aria-label={`Select ${r.key}`} />
+                      </td>
+                      {t.columns.map((c) => (
+                        <td key={c.col} style={c.editable === false ? { fontFamily: C.mono, fontWeight: 600, color: C.navy } : undefined}>
+                          {cell(r.data[c.col])}
+                        </td>
+                      ))}
+                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <button type="button" onClick={() => setEditing(r)} title="Edit" style={ICON}><Pencil size={15} /></button>
+                        <button type="button" onClick={() => doDelete(r.key)} disabled={busyKey === r.key} title="Delete" style={{ ...ICON, color: C.red }}>
+                          {busyKey === r.key ? <Loader2 size={15} className="ds-spin" /> : <Trash2 size={15} />}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* pager */}
+          <div className="ds-row" style={{ padding: "9px 14px", borderTop: "1px solid var(--ccx-line2)", fontSize: 12.5, color: C.ink3 }}>
+            <span>
+              <Database size={13} style={{ verticalAlign: "-2px" }} />{" "}
+              {total === 0 ? "0" : `${offset + 1}–${Math.min(offset + PAGE, total)}`} of {total.toLocaleString()}
+            </span>
+            <div className="ds-push" style={{ display: "flex", gap: 6 }}>
+              <Btn size="sm" disabled={offset === 0 || loading} aria-label="Previous page"
+                onClick={() => setOffset((o) => Math.max(0, o - PAGE))}><ChevronLeft size={14} /></Btn>
+              <Btn size="sm" disabled={offset + PAGE >= total || loading} aria-label="Next page"
+                onClick={() => setOffset((o) => o + PAGE)}><ChevronRight size={14} /></Btn>
+            </div>
+          </div>
+        </Card>
+
+        <div className="ds-row" style={{ justifyContent: "space-between" }}>
+          <span className="ds-note">Server-paged · {PAGE} rows · search runs in the database</span>
+          <span className="ds-note">Deletes are FK-protected — retire a row instead of deleting it where the table allows</span>
         </div>
       </div>
 
@@ -227,8 +283,6 @@ export function PreviewView() {
           onDone={async () => { setBulkOpen(false); setSelected(new Set()); await load(); }} />
       )}
       {historyOpen && <HistoryDrawer onClose={() => setHistoryOpen(false)} onUndone={load} />}
-
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
@@ -434,14 +488,21 @@ function HistoryDrawer({ onClose, onUndone }: { onClose: () => void; onUndone: (
 
   const reload = useCallback(async () => {
     const res = await listEditAudit(20);
-    setRows(res.success ? res.data : []);
+    setRows(res.success ? res.data.rows : []);
     if (!res.success) toast.error(res.error);
   }, []);
   useEffect(() => { let c = false; (async () => { await Promise.resolve(); if (!c) await reload(); })(); return () => { c = true; }; }, [reload]);
 
   const undo = async (r: EditAuditRow) => {
     setBusy(r.id);
-    const res = r.group_id ? await undoEdit({ groupId: r.group_id }) : await undoEdit({ auditId: r.id });
+    const refArg = r.group_id ? { groupId: r.group_id } : { auditId: r.id };
+    let res = await undoEdit(refArg);
+    if (res.success && !res.data.ok) {
+      const cs = res.data.conflicts ?? [];
+      const go = confirm(`${cs.length} row${cs.length === 1 ? "" : "s"} changed since this edit:\n${describeUndoConflicts(cs)}\n\nForce the undo anyway? Those later changes will be overwritten.`);
+      if (!go) { setBusy(null); toast.message("Undo cancelled — nothing was changed."); return; }
+      res = await undoEdit(refArg, true);
+    }
     setBusy(null);
     if (!res.success) { toast.error(res.error); return; }
     const parts = [
@@ -520,15 +581,6 @@ function Drawer({ title, subtitle, onClose, children }: {
   );
 }
 
-const THL: React.CSSProperties = {
-  textAlign: "left", padding: "9px 12px", fontSize: 11, fontWeight: 600, letterSpacing: ".03em",
-  textTransform: "uppercase", color: C.ink3, background: C.sunken, borderBottom: `1px solid ${C.line}`,
-  whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1,
-};
-const TDL: React.CSSProperties = {
-  padding: "8px 12px", borderBottom: `1px solid ${C.line}`, fontSize: 13, color: C.ink, whiteSpace: "nowrap",
-  maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis",
-};
 const ICON: React.CSSProperties = {
   border: "none", background: "transparent", cursor: "pointer", padding: 5, color: C.ink2,
   display: "inline-flex", alignItems: "center", borderRadius: 6,

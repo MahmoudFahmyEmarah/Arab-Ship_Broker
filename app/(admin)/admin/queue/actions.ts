@@ -4,6 +4,22 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { requireAdmin } from "@/lib/admin/require-admin";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { validateRow } from "@/lib/dq/gate";
+
+// Approval is the step that makes a cargo live, so it runs the data-quality
+// gate FAIL-CLOSED on the review channel: a block refuses, and so does a gate
+// that cannot evaluate. (The database repeats the routable-ports rule in
+// trg_cl_zy_live_route_gate whatever this check says.)
+async function refuseIfGateBlocks(listingType: string, listingId: string, actor: { id: string; name: string }): Promise<string | null> {
+  if (listingType !== "cargo") return null;
+  const sb = getSupabaseAdminClient();
+  const { data: row, error } = await sb.from("cargo_listings").select("*").eq("id", listingId).maybeSingle();
+  if (error || !row) return `the listing could not be read for the data-quality gate${error ? ` (${error.message})` : ""} — nothing was changed`;
+  const gate = await validateRow(sb, "cargo_listings", row as Record<string, unknown>, "review", actor, true, { strict: true });
+  if (!gate.blocked) return null;
+  return gate.issues.filter((i) => i.mode === "block").map((i) => `${i.rule_code} — ${i.message}`).join("; ");
+}
 
 async function getServerClient() {
   const cookieStore = await cookies();
@@ -56,6 +72,14 @@ async function executeReviewAction(
 export async function approveQueueItem(queueItemId: string) {
   const admin = await requireAdmin({ section: "review", edit: true });
   try {
+    {
+      const supabase = await getServerClient();
+      const { data: item } = await supabase.from("review_queue").select("listing_type, listing_id").eq("id", queueItemId).maybeSingle();
+      if (item) {
+        const why = await refuseIfGateBlocks(item.listing_type, item.listing_id, { id: admin.supabaseUserId, name: "Review queue approval" });
+        if (why) throw new Error(`Refused by the data-quality gate: ${why}`);
+      }
+    }
     await executeReviewAction(
       queueItemId,
       "APPROVED",

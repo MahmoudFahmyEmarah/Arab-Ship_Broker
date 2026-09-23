@@ -4,10 +4,9 @@ import { useEffect } from "react";
 
 type GlobalErrorProps = {
   error: Error & { digest?: string };
-  reset: () => void;
 };
 
-export default function GlobalError({ error, reset }: GlobalErrorProps) {
+export default function GlobalError({ error }: GlobalErrorProps) {
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -37,7 +36,11 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
 
         <button
           type="button"
-          onClick={reset}
+          // A segment-only reset can keep retrying stale server-component or
+          // auth state after a long-idle session. A document reload reaches the
+          // proxy again, where an expired session is cleared and redirected to
+          // login; transient render failures get a clean request as well.
+          onClick={() => window.location.reload()}
           className="mt-8 inline-flex items-center justify-center rounded-lg bg-asb-blue px-6 py-3 text-sm font-semibold text-white transition-colors duration-200 hover:bg-asb-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-asb-blue focus-visible:ring-offset-2"
         >
           Try again

@@ -25,6 +25,7 @@ export interface ConsoleCtx {
   boot: DqBootstrap;
   refreshBoot: () => Promise<void>;
   canEdit: boolean;
+  canRun: boolean;
   tableLabel: (t: string) => string;
   nav: (patch: Record<string, string | null | undefined>, replace?: boolean) => void;
   params: URLSearchParams;
@@ -64,7 +65,7 @@ export function DataQualityConsole({ boot: initial }: { boot: DqBootstrap }) {
   const refreshBoot = React.useCallback(async () => { const r = await getDqBootstrap(); if (r.success) setBoot(r.data); }, []);
   const labels = React.useMemo(() => new Map(boot.tables.map((t) => [t.table_name, t.label])), [boot.tables]);
   const ctx: ConsoleCtx = React.useMemo(() => ({
-    boot, refreshBoot, canEdit: boot.canEdit, tableLabel: (t) => labels.get(t) ?? t, nav, params, toast, confirm: setConfirm,
+    boot, refreshBoot, canEdit: boot.canEdit, canRun: boot.canRun, tableLabel: (t) => labels.get(t) ?? t, nav, params, toast, confirm: setConfirm,
   }), [boot, refreshBoot, labels, nav, params, toast]);
 
   const activeTab = screen === "progress" ? "runs" : screen === "newrun" ? "overview" : screen;
@@ -77,7 +78,7 @@ export function DataQualityConsole({ boot: initial }: { boot: DqBootstrap }) {
         </div>
       )}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", marginTop: -8 }} className="dq-noprint">
-        <button type="button" className="adm-btn" title="Print or save the Overview as PDF for the weekly ops review" onClick={() => { nav({ tab: "overview" }); setTimeout(() => window.print(), 300); }}>Export overview</button>
+        <button type="button" className="adm-btn" title="Print or save the Overview as PDF for the weekly ops review" onClick={() => { nav({ tab: "overview" }); /* the overview loads its data after the route change (audit U12) */ setTimeout(() => window.print(), 900); }}>Export overview</button>
         <button type="button" className="adm-btn primary" title="Start a rule-based or AI audit run over a chosen scope" onClick={() => nav({ tab: "newrun" })}>+ New run</button>
       </div>
       <div className="dq-tabs dq-noprint" role="tablist">

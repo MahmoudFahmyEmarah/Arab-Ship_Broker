@@ -87,6 +87,51 @@ export const ZONE_LABELS: Record<ZoneCode, string> = Object.fromEntries(
 /** All placeable zones (those with a centroid). */
 export const FLEET_ZONES: ZoneMeta[] = ZONE_CODES.map((c) => ZONES[c]).filter((z) => z.centroid);
 
+// Zones offered on the member dashboard. The wider canonical registry above is
+// intentionally retained for historic rows and future expansion, but those
+// areas must not appear as selectable operating coverage until the business
+// actually serves them.
+export const OPERATING_ZONE_CODES = [
+  "B.SEA",
+  "E.MED",
+  "W.MED",
+  "C.MED",
+  "ADRIATIC",
+  "R.SEA",
+  "AG",
+  "A.SEA",
+  "WCAF",
+  "ECAF",
+] as const;
+export type OperatingZoneCode = (typeof OPERATING_ZONE_CODES)[number];
+
+const OPERATING_ZONE_SET = new Set<string>(OPERATING_ZONE_CODES);
+const RED_SEA_ZONE_SET = new Set<string>(["R.SEA", "R.SEA.N", "R.SEA.S"]);
+
+/** User-facing operating zones. Red Sea is deliberately one UI choice even
+ * though north/south remain separate internal codes for matching distance. */
+export const OPERATING_ZONES: ZoneMeta[] = OPERATING_ZONE_CODES.map((code) => ZONES[code]);
+
+/** Convert a stored zone code to its selectable dashboard code. Unsupported
+ * coverage returns null; all Red Sea variants collapse to the single R.SEA. */
+export function operatingZoneCode(code?: string | null): OperatingZoneCode | null {
+  if (!code) return null;
+  const normalized = code.trim().toUpperCase();
+  if (RED_SEA_ZONE_SET.has(normalized)) return "R.SEA";
+  return OPERATING_ZONE_SET.has(normalized) ? normalized as OperatingZoneCode : null;
+}
+
+/** Match a stored code against user-facing selections, including the three
+ * internal Red Sea values represented by the single R.SEA option. */
+export function zoneMatchesSelection(code: string | null | undefined, selected: Iterable<string>): boolean {
+  const normalized = operatingZoneCode(code);
+  if (!normalized) return false;
+  for (const choice of selected) {
+    if (operatingZoneCode(choice) === normalized) return true;
+  }
+  return false;
+}
+
 export function zoneByCode(code?: string | null): ZoneMeta | null {
   if (!code) return null;
   return (ZONES as Record<string, ZoneMeta>)[code] ?? null;

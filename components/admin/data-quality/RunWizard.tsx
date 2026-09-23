@@ -10,7 +10,7 @@ import { useConsole } from "./DataQualityConsole";
 type Est = { tables: { table: string; rows: number }[]; table_names: string[]; total_rows: number; batches: number };
 
 export function RunWizard() {
-  const { boot, nav, tableLabel, toast } = useConsole();
+  const { boot, nav, tableLabel, toast, canRun } = useConsole();
   const [step, setStep] = React.useState(1);
   const [scopeKind, setScopeKind] = React.useState<DqScope["kind"]>("db");
   const [tables, setTables] = React.useState<string[]>(["cargo_listings", "vessel_availability"]);
@@ -28,7 +28,8 @@ export function RunWizard() {
   const scope = React.useMemo<DqScope>(() => (scopeKind === "db" ? { kind: "db" } : scopeKind === "tables" ? { kind: "tables", tables } : { kind: "filter", filter }), [scopeKind, tables, filter]);
 
   React.useEffect(() => { listRules().then((r) => { if (r.success) setRules(r.data.filter((x) => x.enabled)); }); }, []);
-  React.useEffect(() => { let alive = true; setEst(null); estimateScope(scope, batch).then((r) => { if (alive && r.success) setEst(r.data); }); return () => { alive = false; }; }, [scope, batch, scopeKey]);
+  // settle the slider / chips for 300 ms before counting every table in scope (audit P6)
+  React.useEffect(() => { let alive = true; setEst(null); const t = setTimeout(() => { estimateScope(scope, batch).then((r) => { if (alive && r.success) setEst(r.data); }); }, 300); return () => { alive = false; clearTimeout(t); }; }, [scope, batch, scopeKey]);
 
   const scopeTables = est?.table_names ?? [];
   const applicable = rules.filter((r) => r.tables.some((t) => scopeTables.includes(t)));
@@ -102,7 +103,7 @@ export function RunWizard() {
           {step === 4 && (<>
             <div style={{ fontSize: 15, fontWeight: 600, color: "var(--asb-navy)" }}>Execution</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
-              <div className="adm-field"><label className="adm-field__label">Batch size · {fmtInt(batch)} rows</label><input type="range" min={500} max={1000} step={100} value={batch} onChange={(e) => setBatch(+e.target.value)} title="Rows per batch — each batch runs within the 60 s budget and re-schedules itself" /><span className="dq-muted">{batches} batches for {fmtInt(est?.total_rows ?? 0)} rows</span></div>
+              <div className="adm-field"><label className="adm-field__label">Batch size · {fmtInt(batch)} rows</label><input type="range" min={100} max={5000} step={100} value={batch} onChange={(e) => setBatch(+e.target.value)} title="Rows per batch — each batch runs within the 60 s budget and re-schedules itself" /><span className="dq-muted">{batches} batches for {fmtInt(est?.total_rows ?? 0)} rows</span></div>
               <div className="adm-field"><label className="adm-field__label">When</label><Seg options={[{ id: "now", label: "Run now" }, { id: "nightly", label: `Schedule nightly ${boot.settings.nightly_time}` }]} value={when} onChange={setWhen} /></div>
               <div className="adm-field"><label className="adm-field__label">Notify on completion</label><label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}><Toggle on={notify} onChange={setNotify} />{(boot.settings.notify.recipients ?? []).join(" · ") || "recipients in Settings"}</label></div>
             </div>
@@ -113,7 +114,7 @@ export function RunWizard() {
             <span style={{ flex: 1 }} />
             <button type="button" className="adm-btn ghost" onClick={() => nav({ tab: "overview" })}>Cancel</button>
             {step < 4 && <button type="button" className="adm-btn primary" onClick={() => setStep((s) => Math.min(4, s + 1))}>Continue</button>}
-            {step === 4 && <button type="button" className="adm-btn primary" onClick={start} disabled={starting || !est} title="Runs in batches within the 60 s budget; never locks member tables">{starting ? "Starting…" : when === "now" ? "Start run" : "Schedule"}</button>}
+            {step === 4 && <button type="button" className="adm-btn primary" onClick={start} disabled={starting || !est || !canRun} title={canRun ? "Runs in batches within the 60 s budget; never locks member tables" : "Starting audits needs the run permission on Data quality"}>{starting ? "Starting…" : when === "now" ? "Start run" : "Schedule"}</button>}
           </div>
         </div>
         <aside className="adm-card" style={{ background: "var(--asb-gray-50)", alignSelf: "start" }}>

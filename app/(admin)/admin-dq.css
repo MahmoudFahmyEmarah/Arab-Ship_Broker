@@ -82,3 +82,8 @@ button.adm-stat:hover { transform: var(--lift); box-shadow: var(--sh-card-hover)
 .dq-settings__card .adm-input, .dq-settings__card .adm-select { max-width: 100%; box-sizing: border-box; }
 .dq-settings__card .dq-muted { white-space: normal; line-height: 1.45; }
 .dq-settings__wide { grid-column: 1 / -1; }
+
+/* keyboard: a row that acts as a button (Runs, Issues, Rules) shows its focus (20 Sep 2026) */
+.adm-table tr[role="button"]:focus-visible { outline: 2px solid var(--asb-blue); outline-offset: -2px; }
+.adm-table tr[role="button"]:focus:not(:focus-visible) { outline: none; }
+.adm-table tr[role="button"] { cursor: pointer; }

@@ -1,0 +1,25 @@
+# Data Sync hardening round 2 — migration manifest
+# One migration per line, in the order they apply.
+#
+#   scripts/release-check.sh supabase/releases/sync-20260920.txt --isolated
+#       refuses unless every file here is still pending and nothing OLDER is
+#       pending behind it
+#   scripts/release-apply.sh supabase/releases/sync-20260920.txt --apply
+#       applies exactly this list, one file per transaction, and records each
+#       version — so the Data Quality migrations that are also pending cannot
+#       ride along, without moving any files about
+#
+# THE DATA QUALITY RELEASE (supabase/releases/dq-20260919.txt) GOES FIRST.
+# An earlier note here said either could go first. That was wrong, and it was
+# a trap (corrected 21 Sep 2026): the two releases are independent in what
+# they READ, but not in what they do to the migration history. Applying these
+# 20260920 files moves the newest applied version to 20260920140000, and the
+# Supabase CLI then refuses to insert the pending 20260919 files, which are
+# older — the Data Quality release would have to be renumbered or forced in.
+# release-check.sh --isolated enforces the order; it will refuse this manifest
+# while any 20260919 file is still pending.
+20260920100000_sync_lease_v2.sql
+20260920110000_sync_commit_serialization.sql
+20260920120000_sync_undo_edits_truthful.sql
+20260920130000_sync_upload_jobs_and_health.sql
+20260920140000_sync_schedule_retry_and_alerts.sql

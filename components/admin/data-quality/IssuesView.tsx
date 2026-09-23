@@ -3,7 +3,7 @@
 // Issues — the triage table with saved views, table filter, keyboard triage
 // (j/k move, f fix, i ignore), bulk actions, export, and the detail drawer.
 import * as React from "react";
-import { applyFix, applyFixes, exportIssuesCsv, listIssues, setIssueStatus, undoFix, type IssueFilter } from "@/app/(admin)/admin/data-quality/actions";
+import { applyFix, applyFixes, assignIssues, exportIssuesCsv, listIssues, setIssueStatus, undoFix, type IssueFilter } from "@/app/(admin)/admin/data-quality/actions";
 import { ISSUE_BADGE, ISSUE_LABEL, SEVERITY_BADGE, type DqIssue } from "@/lib/dq/types";
 import { Badge, Loading, downloadText, fmtAgo, fmtInt } from "./ui";
 import { useConsole } from "./DataQualityConsole";
@@ -11,7 +11,7 @@ import { IssueDrawer } from "./IssueDrawer";
 
 const VIEWS: { id: NonNullable<IssueFilter["view"]>; label: string; tip: string }[] = [
   { id: "all", label: "All", tip: "Every issue regardless of status" }, { id: "open", label: "Open", tip: "Not yet actioned" },
-  { id: "blocks", label: "Blocks matching", tip: "Open errors — rows the matcher skips" }, { id: "class", label: "Classification conflicts", tip: "Regime, cargo type and code disagreements" },
+  { id: "blocks", label: "Open errors", tip: "Open error-severity issues. Whether a rule refuses a write depends on its channel mode (Gate tab), not on severity" }, { id: "class", label: "Classification conflicts", tip: "Regime, cargo type and code disagreements" },
   { id: "ai", label: "AI-found only", tip: "Raised by the model with an evidence snippet" }, { id: "fixed", label: "Fixed", tip: "Applied here or cleared on re-check" },
 ];
 
@@ -22,7 +22,10 @@ export function IssuesView() {
   const rule = params.get("rule");
   const severity = params.get("severity");
   const issueId = params.get("issue");
+  const [qLive, setQLive] = React.useState("");
   const [q, setQ] = React.useState("");
+  // the search box fires the page + chip queries per keystroke — settle for 300 ms first (audit P2)
+  React.useEffect(() => { const t = setTimeout(() => setQ(qLive), 300); return () => clearTimeout(t); }, [qLive]);
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<Awaited<ReturnType<typeof listIssues>> extends infer R ? (R extends { success: true; data: infer D } ? D : never) : never>();
   const [loading, setLoading] = React.useState(true);
@@ -56,7 +59,7 @@ export function IssuesView() {
     const r = await applyFix(i.id);
     if (!r.success) { toast(r.error); return; }
     patchLocal([i.id], { status: "fixed" }); refreshBoot();
-    toast(r.data.noop ? `${i.row_label ?? i.row_key} was already fixed outside the module — closed.` : `${i.row_label ?? i.row_key} · ${i.fix.field} set to "${i.fix.value}". Audited in record_edit_audit.`, r.data.noop ? undefined : async () => { const u = await undoFix(i.id); if (!u.success) throw new Error(u.error); await load(); });
+    toast(r.data.noop ? `${i.row_label ?? i.row_key} was already fixed outside the module — closed.` : `${i.row_label ?? i.row_key} · ${i.fix.field} set to "${i.fix.value}". Audited in record_edit_audit.`, r.data.noop ? undefined : async () => { const u = await undoFix(i.id); if (!u.success) throw new Error(u.error); if (!u.data.ok) throw new Error(`${u.data.message}. Open the issue and use "Undo fix" to force it.`); await load(); });
   };
   const bulkFix = () => {
     const eligible = rows.filter((x) => selIds.includes(x.id) && x.status === "open" && x.fix?.value);
@@ -70,7 +73,7 @@ export function IssuesView() {
       let i = Math.max(0, rows.findIndex((x) => x.id === issueId));
       if (e.key === "j") { i = Math.min(rows.length - 1, i + 1); nav({ issue: rows[i].id }, true); }
       else if (e.key === "k") { i = Math.max(0, i - 1); nav({ issue: rows[i].id }, true); }
-      else if (e.key === "f" && issueId && canEdit) { const it = rows.find((x) => x.id === issueId); if (it && it.status === "open") fixOne(it); }
+      else if (e.key === "f" && issueId && canEdit) { const it = rows.find((x) => x.id === issueId); if (it && it.status === "open") confirm({ title: `Apply the suggested fix to ${it.row_label ?? it.row_key}?`, label: "Apply fix", body: "Written to the live database through the audited edit RPC under your name.", undo: "The toast, or Data Sync → Recent edits → Undo.", run: async () => { await fixOne(it); } }); }
       else if (e.key === "i" && issueId && canEdit) { const it = rows.find((x) => x.id === issueId); if (it && it.status === "open") setReason({ status: "ignored", ids: [it.id] }); }
     };
     window.addEventListener("keydown", onKey);
@@ -87,7 +90,7 @@ export function IssuesView() {
         <select className="adm-select" value={table} onChange={(e) => nav({ table: e.target.value === "all" ? null : e.target.value }, true)} title="Filter by table" style={{ fontSize: 12, padding: "4px 8px" }}><option value="all">All tables</option>{boot.tables.map((t) => <option key={t.table_name} value={t.table_name}>{t.label}</option>)}</select>
         <select className="adm-select" value={severity ?? "all"} onChange={(e) => nav({ severity: e.target.value === "all" ? null : e.target.value }, true)} title="Severity" style={{ fontSize: 12, padding: "4px 8px" }}><option value="all">All severities</option><option value="error">Error</option><option value="warn">Warn</option><option value="info">Info</option></select>
         {rule && <button type="button" className="adm-filter-chip is-on" title="Clear the rule filter" onClick={() => nav({ rule: null }, true)}>rule {rule} ✕</button>}
-        <input className="adm-search" style={{ minWidth: 160, flex: "0 1 260px", padding: "4px 8px", fontSize: 12 }} placeholder="Search row, field, value…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="adm-search" style={{ minWidth: 160, flex: "0 1 260px", padding: "4px 8px", fontSize: 12 }} placeholder="Search row, field, value…" value={qLive} onChange={(e) => setQLive(e.target.value)} />
         <span className="dq-muted dq-hide-phone" style={{ marginLeft: "auto", color: "var(--asb-slate)" }}>Keyboard · <kbd className="dq-kbd">j</kbd>/<kbd className="dq-kbd">k</kbd> move · <kbd className="dq-kbd">f</kbd> fix · <kbd className="dq-kbd">i</kbd> ignore</span>
       </div>
       {selIds.length > 0 && (
@@ -96,7 +99,8 @@ export function IssuesView() {
           <button type="button" className="adm-btn small primary" disabled={!canEdit} title="Writes through the audited edit RPC; undo from Recent edits" onClick={bulkFix}>Apply suggested fix</button>
           <button type="button" className="adm-btn small" disabled={!canEdit} title="Requires a reason; hidden from open views" onClick={() => setReason({ status: "ignored", ids: selIds })}>Ignore with reason…</button>
           <button type="button" className="adm-btn small" disabled={!canEdit} title="Feeds the rule's false-positive rate" onClick={() => setReason({ status: "false_positive", ids: selIds })}>Mark false positive</button>
-          <button type="button" className="adm-btn small" title="CSV of the selected rows" onClick={async () => { const r = await exportIssuesCsv(selIds); if (r.success) downloadText("dq-issues.csv", r.data, "text/csv"); else toast(r.error); }}>Export</button>
+          <button type="button" className="adm-btn small" disabled={!canEdit} title="Assign the selected issues to a person by name; leave the name empty to clear" onClick={async () => { const who = window.prompt(`Assign ${selIds.length} issue(s) to (a name; empty clears):`); if (who == null) return; const r = await assignIssues(selIds, who); if (!r.success) { toast(r.error); return; } patchLocal(selIds, { assignee: who.trim() || null }); toast(`${r.data.updated} issue(s) ${who.trim() ? `assigned to ${who.trim()}` : "unassigned"}.`); }}>Assign…</button>
+          <button type="button" className="adm-btn small" title="CSV of the selected rows — at most 5,000; the toast says when the export is capped" onClick={async () => { const r = await exportIssuesCsv(selIds); if (!r.success) { toast(r.error); return; } downloadText("dq-issues.csv", r.data.csv, "text/csv"); toast(r.data.capped ? `Exported the first ${r.data.rows.toLocaleString()} of ${r.data.total.toLocaleString()} issues — narrow the filter for the rest.` : `Exported ${r.data.rows.toLocaleString()} issue(s).`); }}>Export</button>
           <span style={{ flex: 1 }} />
           <button type="button" className="adm-btn small ghost" onClick={() => setSel({})}>Clear</button>
         </div>
@@ -108,7 +112,8 @@ export function IssuesView() {
           <thead style={{ position: "sticky", top: 0, zIndex: 2 }}><tr><th style={{ width: 34 }}><input type="checkbox" checked={rows.length > 0 && rows.every((i) => sel[i.id])} onChange={() => { const on = !rows.every((i) => sel[i.id]); setSel(Object.fromEntries(rows.map((i) => [i.id, on]))); }} aria-label="Select all" /></th><th>Rule</th><th>Table · row</th><th>Field</th><th>Observed</th><th>Expected / suggested</th><th>Sev</th><th>Source</th><th>Status</th><th>Assignee</th><th className="num">Age</th></tr></thead>
           <tbody>
             {rows.map((i) => (
-              <tr key={i.id} className={i.id === issueId ? "is-selected" : ""} style={i.status !== "open" ? { opacity: .6 } : undefined} onClick={() => nav({ issue: i.id }, true)}>
+              <tr key={i.id} data-testid={`issue-row-${i.id}`} className={i.id === issueId ? "is-selected" : ""} style={i.status !== "open" ? { opacity: .6 } : undefined} onClick={() => nav({ issue: i.id }, true)}
+                tabIndex={0} role="button" aria-label={`Open ${i.row_label ?? i.row_key} · ${i.rule_code}`} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); nav({ issue: i.id }, true); } }}>
                 <td onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={!!sel[i.id]} onChange={() => setSel((s) => ({ ...s, [i.id]: !s[i.id] }))} aria-label={`Select ${i.row_label}`} /></td>
                 <td className="mono" style={{ color: "var(--asb-navy)", fontWeight: 600 }} title={i.why ?? ""}>{i.rule_code}</td>
                 <td><div className="dq-muted">{tableLabel(i.table_name)}</div><div style={{ fontWeight: 500, color: "var(--asb-navy)", whiteSpace: "nowrap" }}>{i.row_label ?? i.row_key}</div></td>

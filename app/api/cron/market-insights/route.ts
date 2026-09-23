@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { withJobRun } from "@/lib/jobs/runs";
+import { cronAuthorized, cronTrigger } from "@/lib/cron/auth";
 
 // Weekly Market Insights generator — runs each Monday (Vercel Cron, see
 // vercel.json). Computes the trailing week (previous Mon–Sun), then calls the
@@ -8,8 +9,8 @@ import { withJobRun } from "@/lib/jobs/runs";
 // the Part-1 firewall rules and stores an immutable, dated edition. This route
 // holds no data logic and returns no rows — only a status.
 //
-//   GET /api/cron/market-insights        (Vercel Cron, or manual with the secret)
-//   Authorization: Bearer <CRON_SECRET>  (required unless Vercel's cron header is present)
+//   GET /api/cron/market-insights        (Vercel Cron sends the secret; manual calls must too)
+//   Authorization: Bearer <CRON_SECRET>  (Vercel sends it on its own cron calls)
 export const dynamic = "force-dynamic";
 
 function isoWeek(d: Date): { year: number; week: number } {
@@ -27,10 +28,8 @@ function fmt(d: Date): string {
 }
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization");
-  const isVercelCron = req.headers.get("x-vercel-cron") != null;
-  if (secret && !isVercelCron && auth !== `Bearer ${secret}`) {
+  const isVercelCron = cronTrigger(req.headers) === "cron"; // label only
+  if (!cronAuthorized(req.headers.get("authorization"))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 

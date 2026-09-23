@@ -17,7 +17,10 @@ import { loadVesselReposts } from "./reposts";
 import { validateImoCheckDigit } from "@/lib/schemas/cargo";
 import { SIZE_GATE_DWT } from "../defs";
 import { VESSEL_STORAGE_KEY, initialVesselState, type VesselState } from "./state";
-import { submitVesselPosition } from "./mapState";
+import { mapVesselState, submitVesselPosition } from "./mapState";
+import { toast } from "sonner";
+import { reportGateRefusal, validateMemberDraft } from "@/lib/dq/member-gate";
+import { draftIssuesMessage, draftRefused, ledgerPositionDraftRow } from "@/lib/dq/member-draft";
 import { VesselStep, vesselComplete, vesselSummary } from "./steps/VesselStep";
 import { ArrangementStep, arrComplete, arrSummary } from "./steps/ArrangementStep";
 import { AvailabilityStep, avComplete, avSummary } from "./steps/AvailabilityStep";
@@ -214,7 +217,20 @@ export function VesselLedger() {
     ],
     reposts,
     onSubmit: async (state) => {
-      const result = await submitVesselPosition(state);
+      // Data-quality pre-check (workstream E): ask the gate before posting
+      const verdict = await validateMemberDraft("vessel_availability", ledgerPositionDraftRow(mapVesselState(state) as unknown as Record<string, unknown>));
+      if (verdict.ok && verdict.data.issues.length) {
+        if (draftRefused(verdict.data)) throw new Error(draftIssuesMessage(verdict.data));
+        toast.warning(draftIssuesMessage(verdict.data), { duration: 10000 });
+      }
+      let result;
+      try { result = await submitVesselPosition(state); }
+      catch (e) {
+        // refused by the database gate: report it in its own transaction with the pre-check's correlation id, then show the refusal
+        const text = e instanceof Error ? e.message : String(e);
+        if (verdict.ok && /DQ_GATE/.test(text)) void reportGateRefusal("vessel_availability", verdict.data.correlation_id, text);
+        throw e;
+      }
       router.refresh();
       return result.ref ? `Position ${result.ref} posted for matching` : "Position posted for matching";
     },

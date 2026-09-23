@@ -1,15 +1,19 @@
 "use client";
 
-// The circulation-inbox card in the Sync Workspace. Streams live progress from
-// POST /api/sync/email (Server-Sent Events) into a log panel, then opens the
-// resulting review batch. Also offers a dry run against a pasted email so the
-// classifier can be validated without live credentials.
+// Intake → Circulation inbox. Streams live progress from POST /api/sync/email
+// (Server-Sent Events) into a log panel, then opens the resulting review batch.
+// Also offers a dry run against a pasted email so the classifier can be
+// validated without live credentials.
+//
+// The transport, watermark handling and event parsing are unchanged; only the
+// shell is the design's ChannelCard.
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Mail, Loader2, Play, FlaskConical, ChevronDown, RotateCcw } from "lucide-react";
+import { Mail, Play, FlaskConical, ChevronDown, RotateCcw } from "lucide-react";
 import { getSyncWatermarks } from "@/app/(admin)/admin/data-sync/settings-actions";
-import { C, btn } from "./ui";
+import { ChannelCard, SamplePanel, RunLog } from "./ChannelCard";
+import { Btn, C, relTime } from "./ui";
 
 // datetime-local wants local wall time without the zone
 const toLocalInput = (iso: string | null) => {
@@ -18,14 +22,18 @@ const toLocalInput = (iso: string | null) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
-interface DoneEvent { type: "done"; batchId: string; totals: { new: number; updated: number } }
-type Evt =
-  | { type: "log"; msg: string }
-  | { type: "error"; error: string }
-  | { type: "empty"; message: string }
-  | DoneEvent;
+import type { SyncEvent } from "@/lib/sync/email/types";
+type Evt = SyncEvent;
 
-export function EmailSyncCard({ onDone }: { onDone: (batchId: string) => void }) {
+export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
+  onDone: (batchId: string) => void;
+  /** Whether an IMAP config exists and is switched on (from Connections). */
+  enabled: boolean | null;
+  /** Every streamed event, so the Intake run panel can draw the run. */
+  onEvent?: (e: SyncEvent | { type: "start"; title: string } | { type: "finish" }) => void;
+  /** "Tonight 02:00 · nightly" when the cron is armed, else "On demand". */
+  nextRun?: string;
+}) {
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [showSample, setShowSample] = useState(false);
@@ -49,6 +57,7 @@ export function EmailSyncCard({ onDone }: { onDone: (batchId: string) => void })
     if (running) return;
     setRunning(true);
     setLog([]);
+    onEvent?.({ type: "start", title: body.sample ? "Dry run · pasted email" : "Circulation inbox · sync" });
     try {
       const res = await fetch("/api/sync/email", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -71,9 +80,11 @@ export function EmailSyncCard({ onDone }: { onDone: (batchId: string) => void })
           if (!line) continue;
           let evt: Evt;
           try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          onEvent?.(evt);
           if (evt.type === "log") append(evt.msg);
           else if (evt.type === "error") { append(`✗ ${evt.error}`); toast.error(evt.error); }
           else if (evt.type === "empty") { append(`• ${evt.message}`); toast.message(evt.message); }
+          else if (evt.type === "skipped") { append(`• ${evt.message}`); toast.message(evt.message); }
           else if (evt.type === "done") {
             append(`✓ staged ${evt.totals.new + evt.totals.updated} record(s)`);
             toast.success(`Staged ${evt.totals.new + evt.totals.updated} record(s) for review.`);
@@ -85,70 +96,82 @@ export function EmailSyncCard({ onDone }: { onDone: (batchId: string) => void })
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Email sync failed.";
       append(`✗ ${msg}`);
+      onEvent?.({ type: "error", error: msg });
       toast.error(msg);
     } finally {
       setRunning(false);
+      onEvent?.({ type: "finish" });
     }
   };
 
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "22px 24px", background: C.card }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <span style={{ width: 40, height: 40, borderRadius: 9, background: C.greenBg, color: C.green, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
-          <Mail size={20} />
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15.5, fontWeight: 600, color: C.navy }}>Sync circulation inbox</div>
-          <div style={{ fontSize: 13, color: C.ink3, marginTop: 3, lineHeight: 1.45 }}>
-            Fetch recent circulars and classify them locally through the active LLM key into a review batch.
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-            <button onClick={() => run({ limit: 25, since: sinceChanged ? sinceIso : undefined })} disabled={running} style={btn("dark")}>
-              {running ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Play size={15} />} Sync now
-            </button>
-            <button onClick={() => setShowSample((s) => !s)} disabled={running} style={btn("ghost")}>
-              <FlaskConical size={14} /> Test with a pasted email
-              <ChevronDown size={13} style={{ transform: showSample ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
-            </button>
-          </div>
+    <ChannelCard
+      abbr="IMAP"
+      icon={<Mail size={19} />}
+      iconBg="var(--asb-green-bg)"
+      iconColor="var(--asb-green)"
+      name="Circulation inbox"
+      status={running ? "Running" : enabled === null ? "Checking" : enabled ? "Connected" : "Disabled"}
+      statusTone={running ? "updated" : enabled === null ? "neutral" : enabled ? "new" : "invalid"}
+      desc="Broker circulars fetched and classified locally through the active LLM key into a review batch."
+      last={watermark ? `${relTime(watermark)} · ${new Date(watermark).toLocaleString()}` : "No successful sync yet (default: last 7 days)"}
+      next={nextRun ?? "On demand"}
+      actions={
+        <>
+          <Btn
+            kind="accent" icon={<Play size={15} />} busy={running}
+            title="Fetches mail since the last successful run"
+            onClick={() => run({ limit: 25, since: sinceChanged ? sinceIso : undefined })}
+          >
+            Sync now
+          </Btn>
+          <Btn
+            kind="ghost" disabled={running} onClick={() => setShowSample((v) => !v)}
+            icon={<FlaskConical size={14} />}
+          >
+            Test with a pasted email
+            <ChevronDown size={13} style={{ transform: showSample ? "rotate(180deg)" : "none", transition: "transform var(--t-fast) var(--ease)" }} />
+          </Btn>
+        </>
+      }
+      footer={
+        <div className="ds-note">
+          A run whose classification fails never moves the start point.
         </div>
-      </div>
-
-      <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: C.ink3 }}>
+      }
+    >
+      {/* start point — the window the next run reads */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: C.ink3 }}>
         <label htmlFor="email-since" style={{ fontWeight: 600, color: C.ink }}>Fetch mail since</label>
-        <input id="email-since" type="datetime-local" value={since} onChange={(e) => setSince(e.target.value)} disabled={running}
-          style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${sinceChanged ? C.brass : C.line}`, font: "inherit", fontSize: 12.5, background: "#fff", color: C.ink }} />
+        <input
+          id="email-since" type="datetime-local" value={since} disabled={running}
+          onChange={(e) => setSince(e.target.value)}
+          className="ds-input"
+          style={{ width: "auto", fontSize: 12.5, borderColor: sinceChanged ? C.brass : undefined }}
+        />
         {sinceChanged && (
-          <button type="button" onClick={() => setSince(toLocalInput(watermark))} disabled={running} title="Back to the last successful sync" style={{ ...btn("ghost"), padding: "4px 8px", fontSize: 12 }}>
-            <RotateCcw size={12} /> Reset
-          </button>
+          <Btn size="sm" kind="ghost" disabled={running} icon={<RotateCcw size={12} />}
+            title="Back to the last successful sync"
+            onClick={() => setSince(toLocalInput(watermark))}>
+            Reset
+          </Btn>
         )}
-        <span>
-          {watermark ? `Last successful sync ${new Date(watermark).toLocaleString()}` : "No successful sync yet (default: last 7 days)"} · a run whose classification fails never moves this point.
-        </span>
       </div>
 
       {showSample && (
-        <div style={{ marginTop: 14 }}>
-          <textarea value={sample} onChange={(e) => setSample(e.target.value)} rows={5}
-            placeholder="Paste a circulation email here to classify it without connecting to the inbox…"
-            style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.line}`, font: "inherit", fontSize: 13, resize: "vertical", background: "#fff", color: C.ink }} />
-          <button onClick={() => run({ sample })} disabled={running || !sample.trim()}
-            style={{ ...btn("primary"), marginTop: 8, opacity: running || !sample.trim() ? 0.5 : 1 }}>
-            {running ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FlaskConical size={15} />} Classify sample
-          </button>
-        </div>
+        <SamplePanel
+          value={sample} onChange={setSample} rows={5}
+          placeholder="Paste a circulation email here to classify it without connecting to the inbox…"
+          action={
+            <Btn kind="primary" busy={running} disabled={!sample.trim()}
+              icon={<FlaskConical size={15} />} onClick={() => run({ sample })}>
+              Classify sample
+            </Btn>
+          }
+        />
       )}
 
-      {log.length > 0 && (
-        <div ref={logRef} style={{ marginTop: 16, maxHeight: 200, overflowY: "auto", background: C.navy, color: "#cfe0d6",
-          borderRadius: 8, padding: "12px 14px", fontFamily: C.mono, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-          {log.map((l, i) => (
-            <div key={i} style={{ color: l.startsWith("✗") ? "#f0b4b4" : l.startsWith("✓") ? "#9fe0b8" : "#cfe0d6" }}>{l}</div>
-          ))}
-        </div>
-      )}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
+      {!onEvent && <RunLog lines={log} innerRef={logRef} max={210} />}
+    </ChannelCard>
   );
 }

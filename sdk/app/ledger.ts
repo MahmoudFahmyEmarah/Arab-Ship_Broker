@@ -367,5 +367,5 @@ export async function submitVesselPositionRpc(
 /** Strip Postgres error prefixes and surface the business message. */
 function friendlyRpcError(message: string | undefined): string {
   if (!message) return "Posting failed — please try again.";
-  return message.replace(/^SIZE_GATE:\s*/, "").replace(/^TIER_GATED:\s*/, "");
+  return message.replace(/^SIZE_GATE:\s*/, "").replace(/^TIER_GATED:\s*/, "").replace(/^(ROUTE_GATE|DQ_GATE):\s*/, "");
 }

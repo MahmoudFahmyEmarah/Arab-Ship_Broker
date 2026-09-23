@@ -27,7 +27,7 @@ export function RulesView() {
   const ql = q.toLowerCase();
   const list = rules.filter((r) => (table === "all" || r.tables.includes(table)) && (cat === "all" || r.category === cat) && (sev === "all" || r.severity === sev) && (src === "all" || r.source === src) && (!ql || `${r.code} ${r.name} ${r.description} ${r.tables.join(" ")}`.toLowerCase().includes(ql)));
   const groupKeys = table === "all" ? boot.tables.map((t) => t.table_name) : [table];
-  const groups = groupKeys.map((t) => ({ t, rules: list.filter((r) => (table === "all" ? r.tables[0] === t : r.tables.includes(t))) })).filter((g) => g.rules.length);
+  const groups = groupKeys.map((t) => ({ t, rules: list.filter((r) => r.tables.includes(t)) })).filter((g) => g.rules.length);
   const selected = draft ?? rules.find((r) => r.code === ruleCode) ?? null;
   const rowsOf = (t: string) => boot.tables.find((x) => x.table_name === t);
 
@@ -47,7 +47,7 @@ export function RulesView() {
   const onDuplicate = async (r: DqRule) => { const res = await duplicateRule(r.id); if (!res.success) { toast(res.error); return; } await load(); nav({ rule: res.data.code }); toast(`Duplicated as ${res.data.code} (disabled draft).`); };
   const onNew = () => {
     const t = table === "all" ? "cargo_listings" : table;
-    setDraft({ id: "", code: "", name: "New rule", description: "", category: "validity", severity: "warn", kind: "declarative", definition: "", checks: [{ table: t, field: null, violation_sql: "", expected_text: "" }], ai_prompt: null, tables: [t], autofix: "none", enabled: false, source: "admin", owner: boot.viewerName, version: 0, created_at: "", updated_at: "", deleted_at: null, stats: { open: 0, raised: 0, fp: 0, checked: 0 }, channels: {} });
+    setDraft({ id: "", code: "", name: "New rule", description: "", category: "validity", severity: "warn", kind: "declarative", definition: "", checks: [{ table: t, field: null, violation_sql: "", expected_text: "" }], ai_prompt: null, tables: [t], autofix: "none", enabled: false, queue: true, source: "admin", owner: boot.viewerName, version: 0, created_at: "", updated_at: "", deleted_at: null, stats: { open: 0, raised: 0, fp: 0, checked: 0 }, channels: {} });
   };
 
   return (
@@ -80,7 +80,8 @@ export function RulesView() {
                 {g.rules.map((r) => {
                   const st = r.stats ?? { open: 0, raised: 0, fp: 0, checked: 0 };
                   return (
-                    <tr key={r.id} className={r.code === ruleCode ? "is-selected" : ""} onClick={() => { setDraft(null); nav({ rule: r.code }, true); }} title={r.description} style={r.enabled ? undefined : { opacity: .6 }}>
+                    <tr key={r.id} className={r.code === ruleCode ? "is-selected" : ""} onClick={() => { setDraft(null); nav({ rule: r.code }, true); }} title={r.description} style={r.enabled ? undefined : { opacity: .6 }}
+                      tabIndex={0} role="button" aria-label={`Open rule ${r.code}`} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setDraft(null); nav({ rule: r.code }, true); } }}>
                       <td className="mono" style={{ color: "var(--asb-navy)", fontWeight: 600 }}>{r.code}</td>
                       <td><div style={{ fontWeight: 500, color: "var(--asb-navy)" }}>{r.name}</div><div className="dq-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 420 }}>{r.tables.map(tableLabel).join(" · ")}</div></td>
                       <td style={{ textTransform: "capitalize" }}>{r.category}</td>

@@ -30,6 +30,7 @@ import {
 } from "./filters";
 import { useMarketVisibility, withinPostedWindow } from "@/lib/portal/useMarketVisibility";
 import { IconPlus, IconBell, IconMap } from "./icons";
+import { operatingZoneCode, zoneMatchesSelection } from "@/lib/zones";
 
 // Top matches: ONE matching module (lib/portal/matching) — same gates as the map pairing.
 import { buildTopMatches, type DashMatch } from "@/lib/portal/matching";
@@ -271,11 +272,13 @@ export function DashboardBoard({
   const ZONE_OPTS = React.useMemo(
     () =>
       Array.from(
-        new Set(
+        new Set<string>(
           [
             ...cargos.flatMap((c) => [c.route?.polZone, c.route?.podZone]),
             ...vessels.map((v) => v.openPortZone),
-          ].filter(Boolean) as string[],
+          ]
+            .map((code) => operatingZoneCode(code))
+            .filter((code): code is NonNullable<typeof code> => code !== null),
         ),
       ),
     [cargos, vessels],
@@ -289,7 +292,7 @@ export function DashboardBoard({
       if (fCargoType.length && !fCargoType.includes(c.type)) return false;
       if (fZones.length) {
         const z = [c.route?.polZone, c.route?.podZone];
-        if (!z.some((x) => x && fZones.includes(x))) return false;
+        if (!z.some((x) => zoneMatchesSelection(x, fZones))) return false;
       }
       if (fClass.length) {
         const tags = cargoClassTags(c);
@@ -309,7 +312,7 @@ export function DashboardBoard({
   const vesselPasses = React.useCallback(
     (v: VesselView) => {
       if (fVesselType.length && !fVesselType.includes(v.type)) return false;
-      if (fZones.length && !fZones.includes(v.openPortZone)) return false;
+      if (fZones.length && !zoneMatchesSelection(v.openPortZone, fZones)) return false;
       if (fClass.length) {
         const tags = vesselClassTags(v);
         if (!tags.some((t) => fClass.includes(t))) return false;
@@ -478,6 +481,8 @@ export function DashboardBoard({
             focusedVesselId={focusedVessel}
             onSelectCargo={focus.cargo}
             onSelectVessel={focus.vessel}
+            selectedZoneCodes={fZones}
+            onSelectedZoneCodesChange={setFZones}
           />
         );
         const panelEls = (defaultView: "list" | "card") => (

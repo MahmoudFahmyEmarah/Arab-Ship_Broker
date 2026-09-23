@@ -1,11 +1,18 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { OPEN_BATCH_STATUSES, batchActions, friendlyBatchError, gateChannelFor, type UndoConflict, type CommitOutcome } from "@/lib/sync/batch-status";
 // Data Sync server actions. Every mutation is gated by requireAdmin({ edit }) and
 // runs through the service-role client; commits/undo call the Phase 1 RPCs so the
 // audited, reversible write path is the only way rows reach a live table.
 
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { validateRow } from "@/lib/dq/gate";
+import { findCargoDuplicates, findVesselDuplicates, mergePatch, type DupPair, type QueuedVesselLite, type StagedLite } from "@/lib/sync/dupes";
+import { sanitizeSearch, pickAllowedKeys } from "@/lib/sync/guards";
+import { logAudit, AUDIT_FAMILIES, type AuditRow } from "@/lib/admin/data-sync-audit";
+import type { ProcessSummary } from "@/lib/sync/whatsapp/process";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { SHEET_SPECS, specById, ZONES } from "@/lib/sync/sheets";
@@ -30,42 +37,54 @@ async function adminClient() {
   return getSupabaseAdminClient();
 }
 
-// Writes need the acting admin's public.users.id for the audit trail.
+// Writes need the acting admin's public.users.id for the RPC audit columns and
+// their name for the module's own audit trail (data_sync_audit).
 async function adminWrite() {
   const u = await requireAdmin({ section: "datasync", edit: true });
-  return { c: getSupabaseAdminClient(), actor: u.rowId };
+  return { c: getSupabaseAdminClient(), actor: u.rowId, who: { id: u.rowId, name: u.fullName } };
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-// PostgREST .or() parses commas/parens/dots — strip them so a search term can
-// never break out of the ilike filter it's interpolated into.
-function sanitizeSearch(s: string): string {
-  return s.replace(/[,()%*\\]/g, " ").trim().slice(0, 60);
-}
+// requireAdmin denies by redirect(), which throws. Re-throw it so the bounce
+// happens instead of a toast reading "NEXT_REDIRECT" (same as DQ audit C2).
+const fail = (e: unknown, fallback: string): { success: false; error: string } => {
+  unstable_rethrow(e);
+  return { success: false, error: e instanceof Error ? e.message : fallback };
+};
 
 function badBatch(id: string): string | null {
   return UUID_RE.test(id) ? null : "Invalid batch id.";
+}
+
+// A commit that raises inside commit_sync_batch rolls back its own status
+// write (the "failed" update sits in the transaction that then aborts), so the
+// batch looked untouched and the error text was lost. Phase 0 (18 Sep 2026):
+// the app records the failure in a second statement, and never lets the
+// bookkeeping mask the original error.
+async function markBatchFailed(c: SupabaseClient, batchId: string, error: string): Promise<void> {
+  try { await c.rpc("mark_sync_batch_failed", { p_batch_id: batchId, p_error: error.slice(0, 2000) }); } catch { /* the toast still carries the error */ }
 }
 
 // ── commit ─────────────────────────────────────────────────────────────────
 export async function commitSheet(
   batchId: string,
   sheet: string,
-): Promise<Result<{ inserted: number; updated: number; skipped: number }>> {
+): Promise<Result<CommitOutcome>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   if (!SHEET_IDS.has(sheet)) return { success: false, error: `Unknown sheet "${sheet}".` };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { data, error } = await c.rpc("commit_sync_batch", { p_batch_id: batchId, p_sheet: sheet });
-    if (error) return { success: false, error: error.message };
+    if (error) { await markBatchFailed(c, batchId, error.message); return { success: false, error: friendlyBatchError(error.message) }; }
+    await logAudit(c, { actor: who, action: "batch.commit", targetKind: "batch", targetId: batchId, batchId, summary: `Committed sheet ${sheet} — ${(data as { inserted: number }).inserted} inserted · ${(data as { updated: number }).updated} updated`, detail: { sheet, ...(data as object) } });
     revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { inserted: number; updated: number; skipped: number } };
+    return { success: true, data: data as CommitOutcome };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Commit failed." };
+    return fail(e, "Commit failed.");
   }
 }
 
@@ -74,7 +93,7 @@ export async function commitSelection(
   batchId: string,
   sheet: string,
   rowIds: string[],
-): Promise<Result<{ inserted: number; updated: number; skipped: number }>> {
+): Promise<Result<CommitOutcome>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   if (!SHEET_IDS.has(sheet)) return { success: false, error: `Unknown sheet "${sheet}".` };
@@ -82,13 +101,14 @@ export async function commitSelection(
   if (rowIds.length > 1000) return { success: false, error: "Too many rows selected." };
   if (!rowIds.every((id) => UUID_RE.test(id))) return { success: false, error: "Invalid row id in selection." };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { data, error } = await c.rpc("commit_sync_batch", { p_batch_id: batchId, p_sheet: sheet, p_row_ids: rowIds });
-    if (error) return { success: false, error: error.message };
+    if (error) { await markBatchFailed(c, batchId, error.message); return { success: false, error: friendlyBatchError(error.message) }; }
+    await logAudit(c, { actor: who, action: "batch.commit_selection", targetKind: "batch", targetId: batchId, batchId, summary: `Committed ${rowIds.length} selected row(s) of ${sheet} — ${(data as { inserted: number }).inserted} inserted · ${(data as { updated: number }).updated} updated`, detail: { sheet, rowIds: rowIds.slice(0, 50), ...(data as object) } });
     revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { inserted: number; updated: number; skipped: number } };
+    return { success: true, data: data as CommitOutcome };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Commit failed." };
+    return fail(e, "Commit failed.");
   }
 }
 
@@ -102,7 +122,7 @@ export async function editStagedRow(
   if (!UUID_RE.test(rowId)) return { success: false, error: "Invalid row id." };
   if (!isPlainObject(patch) || Object.keys(patch).length === 0) return { success: false, error: "Nothing to save." };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { data: row, error: rErr } = await c
       .from("sync_staged_row")
       .select("sheet, target_table, key_column, business_key, payload, raw, committed, batch_id, sync_batch ( source )")
@@ -116,8 +136,15 @@ export async function editStagedRow(
     if (!spec) return { success: false, error: `Unknown sheet "${row.sheet}".` };
     const pt = previewTable(row.sheet as string);
 
+    // Front gate: only columns the editor exposes as editable. A client could
+    // otherwise write review_status / commodity_id / anything the target table
+    // has, and commit_sync_batch would faithfully apply it.
+    const editable = (pt?.columns ?? []).filter((cc) => cc.editable !== false).map((cc) => cc.col);
+    const clean = pickAllowedKeys(patch, editable);
+    if (Object.keys(clean).length === 0) return { success: false, error: "None of those fields can be edited here." };
+
     const payload = { ...(row.payload as RawRow) };
-    for (const [k, v] of Object.entries(patch)) {
+    for (const [k, v] of Object.entries(clean)) {
       const col = pt?.columns.find((cc) => cc.col === k);
       payload[k] = (col ? coerce(col.type, v) : v) as Cell;
     }
@@ -160,65 +187,117 @@ export async function editStagedRow(
     const { error: gErr } = await c.rpc("fn_dq_gate_batch", { p_batch_id: (row as { batch_id: string }).batch_id, p_channel: srcKind === "upload" ? "sync" : "pipeline", p_actor: "staged-row edit", p_row_id: rowId });
     if (gErr) console.error("[data-sync] gate re-check:", gErr.message);
     const { data: after } = await c.from("sync_staged_row").select("classification").eq("id", rowId).maybeSingle();
+    await logAudit(c, { actor: who, action: "row.edit", targetKind: "staged_row", targetId: rowId, batchId: (row as { batch_id: string }).batch_id, summary: `Edited staged row ${row.business_key ?? rowId.slice(0, 8)} (${row.sheet}) — ${Object.keys(clean).join(", ")}`, detail: { sheet: row.sheet, fields: clean, classification: (after as { classification?: string } | null)?.classification ?? classification } });
     revalidatePath("/admin/data-sync");
     return { success: true, data: { classification: (after as { classification?: string } | null)?.classification ?? classification } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not save the edit." };
+    return fail(e, "Could not save the edit.");
   }
 }
 
 export async function commitAll(
   batchId: string,
-): Promise<Result<{ inserted: number; updated: number; skipped: number }>> {
+): Promise<Result<CommitOutcome>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { data, error } = await c.rpc("commit_sync_batch", { p_batch_id: batchId, p_sheet: null });
-    if (error) return { success: false, error: error.message };
+    if (error) { await markBatchFailed(c, batchId, error.message); return { success: false, error: friendlyBatchError(error.message) }; }
+    await logAudit(c, { actor: who, action: "batch.commit", targetKind: "batch", targetId: batchId, batchId, summary: `Committed whole batch — ${(data as { inserted: number }).inserted} inserted · ${(data as { updated: number }).updated} updated`, detail: data as Record<string, unknown> });
     revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { inserted: number; updated: number; skipped: number } };
+    return { success: true, data: data as CommitOutcome };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Commit failed." };
+    return fail(e, "Commit failed.");
+  }
+}
+
+// ── run the data-quality gate again ────────────────────────────────────────
+// Phase 3 (18 Sep 2026): commit refuses any row the gate has not passed —
+// never checked, edited since, or judged under older rules. This re-runs the
+// gate on the whole batch, recounts it and settles its status.
+export async function regateBatch(
+  batchId: string,
+): Promise<Result<{ blocked: number; warned: number; rules: number; errors: string[] }>> {
+  const bad = badBatch(batchId);
+  if (bad) return { success: false, error: bad };
+  try {
+    const { c, who } = await adminWrite();
+    const { data: b, error: rErr } = await c.from("sync_batch").select("source, status").eq("id", batchId).maybeSingle();
+    if (rErr) return { success: false, error: rErr.message };
+    if (!b) return { success: false, error: "Batch not found." };
+    const { data, error } = await c.rpc("regate_sync_batch", { p_batch_id: batchId, p_channel: gateChannelFor(b.source), p_actor: who.name ?? "gate re-run" });
+    if (error) return { success: false, error: friendlyBatchError(error.message) };
+    const g = data as { ok?: boolean; error?: string; blocked: number; warned: number; rules: number; errors?: string[] };
+    if (g.ok === false) {
+      // the gate could not run: the batch is now gate_failed with the reason on it
+      await logAudit(c, { actor: who, action: "batch.regate", targetKind: "batch", targetId: batchId, batchId, summary: `The data-quality gate could not run — ${g.error ?? "unknown error"}`, detail: g, ok: false });
+      revalidatePath("/admin/data-sync");
+      return { success: false, error: `The data-quality gate could not run on this batch: ${g.error ?? "unknown error"}. The batch is marked "gate failed"; fix the rule it names in Data quality → Rules and run the gate again.` };
+    }
+    await logAudit(c, { actor: who, action: "batch.regate", targetKind: "batch", targetId: batchId, batchId, summary: `Ran the data-quality gate — ${g.blocked} blocked · ${g.warned} warned · ${g.rules} rules${g.errors?.length ? ` · ${g.errors.length} rule error(s)` : ""}`, detail: g, ok: !(g.errors?.length) });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { blocked: g.blocked ?? 0, warned: g.warned ?? 0, rules: g.rules ?? 0, errors: g.errors ?? [] } };
+  } catch (e) {
+    return fail(e, "The gate could not run.");
   }
 }
 
 // ── undo (the reversible guarantee) ────────────────────────────────────────
+// Phase 2 (18 Sep 2026): undo first compares every live row with the
+// audit's after-image. When rows changed since the commit it returns them
+// (ok: false, conflicts) and touches nothing; the console asks, then calls
+// again with force = true, which restores anyway and records each override.
+export interface UndoOutcome {
+  ok: boolean;
+  reverted: number;
+  deleted: number;
+  forced: number;
+  conflicts: UndoConflict[];
+}
 export async function undoBatch(
   batchId: string,
-): Promise<Result<{ reverted: number; deleted: number }>> {
+  force = false,
+): Promise<Result<UndoOutcome>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   try {
-    const c = await adminClient();
-    const { data, error } = await c.rpc("undo_sync_batch", { p_batch_id: batchId });
-    if (error) return { success: false, error: error.message };
-    revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { reverted: number; deleted: number } };
+    const { c, who } = await adminWrite();
+    const { data, error } = await c.rpc("undo_sync_batch", { p_batch_id: batchId, p_force: force, p_actor: who.name ?? null });
+    if (error) return { success: false, error: friendlyBatchError(error.message) };
+    const out = data as UndoOutcome;
+    if (out.ok) {
+      await logAudit(c, { actor: who, action: "batch.undo", targetKind: "batch", targetId: batchId, batchId, summary: `Undid batch — ${out.reverted} restored · ${out.deleted} removed${out.forced ? ` · ${out.forced} later edit(s) overridden` : ""}`, detail: { ...out, force } });
+      revalidatePath("/admin/data-sync");
+    }
+    return { success: true, data: out };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Undo failed." };
+    return fail(e, "Undo failed.");
   }
 }
 
-// ── discard a draft batch (nothing committed → safe hard delete) ────────────
+// ── discard a batch nothing was written from (safe hard delete) ─────────────
+// The status says what the console may offer; trg_sync_batch_discard_guard
+// is the final word — a batch with any audit row cannot be deleted.
 export async function discardBatch(batchId: string): Promise<Result> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { data: batch, error: readErr } = await c
       .from("sync_batch").select("status").eq("id", batchId).maybeSingle();
     if (readErr) return { success: false, error: readErr.message };
     if (!batch) return { success: false, error: "Batch not found." };
-    if (batch.status === "committed" || batch.status === "committing") {
+    if (!batchActions(batch.status).discard) {
       return { success: false, error: "This batch has committed rows — undo it instead of discarding." };
     }
     const { error } = await c.from("sync_batch").delete().eq("id", batchId); // cascades staged rows
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: friendlyBatchError(error.message) };
+    await logAudit(c, { actor: who, action: "batch.discard", targetKind: "batch", targetId: batchId, batchId, summary: `Discarded draft batch (was ${batch.status})`, detail: { status: batch.status } });
     revalidatePath("/admin/data-sync");
     return { success: true };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Discard failed." };
+    return fail(e, "Discard failed.");
   }
 }
 
@@ -248,7 +327,7 @@ export interface StagedRowView {
 export async function listStaged(
   batchId: string,
   sheet: string,
-  opts: { changesOnly?: boolean; limit?: number; offset?: number } = {},
+  opts: { changesOnly?: boolean; limit?: number; offset?: number; classification?: string } = {},
 ): Promise<Result<{ rows: StagedRowView[]; total: number }>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
@@ -263,6 +342,9 @@ export async function listStaged(
       .eq("batch_id", batchId)
       .eq("sheet", sheet);
     if (opts.changesOnly) q = q.neq("classification", "unchanged");
+    // Phase 6: the figure tiles filter on the server, so the page shown is the
+    // batch-wide set they count, not the loaded page filtered afterwards.
+    if (opts.classification && ["new", "updated", "unchanged", "invalid"].includes(opts.classification)) q = q.eq("classification", opts.classification);
     q = q.order("row_index", { ascending: true, nullsFirst: false }).range(offset, offset + limit - 1);
 
     const { data, error, count } = await q;
@@ -287,7 +369,7 @@ export async function listStaged(
     });
     return { success: true, data: { rows, total: count ?? 0 } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read staged rows." };
+    return fail(e, "Could not read staged rows.");
   }
 }
 
@@ -345,7 +427,7 @@ export async function listInvalidStaged(): Promise<Result<{
     });
     return { success: true, data: { batchId: batch.id, batchLabel: batch.label, rows } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read invalid rows." };
+    return fail(e, "Could not read invalid rows.");
   }
 }
 
@@ -361,7 +443,8 @@ export async function countInvalidStagedPending(): Promise<number> {
       .eq("classification", "invalid")
       .eq("committed", false);
     return count ?? 0;
-  } catch {
+  } catch (e) {
+    unstable_rethrow(e);
     return 0;
   }
 }
@@ -377,7 +460,7 @@ export async function syncVesselPositions(
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { data, error } = await c
       .from("sync_staged_row")
       .select("raw")
@@ -438,6 +521,7 @@ export async function syncVesselPositions(
       p_positions: positions,
     });
     if (rErr) return { success: false, error: rErr.message };
+    await logAudit(c, { actor: who, action: "positions.post", targetKind: "batch", targetId: batchId, batchId, summary: `Posted open positions from the workbook — ${(res as { posted: number }).posted} open · ${(res as { closed: number }).closed} closed · ${(res as { skipped: number }).skipped} skipped`, detail: { positions: positions.length, ...(res as object) } });
     revalidatePath("/dashboard");
     revalidatePath("/");
     return {
@@ -445,10 +529,7 @@ export async function syncVesselPositions(
       data: res as { posted: number; closed: number; skipped: number },
     };
   } catch (e) {
-    return {
-      success: false,
-      error: e instanceof Error ? e.message : "Could not post open positions.",
-    };
+    return fail(e, "Could not post open positions.");
   }
 }
 
@@ -464,6 +545,24 @@ export interface BatchMeta {
   committed_at: string | null;
 }
 
+// Phase 6: History reads batches in pages instead of stopping at the 12 the page loads.
+export async function listBatches(opts: { offset?: number; limit?: number } = {}): Promise<Result<{ rows: BatchMeta[]; total: number }>> {
+  const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
+  const offset = Math.max(opts.offset ?? 0, 0);
+  try {
+    const c = await adminClient();
+    const { data, error, count } = await c
+      .from("sync_batch")
+      .select("id, label, source, status, counts, file_name, created_at, committed_at", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: { rows: (data ?? []) as BatchMeta[], total: count ?? 0 } };
+  } catch (e) {
+    return fail(e, "Could not read batches.");
+  }
+}
+
 export async function getBatch(batchId: string): Promise<Result<BatchMeta | null>> {
   const bad = badBatch(batchId);
   if (bad) return { success: false, error: bad };
@@ -477,7 +576,7 @@ export async function getBatch(batchId: string): Promise<Result<BatchMeta | null
     if (error) return { success: false, error: error.message };
     return { success: true, data: (data as BatchMeta) ?? null };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read batch." };
+    return fail(e, "Could not read batch.");
   }
 }
 
@@ -515,7 +614,7 @@ export async function listRecords(
     });
     return { success: true, data: { rows, total: count ?? 0 } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read records." };
+    return fail(e, "Could not read records.");
   }
 }
 
@@ -557,15 +656,16 @@ export async function editRecord(
   const clean = pickEditable(t, patch);
   if (Object.keys(clean).length === 0) return { success: false, error: "Nothing to save." };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
     const { data, error } = await c.rpc("edit_live_record", {
       p_table: t.table, p_key: key, p_patch: clean, p_actor: actor,
     });
     if (error) return { success: false, error: friendlyDbError(error, "save") };
+    await logAudit(c, { actor: who, action: "record.edit", targetKind: "record", targetId: `${t.table}:${key}`, summary: `Edited ${t.label.slice(0, -1)} ${key} — ${Object.keys(clean).join(", ")}`, detail: { table: t.table, key, patch: clean, auditId: (data as { audit_id: string }).audit_id } });
     revalidatePath("/admin/data-sync");
     return { success: true, data: { auditId: (data as { audit_id: string }).audit_id } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Edit failed." };
+    return fail(e, "Edit failed.");
   }
 }
 
@@ -590,15 +690,16 @@ export async function insertRecord(
   const allowed = new Set([t.keyCol, ...t.columns.map((c) => c.col)]);
   const clean = Object.fromEntries(Object.entries(row).filter(([k, v]) => allowed.has(k) && v !== undefined));
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
     const { data, error } = await c.rpc("insert_live_record", {
       p_table: t.table, p_row: clean, p_actor: actor,
     });
     if (error) return { success: false, error: friendlyDbError(error, "add") };
+    await logAudit(c, { actor: who, action: "record.insert", targetKind: "record", targetId: `${t.table}:${key}`, summary: `Added ${t.label.slice(0, -1)} ${key}`, detail: { table: t.table, key, row: clean } });
     revalidatePath("/admin/data-sync");
     return { success: true, data: { auditId: (data as { audit_id: string }).audit_id, key } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Add failed." };
+    return fail(e, "Add failed.");
   }
 }
 
@@ -616,16 +717,17 @@ export async function bulkEditRecords(
   const clean = pickEditable(t, patch);
   if (Object.keys(clean).length === 0) return { success: false, error: "Choose a field and value to apply." };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
     const { data, error } = await c.rpc("bulk_update_live_records", {
       p_table: t.table, p_keys: keys, p_patch: clean, p_actor: actor,
     });
     if (error) return { success: false, error: friendlyDbError(error, "apply") };
+    await logAudit(c, { actor: who, action: "record.bulk_edit", targetKind: "record", targetId: t.table, summary: `Bulk-edited ${keys.length} ${t.label} — ${Object.keys(clean).join(", ")}`, detail: { table: t.table, keys: keys.slice(0, 100), patch: clean, groupId: (data as { group_id: string }).group_id } });
     revalidatePath("/admin/data-sync");
     const d = data as { updated: number; group_id: string };
     return { success: true, data: { updated: d.updated, groupId: d.group_id } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Bulk edit failed." };
+    return fail(e, "Bulk edit failed.");
   }
 }
 
@@ -639,16 +741,17 @@ export async function bulkDeleteRecords(
   if (!Array.isArray(keys) || keys.length === 0) return { success: false, error: "Select at least one row." };
   if (keys.length > MAX_BULK) return { success: false, error: `Bulk deletes are capped at ${MAX_BULK} rows.` };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
     const { data, error } = await c.rpc("bulk_delete_live_records", {
       p_table: t.table, p_keys: keys, p_actor: actor,
     });
     if (error) return { success: false, error: friendlyDbError(error, "delete") };
+    await logAudit(c, { actor: who, action: "record.bulk_delete", targetKind: "record", targetId: t.table, summary: `Bulk-deleted ${keys.length} ${t.label}`, detail: { table: t.table, keys: keys.slice(0, 100), groupId: (data as { group_id: string }).group_id } });
     revalidatePath("/admin/data-sync");
     const d = data as { deleted: number; group_id: string };
     return { success: true, data: { deleted: d.deleted, groupId: d.group_id } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Bulk delete failed." };
+    return fail(e, "Bulk delete failed.");
   }
 }
 
@@ -658,34 +761,42 @@ export async function deleteRecord(tableId: string, key: string): Promise<Result
   if (!t) return { success: false, error: `Unknown table "${tableId}".` };
   if (!key) return { success: false, error: "Missing record key." };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
     const { error } = await c.rpc("delete_live_record", { p_table: t.table, p_key: key, p_actor: actor });
     if (error) return { success: false, error: friendlyDbError(error, "delete") };
+    await logAudit(c, { actor: who, action: "record.delete", targetKind: "record", targetId: `${t.table}:${key}`, summary: `Deleted ${t.label.slice(0, -1)} ${key}`, detail: { table: t.table, key } });
     revalidatePath("/admin/data-sync");
     return { success: true };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Delete failed." };
+    return fail(e, "Delete failed.");
   }
 }
 
 // ── undo an edit or a whole bulk group ──────────────────────────────────────
+export interface UndoEditOutcome { ok: boolean; restored: number; reinserted: number; removed?: number; forced?: number; conflicts?: UndoConflict[] }
 export async function undoEdit(
   ref: { auditId?: string; groupId?: string },
-): Promise<Result<{ restored: number; reinserted: number; removed?: number }>> {
+  force = false,
+): Promise<Result<UndoEditOutcome>> {
   const { auditId, groupId } = ref;
   if (auditId && !UUID_RE.test(auditId)) return { success: false, error: "Invalid edit id." };
   if (groupId && !UUID_RE.test(groupId)) return { success: false, error: "Invalid group id." };
   if (!auditId && !groupId) return { success: false, error: "Nothing to undo." };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
+    // Same rule as batches (phase 2): conflicts come back first; force overrides.
     const { data, error } = await c.rpc("undo_record_edits", {
-      p_audit_id: auditId ?? null, p_group_id: groupId ?? null, p_actor: actor,
+      p_audit_id: auditId ?? null, p_group_id: groupId ?? null, p_actor: actor, p_force: force,
     });
     if (error) return { success: false, error: friendlyDbError(error, "undo") };
-    revalidatePath("/admin/data-sync");
-    return { success: true, data: data as { restored: number; reinserted: number; removed?: number } };
+    const out = data as UndoEditOutcome;
+    if (out.ok) {
+      await logAudit(c, { actor: who, action: "record.undo", targetKind: "record", targetId: groupId ?? auditId ?? null, summary: `Undid ${groupId ? "a bulk edit group" : "a record edit"} — ${out.restored} restored · ${out.reinserted} reinserted${out.forced ? ` · ${out.forced} later edit(s) overridden` : ""}`, detail: { auditId, groupId, force, ...out } });
+      revalidatePath("/admin/data-sync");
+    }
+    return { success: true, data: out };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Undo failed." };
+    return fail(e, "Undo failed.");
   }
 }
 
@@ -699,18 +810,248 @@ export interface EditAuditRow {
   undone: boolean;
 }
 
-export async function listEditAudit(limit = 15): Promise<Result<EditAuditRow[]>> {
+export interface EditAuditPage { rows: EditAuditRow[]; /** pass back as `before` to read the next (older) page; null when this was the last page */ nextCursor: string | null }
+
+// P1-4 (20 Sep 2026): keyset pagination (edited_at, id) instead of "the last 50".
+export async function listEditAudit(opts: number | { limit?: number; before?: string | null } = 50): Promise<Result<EditAuditPage>> {
+  const o = typeof opts === "number" ? { limit: opts } : opts;
+  const limit = Math.min(Math.max(o.limit ?? 50, 1), 100);
   try {
     const c = await adminClient();
-    const { data, error } = await c
+    let q = c
       .from("record_edit_audit")
       .select("id, table_name, business_key, op, group_id, edited_at, undone")
       .order("edited_at", { ascending: false })
-      .limit(Math.min(Math.max(limit, 1), 50));
+      .order("id", { ascending: false })
+      .limit(limit + 1);
+    if (o.before) {
+      const [at, id] = o.before.split("|");
+      if (!at || !id || !UUID_RE.test(id) || Number.isNaN(new Date(at).getTime())) return { success: false, error: "Invalid history cursor." };
+      q = q.or(`edited_at.lt.${at},and(edited_at.eq.${at},id.lt.${id})`);
+    }
+    const { data, error } = await q;
     if (error) return { success: false, error: error.message };
-    return { success: true, data: (data ?? []) as EditAuditRow[] };
+    const all = (data ?? []) as EditAuditRow[];
+    const rows = all.slice(0, limit);
+    const last = rows[rows.length - 1];
+    return { success: true, data: { rows, nextCursor: all.length > limit && last ? `${last.edited_at}|${last.id}` : null } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read edit history." };
+    return fail(e, "Could not read edit history.");
+  }
+}
+
+// ── background upload jobs (P1-3; panel and actions 21 Sep 2026) ────────────
+export interface UploadJobRow {
+  id: string;
+  file_name: string;
+  status: "queued" | "running" | "retry_wait" | "done" | "failed" | "cancelled";
+  rows_parsed: number | null;
+  size: number;
+  attempts: number;
+  max_attempts: number;
+  batch_id: string | null;
+  failure_kind: "transient" | "permanent" | "timeout" | "lost_lease" | null;
+  error: string | null;
+  totals: Record<string, number> | null;
+  next_attempt_at: string | null;
+  lease_until: string | null;
+  storage_path: string | null;
+  payload_expires_at: string | null;
+  payload_deleted_at: string | null;
+  started_by: string | null;
+  uploader: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  /** false once an administrator has committed or edited the batch: a retry must not rebuild it */
+  batch_resumable: boolean | null;
+}
+
+const UPLOAD_COLS = "id, file_name, status, rows_parsed, size, attempts, max_attempts, batch_id, failure_kind, error, totals, next_attempt_at, lease_until, storage_path, payload_expires_at, payload_deleted_at, started_by, created_at, started_at, finished_at";
+
+/**
+ * One page of upload jobs, newest first, with the uploader's name resolved
+ * and (for a parked job) whether a retry would be allowed. Server-side
+ * pagination: the panel asks for a page, not "the latest ten".
+ */
+export async function listUploadJobs(opts: { page?: number; pageSize?: number; status?: string | null } = {}): Promise<Result<{ rows: UploadJobRow[]; total: number; page: number; pageSize: number }>> {
+  try {
+    const c = await adminClient();
+    const pageSize = Math.min(Math.max(opts.pageSize ?? 10, 5), 100);
+    const page = Math.max(opts.page ?? 1, 1);
+    const from = (page - 1) * pageSize;
+    let q = c.from("sync_upload_job").select(UPLOAD_COLS, { count: "exact" }).order("created_at", { ascending: false });
+    if (opts.status && opts.status !== "all") {
+      const allowed = ["queued", "running", "retry_wait", "done", "failed", "cancelled"];
+      if (!allowed.includes(opts.status)) return { success: false, error: "Unknown status filter." };
+      q = q.eq("status", opts.status);
+    }
+    const { data, error, count } = await q.range(from, from + pageSize - 1);
+    if (error) return { success: false, error: error.message };
+    const rows = (data ?? []) as unknown as UploadJobRow[];
+
+    // uploader names in one round trip
+    const ids = Array.from(new Set(rows.map((r) => r.started_by).filter((x): x is string => !!x)));
+    const names = new Map<string, string>();
+    if (ids.length) {
+      const { data: us } = await c.from("users").select("id, full_name").in("id", ids);
+      for (const u of (us ?? []) as { id: string; full_name: string | null }[]) names.set(u.id, u.full_name ?? "");
+    }
+    // a parked job: would a retry be allowed, or has its batch been worked on?
+    for (const r of rows) {
+      r.uploader = r.started_by ? (names.get(r.started_by) || null) : null;
+      r.batch_resumable = null;
+      if ((r.status === "failed" || r.status === "cancelled") && r.payload_deleted_at == null) {
+        const { data: res } = await c.rpc("fn_sync_upload_batch_resumable", { p_batch_id: r.batch_id });
+        r.batch_resumable = !!(res as { resumable?: boolean } | null)?.resumable;
+      }
+    }
+    return { success: true, data: { rows, total: count ?? rows.length, page, pageSize } };
+  } catch (e) {
+    return fail(e, "Could not read upload jobs.");
+  }
+}
+
+/** Queue a parked job again. Refused when its workbook is gone or its batch has been worked on. */
+export async function retryUploadJob(id: string): Promise<Result<{ status: string }>> {
+  try {
+    if (!UUID_RE.test(id)) return { success: false, error: "Invalid job id." };
+    const { c, actor, who } = await adminWrite();
+    const { data, error } = await c.rpc("retry_sync_upload_job", { p_id: id, p_actor: actor });
+    if (error) return { success: false, error: error.message };
+    const r = (data ?? {}) as { ok?: boolean; status?: string; reason?: string; detail?: string };
+    if (!r.ok) {
+      const why = r.detail ?? r.reason ?? "the job cannot be queued again";
+      await logAudit(c, { actor: who, action: "run.upload", targetKind: "upload_job", targetId: id, summary: `Retry of upload job refused \u2014 ${why}`, ok: false, detail: { job: id, reason: r.reason ?? null } });
+      return { success: false, error: why };
+    }
+    await logAudit(c, { actor: who, action: "run.upload", targetKind: "upload_job", targetId: id, summary: "Queued a parked upload job again", detail: { job: id } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { status: r.status ?? "queued" } };
+  } catch (e) {
+    return fail(e, "Could not queue the job again.");
+  }
+}
+
+/** Cancel a job that has not started (queued, or waiting to retry). */
+export async function cancelUploadJob(id: string): Promise<Result<{ status: string }>> {
+  try {
+    if (!UUID_RE.test(id)) return { success: false, error: "Invalid job id." };
+    const { c, actor, who } = await adminWrite();
+    const { data, error } = await c.rpc("cancel_sync_upload_job", { p_id: id, p_actor: actor });
+    if (error) return { success: false, error: error.message };
+    const r = (data ?? {}) as { ok?: boolean; status?: string; reason?: string; detail?: string };
+    if (!r.ok) return { success: false, error: r.detail ?? r.reason ?? "the job cannot be cancelled" };
+    await logAudit(c, { actor: who, action: "run.upload", targetKind: "upload_job", targetId: id, summary: "Cancelled a queued upload job", detail: { job: id } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { status: r.status ?? "cancelled" } };
+  } catch (e) {
+    return fail(e, "Could not cancel the job.");
+  }
+}
+
+/**
+ * Forget a finished job and its stored workbook. Only a terminal job, and
+ * only once its retention window has passed \u2014 a failed upload is kept for
+ * troubleshooting until then.
+ */
+export async function removeUploadJob(id: string): Promise<Result<{ removed: boolean }>> {
+  try {
+    if (!UUID_RE.test(id)) return { success: false, error: "Invalid job id." };
+    const { c, actor, who } = await adminWrite();
+    void actor;
+    const { data, error } = await c.from("sync_upload_job").select("id, file_name, status, storage_bucket, storage_path, payload_expires_at, payload_deleted_at").eq("id", id).maybeSingle();
+    if (error) return { success: false, error: error.message };
+    const job = data as { id: string; file_name: string; status: string; storage_bucket: string | null; storage_path: string | null; payload_expires_at: string | null; payload_deleted_at: string | null } | null;
+    if (!job) return { success: false, error: "No such upload job." };
+    if (!["failed", "cancelled", "done"].includes(job.status)) return { success: false, error: `The job is ${job.status} \u2014 only a finished job can be removed.` };
+    const expires = job.payload_expires_at ? new Date(job.payload_expires_at).getTime() : 0;
+    if (job.payload_deleted_at == null && job.storage_path && expires > Date.now()) {
+      return { success: false, error: `Its workbook is kept for troubleshooting until ${new Date(expires).toISOString().slice(0, 16).replace("T", " ")} UTC.` };
+    }
+    if (job.storage_path && job.payload_deleted_at == null) {
+      const { error: sErr } = await c.storage.from(job.storage_bucket || "sync-uploads").remove([job.storage_path]);
+      if (sErr) return { success: false, error: `The stored workbook could not be removed: ${sErr.message}` };
+    }
+    const { error: dErr } = await c.from("sync_upload_job").delete().eq("id", id);
+    if (dErr) return { success: false, error: dErr.message };
+    await logAudit(c, { actor: who, action: "run.upload", targetKind: "upload_job", targetId: id, summary: `Removed the upload job for ${job.file_name} and its stored workbook`, detail: { job: id, status: job.status } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { removed: true } };
+  } catch (e) {
+    return fail(e, "Could not remove the job.");
+  }
+}
+
+// ── health (workstream I) ───────────────────────────────────────────────────
+export interface SyncAlertStateRow {
+  kind: string; ref: string; consecutive: number; detail: string | null;
+  first_seen: string; last_seen: string; notified_at: string | null; cleared_at: string | null;
+}
+export interface SyncHealth {
+  summary: Record<string, number>;
+  alerts: SyncAlertStateRow[];
+  config: { enabled: boolean; recipients: string[]; min_consecutive: number; updated_at: string | null };
+  /** the last time the health cron actually ran, and what it did */
+  lastCheck: { at: string | null; status: string | null; rows: number | null; meta: Record<string, unknown> | null };
+}
+
+export async function getSyncHealth(): Promise<Result<SyncHealth>> {
+  try {
+    const c = await adminClient();
+    const [sum, state, cfg, job] = await Promise.all([
+      c.rpc("fn_sync_health_summary"),
+      c.from("sync_alert_state").select("kind, ref, consecutive, detail, first_seen, last_seen, notified_at, cleared_at").order("last_seen", { ascending: false }).limit(200),
+      c.from("sync_alert_config").select("enabled, recipients, min_consecutive, updated_at").eq("id", 1).maybeSingle(),
+      c.from("job_runs").select("finished_at, started_at, status, rows, meta").eq("job", "sync-health").order("id", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (sum.error) return { success: false, error: sum.error.message };
+    const j = (job.data ?? null) as { finished_at: string | null; started_at: string | null; status: string | null; rows: number | null; meta: Record<string, unknown> | null } | null;
+    const k = (cfg.data ?? null) as { enabled: boolean; recipients: string[]; min_consecutive: number; updated_at: string } | null;
+    return { success: true, data: {
+      summary: (sum.data ?? {}) as Record<string, number>,
+      alerts: (state.data ?? []) as SyncAlertStateRow[],
+      config: { enabled: !!k?.enabled, recipients: k?.recipients ?? [], min_consecutive: Number(k?.min_consecutive ?? 2), updated_at: k?.updated_at ?? null },
+      lastCheck: { at: j?.finished_at ?? j?.started_at ?? null, status: j?.status ?? null, rows: j?.rows ?? null, meta: j?.meta ?? null },
+    } };
+  } catch (e) {
+    return fail(e, "Could not read the health state.");
+  }
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function saveAlertConfig(patch: { enabled?: boolean; recipients?: string[]; min_consecutive?: number }): Promise<Result<{ enabled: boolean; recipients: string[]; min_consecutive: number }>> {
+  try {
+    const { c, actor, who } = await adminWrite();
+    const row: Record<string, unknown> = { id: 1, updated_at: new Date().toISOString(), updated_by: actor };
+    if (patch.enabled !== undefined) row.enabled = !!patch.enabled;
+    if (patch.recipients !== undefined) {
+      const list = (patch.recipients ?? []).map((r) => String(r).trim()).filter(Boolean);
+      const bad = list.filter((r) => !EMAIL_RE.test(r));
+      if (bad.length) return { success: false, error: `Not an email address: ${bad.join(", ")}` };
+      if (list.length > 20) return { success: false, error: "At most twenty recipients." };
+      row.recipients = list;
+    }
+    if (patch.min_consecutive !== undefined) {
+      const n = Number(patch.min_consecutive);
+      if (!Number.isInteger(n) || n < 1 || n > 20) return { success: false, error: "Consecutive checks must be a whole number between 1 and 20." };
+      row.min_consecutive = n;
+    }
+    if (row.enabled === true) {
+      const recips = (row.recipients as string[] | undefined) ?? (await c.from("sync_alert_config").select("recipients").eq("id", 1).maybeSingle()).data?.recipients ?? [];
+      if (!recips.length) return { success: false, error: "Add at least one recipient before switching alerting on." };
+    }
+    const { data, error } = await c.from("sync_alert_config").upsert(row, { onConflict: "id" }).select("enabled, recipients, min_consecutive").single();
+    if (error) return { success: false, error: error.message };
+    const saved = data as { enabled: boolean; recipients: string[]; min_consecutive: number };
+    await logAudit(c, { actor: who, action: "settings.health.save", targetKind: "settings", targetId: "sync_alert_config",
+      summary: `Health alerting ${saved.enabled ? "on" : "off"} \u2014 ${saved.recipients.length} recipient(s), after ${saved.min_consecutive} consecutive check(s)`,
+      detail: { enabled: saved.enabled, recipients: saved.recipients, min_consecutive: saved.min_consecutive } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: saved };
+  } catch (e) {
+    return fail(e, "Could not save the alert settings.");
   }
 }
 
@@ -742,7 +1083,7 @@ export async function listCommodityQueue(
     if (error) return { success: false, error: error.message };
     return { success: true, data: (data ?? []) as CommodityQueueRow[] };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read the review queue." };
+    return fail(e, "Could not read the review queue.");
   }
 }
 
@@ -754,7 +1095,8 @@ export async function countCommodityQueuePending(): Promise<number> {
       .select("id", { count: "exact", head: true })
       .eq("status", "pending");
     return count ?? 0;
-  } catch {
+  } catch (e) {
+    unstable_rethrow(e);
     return 0;
   }
 }
@@ -777,7 +1119,15 @@ export async function resolveCommodityReview(
   if (!input.canonical?.trim()) return { success: false, error: "Canonical name is required." };
   if (!input.cargoType || !input.imsbc) return { success: false, error: "Cargo type and IMSBC category are required." };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
+    // review gate: commodity (workstream E) — the mapping is a publication, strict and fail-closed
+    {
+      const gate = await validateRow(c, "commodities", { canonical_name: input.canonical.trim(), category_label: input.category ?? null, is_grain: input.isGrain ?? false, is_dg: input.isDg ?? false }, "review", { id: actor, name: "Manual Review commodity" }, true, { strict: true });
+      if (gate.blocked) {
+        const why = gate.issues.filter((i) => i.mode === "block").map((i) => `${i.rule_code} — ${i.message}`).join("; ");
+        return { success: false, error: `Refused by the data-quality gate: ${why}` };
+      }
+    }
     const { data, error } = await c.rpc("resolve_commodity_review", {
       p_id: id,
       p_canonical: input.canonical.trim(),
@@ -790,26 +1140,198 @@ export async function resolveCommodityReview(
       p_actor: actor,
     });
     if (error) return { success: false, error: error.message };
+    await logAudit(c, { actor: who, action: "queue.commodity.resolve", targetKind: "queue", targetId: id, summary: `Mapped commodity → ${input.canonical.trim()} (${input.cargoType} · ${input.imsbc})`, detail: { ...input, commodityId: (data as { commodity_id: string }).commodity_id } });
     revalidatePath("/admin/data-sync");
     return { success: true, data: { commodityId: (data as { commodity_id: string }).commodity_id } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not resolve the commodity." };
+    return fail(e, "Could not resolve the commodity.");
   }
 }
 
 export async function ignoreCommodityReview(id: string): Promise<Result> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid queue id." };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
     const { error } = await c
       .from("commodity_review_queue")
       .update({ status: "ignored", resolved_by: actor, resolved_at: new Date().toISOString() })
       .eq("id", id);
     if (error) return { success: false, error: error.message };
+    await logAudit(c, { actor: who, action: "queue.commodity.ignore", targetKind: "queue", targetId: id, summary: "Ignored a commodity review entry" });
     revalidatePath("/admin/data-sync");
     return { success: true };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not update the queue." };
+    return fail(e, "Could not update the queue.");
+  }
+}
+
+/** All four queue badges in one gated round trip. */
+export async function countQueues(): Promise<Result<{ commodities: number; vessels: number; ports: number; invalid: number }>> {
+  try {
+    const c = await adminClient();
+    const batch = await latestReviewBatch(c);
+    const head = { count: "exact" as const, head: true };
+    const [cc, vc, pc, ic] = await Promise.all([
+      c.from("commodity_review_queue").select("id", head).eq("status", "pending"),
+      c.from("vessel_review_queue").select("id", head).eq("status", "pending"),
+      c.from("port_review_queue").select("id", head).eq("status", "pending"),
+      batch
+        ? c.from("sync_staged_row").select("id", head).eq("batch_id", batch.id).eq("classification", "invalid").eq("committed", false)
+        : Promise.resolve({ count: 0 }),
+    ]);
+    return { success: true, data: { commodities: cc.count ?? 0, vessels: vc.count ?? 0, ports: pc.count ?? 0, invalid: ic.count ?? 0 } };
+  } catch (e) {
+    return fail(e, "Could not count the queues.");
+  }
+}
+
+// ── Port review queue (unclassified port text → an alias or an area) ─────────
+// The gate (DQ-P03) refuses any cargo whose port side is neither a port, a
+// list of ports, nor a known area. Those names land here: map the text to an
+// existing port (an alias) or declare it an area with a nominated reference
+// port, and every listing that used the text is re-classified.
+export interface PortQueueRow {
+  id: string;
+  raw_name: string;
+  name_key: string;
+  side: "load" | "disch" | "open";
+  sample_ref: string | null;
+  source: string | null;
+  first_batch_id: string | null;
+  hits: number;
+  suggested_zone: string | null;
+  status: "pending" | "mapped" | "ignored";
+  resolved_kind: "port" | "alias" | "area" | null;
+  mapped_locode: string | null;
+  mapped_area_key: string | null;
+  created_at: string;
+}
+
+export interface PortOpt { locode: string; trade_name: string; zone: string | null; country: string | null }
+
+export async function listPortQueue(
+  status: "pending" | "mapped" | "ignored" = "pending",
+): Promise<Result<PortQueueRow[]>> {
+  try {
+    const c = await adminClient();
+    const { data, error } = await c
+      .from("port_review_queue")
+      .select("id, raw_name, name_key, side, sample_ref, source, first_batch_id, hits, suggested_zone, status, resolved_kind, mapped_locode, mapped_area_key, created_at")
+      .eq("status", status)
+      .order("hits", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: (data ?? []) as PortQueueRow[] };
+  } catch (e) {
+    return fail(e, "Could not read the port queue.");
+  }
+}
+
+export async function countPortQueuePending(): Promise<number> {
+  try {
+    const c = await adminClient();
+    const { count } = await c
+      .from("port_review_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    return count ?? 0;
+  } catch (e) {
+    unstable_rethrow(e);
+    return 0;
+  }
+}
+
+/** Re-scan live listings and uncommitted staged rows for unclassified ports. */
+export async function sweepPortQueue(): Promise<Result<{ queued: number }>> {
+  try {
+    const { c, who } = await adminWrite();
+    const { data, error } = await c.rpc("fn_port_review_sweep");
+    if (error) return { success: false, error: error.message };
+    await logAudit(c, { actor: who, action: "queue.port.sweep", targetKind: "queue", summary: `Swept the port queue — ${Number(data ?? 0)} entries queued`, detail: { queued: Number(data ?? 0) } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { queued: Number(data ?? 0) } };
+  } catch (e) {
+    return fail(e, "Could not sweep the port queue.");
+  }
+}
+
+export async function listPortsForPicker(): Promise<Result<PortOpt[]>> {
+  try {
+    const c = await adminClient();
+    const { data, error } = await c
+      .from("ports")
+      .select("locode, trade_name, zone, country")
+      .eq("is_active", true)
+      .order("trade_name")
+      .limit(2000);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: (data ?? []) as PortOpt[] };
+  } catch (e) {
+    return fail(e, "Could not read the ports registry.");
+  }
+}
+
+export interface ResolvePortInput {
+  kind: "alias" | "area";
+  /** alias target, or the area's reference port */
+  locode?: string | null;
+  areaName?: string | null;
+  areaKind?: "country" | "area" | "range";
+  zone?: string | null;
+  candidates?: string[];
+}
+
+export async function resolvePortReview(id: string, input: ResolvePortInput): Promise<Result<{ reclassified: number }>> {
+  if (!UUID_RE.test(id)) return { success: false, error: "Invalid queue id." };
+  if (input.kind === "alias" && !input.locode) return { success: false, error: "Pick the port this name refers to." };
+  if (input.kind === "area" && !input.locode) {
+    return { success: false, error: "Nominate a reference port — without one the area still cannot feed distance or costs." };
+  }
+  try {
+    const { c, who } = await adminWrite();
+    // review gate: port (workstream E) — the port a name or an area is placed on must itself pass the gate
+    if (input.locode) {
+      const { data: port } = await c.from("ports").select("*").eq("locode", input.locode).maybeSingle();
+      if (!port) return { success: false, error: `${input.locode} is not in the ports registry.` };
+      const gate = await validateRow(c, "ports", port as Record<string, unknown>, "review", { id: null, name: "Manual Review port" }, true, { strict: true });
+      if (gate.blocked) {
+        const why = gate.issues.filter((i) => i.mode === "block").map((i) => `${i.rule_code} — ${i.message}`).join("; ");
+        return { success: false, error: `Refused by the data-quality gate: ${input.locode} — ${why}` };
+      }
+    }
+    const { data, error } = await c.rpc("resolve_port_review", {
+      p_id: id,
+      p_kind: input.kind,
+      p_locode: input.locode ?? null,
+      p_area_name: input.areaName ?? null,
+      p_area_kind: input.areaKind ?? "area",
+      p_zone: input.zone ?? null,
+      p_candidates: input.candidates ?? [],
+    });
+    if (error) return { success: false, error: error.message };
+    revalidatePath("/admin/data-sync");
+    revalidatePath("/dashboard");
+    revalidatePath("/");
+    const out = (data ?? {}) as { listings_reclassified?: number };
+    await logAudit(c, { actor: who, action: "queue.port.resolve", targetKind: "queue", targetId: id, summary: `Resolved port text as ${input.kind}${input.locode ? ` → ${input.locode}` : ""} — ${Number(out.listings_reclassified ?? 0)} listing(s) reclassified`, detail: { ...input, ...out } });
+    return { success: true, data: { reclassified: Number(out.listings_reclassified ?? 0) } };
+  } catch (e) {
+    return fail(e, "Could not resolve the port.");
+  }
+}
+
+export async function ignorePortReview(id: string): Promise<Result> {
+  if (!UUID_RE.test(id)) return { success: false, error: "Invalid queue id." };
+  try {
+    const { c, who } = await adminWrite();
+    const { error } = await c.rpc("resolve_port_review", { p_id: id, p_kind: "ignore" });
+    if (error) return { success: false, error: error.message };
+    await logAudit(c, { actor: who, action: "queue.port.ignore", targetKind: "queue", targetId: id, summary: "Ignored a port review entry" });
+    revalidatePath("/admin/data-sync");
+    return { success: true };
+  } catch (e) {
+    return fail(e, "Could not update the queue.");
   }
 }
 
@@ -856,7 +1378,7 @@ export async function listVesselQueue(
     if (error) return { success: false, error: error.message };
     return { success: true, data: (data ?? []) as VesselQueueRow[] };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read the vessel queue." };
+    return fail(e, "Could not read the vessel queue.");
   }
 }
 
@@ -868,7 +1390,8 @@ export async function countVesselQueuePending(): Promise<number> {
       .select("id", { count: "exact", head: true })
       .eq("status", "pending");
     return count ?? 0;
-  } catch {
+  } catch (e) {
+    unstable_rethrow(e);
     return 0;
   }
 }
@@ -933,7 +1456,7 @@ export async function resolveVesselReview(
   if (patch && "vessel_name" in patch && !patch.vessel_name?.trim())
     return { success: false, error: "The vessel needs a name." };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
     if (patch && Object.keys(patch).length > 0) {
       const upd = vesselPatchToUpdate(patch);
       const { error: uErr } = await c.from("vessel_review_queue").update(upd).eq("id", id);
@@ -973,6 +1496,7 @@ export async function resolveVesselReview(
         console.error("[data-sync] poster source on availability:", e);
       }
     }
+    await logAudit(c, { actor: who, action: "queue.vessel.sync", targetKind: "queue", targetId: id, summary: `Synced queued vessel ${trimmed ? `with IMO ${trimmed}` : "WITHOUT an IMO (temporary)"} — ${d.op}`, detail: { imo: trimmed, patch: patch ?? null, ...d } });
     revalidatePath("/admin/data-sync");
     // The sync now posts the OPEN position too — refresh the market pages.
     revalidatePath("/dashboard", "layout");
@@ -980,7 +1504,7 @@ export async function resolveVesselReview(
     revalidatePath("/");
     return { success: true, data: { vesselId: d.vessel_id, op: d.op, availabilityId: d.availability_id ?? null, portResolved: !!d.port_resolved } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not sync the vessel." };
+    return fail(e, "Could not sync the vessel.");
   }
 }
 
@@ -1001,7 +1525,7 @@ export async function listFlagStates(): Promise<Result<FlagStateOpt[]>> {
     if (error) return { success: false, error: error.message };
     return { success: true, data: (data ?? []) as FlagStateOpt[] };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read the flag registry." };
+    return fail(e, "Could not read the flag registry.");
   }
 }
 
@@ -1017,21 +1541,22 @@ export async function listOrganizationNames(): Promise<Result<OrganizationOpt[]>
     if (error) return { success: false, error: error.message };
     return { success: true, data: (data ?? []) as OrganizationOpt[] };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read the company registry." };
+    return fail(e, "Could not read the company registry.");
   }
 }
 
 export async function resolveVesselQueuePatchOnly(id: string, patch: VesselQueuePatch): Promise<Result> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid queue id." };
   try {
-    const { c } = await adminWrite();
+    const { c, who } = await adminWrite();
     const upd = vesselPatchToUpdate(patch);
     if (Object.keys(upd).length === 0) return { success: true };
     const { error } = await c.from("vessel_review_queue").update(upd).eq("id", id);
     if (error) return { success: false, error: error.message };
+    await logAudit(c, { actor: who, action: "queue.vessel.patch", targetKind: "queue", targetId: id, summary: `Corrected queued vessel fields — ${Object.keys(upd).join(", ")}`, detail: upd });
     return { success: true };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not save the edits." };
+    return fail(e, "Could not save the edits.");
   }
 }
 
@@ -1055,7 +1580,7 @@ export async function findVesselQueueMatches(id: string): Promise<Result<MatchVi
     });
     return { success: true, data: matches.map(({ kind, label, facts, band, origin }) => ({ kind, label, facts, band, origin })) };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Match search failed." };
+    return fail(e, "Match search failed.");
   }
 }
 
@@ -1063,7 +1588,7 @@ export async function findVesselQueueMatches(id: string): Promise<Result<MatchVi
 export async function sendVesselQueueTeaser(id: string): Promise<Result<{ status: string }>> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid queue id." };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { data: q, error } = await c
       .from("vessel_review_queue")
       .select("dwt_grain, built, open_port, open_country, open_zone, dest_zones, source_email")
@@ -1089,25 +1614,27 @@ export async function sendVesselQueueTeaser(id: string): Promise<Result<{ status
     const body = composeTeaser(matches, cfg?.platform_url ?? "https://arabshipbroker.com");
     const sent = await sendWhatsApp(c, { to, body, kind: "teaser", messageId: null });
     if (!sent.ok) return { success: false, error: sent.error ?? "Send failed." };
+    await logAudit(c, { actor: who, action: "whatsapp.teaser", targetKind: "queue", targetId: id, summary: `Sent the masked match summary to the queued vessel's contact (${sent.status})`, detail: { status: sent.status, matches: matches.length } });
     return { success: true, data: { status: sent.status } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Teaser send failed." };
+    return fail(e, "Teaser send failed.");
   }
 }
 
 export async function ignoreVesselReview(id: string): Promise<Result> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid queue id." };
   try {
-    const { c, actor } = await adminWrite();
+    const { c, actor, who } = await adminWrite();
     const { error } = await c
       .from("vessel_review_queue")
       .update({ status: "ignored", resolved_by: actor, resolved_at: new Date().toISOString() })
       .eq("id", id);
     if (error) return { success: false, error: error.message };
+    await logAudit(c, { actor: who, action: "queue.vessel.ignore", targetKind: "queue", targetId: id, summary: "Ignored a vessel review entry" });
     revalidatePath("/admin/data-sync");
     return { success: true };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not update the queue." };
+    return fail(e, "Could not update the queue.");
   }
 }
 
@@ -1143,7 +1670,7 @@ export async function listWhatsappMessages(limit = 15): Promise<Result<WhatsappM
     if (error) return { success: false, error: error.message };
     return { success: true, data: (data ?? []) as WhatsappMessageRow[] };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not read WhatsApp messages." };
+    return fail(e, "Could not read WhatsApp messages.");
   }
 }
 
@@ -1151,54 +1678,58 @@ export async function listWhatsappMessages(limit = 15): Promise<Result<WhatsappM
 export async function deleteWhatsappMessage(id: string): Promise<Result> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid message id." };
   try {
-    const { c } = await adminWrite();
+    const { c, who } = await adminWrite();
     const { error } = await c.from("whatsapp_message").delete().eq("id", id);
     if (error) return { success: false, error: error.message };
+    await logAudit(c, { actor: who, action: "whatsapp.message.delete", targetKind: "whatsapp_message", targetId: id, summary: "Deleted a WhatsApp inbox message" });
     revalidatePath("/admin/data-sync");
     return { success: true };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not delete the message." };
+    return fail(e, "Could not delete the message.");
   }
 }
 
 // Clear the whole inbox (messages only — review batches and synced data stay).
 export async function clearWhatsappInbox(): Promise<Result<{ deleted: number }>> {
   try {
-    const { c } = await adminWrite();
+    const { c, who } = await adminWrite();
     const { data, error } = await c
       .from("whatsapp_message")
       .delete()
       .in("status", ["pending", "staged", "failed", "irrelevant"])
       .select("id");
     if (error) return { success: false, error: error.message };
+    await logAudit(c, { actor: who, action: "whatsapp.inbox.clear", targetKind: "whatsapp_message", summary: `Cleared the WhatsApp inbox — ${data?.length ?? 0} message(s)`, detail: { deleted: data?.length ?? 0 } });
     revalidatePath("/admin/data-sync");
     return { success: true, data: { deleted: data?.length ?? 0 } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Could not clear the inbox." };
+    return fail(e, "Could not clear the inbox.");
   }
 }
 
 // Manual sweep: classify+stage+ack anything pending (and optionally failed).
-export async function processWhatsapp(includeFailed = false): Promise<Result<{ processed: number; staged: number; irrelevant: number; failed: number; log: string[] }>> {
+export type { ProcessSummary } from "@/lib/sync/whatsapp/process";
+export async function processWhatsapp(includeFailed = false): Promise<Result<ProcessSummary>> {
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { processPendingWhatsapp } = await import("@/lib/sync/whatsapp/process");
-    const res = await processPendingWhatsapp(c, { includeFailed });
+    const res = await processPendingWhatsapp(c, { includeFailed, limit: 25, budgetMs: 50_000, owner: "admin" });
+    await logAudit(c, { actor: who, action: "run.whatsapp.sweep", targetKind: "run", summary: `WhatsApp sweep — ${res.processed} processed · ${res.staged} staged · ${res.irrelevant} irrelevant · ${res.failed} failed`, detail: { includeFailed, processed: res.processed, staged: res.staged, irrelevant: res.irrelevant, failed: res.failed, usage: res.usage }, ok: !(res.failed && !res.staged) });
     revalidatePath("/admin/data-sync");
     return { success: true, data: res };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Processing failed." };
+    return fail(e, "Processing failed.");
   }
 }
 
 // A pasted-message dry run (no WhatsApp connection needed): inserts a synthetic
 // inbox message and processes it — mirrors the email "Test with a pasted email".
-export async function simulateWhatsapp(sample: string): Promise<Result<{ log: string[] }>> {
+export async function simulateWhatsapp(sample: string): Promise<Result<{ log: string[]; steps: ProcessSummary["steps"]; usage: ProcessSummary["usage"] }>> {
   const text = sample?.trim();
   if (!text) return { success: false, error: "Paste a WhatsApp message to classify." };
   if (text.length > 8000) return { success: false, error: "Sample is too long." };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { error } = await c.from("whatsapp_message").insert({
       wa_message_id: `SIM:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
       provider: "unofficial", wa_from: "simulated@s.whatsapp.net",
@@ -1206,11 +1737,12 @@ export async function simulateWhatsapp(sample: string): Promise<Result<{ log: st
     });
     if (error) return { success: false, error: error.message };
     const { processPendingWhatsapp } = await import("@/lib/sync/whatsapp/process");
-    const res = await processPendingWhatsapp(c);
+    const res = await processPendingWhatsapp(c, { limit: 5, budgetMs: 50_000, owner: "admin:simulate" });
+    await logAudit(c, { actor: who, action: "run.whatsapp.simulate", targetKind: "run", summary: `WhatsApp dry run on a pasted message — ${res.staged} staged · ${res.irrelevant} irrelevant · ${res.failed} failed`, detail: { chars: text.length, usage: res.usage } });
     revalidatePath("/admin/data-sync");
-    return { success: true, data: { log: res.log } };
+    return { success: true, data: { log: res.log, steps: res.steps, usage: res.usage } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Simulation failed." };
+    return fail(e, "Simulation failed.");
   }
 }
 
@@ -1237,7 +1769,7 @@ export async function findMatches(stagedRowId: string): Promise<Result<MatchView
     const matches = await loadMatches(c, row.sheet as "cargo" | "vessels", (row.payload ?? {}) as Record<string, unknown>);
     return { success: true, data: matches.map(({ kind, label, facts, band, origin }) => ({ kind, label, facts, band, origin })) };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Match search failed." };
+    return fail(e, "Match search failed.");
   }
 }
 
@@ -1249,7 +1781,7 @@ export async function sendMatchTeaser(
   if (!UUID_RE.test(whatsappMessageId) || !UUID_RE.test(stagedRowId))
     return { success: false, error: "Invalid id." };
   try {
-    const c = await adminClient();
+    const { c, who } = await adminWrite();
     const { data: msg, error: mErr } = await c
       .from("whatsapp_message").select("id, wa_from").eq("id", whatsappMessageId).maybeSingle();
     if (mErr) return { success: false, error: mErr.message };
@@ -1272,9 +1804,151 @@ export async function sendMatchTeaser(
     if (!sent.ok) return { success: false, error: sent.error ?? "Teaser send failed." };
 
     await c.from("whatsapp_message").update({ teaser_sent_at: new Date().toISOString() }).eq("id", msg.id);
+    await logAudit(c, { actor: who, action: "whatsapp.teaser", targetKind: "whatsapp_message", targetId: msg.id, summary: `Sent the masked match summary to ${msg.wa_from.replace("@s.whatsapp.net", "")} (${sent.status})`, detail: { stagedRowId, status: sent.status, matches: matches.length } });
     revalidatePath("/admin/data-sync");
     return { success: true, data: { status: sent.status } };
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Teaser send failed." };
+    return fail(e, "Teaser send failed.");
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Duplicate pairs (Review) — DQ-U03 same cargo under two refs, DQ-U04 the same
+// ship with and without an IMO. Detection is pure (lib/sync/dupes.ts); the
+// merge is reversible: the dropped row is re-classified 'unchanged' (never
+// committed) and carries an info flag pointing at the kept row, so "Restore"
+// simply re-validates it.
+// ════════════════════════════════════════════════════════════════════════════
+export type { DupPair } from "@/lib/sync/dupes";
+
+export async function findDuplicatePairs(batchId: string): Promise<Result<DupPair[]>> {
+  const bad = badBatch(batchId);
+  if (bad) return { success: false, error: bad };
+  try {
+    const c = await adminClient();
+    // The open batch plus any other draft batch: a workbook row and a circular
+    // row for the same order live in different batches by construction.
+    const { data: drafts } = await c.from("sync_batch").select("id").in("status", OPEN_BATCH_STATUSES).order("created_at", { ascending: false }).limit(6);
+    const ids = Array.from(new Set([batchId, ...((drafts ?? []) as { id: string }[]).map((b) => b.id)]));
+    const [{ data: rows, error }, { data: queue }] = await Promise.all([
+      c.from("sync_staged_row")
+        .select("id, sheet, business_key, classification, committed, payload, batch_id")
+        .in("batch_id", ids).in("sheet", ["cargo", "vessels"]).neq("classification", "unchanged")
+        .limit(4000),
+      c.from("vessel_review_queue").select("id, vessel_name, built, dwt_grain").eq("status", "pending").limit(500),
+    ]);
+    if (error) return { success: false, error: error.message };
+    const staged = (rows ?? []) as StagedLite[];
+    const pairs = [
+      ...findCargoDuplicates(staged),
+      ...findVesselDuplicates(staged.filter((r) => r.batch_id === batchId), (queue ?? []) as QueuedVesselLite[]),
+    ];
+    return { success: true, data: pairs.slice(0, 40) };
+  } catch (e) {
+    return fail(e, "Could not look for duplicates.");
+  }
+}
+
+export async function mergeStagedRows(keepId: string, dropId: string, dropOrigin: "staged" | "queue"): Promise<Result<{ filled: string[] }>> {
+  if (!UUID_RE.test(keepId) || !UUID_RE.test(dropId)) return { success: false, error: "Invalid row id." };
+  try {
+    const { c, actor, who } = await adminWrite();
+    const { data: keep, error: kErr } = await c.from("sync_staged_row").select("id, sheet, payload, committed, flags").eq("id", keepId).maybeSingle();
+    if (kErr) return { success: false, error: kErr.message };
+    if (!keep) return { success: false, error: "The row to keep was not found." };
+    if (keep.committed) return { success: false, error: "The kept row is already committed — undo the batch first." };
+
+    let filled: string[] = [];
+    if (dropOrigin === "queue") {
+      // DQ-U04: the IMO-less queue entry is superseded by the registered row.
+      const { error } = await c.from("vessel_review_queue")
+        .update({ status: "ignored", resolved_by: actor, resolved_at: new Date().toISOString() })
+        .eq("id", dropId).eq("status", "pending");
+      if (error) return { success: false, error: error.message };
+    } else {
+      const { data: drop, error: dErr } = await c.from("sync_staged_row").select("id, sheet, payload, committed, flags").eq("id", dropId).maybeSingle();
+      if (dErr) return { success: false, error: dErr.message };
+      if (!drop) return { success: false, error: "The duplicate row was not found." };
+      if (drop.committed) return { success: false, error: "The duplicate is already committed — undo the batch first." };
+      if (drop.sheet !== keep.sheet) return { success: false, error: "Rows belong to different sheets." };
+      // Fill the kept row's gaps from the duplicate, through the same
+      // validate + gate path as any edit.
+      const pt = previewTable(keep.sheet as string);
+      const editable = (pt?.columns ?? []).filter((cc) => cc.editable !== false).map((cc) => cc.col);
+      const patch = mergePatch(keep.payload as Record<string, unknown>, drop.payload as Record<string, unknown>, editable);
+      filled = Object.keys(patch);
+      if (filled.length) {
+        const r = await editStagedRow(keepId, patch);
+        if (!r.success) return r;
+      }
+      // Park the duplicate: 'unchanged' is never committed, stays visible with
+      // "Changes only" off, and restoring is one re-validate away.
+      const flags = [...((drop.flags as { level: string; field?: string; msg: string }[]) ?? []).filter((f) => !f.msg.startsWith("merged into")),
+        { level: "info", msg: `merged into ${keepId}` }];
+      const { error } = await c.from("sync_staged_row").update({ classification: "unchanged", flags }).eq("id", dropId);
+      if (error) return { success: false, error: error.message };
+    }
+    await logAudit(c, { actor: who, action: "row.merge", targetKind: "staged_row", targetId: keepId, summary: `Merged duplicate ${dropOrigin === "queue" ? "queue entry" : "staged row"} ${dropId.slice(0, 8)} into ${keepId.slice(0, 8)}${filled.length ? ` — filled ${filled.join(", ")}` : ""}`, detail: { keepId, dropId, dropOrigin, filled } });
+    revalidatePath("/admin/data-sync");
+    return { success: true, data: { filled } };
+  } catch (e) {
+    return fail(e, "Merge failed.");
+  }
+}
+
+/** Undo a merge: re-validate the parked row so it regains its real class. */
+export async function restoreMergedRow(rowId: string): Promise<Result<{ classification: string }>> {
+  if (!UUID_RE.test(rowId)) return { success: false, error: "Invalid row id." };
+  try {
+    const { c, who } = await adminWrite();
+    const { data: row, error } = await c.from("sync_staged_row").select("payload, flags, sheet").eq("id", rowId).maybeSingle();
+    if (error) return { success: false, error: error.message };
+    if (!row) return { success: false, error: "Row not found." };
+    const flags = ((row.flags as { level: string; msg: string }[]) ?? []).filter((f) => !f.msg.startsWith("merged into"));
+    await c.from("sync_staged_row").update({ flags }).eq("id", rowId);
+    // Re-run the row through validate + diff + gate by "editing" its key column
+    // to itself — the cheapest way to reclassify without a second code path.
+    const spec = specById(row.sheet as string);
+    const key = spec ? (row.payload as RawRow)[spec.keyColumn] : null;
+    if (!spec || key == null) return { success: false, error: "Row has no business key to re-validate." };
+    await logAudit(c, { actor: who, action: "row.restore", targetKind: "staged_row", targetId: rowId, summary: `Restored merged row ${String(key)} (${row.sheet}) for re-validation` });
+    return editStagedRow(rowId, { [spec.keyColumn]: key });
+  } catch (e) {
+    return fail(e, "Restore failed.");
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Audit trail (read) — public.data_sync_audit, written by every action above.
+// ════════════════════════════════════════════════════════════════════════════
+export type { AuditRow } from "@/lib/admin/data-sync-audit";
+
+export async function listDataSyncAudit(f: {
+  family?: string | null; actorId?: string | null; q?: string | null;
+  from?: string | null; to?: string | null; limit?: number; beforeId?: number | null;
+} = {}): Promise<Result<{ rows: AuditRow[]; actors: { id: string; name: string }[] }>> {
+  try {
+    const c = await adminClient();
+    const limit = Math.min(Math.max(f.limit ?? 100, 1), 500);
+    let q = c.from("data_sync_audit")
+      .select("id, at, actor_id, actor_name, actor_kind, action, target_kind, target_id, batch_id, summary, detail, ok, ip")
+      .order("id", { ascending: false }).limit(limit);
+    if (f.family && AUDIT_FAMILIES.some((x) => x.id === f.family)) q = q.like("action", `${f.family}.%`);
+    if (f.actorId === "system") q = q.neq("actor_kind", "admin");
+    else if (f.actorId && UUID_RE.test(f.actorId)) q = q.eq("actor_id", f.actorId);
+    if (f.q) { const t = sanitizeSearch(f.q); if (t) q = q.or(`summary.ilike.%${t}%,target_id.ilike.%${t}%,action.ilike.%${t}%`); }
+    if (f.from) q = q.gte("at", f.from);
+    if (f.to) q = q.lte("at", f.to);
+    if (f.beforeId) q = q.lt("id", f.beforeId);
+    const [{ data, error }, actorsRes] = await Promise.all([
+      q,
+      c.from("data_sync_audit").select("actor_id, actor_name").not("actor_id", "is", null).order("at", { ascending: false }).limit(500),
+    ]);
+    if (error) return { success: false, error: error.message };
+    const seen = new Map<string, string>();
+    for (const a of (actorsRes.data ?? []) as { actor_id: string; actor_name: string | null }[]) if (!seen.has(a.actor_id)) seen.set(a.actor_id, a.actor_name ?? a.actor_id.slice(0, 8));
+    return { success: true, data: { rows: (data ?? []) as AuditRow[], actors: [...seen].map(([id, name]) => ({ id, name })) } };
+  } catch (e) {
+    return fail(e, "Could not read the audit trail.");
   }
 }

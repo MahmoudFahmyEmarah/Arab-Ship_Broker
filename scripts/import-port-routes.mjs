@@ -284,4 +284,11 @@ function parsePassageReport(file) {
     process.stdout.write(`  waypoints ${wpTotal}/${wpBuf.length}\r`);
   }
   console.log(`\nImported ${inserted.length} routes · ${wpBuf.length} waypoints.`);
+  // 6 · chokepoint tags. A wholesale replace writes none, so re-derive them:
+  //     measured rows from their geometry (tight boxes), distance-only rows
+  //     from the two ports' trading zones. The Suez side-guard trigger on
+  //     port_routes strips any SUEZ tag whose two ports sit on the same side
+  //     of the canal (owner's rule, 12 Sep 2026 — see risk-areas.ts).
+  const retagged = await rest("rpc/fn_port_routes_recompute_chokepoints", { method: "POST", body: "{}" });
+  console.log(`Chokepoints recomputed on ${retagged ?? 0} route(s).`);
 })();

@@ -263,3 +263,35 @@ export function AnchorMark({ width, height, title, ...props }: IconProps) {
     </svg>
   );
 }
+
+/** Voyage cost — a calculator: display up top, a key grid beneath. */
+export function VoyCalc({ width, height, title, ...props }: IconProps) {
+  return (
+    <svg {...icon24RootProps({ width, height, title })} {...props}>
+      {title ? <title>{title}</title> : null}
+      <rect x="6" y="2.5" width="12" height="19" rx="2" />
+      <rect x="8.5" y="5.5" width="7" height="3.5" rx="0.6" />
+      <circle cx="9.5" cy="12.5" r="0.6" fill="currentColor" />
+      <circle cx="12" cy="12.5" r="0.6" fill="currentColor" />
+      <circle cx="14.5" cy="12.5" r="0.6" fill="currentColor" />
+      <circle cx="9.5" cy="15.5" r="0.6" fill="currentColor" />
+      <circle cx="12" cy="15.5" r="0.6" fill="currentColor" />
+      <circle cx="14.5" cy="15.5" r="0.6" fill="currentColor" />
+      <circle cx="9.5" cy="18.5" r="0.6" fill="currentColor" />
+      <line x1="12" y1="18.5" x2="14.5" y2="18.5" />
+    </svg>
+  );
+}
+
+/** Port DA — a proforma disbursement: a receipt, torn edge at the foot. */
+export function PortDA({ width, height, title, ...props }: IconProps) {
+  return (
+    <svg {...icon24RootProps({ width, height, title })} {...props}>
+      {title ? <title>{title}</title> : null}
+      <path d="M6 2.5h12v19l-2-1.6-2 1.6-2-1.6-2 1.6-2-1.6-2 1.6z" />
+      <line x1="9" y1="7.5" x2="15" y2="7.5" />
+      <line x1="9" y1="11" x2="15" y2="11" />
+      <line x1="9" y1="14.5" x2="12.5" y2="14.5" />
+    </svg>
+  );
+}

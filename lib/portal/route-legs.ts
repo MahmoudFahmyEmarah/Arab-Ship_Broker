@@ -7,7 +7,15 @@
 // the first alternative that resolves becomes the REFERENCE port that feeds
 // distance, Voy OPEX and Ports DA — always labelled as an estimate. A leg that
 // names an area or a country ("Spain Med", "Egypt") is shown as written with an
-// "area" marker and feeds nothing until a member picks a port.
+// "area" marker.
+//
+// 10 Sep 2026: the DATABASE now classifies every port side (port | options |
+// area | none) and nominates the reference port — fn_resolve_port_side, via
+// cargo_listings.load_port_scope / load_ref_locode. That stored answer wins,
+// because it knows the area dictionary and the alias table this module cannot
+// see; legInfo still derives its own when no stored answer is passed (mock
+// data, forms, the vessel side). An area with a nominated reference port now
+// DOES feed distance, Voy OPEX and Ports DA — always labelled an estimate.
 import type { CargoView } from "./types";
 
 export type LegKind = "port" | "alt" | "area" | "none";
@@ -56,21 +64,52 @@ const cleanCode = (code: string | null | undefined): string | null => {
   return /^[A-Z]{2}[A-Z2-9]{3}$/.test(k) ? k : null;
 };
 
+/** The database's reading of one side, when the server loader has it. */
+export interface StoredLeg {
+  scope: "port" | "options" | "area" | "none" | null;
+  refCode: string | null;
+}
+
 export function legInfo(
   code: string | null | undefined,
   name: string | null | undefined,
   zone: string | null | undefined,
   names?: PortNames | null,
+  stored?: StoredLeg | null,
 ): RouteLeg {
   const c = cleanCode(code);
   const n = (name ?? "").trim();
   const z = (zone ?? "").trim() || null;
+  const storedRef = cleanCode(stored?.refCode);
   if (c) {
     const known = names?.byCode[c];
     const label = known || n || c;
     return { kind: "port", label, code: c, refCode: c, refName: label, alternatives: [], zone: z, estimated: false, tooltip: `${label} · ${c}${z ? ` · ${z}` : ""}` };
   }
   if (n) {
+    // The database placed this side already — trust it over re-deriving,
+    // and use its reference port so areas can feed the calculators.
+    // "options" → alt; "area" → area; "none" with a reference → the trigger
+    // found no placeable text but a LOCODE sat in slot 2 — shown as an area
+    // (unplaceable wording, estimated figures), never as alternatives.
+    if (stored?.scope && stored.scope !== "port" && storedRef) {
+      const alts = splitAlternatives(n).map((a) => ({ name: a, code: names?.byName[portKey(a)] ?? null }));
+      const refName = names?.byCode[storedRef] ?? storedRef;
+      const isArea = stored.scope !== "options";
+      return {
+        kind: isArea ? "area" : "alt",
+        label: n,
+        code: null,
+        refCode: storedRef,
+        refName,
+        alternatives: isArea ? [] : alts,
+        zone: z,
+        estimated: true,
+        tooltip: isArea
+          ? `${n} — an area, not a single port; distance and costs are estimated from ${refName} (${storedRef})${z ? ` · zone ${z}` : ""}`
+          : `Alternatives: ${alts.map((a) => (a.code ? `${a.name} (${a.code})` : a.name)).join(" · ")} — distance and costs are estimated from ${refName}`,
+      };
+    }
     const alts = splitAlternatives(n);
     if (alts.length >= 2) {
       const resolved = alts.map((a) => ({ name: a, code: names?.byName[portKey(a)] ?? null }));
@@ -101,9 +140,15 @@ export interface RouteLegs {
 }
 
 /** The two legs of a cargo. Uses the server-resolved legs when present. */
-export function routeLegs(c: Pick<CargoView, "route" | "polLeg" | "podLeg">, names?: PortNames | null): RouteLegs {
-  const pol = c.polLeg ?? legInfo(c.route?.polCode, c.route?.polName, c.route?.polZone, names);
-  const pod = c.podLeg ?? legInfo(c.route?.podCode, c.route?.podName, c.route?.podZone, names);
+export function routeLegs(
+  c: Pick<CargoView, "route" | "polLeg" | "podLeg"> & Partial<Pick<CargoView, "portScope">>,
+  names?: PortNames | null,
+): RouteLegs {
+  const ps = c.portScope;
+  const pol = c.polLeg ?? legInfo(c.route?.polCode, c.route?.polName, c.route?.polZone, names,
+    ps ? { scope: ps.polScope, refCode: ps.polRef } : null);
+  const pod = c.podLeg ?? legInfo(c.route?.podCode, c.route?.podName, c.route?.podZone, names,
+    ps ? { scope: ps.podScope, refCode: ps.podRef } : null);
   const parts: string[] = [];
   if (pol.estimated) parts.push(`load side uses ${pol.refName} (listing says ${pol.label})`);
   if (pod.estimated) parts.push(`discharge side uses ${pod.refName} (listing says ${pod.label})`);
@@ -126,3 +171,47 @@ export function noRouteReason(legs: RouteLegs): string | null {
 }
 
 export const legMarker = (leg: RouteLeg): "alt" | "area" | null => (leg.kind === "alt" ? "alt" : leg.kind === "area" ? "area" : null);
+
+// ── Route state (17 Sep 2026) ──────────────────────────────────────────────
+// Three explicit states for every cargo, shown on the card and the row rather
+// than hidden in a tooltip:
+//   exact      port → port, the listing's own LOCODEs
+//   estimated  an area / option list on either side, resolved through the
+//              nominated reference port — the original wording stays, the
+//              reference route is printed underneath ("Estimated via …")
+//   invalid    a side nobody can place: no LOCODE and no reference port
+// The database refuses the third shape for a live, approved cargo
+// (trg_cl_zy_live_route_gate, 20260917120000_cargo_live_route_gate.sql).
+export type RouteState = "exact" | "estimated" | "invalid";
+
+export function routeState(legs: RouteLegs): RouteState {
+  if (!legs.polCode || !legs.podCode) return "invalid";
+  return legs.estimated ? "estimated" : "exact";
+}
+
+export interface RouteEstimate {
+  state: Exclude<RouteState, "exact">;
+  /** one short line for the card: "Estimated via Piraeus → Lattakia" */
+  text: string;
+  /** the long form, for a tooltip */
+  detail: string;
+}
+
+/** The secondary route line. Null for exact port → port (nothing to add). */
+export function routeEstimate(legs: RouteLegs): RouteEstimate | null {
+  const state = routeState(legs);
+  if (state === "exact") return null;
+  if (state === "invalid") {
+    return {
+      state,
+      text: "Reference port required",
+      detail: noRouteReason(legs) ?? "No route can be drawn.",
+    };
+  }
+  const via = `${legs.pol.refName ?? legs.pol.label} → ${legs.pod.refName ?? legs.pod.label}`;
+  return {
+    state,
+    text: `Estimated via ${via}`,
+    detail: `${legs.note ?? "Estimated."} Distance, Voy OPEX and Ports DA use ${via}; the contractual ports are as written above.`,
+  };
+}

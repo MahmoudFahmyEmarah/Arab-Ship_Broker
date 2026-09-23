@@ -8,6 +8,7 @@
 // an empty result (no phantom zones).
 import { CargoView, VesselView } from "./types";
 import { LOAD_TERMS, CARGO_CATEGORIES } from "@/lib/schemas/cargo";
+import { operatingZoneCode } from "@/lib/zones";
 
 export type FacetItem = CargoView | VesselView;
 
@@ -77,8 +78,14 @@ export const CARGO_FACETS: EnumFacet<CargoView>[] = [
     kind: "enum",
     group: "cargo",
     closed: false, // open/geographic — only zones present in the data
-    options: (items) => distinct(items.flatMap((c) => [c.route?.polZone, c.route?.podZone])),
-    valueOf: (c) => [c.route?.polZone, c.route?.podZone].filter(Boolean) as string[],
+    options: (items) => distinct(items
+      .flatMap((c) => [c.route?.polZone, c.route?.podZone])
+      .map((code) => operatingZoneCode(code))),
+    // A cargo matches when either route endpoint is in the selected zone. The
+    // marker itself remains at the true load port; filtering never relocates it.
+    valueOf: (c) => [c.route?.polZone, c.route?.podZone]
+      .map((code) => operatingZoneCode(code))
+      .filter((code): code is NonNullable<typeof code> => code !== null),
   },
   // NOTE: "Cargo nature" deliberately NOT a facet (§2b — it's offer firmness, a
   // listing field, not a discovery facet). Laycan (range/SPOT), Quantity range
@@ -102,8 +109,8 @@ export const VESSEL_FACETS: EnumFacet<VesselView>[] = [
     kind: "enum",
     group: "vessel",
     closed: false,
-    options: (items) => distinct(items.map((v) => v.openPortZone)),
-    valueOf: (v) => v.openPortZone ?? null,
+    options: (items) => distinct(items.map((v) => operatingZoneCode(v.openPortZone))),
+    valueOf: (v) => operatingZoneCode(v.openPortZone),
   },
 ];
 

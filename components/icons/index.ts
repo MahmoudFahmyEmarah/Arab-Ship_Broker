@@ -11,5 +11,6 @@ export type { IconProps } from "./_base";
 export {
   Vessel, Cargo, Voyage, Doc, Shackle, Swivel, SignIn, ShieldLine, AnchorMark,
   Globe, TrendUp, Clock, Mail, Sliders, CargoVesselPair, MarketBars, DocAudit,
+  VoyCalc, PortDA,
 } from "./asb24";
 export { BrandLogo } from "./BrandLogo";

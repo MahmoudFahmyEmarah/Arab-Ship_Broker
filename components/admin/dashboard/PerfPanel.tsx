@@ -52,8 +52,10 @@ function DomainBox({ d }: { d: DomainSnapshot }) {
         <div className="adb-kv"><span>Sending mailbox</span><b>{d.mailbox ?? "—"}</b></div>
         <div className="adb-kv"><span>Namecheap API</span>
           {d.namecheap.connected
-            ? <b>auto-renew <span className={d.namecheap.auto_renew ? "is-ok" : "is-warn"}>{d.namecheap.auto_renew ? "on" : "off"}</span> · lock {d.namecheap.locked ? "on" : "off"} · WhoisGuard {d.namecheap.whois_guard ? "on" : "off"}</b>
-            : <b className="adb-muted">not connected · set NAMECHEAP_API_USER / KEY / CLIENT_IP</b>}
+            ? <b>auto-renew <span className={d.namecheap.auto_renew ? "is-ok" : "is-warn"}>{onOff(d.namecheap.auto_renew)}</span> · lock {onOff(d.namecheap.locked)} · WhoisGuard {onOff(d.namecheap.whois_guard)}</b>
+            : d.namecheap.configured
+              ? <b className="is-warn" title={d.namecheap.error ?? ""}>refused · {d.namecheap.error ?? "the API did not answer"}</b>
+              : <b className="adb-muted">not connected · set NAMECHEAP_API_USER / KEY / CLIENT_IP</b>}
         </div>
       </div>
       <div className="adb-sec__fix">
@@ -65,6 +67,10 @@ function DomainBox({ d }: { d: DomainSnapshot }) {
     </Box>
   );
 }
+
+// A Namecheap flag we could not read is UNKNOWN. Rendering null as "off" told
+// the owner auto-renew was off when it was on — never assert what we lack.
+const onOff = (v: boolean | null) => (v === null ? "unknown" : v ? "on" : "off");
 
 export function PerfPanel({ feed, now, stale, vercel, domain }: { feed: DashboardFeed; now: Date; stale: boolean; vercel: VercelSnapshot | null; domain: DomainSnapshot | null }) {
   const db = feed.db, sec = feed.security, gm = feed.cron_groupmail;

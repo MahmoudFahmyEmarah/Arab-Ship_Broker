@@ -127,7 +127,10 @@ export type DomainSnapshot = {
   smtp: { host: string | null; port: number; reachable: boolean | null; ms: number | null; error: string | null };
   mailbox: string | null;
   cpanel_host: string | null;
-  namecheap: { connected: boolean; auto_renew: boolean | null; locked: boolean | null; whois_guard: boolean | null; expired: boolean | null };
+  // connected = the API answered successfully. `error` carries Namecheap's own
+  // message when it refused (most often 1011150, an IP that is not whitelisted).
+  // A null flag means UNKNOWN and must never be rendered as "off".
+  namecheap: { connected: boolean; configured: boolean; error: string | null; auto_renew: boolean | null; locked: boolean | null; whois_guard: boolean | null; expired: boolean | null };
   errors: string[];
 };
 

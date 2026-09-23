@@ -5,6 +5,13 @@
 import * as React from "react";
 import { listGateLog, listRules, setChannelMode } from "@/app/(admin)/admin/data-quality/actions";
 import { DQ_CHANNELS, MODE_BADGE, SEVERITY_BADGE, type DqChannel, type DqGateLogRow, type DqMode, type DqRule } from "@/lib/dq/types";
+
+// Member forms reach fn_dq_validate through the database since 17 Sep 2026
+// (trg_*_zz_dq_gate on every authenticated write; shadow until Settings →
+// "Enforce on member forms" is on). The partner API channel is honoured by the
+// same trigger when a route sets the dq.channel setting — no such route exists
+// yet, so its cells are shown, not editable.
+const UNWIRED = new Set<DqChannel>(["api"]);
 import { Badge, Loading, fmtDateTime } from "./ui";
 import { useConsole } from "./DataQualityConsole";
 
@@ -45,11 +52,11 @@ export function GateView() {
         </div>
         {!rules ? <Loading /> : (
           <div className="adm-table"><div style={{ overflowX: "auto" }}><table style={{ minWidth: 900 }}>
-            <thead style={{ position: "sticky", top: 0, zIndex: 2 }}><tr><th style={{ minWidth: 260 }}>Rule</th>{DQ_CHANNELS.map((c) => <th key={c.id} style={{ textAlign: "center" }} title={c.label}>{c.label}<div style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "var(--asb-gray-500)" }}>{c.sub}</div></th>)}</tr></thead>
+            <thead style={{ position: "sticky", top: 0, zIndex: 2 }}><tr><th style={{ minWidth: 260 }}>Rule</th>{DQ_CHANNELS.map((c) => <th key={c.id} style={{ textAlign: "center" }} title={c.label}>{c.label}<div style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "var(--asb-gray-500)" }}>{c.sub}</div>{UNWIRED.has(c.id) && <div style={{ fontWeight: 600, letterSpacing: 0, textTransform: "none", color: "var(--asb-amber)" }}>not wired yet</div>}</th>)}</tr></thead>
             <tbody>{gateRules.map((r) => (
               <tr key={r.id} className="no-hover" style={r.enabled ? undefined : { opacity: .45 }}>
                 <td><span className="mono" style={{ color: "var(--asb-navy)", fontWeight: 600, marginRight: 6 }}>{r.code}</span><span style={{ fontSize: 12 }}>{r.name}</span><Badge cls={SEVERITY_BADGE[r.severity]} style={{ marginLeft: 6 }}>{r.severity}</Badge></td>
-                {DQ_CHANNELS.map((c) => { const m = r.channels?.[c.id] ?? defaultMode(r.severity); const sqlOnly = r.kind === "sql"; return <td key={c.id} style={{ textAlign: "center", padding: "4px 6px" }}><button type="button" className={`adm-badge ${sqlOnly ? "expired" : MODE_BADGE[m]} dq-mode-cell`} disabled={!canEdit || sqlOnly} title={sqlOnly ? "SQL predicate — batch audits only" : `${r.code} on ${c.label} — click to cycle`} onClick={() => cycle(r, c.id)}>{sqlOnly ? "audit" : m}</button></td>; })}
+                {DQ_CHANNELS.map((c) => { const m = r.channels?.[c.id] ?? defaultMode(r.severity); const sqlOnly = r.kind === "sql"; const unwired = UNWIRED.has(c.id); return <td key={c.id} style={{ textAlign: "center", padding: "4px 6px", opacity: unwired ? 0.45 : 1 }}><button type="button" className={`adm-badge ${sqlOnly ? "expired" : MODE_BADGE[m]} dq-mode-cell`} disabled={!canEdit || sqlOnly || unwired} title={sqlOnly ? "SQL predicate — batch audits only" : unwired ? `${c.label} is not wired to the gate yet — this mode has no effect until it is` : `${r.code} on ${c.label} — click to cycle`} onClick={() => cycle(r, c.id)}>{sqlOnly ? "audit" : m}</button></td>; })}
               </tr>))}</tbody>
           </table></div><div className="adm-table__foot"><span>{gateRules.length} rules × {DQ_CHANNELS.length} channels · disabled rules shown dimmed</span><span>Filter by table applies here too</span></div></div>
         )}

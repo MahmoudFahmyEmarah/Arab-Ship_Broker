@@ -34,14 +34,18 @@ export const SEVERITY_LABEL: Record<RiskSeverity, string> = {
   advisory: "Advisory",
 };
 
-// Same boxes as the migration (20260904100000) — one truth for both layers.
+// Same boxes as the migration (20260909160000) — one truth for both layers.
+// Each box covers only the INNER part of the passage, so a route that merely
+// calls at a port on the passage (Port Said, Adabiya, Istanbul, Canakkale,
+// Tangier, Mina Saqr) is not counted as a transit — only a route that goes
+// through the narrows is.
 export const CHOKEPOINT_BOXES: { cp: string; label: string; lat0: number; lat1: number; lon0: number; lon1: number }[] = [
-  { cp: "SUEZ", label: "Suez Canal", lat0: 29.85, lat1: 31.3, lon0: 32.2, lon1: 32.7 },
-  { cp: "BOSPHORUS", label: "Bosphorus", lat0: 40.95, lat1: 41.3, lon0: 28.9, lon1: 29.3 },
-  { cp: "DARDANELLES", label: "Dardanelles", lat0: 40.0, lat1: 40.5, lon0: 26.1, lon1: 26.8 },
+  { cp: "SUEZ", label: "Suez Canal", lat0: 30.15, lat1: 31.05, lon0: 32.2, lon1: 32.7 },
+  { cp: "BOSPHORUS", label: "Bosphorus", lat0: 41.07, lat1: 41.22, lon0: 28.98, lon1: 29.18 },
+  { cp: "DARDANELLES", label: "Dardanelles", lat0: 40.2, lat1: 40.45, lon0: 26.45, lon1: 26.75 },
   { cp: "BAB_EL_MANDEB", label: "Bab-el-Mandeb", lat0: 12.3, lat1: 13.2, lon0: 43.0, lon1: 43.8 },
-  { cp: "HORMUZ", label: "Strait of Hormuz", lat0: 25.8, lat1: 26.9, lon0: 55.7, lon1: 56.9 },
-  { cp: "GIBRALTAR", label: "Strait of Gibraltar", lat0: 35.7, lat1: 36.2, lon0: -6.0, lon1: -5.2 },
+  { cp: "HORMUZ", label: "Strait of Hormuz", lat0: 26.3, lat1: 26.75, lon0: 56.2, lon1: 56.8 },
+  { cp: "GIBRALTAR", label: "Strait of Gibraltar", lat0: 35.85, lat1: 36.05, lon0: -5.72, lon1: -5.52 },
 ];
 
 export function pointInRing(p: LL, ring: LL[]): boolean {
@@ -76,6 +80,31 @@ export function areasCrossed(line: LL[], areas: RiskArea[]): RiskArea[] {
   return areas.filter((a) => a.isActive && a.polygon.length >= 3 && pts.some((p) => pointInRing(p, a.polygon)));
 }
 
+/**
+ * Which side of the Suez Canal a point lies on. "S" = the Red Sea and every
+ * sea reached through it (Gulf of Aden, East Africa, the Gulf incl. its head
+ * at 30.5N, Indian Ocean, Far East); everything else — Med, Black Sea,
+ * Atlantic, Northern Europe, the Americas, West Africa — is "N". Suez town
+ * (29.97N 32.55E) and Aqaba are S; Port Said (31.25N) is N.
+ *
+ * Used only to DROP a claimed transit: two ports on the same side cannot
+ * have transited the canal, whatever a box test or a stored tag says. It never
+ * adds one, so a Cape-route pair (both "cross-side") still relies on geometry.
+ */
+export function suezSideOf(p: LL): "N" | "S" {
+  const [lat, lon] = p;
+  if (lon >= 60) return "S";
+  if (lon >= 44 && lat <= 31) return "S";      // the Gulf up to Shatt al-Arab
+  if (lon >= 32.3 && lat <= 30.0) return "S";  // Red Sea, Gulf of Suez / Aqaba
+  return "N";
+}
+
+/** A Suez transit is only plausible when the two ends sit on opposite sides. */
+export function suezPlausible(line: LL[]): boolean {
+  if (line.length < 2) return false;
+  return suezSideOf(line[0]) !== suezSideOf(line[line.length - 1]);
+}
+
 export function chokepointsFromGeometry(line: LL[]): string[] {
   if (line.length < 2) return [];
   const pts = densify(line, 0.1);
@@ -87,6 +116,10 @@ export function chokepointsFromGeometry(line: LL[]): string[] {
 /** Build the alert list for a drawn route. `stored` = chokepoints from the DB row, if any. */
 export function routeAlerts(line: LL[], areas: RiskArea[], stored?: string[] | null): RouteAlert[] {
   const cps = new Set<string>([...(stored ?? []), ...chokepointsFromGeometry(line)]);
+  // Owner's rule (12 Sep 2026): a same-side pair — Sfax → Port Said, Jeddah →
+  // Aqaba — never shows a canal transit, whatever the stored tag or a box test
+  // says. Geography is the final word.
+  if (cps.has("SUEZ") && !suezPlausible(line)) cps.delete("SUEZ");
   const out: RouteAlert[] = [];
   if (cps.has("SUEZ")) {
     out.push({

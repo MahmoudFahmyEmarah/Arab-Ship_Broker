@@ -173,7 +173,14 @@ async function loadPortNames(): Promise<PortNames | null> {
 }
 
 function withLegs(v: CargoView, names: PortNames | null): CargoView {
-  return { ...v, polLeg: legInfo(v.route.polCode, v.route.polName, v.route.polZone, names), podLeg: legInfo(v.route.podCode, v.route.podName, v.route.podZone, names) };
+  const ps = v.portScope;
+  return {
+    ...v,
+    polLeg: legInfo(v.route.polCode, v.route.polName, v.route.polZone, names,
+      ps ? { scope: ps.polScope, refCode: ps.polRef } : null),
+    podLeg: legInfo(v.route.podCode, v.route.podName, v.route.podZone, names,
+      ps ? { scope: ps.podScope, refCode: ps.podRef } : null),
+  };
 }
 
 export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<CargoView>> {

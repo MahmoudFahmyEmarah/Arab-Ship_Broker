@@ -4,6 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "test:route-alerts": "node --import tsx scripts/route-alert-check.ts",
+    "test:zones": "node --import tsx scripts/zone-filter-check.ts",
+    "test:llm-providers": "node --import tsx scripts/llm-provider-check.ts",
+    "prebuild": "npm run test:route-alerts && npm run test:zones && npm run test:llm-providers",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -49,6 +53,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/mailparser": "^3.4.6",
     "@types/node": "^20.19.39",

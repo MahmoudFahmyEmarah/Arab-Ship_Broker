@@ -19,6 +19,7 @@ import {
 import { legMarker, routeLegs, type RouteLeg } from "@/lib/portal/route-legs";
 import { MarketPartnerTag } from "./MarketPartnerPanel";
 import { PosterLine } from "./PosterLine";
+import { RouteEstimateLine } from "./RouteEstimate";
 
 // LOCODE → port name → zone (owner's cascade) so a circular's "Egypt Med"
 // shows as text instead of an empty pair of codes.
@@ -113,6 +114,8 @@ export function CargoCard({
         </div>
         {c.wog && <span className="cc-wog">WOG</span>}
       </div>
+      {/* the reference route the figures come from — printed, not hidden in the tooltip */}
+      <RouteEstimateLine legs={legs} className="cc-route-est" />
 
       <div className="cc-grid-wrap">
         <span className="cc-accent" aria-hidden />

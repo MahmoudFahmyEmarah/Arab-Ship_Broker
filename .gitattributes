@@ -1,0 +1,33 @@
+# SQL is applied verbatim, and a function body between $$ ... $$ keeps its
+# line endings inside pg_proc.prosrc. Two consequences, both learned the hard
+# way on 21 Sep 2026 when scripts/migration-harness.sh caught a DOWN chain that
+# could not restore what the migrations created:
+#
+#   1. A file saved with CRLF stores a DIFFERENT function body from the same
+#      file saved with LF. Same code, different checksum. A DOWN file written
+#      on Windows cannot restore byte-for-byte what a migration written with
+#      LF created.
+#
+#   2. Therefore git must never rewrite the line endings of a .sql file. Some
+#      migrations in this repository are CRLF and are ALREADY APPLIED to the
+#      linked project: production's stored bodies carry those line endings,
+#      and a rebuild from this repository has to reproduce them exactly.
+#      Normalising them here would not remove drift, it would create it.
+#
+# So: no conversion, in either direction. What is committed is what is
+# applied. New SQL should be written with LF — that is a convention for the
+# author, not something git may impose on files that already exist.
+#
+# `whitespace=-trailing-space` for the same reason. A restored body carries the
+# line endings of the migration that created it, so a DOWN file can legitimately
+# hold CRLF inside an otherwise-LF file. Git's whitespace checker reads that CR
+# as trailing whitespace and `git diff --check` reports hundreds of them. The
+# bytes are correct and the migration harness proves it; the lint is the thing
+# that is wrong here, so it is switched off for SQL rather than the bytes being
+# "fixed" into a DOWN that restores the wrong function.
+*.sql -text whitespace=-trailing-space
+
+# Shell scripts run inside the Linux container as well as on the host; a CR at
+# the end of a shebang line is a "bad interpreter" error that reads as a
+# missing file.
+*.sh text eol=lf

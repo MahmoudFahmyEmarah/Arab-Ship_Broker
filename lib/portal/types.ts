@@ -34,6 +34,15 @@ export interface CargoView {
     podCode: string;
     podZone: string;
   };
+  // The database's own reading of each side (migration 20260910100000):
+  // scope = port | options | area | none, ref = the port feeding distance,
+  // Voy OPEX and Ports DA when the side is not a single fixed port.
+  portScope?: {
+    polScope: "port" | "options" | "area" | "none" | null;
+    podScope: "port" | "options" | "area" | "none" | null;
+    polRef: string | null;
+    podRef: string | null;
+  };
   // Resolved legs (name first, reference port for alternatives) — set by the
   // server loader when port names are available; routeLegs() falls back.
   polLeg?: RouteLeg;

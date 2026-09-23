@@ -8,8 +8,11 @@
 //
 // Ranges and countries ("Egypt Med", "Reni or Izmail", "Algeria") are NOT
 // ports — they stay as text and the cards show the text, then the zone.
-// Mirrors public.fn_resolve_port_locode() in the database (migration
-// 20260903_listing_posters_port_resolution).
+// Mirrors public.fn_resolve_port_locode() in the database. The alias list
+// lives in public.port_aliases since 10 Sep 2026 (migration
+// 20260910100000) — it is loaded here rather than hardcoded, so the two
+// layers cannot drift. SHORTHAND below is only the offline fallback used
+// when the alias query fails.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -54,6 +57,11 @@ export async function fetchPortIndex(supabase: SupabaseClient): Promise<PortInde
     if (error || !data) return null;
     const byName = new Map<string, string>();
     const byCode = new Set<string>();
+    // The database's alias table wins over the built-in fallback list.
+    const { data: aliases } = await supabase
+      .from("port_aliases")
+      .select("alias_key, locode, canonical_name")
+      .limit(2000);
     // verified ports win a name clash
     const rows = [...(data as { locode: string; trade_name: string; is_verified: boolean | null }[])]
       .sort((a, b) => Number(!!b.is_verified) - Number(!!a.is_verified));
@@ -62,6 +70,13 @@ export async function fetchPortIndex(supabase: SupabaseClient): Promise<PortInde
       byCode.add(code);
       const k = portKey(p.trade_name);
       if (k && !byName.has(k)) byName.set(k, p.locode);
+    }
+    // Aliases resolve either straight to a LOCODE or via a canonical name.
+    for (const a of (aliases ?? []) as { alias_key: string; locode: string | null; canonical_name: string | null }[]) {
+      const key = (a.alias_key ?? "").trim();
+      if (!key || byName.has(key)) continue;
+      const target = a.locode ?? (a.canonical_name ? byName.get(portKey(a.canonical_name)) ?? null : null);
+      if (target) byName.set(key, target);
     }
     return { byName, byCode };
   } catch {

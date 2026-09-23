@@ -8,12 +8,13 @@
 //                   end passed and still unpaid → expired (seats drop to T1)
 //   4. tiers      — fn_billing_sync_tiers so entitlements match reality
 //
-//   GET /api/cron/billing   Authorization: Bearer <CRON_SECRET> unless Vercel's cron header is present
+//   GET /api/cron/billing   Authorization: Bearer <CRON_SECRET> (Vercel sends it on its own cron calls)
 import { NextRequest, NextResponse } from "next/server";
 import { billingDb, draftSubscriptionInvoice, getBillingSettings, getCatalogue, getInvoice, issueInvoice, syncTiers } from "@/lib/billing/server";
 import { buildBillingMail, sendBillingMail, type BillingMailKind } from "@/lib/billing/mail";
 import { withJobRun } from "@/lib/jobs/runs";
 import type { BillingCustomer, Invoice, Subscription } from "@/lib/billing/types";
+import { cronAuthorized, cronTrigger } from "@/lib/cron/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,9 +23,8 @@ export const maxDuration = 120;
 const DAY = 86_400_000;
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const isVercelCron = req.headers.get("x-vercel-cron") != null;
-  if (secret && !isVercelCron && req.headers.get("authorization") !== `Bearer ${secret}`) {
+  const isVercelCron = cronTrigger(req.headers) === "cron"; // label only
+  if (!cronAuthorized(req.headers.get("authorization"))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   const sb = billingDb();

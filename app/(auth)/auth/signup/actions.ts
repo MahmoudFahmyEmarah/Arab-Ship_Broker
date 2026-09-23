@@ -100,19 +100,26 @@ export async function signupAction(data: SignupInput) {
         }
 
         // Register a new company; the creator takes the org-admin seat.
-        const { data: newOrg } = await supabaseAdmin
-          .from("organizations")
-          .insert({
-            name: companyName,
-            org_type: orgType,
-            email_domains: emailDomain ? [emailDomain] : null,
-          })
-          .select("id")
-          .single();
-        const newOrgId = (newOrg as { id: string } | null)?.id;
+        //
+        // Through fn_dq_signup_create_org, not a direct insert (21 Sep 2026).
+        // This is a RESTRICTED write path in lib/dq/policy.ts: signup may
+        // create an organisation profile with a name, a type and one email
+        // domain, and the function has no parameter for anything else — no
+        // subscription tier, no IMO, no fleet counts, no link fields. The
+        // limit is the signature, so it cannot be widened here by accident.
+        const { data: newOrgId, error: orgError } = await supabaseAdmin.rpc("fn_dq_signup_create_org", {
+          p_name: companyName,
+          p_org_type: orgType,
+          p_email_domain: emailDomain,
+        });
+        if (orgError) {
+          // the member's account exists; only the company profile failed, and
+          // an ASB admin can attach one. Never fail the signup for it.
+          console.error("signup: organisation profile not created", orgError.message);
+        }
         if (newOrgId) {
           await supabaseAdmin.from("organization_members").insert({
-            org_id: newOrgId,
+            org_id: newOrgId as string,
             user_id: appUserId,
             member_role: "admin",
             is_current: true,

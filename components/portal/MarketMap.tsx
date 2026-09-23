@@ -24,7 +24,7 @@ import { routeGeometry } from "@/lib/portal/routeGeometry";
 import { getPortRoute } from "@/sdk/app/routes";
 import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
 import { routeAlerts, positionAlerts, tagLeg, parseRiskAreaRow, type RiskArea, type RouteAlert } from "@/lib/portal/risk-areas";
-import { FLEET_ZONES } from "@/lib/zones";
+import { OPERATING_ZONES, operatingZoneCode } from "@/lib/zones";
 import { ZONE_SHAPES } from "@/lib/portal/zone-shapes";
 import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
 import { formatLaycanRange, formatShortDate } from "@/lib/portal/format";
@@ -412,6 +412,8 @@ export default function MarketMap({
   portCoords,
   vesselVectors = false,
   barLeft = false,
+  selectedZoneCodes,
+  onSelectedZoneCodesChange,
 }: {
   cargos: CargoView[];
   vessels: VesselView[];
@@ -427,6 +429,10 @@ export default function MarketMap({
   // Card+map pages (markets, My Cargo/My Vessels): mirror the icon rail to the
   // map's inner-left edge — the map sits right of the cards (09 §5).
   barLeft?: boolean;
+  // Dashboard-controlled zone state keeps its top filter and the map picker in
+  // lockstep. Other map surfaces may omit these and use local map state.
+  selectedZoneCodes?: string[];
+  onSelectedZoneCodesChange?: (codes: string[]) => void;
 }) {
   const geoFor = React.useCallback(
     (locode?: string | null): PortGeo | null => {
@@ -526,18 +532,41 @@ export default function MarketMap({
   const tier = useViewerTier();
   const voyLocked = tier === "T1" || tier === "T2";
   const [selections, setSelections] = React.useState<Selections>({});
-  const selectedZones = React.useMemo(() => new Set<string>([...(selections.zone ?? []), ...(selections.openZone ?? [])]), [selections]);
+  const selectedZones = React.useMemo(() => {
+    const source = selectedZoneCodes === undefined
+      ? [...(selections.zone ?? []), ...(selections.openZone ?? [])]
+      : selectedZoneCodes;
+    return new Set<string>(source
+      .map((code) => operatingZoneCode(code))
+      .filter((code): code is NonNullable<typeof code> => code !== null));
+  }, [selectedZoneCodes, selections]);
+  const effectiveSelections = React.useMemo<Selections>(() => {
+    if (selectedZoneCodes === undefined) return selections;
+    return { ...selections, zone: new Set(selectedZones), openZone: new Set(selectedZones) };
+  }, [selectedZoneCodes, selectedZones, selections]);
   const selectedZoneCount = selectedZones.size;
   const toggleZone = React.useCallback((code: string) => {
+    const normalized = operatingZoneCode(code);
+    if (!normalized) return;
+    if (selectedZoneCodes !== undefined) {
+      const next = new Set(selectedZones);
+      if (next.has(normalized)) next.delete(normalized); else next.add(normalized);
+      onSelectedZoneCodesChange?.([...next]);
+      return;
+    }
     setSelections((prev) => {
       const next = new Set<string>([...(prev.zone ?? []), ...(prev.openZone ?? [])]);
-      if (next.has(code)) next.delete(code); else next.add(code);
+      if (next.has(normalized)) next.delete(normalized); else next.add(normalized);
       return { ...prev, zone: new Set(next), openZone: new Set(next) };
     });
-  }, []);
+  }, [onSelectedZoneCodesChange, selectedZoneCodes, selectedZones]);
   const clearZones = React.useCallback(() => {
+    if (selectedZoneCodes !== undefined) {
+      onSelectedZoneCodesChange?.([]);
+      return;
+    }
     setSelections((prev) => ({ ...prev, zone: new Set<string>(), openZone: new Set<string>() }));
-  }, []);
+  }, [onSelectedZoneCodesChange, selectedZoneCodes]);
   const [qtyMin, setQtyMin] = React.useState<number | "">("");
   const [qtyMax, setQtyMax] = React.useState<number | "">("");
   // Click-to-pair (09 §8): any cargo OR vessel marker becomes the pair anchor;
@@ -609,17 +638,17 @@ export default function MarketMap({
   const visCargos = React.useMemo(
     () =>
       cargos.filter((c) => {
-        if (!passesFacets(c, CARGO_FACETS, selections)) return false;
+        if (!passesFacets(c, CARGO_FACETS, effectiveSelections)) return false;
         const q = cargoQtyMax(c);
         if (qtyMin !== "" && q < qtyMin) return false;
         if (qtyMax !== "" && q > qtyMax) return false;
         return true;
       }),
-    [cargos, selections, qtyMin, qtyMax],
+    [cargos, effectiveSelections, qtyMin, qtyMax],
   );
   const visVessels = React.useMemo(
-    () => vessels.filter((v) => passesFacets(v, VESSEL_FACETS, selections)),
-    [vessels, selections],
+    () => vessels.filter((v) => passesFacets(v, VESSEL_FACETS, effectiveSelections)),
+    [vessels, effectiveSelections],
   );
   const anchorCargo = pairAnchor?.kind === "cargo" ? cargos.find((c) => c.id === pairAnchor.id) ?? null : null;
   const anchorVessel = pairAnchor?.kind === "vessel" ? vessels.find((v) => v.id === pairAnchor.id) ?? null : null;
@@ -690,13 +719,17 @@ export default function MarketMap({
   };
 
   const toggleOption = React.useCallback((facetId: string, value: string) => {
+    if (selectedZoneCodes !== undefined && (facetId === "zone" || facetId === "openZone")) {
+      toggleZone(value);
+      return;
+    }
     setSelections((prev) => {
       const set = new Set(prev[facetId] ?? []);
       if (set.has(value)) set.delete(value);
       else set.add(value);
       return { ...prev, [facetId]: set };
     });
-  }, []);
+  }, [selectedZoneCodes, toggleZone]);
   const [, force] = React.useReducer((x) => x + 1, 0);
 
   // Init once
@@ -857,7 +890,10 @@ export default function MarketMap({
       map.removeLayer(lyr);
       return;
     }
-    ZONE_SHAPES.forEach((z) => {
+    ZONE_SHAPES.filter((z) => {
+      const code = operatingZoneCode(z.code);
+      return !!code && (selectedZoneCount === 0 || selectedZones.has(code));
+    }).forEach((z) => {
       // Coastline-following basin outline (dashed casing + soft tint), not a box.
       L.polygon(z.poly, {
         color: z.color,
@@ -883,7 +919,7 @@ export default function MarketMap({
       }).addTo(lyr);
     });
     map.addLayer(lyr);
-  }, [zonesOn, ready, base]);
+  }, [zonesOn, ready, base, selectedZoneCount, selectedZones]);
 
   // Markers
   React.useEffect(() => {
@@ -1535,13 +1571,13 @@ export default function MarketMap({
         </BarIcon>
         <BarIcon on={filtersOpen} onClick={() => { const n = !filtersOpen; closePanels(); setFiltersOpen(n); }} title="Filters — narrow the pins by category, IMSBC group, load terms, zone, vessel type or size">
           {G.filter}
-          {Object.values(selections).some((s) => s.size > 0) && <span className="bar-badge bar-badge--cargo" />}
+          {Object.values(effectiveSelections).some((s) => s.size > 0) && <span className="bar-badge bar-badge--cargo" />}
         </BarIcon>
         {zonePickOpen && (
           <div className="map-flyout" style={{ bottom: "auto", top: 8, width: 300 }} onClick={(e) => e.stopPropagation()}>
             <div className="base-picker__title" title="Sea areas used to group cargo and tonnage. Pick one or more to show only listings in those zones.">Zones</div>
             <div className="zone-flyout__list">
-              {FLEET_ZONES.map((z) => {
+              {OPERATING_ZONES.map((z) => {
                 const on = selectedZones.has(z.code);
                 return (
                   <button key={z.code} type="button" className={`zone-flyout__opt${on ? " is-on" : ""}`} onClick={() => toggleZone(z.code)} title={`${z.label} (${z.code})`}>
@@ -1693,7 +1729,7 @@ export default function MarketMap({
         vesselLayer={vesselsOn}
         onToggleCargoLayer={() => setCargoOn((v) => !v)}
         onToggleVesselLayer={() => setVesselsOn((v) => !v)}
-        selections={selections}
+        selections={effectiveSelections}
         onToggleOption={toggleOption}
         qtyMin={qtyMin}
         qtyMax={qtyMax}
@@ -1701,6 +1737,7 @@ export default function MarketMap({
         onQtyMax={setQtyMax}
         onReset={() => {
           setSelections({});
+          onSelectedZoneCodesChange?.([]);
           setQtyMin("");
           setQtyMax("");
         }}

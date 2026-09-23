@@ -10,9 +10,13 @@ export type DqAutofix = "none" | "normalise" | "set from registry" | "reclassify
 export type DqSource = "built-in" | "workbook" | "admin" | "AI-suggested";
 export type DqChannel = "forms" | "admin" | "sync" | "review" | "pipeline" | "api";
 export type DqMode = "block" | "warn" | "audit";
-export type DqRunStatus = "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
+export type DqRunStatus = "queued" | "running" | "paused" | "completed" | "completed_with_errors" | "failed" | "cancelled";
 export type DqRunMode = "rules" | "ai" | "both";
-export type DqIssueStatus = "open" | "fixed" | "ignored" | "false_positive" | "escalated";
+export type DqIssueStatus = "open" | "fixed" | "ignored" | "false_positive" | "escalated" | "rule_disabled" | "check_removed" | "record_gone";
+/** statuses an administrator may set by hand; the others are set by runs and rule changes */
+export const ISSUE_STATUS_MANUAL: DqIssueStatus[] = ["open", "fixed", "ignored", "false_positive", "escalated"];
+/** a suppression: the decision is remembered with the observed value and needs a reason */
+export const isSuppression = (s: DqIssueStatus): boolean => s === "ignored" || s === "false_positive";
 
 export const DQ_CATEGORIES: DqCategory[] = [
   "completeness", "validity", "referential", "uniqueness", "consistency", "classification", "business rule", "freshness", "compliance",
@@ -57,6 +61,8 @@ export interface DqRule {
   tables: string[];
   autofix: DqAutofix;
   enabled: boolean;
+  /** false = counter only: scored, never queued (audit U2) */
+  queue: boolean;
   source: DqSource;
   owner: string | null;
   version: number;
@@ -95,6 +101,8 @@ export interface DqScope {
   counts?: { table: string; rows: number }[];
 }
 
+export interface DqRuleError { rule: string; rule_id?: string; table: string; check_idx?: number; stage?: "keys" | "eval"; error: string }
+
 export interface DqRun {
   id: string;
   code: string;
@@ -112,7 +120,23 @@ export interface DqRun {
   ai_issues: number;
   tokens: number;
   cost: number;
+  /** workstream C: coverage over check units (rule, table, check) */
+  rules_expected: number;
+  rules_ok: number;
+  rules_failed: number;
+  checks_expected: number;
+  checks_failed: number;
+  coverage_pct: number | null;
+  /** batch errors (stage "eval") merged with key-preparation errors (stage "keys") */
+  rule_errors: DqRuleError[];
+  /** key queries that failed at prepare time; retried by fn_dq_retry_run once the rule is repaired */
+  prep_errors: DqRuleError[];
   cursor: { idx: number; last: string | null };
+  /** workstream H: the persisted adaptive batch limit and the timeouts counted at the floor */
+  batch_limit: number | null;
+  timeout_retries: number;
+  /** workstream G: "nightly/<UTC date>" on scheduler-created runs (unique per night) */
+  schedule_key: string | null;
   started_by_name: string | null;
   trigger: string;
   scheduled_for: string | null;
@@ -138,6 +162,8 @@ export interface DqRunBatch {
   found: { error: number; warn: number; info: number };
   ai_tokens: number;
   ai_issues: number;
+  /** workstream F: reserved → done | failed | skipped; null before the AI step */
+  ai_state?: "reserved" | "done" | "failed" | "skipped" | null;
   ms: number | null;
   error: string | null;
 }
@@ -176,6 +202,9 @@ export interface DqIssue {
   reason: string | null;
   assignee: string | null;
   fixed_audit_id: string | null;
+  suppressed_observed?: string | null;
+  suppress_until?: string | null;
+  status_changed_at?: string;
   first_seen: string;
   last_seen: string;
   resolved_at: string | null;
@@ -185,7 +214,7 @@ export interface DqIssue {
 export interface DqSuggestion {
   id: string;
   kind: "rule" | "fix";
-  status: "pending" | "accepted" | "dismissed";
+  status: "pending" | "accepted" | "dismissed" | "applied_nothing";
   title: string;
   nl: string;
   sql: string | null;
@@ -224,9 +253,13 @@ export interface DqSettings {
   ai_sample: number;
   ai_daily_tokens: number;
   ai_price_per_mtok: number;
+  /** cap on the model's reply per review call (256..32000) */
+  ai_max_output_tokens: number;
   auto_apply_threshold: number;
   weights: { error: number; warn: number; info: number };
   nightly_enabled: boolean;
+  /** member-form gate: false = shadow (log only), true = refuse + fail closed */
+  gate_forms_enforce: boolean;
   nightly_time: string;
   nightly_mode: DqRunMode;
   notify: { recipients: string[]; on_complete: boolean; on_errors: boolean; digest: boolean; budget80: boolean };
@@ -247,12 +280,17 @@ export interface DqHealthTile {
   score: number;
   coverage: number;
   href: string | null;
+  /** the cached snapshot came from a run with rule errors (workstream C) */
+  partial?: boolean;
+  cached_at?: string;
   trend: number[]; // last 14 snapshots (oldest → newest), ending with the live score
 }
 
 export interface DqGateResult {
   ok: boolean;
   blocked: boolean;
+  /** rules that threw while evaluating — the gate failed open for them (audit C5) */
+  errors?: number;
   issues: { rule_code: string; name: string; severity: DqSeverity; field: string | null; mode: DqMode; message: string }[];
 }
 
@@ -279,9 +317,61 @@ export interface DqPortException {
 export const SEVERITY_BADGE: Record<DqSeverity, string> = { error: "rejected", warn: "pending", info: "draft" };
 export const MODE_BADGE: Record<DqMode, string> = { block: "rejected", warn: "pending", audit: "draft" };
 export const SOURCE_BADGE: Record<DqSource, string> = { "built-in": "closed", workbook: "draft", admin: "tier", "AI-suggested": "amber" };
-export const RUN_BADGE: Record<DqRunStatus, string> = { completed: "live", running: "closed", paused: "pending", queued: "draft", failed: "rejected", cancelled: "expired" };
-export const ISSUE_BADGE: Record<DqIssueStatus, string> = { open: "rejected", fixed: "live", ignored: "expired", false_positive: "draft", escalated: "pending" };
-export const ISSUE_LABEL: Record<DqIssueStatus, string> = { open: "open", fixed: "fixed", ignored: "ignored", false_positive: "false positive", escalated: "escalated" };
+export const RUN_BADGE: Record<DqRunStatus, string> = { completed: "live", completed_with_errors: "pending", running: "closed", paused: "pending", queued: "draft", failed: "rejected", cancelled: "expired" };
+export const RUN_LABEL: Record<DqRunStatus, string> = { completed: "completed", completed_with_errors: "completed with errors", running: "running", paused: "paused", queued: "queued", failed: "failed", cancelled: "cancelled" };
+
+/** "every check saw every row" · "86 % — 6 of 7 checks failed (4 rules)" · "—" while a run is in flight (workstream C, unit-based) */
+export function runCoverageLabel(r: Pick<DqRun, "status" | "coverage_pct" | "rules_failed" | "rules_expected"> & Partial<Pick<DqRun, "checks_failed" | "checks_expected">>): string {
+  if (r.status !== "completed" && r.status !== "completed_with_errors") return "—";
+  const pct = r.coverage_pct == null ? 100 : Number(r.coverage_pct);
+  const failedChecks = r.checks_failed ?? r.rules_failed;
+  if (r.rules_failed === 0 && failedChecks === 0 && pct >= 100) return "every check saw every row";
+  const total = r.checks_expected ?? r.rules_expected;
+  return `${Math.round(pct)} % — ${failedChecks} of ${total} check${total === 1 ? "" : "s"} failed (${r.rules_failed} rule${r.rules_failed === 1 ? "" : "s"})`;
+}
+export const ISSUE_BADGE: Record<DqIssueStatus, string> = { open: "rejected", fixed: "live", ignored: "expired", false_positive: "draft", escalated: "pending", rule_disabled: "expired", check_removed: "expired", record_gone: "expired" };
+export const ISSUE_LABEL: Record<DqIssueStatus, string> = { open: "open", fixed: "fixed", ignored: "ignored", false_positive: "false positive", escalated: "escalated", rule_disabled: "rule disabled", check_removed: "check removed", record_gone: "record gone" };
+
+// ── notifications (workstream G, outbox) ──────────────────────────────────
+export type DqNotificationKind = "run_finished" | "budget80" | "digest";
+export interface DqNotification {
+  id: number;
+  idem_key: string;
+  kind: DqNotificationKind;
+  payload: Record<string, unknown>;
+  status: "queued" | "sending" | "sent" | "failed";
+  attempts: number;
+  next_attempt_at: string;
+  sent_at: string | null;
+  last_error: string | null;
+  recipients: string[] | null;
+  created_at: string;
+}
+export type DqNotificationState = "pending" | "retrying" | "sending" | "sent" | "failed";
+/** What the console shows: a queued row that already failed once is "retrying". */
+export function notificationState(n: Pick<DqNotification, "status" | "attempts">): DqNotificationState {
+  if (n.status === "queued") return n.attempts > 0 ? "retrying" : "pending";
+  return n.status;
+}
+export const NOTIFICATION_BADGE: Record<DqNotificationState, string> = { pending: "draft", retrying: "pending", sending: "closed", sent: "live", failed: "rejected" };
+export const NOTIFICATION_KIND_LABEL: Record<DqNotificationKind, string> = { run_finished: "Run finished", budget80: "AI budget 80 %", digest: "Weekly digest" };
+
+// ── schedule state (workstream G) ─────────────────────────────────────────
+export interface DqScheduleState {
+  enabled: boolean;
+  nightly_time: string;
+  next_at: string | null;
+  slot_key: string | null;
+  slot_due: string | null;
+  /** the run created for the current slot, if any */
+  slot_run: Pick<DqRun, "id" | "code" | "status" | "created_at" | "finished_at"> | null;
+  /** the most recent scheduler-created run */
+  last_scheduled: Pick<DqRun, "id" | "code" | "status" | "created_at" | "finished_at" | "schedule_key"> | null;
+  /** the most recent scheduler-created run that completed */
+  last_successful: Pick<DqRun, "id" | "code" | "status" | "created_at" | "finished_at" | "schedule_key"> | null;
+  missed: boolean;
+  catch_up: boolean;
+}
 export const RUN_MODE_LABEL: Record<DqRunMode, string> = { rules: "rule-based", ai: "AI review", both: "rules + AI" };
 
 export function scopeLabel(scope: DqScope, tableLabel: (t: string) => string): string {

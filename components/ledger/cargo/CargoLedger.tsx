@@ -11,7 +11,10 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { LedgerShell } from "../LedgerShell";
 import type { LedgerConfig, LedgerRepost } from "../types";
 import { CARGO_STORAGE_KEY, initialCargoState, type CargoState } from "./state";
-import { submitCargoLedger } from "./mapState";
+import { mapCargoState, submitCargoLedger } from "./mapState";
+import { toast } from "sonner";
+import { reportGateRefusal, validateMemberDraft } from "@/lib/dq/member-gate";
+import { draftIssuesMessage, draftRefused, ledgerCargoDraftRow } from "@/lib/dq/member-draft";
 import { loadCargoReposts } from "./reposts";
 import { CommodityStep, commodityComplete, commoditySummary } from "./steps/CommodityStep";
 import { QuantityStep, qtyComplete, qtySummary } from "./steps/QuantityStep";
@@ -143,7 +146,19 @@ export function CargoLedger() {
     ],
     reposts,
     onSubmit: async (state) => {
-      await submitCargoLedger(state);
+      // Data-quality pre-check (workstream E): ask the gate before posting
+      const verdict = await validateMemberDraft("cargo_listings", ledgerCargoDraftRow(mapCargoState(state) as unknown as Record<string, unknown>));
+      if (verdict.ok && verdict.data.issues.length) {
+        if (draftRefused(verdict.data)) throw new Error(draftIssuesMessage(verdict.data));
+        toast.warning(draftIssuesMessage(verdict.data), { duration: 10000 });
+      }
+      try { await submitCargoLedger(state); }
+      catch (e) {
+        // refused by the database gate: report it in its own transaction with the pre-check's correlation id, then show the refusal
+        const text = e instanceof Error ? e.message : String(e);
+        if (verdict.ok && /DQ_GATE/.test(text)) void reportGateRefusal("cargo_listings", verdict.data.correlation_id, text);
+        throw e;
+      }
       router.refresh();
       return "Cargo posted for matching";
     },

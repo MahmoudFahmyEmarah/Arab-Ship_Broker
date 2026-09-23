@@ -35,6 +35,11 @@ export interface Founder {
   bio: string;
   img: string | null;
   imgPos: string;
+  /**
+   * Rendered photo size in px. 128 unless the source file cannot carry it —
+   * a photo enlarged past its pixels gets softer, not bigger.
+   */
+  imgSize?: number;
   initials: string;
   linkedin: string;
 }
@@ -43,19 +48,19 @@ export const founders: Founder[] = [
   {
     name: "Mohamed Dawoud",
     role: "Dry Bulk Broker & Co-Founder",
-    creds: "Capt., BSc., MSc. “Fleet Ops.”",
-    bio: "His career began on ship steel, and the discipline of cargo operations continues to shape his work today. With an MSc in Fleet Operations, a Master Mariner Licence, and more than 10 years aboard bulk carriers, Capt. Mohamed combines hands-on maritime knowledge with strong commercial judgment. He supports owners and charterers with practical market insight, risk-aware negotiations, and reliable execution across dry-bulk transactions.",
-    img: "/founder.jpg",
+    creds: "Capt., BSc., MSc. “Ship Ops.”",
+    bio: "His career began on ship steel, and the discipline of cargo operations continues to shape his work today. With an MSc in Ship Operations, a Master Mariner Licence, and more than 10 years aboard bulk carriers and general cargo vessels — from Handysize to Capesize — and transloaders, Capt. Mohamed combines hands-on maritime knowledge with strong commercial judgment. He supports owners and charterers with practical market insight, risk-aware negotiations, and reliable execution across dry-bulk transactions.",
+    img: "/founder.jpg",       // 960×1280 — carries 128px comfortably
     imgPos: "60% 30%",
     initials: "MD",
     linkedin: "https://www.linkedin.com/in/cpt-mohamed-dawoud",
   },
   {
     name: "Ahmed Abdallah",
-    role: "Dry Bulk Broker & Co-Founder",
-    creds: "C/O, Master Mariner, MSc. “Maritime Nav.”",
+    role: "S&P Broker & Co-Founder",
+    creds: "Capt.",
     bio: "From the bridge to the brokerage desk, Ahmed combines years at sea with a strong understanding of dry-bulk markets. Having sailed as Chief Officer across international fleets, he brings practical operational insight to S&P and dry-bulk brokerage. Ahmed supports owners in evaluating opportunities, negotiating commercial terms, and executing transactions across the Red Sea, Arabian Gulf, and Arabian Sea.",
-    img: "/cofounder.jpg",
+    img: "/cofounder.jpg",     // 800×800 — carries 128px comfortably
     imgPos: "center 20%",
     initials: "AA",
     linkedin: "https://www.linkedin.com/in/ahmed-abdallah-8a26441a9/",
@@ -65,8 +70,12 @@ export const founders: Founder[] = [
     role: "Chief Technology Officer & Co-Founder",
     creds: "MSc. “Data Science”, RWTH Aachen University",
     bio: "Mahmoud leads Arab ShipBroker's technology strategy, digital product development, and AI-driven transformation. His experience spans software engineering, data science, and enterprise AI platforms across international organizations including Vodafone and Saudi Telecom Company (STC), where he led large-scale AI ecosystems and award-winning innovation initiatives. At Arab ShipBroker, he builds the secure, data-driven platforms that modernize maritime brokerage and speed commercial decision-making across the MENA shipping market.",
-    img: "/cto.jpeg",
+    img: "/cto.jpeg",          // 498×476 — too small to enlarge; stays at 96px
     imgPos: "center 25%",
+    // Deliberately not 128: the source is 498px on its short side and would
+    // only get softer. Remove this line the day a larger photo replaces the
+    // file — nothing else needs to change.
+    imgSize: 96,
     initials: "ME",
     linkedin: "https://www.linkedin.com/in/mahmoud-emarah/",
   },
@@ -79,6 +88,9 @@ function FounderCard({
   p: Founder;
   cardRef: (el: HTMLDivElement | null) => void;
 }) {
+  // 128px unless the entry says otherwise; the source is requested at 3× so
+  // a retina screen gets real pixels rather than an upscaled 96
+  const size = p.imgSize ?? 128;
   return (
     <div
       ref={cardRef}
@@ -89,13 +101,16 @@ function FounderCard({
       <div className="p-10 max-sm:p-8 flex flex-col gap-6 flex-1">
         <div className="flex items-center gap-5 max-sm:flex-col max-sm:items-center max-sm:text-center">
           <div className="shrink-0">
-            <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-2xl border-4 border-white bg-linear-to-br from-ocean-600 to-ocean-800 flex items-center justify-center">
+            <div
+              className="rounded-2xl overflow-hidden shadow-2xl border-4 border-white bg-linear-to-br from-ocean-600 to-ocean-800 flex items-center justify-center"
+              style={{ width: size, height: size }}
+            >
               {p.img ? (
                 <Image
                   src={p.img}
                   alt={p.name}
-                  width={288}
-                  height={288}
+                  width={size * 3}
+                  height={size * 3}
                   quality={92}
                   className="w-full h-full object-cover"
                   style={{ objectPosition: p.imgPos }}

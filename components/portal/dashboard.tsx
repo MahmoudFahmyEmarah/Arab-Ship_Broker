@@ -26,6 +26,7 @@ import {
 import { IconCaret } from "./icons";
 import { legInfo, legMarker, routeLegs, type RouteLeg } from "@/lib/portal/route-legs";
 import { PosterLine } from "./PosterLine";
+import { RouteEstimateLine } from "./RouteEstimate";
 import { MatchesPopover } from "./MatchesPopover";
 
 // Route legs (owner's rule, 9 Sep 2026): port NAME first — a bare LOCODE
@@ -118,6 +119,8 @@ export function DashCargoRow({
             </span>
           </>
         )}
+        {/* estimated / invalid route state — its own line under the figures */}
+        <RouteEstimateLine legs={legs} className="dash-row__est" />
       </div>
       <PosterLine poster={c.poster} className="dash-row__poster" />
     </div>
