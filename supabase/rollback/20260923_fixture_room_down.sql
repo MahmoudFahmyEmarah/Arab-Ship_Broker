@@ -81,7 +81,7 @@ drop function if exists public.fn_fixture_actor();
 
 -- ── tables (20260923200000) ─────────────────────────────────────────────────
 do $$
-declare v_rows bigint := 0; t text; v_tables text[] := array[
+declare v_rows bigint := 0; t text; b text; r record; v_tables text[] := array[
   'fixture_access_log', 'fixture_recap_versions', 'fixture_events', 'fixture_messages',
   'fixture_subjects', 'fixture_proposals', 'fixture_terms', 'fixture_parties', 'fixture_rooms'];
 begin
@@ -100,8 +100,36 @@ begin
         raise notice 'public.%_bak_20260923200000 already exists — dropping the current table instead of overwriting the backup', t;
         execute format('drop table public.%I cascade', t);
       else
-        execute format('alter table public.%I rename to %I', t, t || '_bak_20260923200000');
-        raise notice 'kept public.% as public.%_bak_20260923200000', t, t;
+        b := t || '_bak_20260923200000';
+        execute format('alter table public.%I rename to %I', t, b);
+        -- Renaming a table keeps its index, constraint and identity-sequence
+        -- names, and a later re-apply says `create … if not exists` for every
+        -- index: it would be skipped silently and the module would come back
+        -- without its unique indexes (found 25 Sep 2026 on the local stack).
+        -- Free every name the forward migration will ask for again. The
+        -- suffix is 19 characters, so the base is cut to 44 to stay within
+        -- PostgreSQL's 63-character identifier limit (a truncated name would
+        -- otherwise lose the suffix and collide on the next rename).
+        for r in
+          select conname from pg_constraint
+          where conrelid = ('public.' || b)::regclass and contype in ('p', 'u', 'x')
+        loop
+          execute format('alter table public.%I rename constraint %I to %I', b, r.conname, left(r.conname, 44) || '_bak_20260923200000');
+        end loop;
+        for r in
+          select indexname from pg_indexes
+          where schemaname = 'public' and tablename = b and indexname not like '%\_bak\_20260923200000'
+        loop
+          execute format('alter index public.%I rename to %I', r.indexname, left(r.indexname, 44) || '_bak_20260923200000');
+        end loop;
+        for r in
+          select s.relname from pg_class s
+          join pg_depend d on d.objid = s.oid and d.classid = 'pg_class'::regclass and d.deptype in ('a', 'i')
+          where s.relkind = 'S' and d.refobjid = ('public.' || b)::regclass
+        loop
+          execute format('alter sequence public.%I rename to %I', r.relname, left(r.relname, 44) || '_bak_20260923200000');
+        end loop;
+        raise notice 'kept public.% as public.% (indexes, constraints and sequences renamed alike)', t, b;
       end if;
     else
       execute format('drop table public.%I cascade', t);

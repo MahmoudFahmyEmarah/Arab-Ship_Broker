@@ -28,6 +28,15 @@ cannot serve them directly.
 | `fixture_recap_versions` | immutable recap snapshots (structured + text); acknowledgements are events |
 | `fixture_access_log` | every admin read (durable, never pruned) |
 
+Rollback: `supabase/rollback/20260923_fixture_room_down.sql` drops the
+module when no room exists and otherwise keeps every table as
+`*_bak_20260923200000`. When it keeps them it also renames their indexes,
+index-backed constraints and identity sequences with the same suffix
+(base cut to 44 characters for the identifier limit): a renamed table keeps
+those names, and a later re-apply's `create … if not exists` would otherwise
+skip every named index and bring the module back without its unique
+indexes (found and fixed 25 Sep 2026).
+
 Reads: `get_fixture_room`, `get_fixture_room_version`, `list_fixture_rooms`.
 Commands: `create_fixture_room`, `invite_fixture_party`,
 `respond_fixture_invitation`, `submit_fixture_proposal`,

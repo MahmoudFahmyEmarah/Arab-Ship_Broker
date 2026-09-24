@@ -55,6 +55,30 @@ changing between the two fingerprints while the PDA branch's own harness ran;
 the wrapper therefore ignores `pda_|tariff|_pda` lines (every Fixture object
 is `fixture_*`, so Fixture residue would still be reported).
 
+Result (25 Sep 2026, local, final SQL including the `FX_VERSION_CONFLICT`
+55000 change): **HARNESS: OK (4 migrations, 6 suites, 1 downs)**; fingerprint
+identical, 0 residue lines; all four migrations re-applied.
+
+The first run that day found a rollback defect. An earlier browser run had
+been cut off by the Docker outage before its cleanup, so one room existed
+when the DOWN ran and the DOWN took its rename-to-backup path. A renamed
+table keeps its index, constraint and identity-sequence names, so the
+`--reapply` that followed said `create … if not exists` for every index and
+silently created none: the live `fixture_rooms` came back with only its
+primary key and `ref` constraint, and the race test then created two rooms
+for one pairing. The DOWN now renames the indexes, index-backed constraints
+and owned sequences with the same suffix (base cut to 44 characters for the
+63-character identifier limit; the first attempt truncated
+`fixture_recap_versions_room_id_version_no_key_bak_…` and collided), and the
+wrapper allows `_bak_20260923200000` residue lines, which the migration
+harness documents as the residue a DOWN may leave. The rename path was then
+exercised in a rolled-back transaction: one synthetic room → DOWN → nine
+backup tables, 0 unsuffixed index or sequence names → the four migrations
+again → all eight `fixture_rooms` indexes present, five unique indexes on
+`fixture_parties`, `fixture_events.id` on `fixture_events_id_seq`, the room
+still in the backup. The orphaned browser-run rows were removed from the
+local database before the clean re-run above.
+
 ## 3 · Two-session optimistic-concurrency race (local stack, commits)
 
 ```
@@ -68,7 +92,10 @@ refused with `FX_VERSION_CONFLICT`. Then two sessions create the same pairing.
 Result: **ALL ASSERTIONS PASSED** — one `proposal.submitted` event, one
 proposal row, version V+1, session A's proposal landed, B refused with
 `FX_VERSION_CONFLICT`, one room for the raced pairing, the second creator
-refused with `FX_CONFLICT`.
+refused with `FX_CONFLICT`. Re-run 25 Sep 2026 against the final SQL after
+the harness above: **8/8, ALL ASSERTIONS PASSED**. (The run between the two
+harness runs failed exactly the two pairing assertions, which is how the
+missing unique index in section 2 was noticed.)
 
 ## 4 · Integration over the real API (local stack, PostgREST + member JWTs)
 
@@ -125,8 +152,18 @@ Result (24–25 Sep 2026, local stack, dev server on port 3100 because port
   post-command refetch (a dev-mode server action takes 5–15 s here). The spec
   now uses a 30 s assertion budget and 300 s per test; the rerun with those
   budgets aborted after five minutes when Docker Desktop stopped ("Docker
-  Desktop is unable to start"), taking the local stack with it. **Tests 3
-  and 4 of `fixture-room.spec.ts` are therefore not claimed as passed.**
+  Desktop is unable to start"), taking the local stack with it, so tests 3
+  and 4 were not claimed at the first commit.
+- `fixture-room.spec.ts`, 25 Sep 2026 after the stack returned and the
+  section 2 re-run: **4 passed (5.1 min)** on a freshly started dev server
+  (port 3100). One earlier attempt that day failed on test 1 with the
+  application's 404 page for `/dashboard/fixture-room/new?cargo=…` from a
+  dev server that had been running since before the module was dropped and
+  re-applied on the local database; the unauthenticated probe of the same
+  route on that server still redirected to login, and the same code on a
+  fresh server served the route in 5.9 s and passed. The cause of that
+  instance's 404 was not determined; it is recorded here rather than
+  explained.
 
 Defects the browser runs found and fixed along the way: a strict-mode
 selector in the spec; `useNow()` reading the clock during server rendering

@@ -15,11 +15,13 @@
 # The local database is shared with the PDA Estimator branch, whose own
 # harness may add or drop pda_* / tariff objects between the two fingerprints.
 # Those catalogue lines are ignored (--allow-residue); every Fixture Room
-# object is named fixture_*, so Fixture residue would still be reported.
+# object is named fixture_*, so Fixture residue would still be reported. The
+# DOWN keeps *_bak_20260923200000 copies when rooms exist; those lines are the
+# residue the migration harness documents and are allowed too.
 #
 # --target linked is an OWNER GATE and is not run from here without approval.
 set -uo pipefail
-RESIDUE='(pda_|tariff|_pda)'
+RESIDUE='(pda_|tariff|_pda|_bak_20260923200000)'
 cd "$(dirname "$0")/.."
 TARGET=local; DOWN=1; REAPPLY=0
 while [ $# -gt 0 ]; do
