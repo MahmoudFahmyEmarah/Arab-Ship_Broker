@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "lib/pda/**/*.ts",
+    "sdk/app/pda.ts",
+    "components/pda/**/*.tsx",
+    "app/(dashboard)/dashboard/ports-da/**/*.ts",
+    "app/(dashboard)/dashboard/ports-da/**/*.tsx",
+    "app/(admin)/admin/port-tariffs/**/*.ts",
+    "app/(admin)/admin/port-tariffs/**/*.tsx",
+    "scripts/pda-check.ts"
+  ],
+  "exclude": ["node_modules"]
+}
