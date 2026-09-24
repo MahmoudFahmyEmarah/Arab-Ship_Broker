@@ -4,6 +4,36 @@ import { PDA_BASES } from "./types";
 
 const nonNegative = z.number().finite().nonnegative();
 const positive = z.number().finite().positive();
+const shortList = z.array(z.string().trim().min(1).max(120)).max(100);
+
+export const pdaApplicabilitySchema = z.object({
+  requestedServices: shortList.optional(),
+  vesselTypes: shortList.optional(),
+  cargoTypes: shortList.optional(),
+  cargoStatuses: z.array(z.enum(["laden", "ballast"])).max(2).optional(),
+  voyageScopes: z.array(z.enum(["domestic", "international"])).max(2).optional(),
+  locations: z.array(z.enum(["alongside", "anchorage"])).max(2).optional(),
+  minGt: nonNegative.optional(), maxGt: nonNegative.optional(),
+  minNt: nonNegative.optional(), maxNt: nonNegative.optional(),
+  minScnrt: nonNegative.optional(), maxScnrt: nonNegative.optional(),
+  minDwt: nonNegative.optional(), maxDwt: nonNegative.optional(),
+  minLoaM: nonNegative.optional(), maxLoaM: nonNegative.optional(),
+  minDraftM: nonNegative.optional(), maxDraftM: nonNegative.optional(),
+  minCargoQuantityMt: nonNegative.optional(), maxCargoQuantityMt: nonNegative.optional(),
+  percentageBaseCodes: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,79}$/)).min(1).max(100).optional(),
+}).strict().superRefine((value, ctx) => {
+  for (const [minimum, maximum] of [
+    ["minGt", "maxGt"], ["minNt", "maxNt"], ["minScnrt", "maxScnrt"],
+    ["minDwt", "maxDwt"], ["minLoaM", "maxLoaM"], ["minDraftM", "maxDraftM"],
+    ["minCargoQuantityMt", "maxCargoQuantityMt"],
+  ] as const) {
+    if (value[minimum] != null && value[maximum] != null && value[minimum] > value[maximum]) {
+      ctx.addIssue({ code: "custom", path: [maximum], message: `${maximum} must be greater than or equal to ${minimum}` });
+    }
+  }
+});
+
+const bandUnitSchema = z.enum(["gt", "nt", "scnrt", "dwt", "loa_m", "days", "hours", "units", "cargo_mt"]);
 
 export const pdaRequestSchema = z.object({
   portLocode: z.string().trim().regex(/^[A-Z]{2}[A-Z0-9]{3}$/),
@@ -68,12 +98,12 @@ export const pdaTariffVersionSchema = z.object({
       amount: nonNegative.nullable().optional(),
       rate: nonNegative.nullable().optional(),
       priority: z.number().int(),
-      unit: z.string().trim().max(40).nullable().optional(),
+      unit: bandUnitSchema.nullable().optional(),
       includedUnits: nonNegative.nullable().optional(),
       minimumAmount: nonNegative.nullable().optional(),
       maximumAmount: nonNegative.nullable().optional(),
       taxPercent: nonNegative.max(1000).nullable().optional(),
-      applicability: z.record(z.string(), z.unknown()).optional(),
+      applicability: pdaApplicabilitySchema.optional(),
       bands: z
         .array(
           z.object({
@@ -95,4 +125,21 @@ export const pdaTariffVersionSchema = z.object({
       }),
     }),
   ),
+}).superRefine((version, ctx) => {
+  const byCode = new Map(version.rules.map((rule) => [rule.code, rule]));
+  for (const [index, rule] of version.rules.entries()) {
+    if (["tiered_flat", "tiered_rate", "progressive"].includes(rule.basis) && !rule.unit) {
+      ctx.addIssue({ code: "custom", path: ["rules", index, "unit"], message: `${rule.code} requires a supported band unit` });
+    }
+    if (rule.basis !== "percentage") continue;
+    if (!rule.applicability?.percentageBaseCodes?.length) {
+      ctx.addIssue({ code: "custom", path: ["rules", index, "applicability", "percentageBaseCodes"], message: `${rule.code} requires at least one percentage base code` });
+    }
+    for (const baseCode of rule.applicability?.percentageBaseCodes ?? []) {
+      const base = byCode.get(baseCode);
+      if (!base || base.priority >= rule.priority) {
+        ctx.addIssue({ code: "custom", path: ["rules", index, "applicability", "percentageBaseCodes"], message: `${baseCode} must reference a lower-priority rule in the same version` });
+      }
+    }
+  }
 });

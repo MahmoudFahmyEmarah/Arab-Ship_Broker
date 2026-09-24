@@ -119,6 +119,51 @@ $$;
 revoke all on function public.pda_register_tariff_source(uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.pda_register_tariff_source(uuid, jsonb) to service_role;
 
+create or replace function public.pda_upsert_port_terminal(p_actor uuid, p_payload jsonb)
+returns uuid
+language plpgsql security definer set search_path to ''
+as $$
+declare
+  v_id uuid := nullif(p_payload->>'id','')::uuid;
+  v_port text := upper(trim(p_payload->>'portLocode'));
+  v_name text := trim(p_payload->>'name');
+begin
+  perform public.fn_pda_assert_admin_actor(p_actor);
+  if not exists (select 1 from public.ports p where p.locode = v_port and p.is_active and p.is_verified) then
+    raise exception 'PDA_PORT: exact active verified port is required' using errcode = '22023';
+  end if;
+  if length(v_name) < 2 then raise exception 'PDA_TERMINAL: terminal name is required' using errcode = '22023'; end if;
+  if v_id is null then
+    insert into public.port_terminals(port_locode, name, normalized_name, aliases, created_by)
+    values (v_port, v_name, lower(v_name), coalesce(array(select jsonb_array_elements_text(p_payload->'aliases')), '{}'), p_actor)
+    returning id into v_id;
+  else
+    update public.port_terminals set name = v_name, normalized_name = lower(v_name),
+      aliases = case when p_payload ? 'aliases' then array(select jsonb_array_elements_text(p_payload->'aliases')) else aliases end,
+      updated_at = now()
+    where id = v_id and port_locode = v_port and not is_verified;
+    if not found then raise exception 'PDA_TERMINAL: only an unverified terminal under the exact port may be edited' using errcode = '55000'; end if;
+  end if;
+  return v_id;
+end;
+$$;
+revoke all on function public.pda_upsert_port_terminal(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.pda_upsert_port_terminal(uuid, jsonb) to service_role;
+
+create or replace function public.pda_verify_port_terminal(p_actor uuid, p_terminal_id uuid)
+returns void
+language plpgsql security definer set search_path to ''
+as $$
+begin
+  perform public.fn_pda_assert_admin_actor(p_actor);
+  update public.port_terminals set is_verified = true, verified_by = p_actor, verified_at = now(), updated_at = now()
+  where id = p_terminal_id and is_active and not is_verified and created_by <> p_actor;
+  if not found then raise exception 'PDA_CHECKER: a different super-admin must verify the active terminal' using errcode = '42501'; end if;
+end;
+$$;
+revoke all on function public.pda_verify_port_terminal(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.pda_verify_port_terminal(uuid, uuid) to service_role;
+
 create or replace function public.pda_create_tariff_draft(p_actor uuid, p_payload jsonb)
 returns uuid
 language plpgsql security definer set search_path to ''
@@ -144,6 +189,9 @@ begin
   end if;
 
   if v_set_id is null then
+    if exists (select 1 from public.port_tariff_sets s where s.port_locode = v_port and s.terminal_id is not distinct from v_terminal and s.is_active) then
+      raise exception 'PDA_SET: an active consolidated tariff set already exists for this port/terminal; use its UUID' using errcode = '23505';
+    end if;
     insert into public.port_tariff_sets (
       port_locode, terminal_id, publisher_id, name, scope, created_by
     ) values (
@@ -152,9 +200,15 @@ begin
     ) returning id into v_set_id;
   elsif not exists (
     select 1 from public.port_tariff_sets s
-    where s.id = v_set_id and s.port_locode = v_port and s.terminal_id is not distinct from v_terminal
+    where s.id = v_set_id and s.port_locode = v_port and s.terminal_id is not distinct from v_terminal and s.is_active
   ) then
-    raise exception 'PDA_SET: tariff set does not match the exact port/terminal' using errcode = '22023';
+    raise exception 'PDA_SET: active tariff set does not match the exact port/terminal' using errcode = '22023';
+  end if;
+  if nullif(p_payload->>'supersedesId','') is not null and not exists (
+    select 1 from public.port_tariff_versions x
+    where x.id = (p_payload->>'supersedesId')::uuid and x.tariff_set_id = v_set_id
+  ) then
+    raise exception 'PDA_SUPERSEDES: superseded version must belong to the same tariff set' using errcode = '22023';
   end if;
 
   insert into public.port_tariff_versions (
@@ -183,6 +237,7 @@ declare
   v_status text;
   v_rule jsonb;
   v_band jsonb;
+  v_pair record;
   v_rule_id uuid;
   v_count integer := 0;
 begin
@@ -196,6 +251,61 @@ begin
 
   delete from public.port_tariff_rules where tariff_version_id = p_version_id;
   for v_rule in select value from jsonb_array_elements(p_rules) loop
+    if jsonb_typeof(coalesce(v_rule->'applicability','{}'::jsonb)) <> 'object'
+       or exists (select 1 from jsonb_object_keys(coalesce(v_rule->'applicability','{}'::jsonb)) k
+         where k not in ('requestedServices','vesselTypes','cargoTypes','cargoStatuses','voyageScopes','locations',
+           'minGt','maxGt','minNt','maxNt','minScnrt','maxScnrt','minDwt','maxDwt','minLoaM','maxLoaM',
+           'minDraftM','maxDraftM','minCargoQuantityMt','maxCargoQuantityMt','percentageBaseCodes')) then
+      raise exception 'PDA_APPLICABILITY: % has unsupported applicability fields', v_rule->>'code' using errcode = '22023';
+    end if;
+    if exists (select 1 from jsonb_each(coalesce(v_rule->'applicability','{}'::jsonb)) e
+      where e.key in ('requestedServices','vesselTypes','cargoTypes','cargoStatuses','voyageScopes','locations','percentageBaseCodes')
+        and (jsonb_typeof(e.value) <> 'array' or exists (select 1 from jsonb_array_elements(e.value) x where jsonb_typeof(x) <> 'string'))) then
+      raise exception 'PDA_APPLICABILITY: % list fields must be string arrays', v_rule->>'code' using errcode = '22023';
+    end if;
+    if exists (select 1 from jsonb_each(coalesce(v_rule->'applicability','{}'::jsonb)) e
+      where (e.key like 'min%' or e.key like 'max%') and jsonb_typeof(e.value) <> 'number') then
+      raise exception 'PDA_APPLICABILITY: % ranges must be numeric', v_rule->>'code' using errcode = '22023';
+    end if;
+    if exists (select 1 from jsonb_each(coalesce(v_rule->'applicability','{}'::jsonb)) e
+      where e.key in ('requestedServices','vesselTypes','cargoTypes','cargoStatuses','voyageScopes','locations','percentageBaseCodes')
+        and (jsonb_array_length(e.value) > 100 or exists (
+          select 1 from jsonb_array_elements_text(e.value) item(value)
+          where length(trim(item.value)) not between 1 and 120
+        ))) then
+      raise exception 'PDA_APPLICABILITY: % list fields contain too many or invalid values', v_rule->>'code' using errcode = '22023';
+    end if;
+    if exists (select 1 from jsonb_array_elements_text(coalesce(v_rule#>'{applicability,cargoStatuses}','[]'::jsonb)) item(value) where item.value not in ('laden','ballast'))
+       or exists (select 1 from jsonb_array_elements_text(coalesce(v_rule#>'{applicability,voyageScopes}','[]'::jsonb)) item(value) where item.value not in ('domestic','international'))
+       or exists (select 1 from jsonb_array_elements_text(coalesce(v_rule#>'{applicability,locations}','[]'::jsonb)) item(value) where item.value not in ('alongside','anchorage'))
+       or exists (select 1 from jsonb_array_elements_text(coalesce(v_rule#>'{applicability,percentageBaseCodes}','[]'::jsonb)) item(value) where item.value !~ '^[a-z][a-z0-9_]{1,79}$') then
+      raise exception 'PDA_APPLICABILITY: % contains an unsupported enumerated value or rule code', v_rule->>'code' using errcode = '22023';
+    end if;
+    if exists (select 1 from jsonb_each(coalesce(v_rule->'applicability','{}'::jsonb)) e
+      where (e.key like 'min%' or e.key like 'max%') and (e.value #>> '{}')::numeric < 0) then
+      raise exception 'PDA_APPLICABILITY: % ranges cannot be negative', v_rule->>'code' using errcode = '22023';
+    end if;
+    for v_pair in select * from (values
+      ('minGt','maxGt'), ('minNt','maxNt'), ('minScnrt','maxScnrt'), ('minDwt','maxDwt'),
+      ('minLoaM','maxLoaM'), ('minDraftM','maxDraftM'), ('minCargoQuantityMt','maxCargoQuantityMt')
+    ) as pairs(min_key, max_key) loop
+      if (v_rule->'applicability') ? v_pair.min_key and (v_rule->'applicability') ? v_pair.max_key
+         and (v_rule#>>array['applicability',v_pair.min_key])::numeric > (v_rule#>>array['applicability',v_pair.max_key])::numeric then
+        raise exception 'PDA_APPLICABILITY: % has an inverted %/% range', v_rule->>'code', v_pair.min_key, v_pair.max_key using errcode = '22023';
+      end if;
+    end loop;
+    if nullif(v_rule->>'unit','') is not null
+       and (v_rule->>'unit') not in ('gt','nt','scnrt','dwt','loa_m','days','hours','units','cargo_mt') then
+      raise exception 'PDA_UNIT: % has an unsupported unit', v_rule->>'code' using errcode = '22023';
+    end if;
+    if (v_rule->>'basis') in ('tiered_flat','tiered_rate','progressive')
+       and nullif(v_rule->>'unit','') is null then
+      raise exception 'PDA_UNIT: % requires a supported band unit', v_rule->>'code' using errcode = '22023';
+    end if;
+    if (v_rule->>'basis') = 'percentage'
+       and jsonb_array_length(coalesce(v_rule#>'{applicability,percentageBaseCodes}','[]'::jsonb)) = 0 then
+      raise exception 'PDA_PERCENTAGE: % requires at least one base code', v_rule->>'code' using errcode = '22023';
+    end if;
     insert into public.port_tariff_rules (
       tariff_version_id, code, label, basis, amount, rate, unit, priority,
       included_units, minimum_amount, maximum_amount, tax_percent, applicability,
@@ -246,6 +356,15 @@ begin
     end if;
     v_count := v_count + 1;
   end loop;
+  if exists (
+    select 1 from public.port_tariff_rules r
+    cross join lateral jsonb_array_elements_text(coalesce(r.applicability->'percentageBaseCodes','[]'::jsonb)) base(code)
+    left join public.port_tariff_rules prior on prior.tariff_version_id = r.tariff_version_id and prior.code = base.code
+    where r.tariff_version_id = p_version_id and r.basis = 'percentage'
+      and (prior.id is null or prior.priority >= r.priority)
+  ) then
+    raise exception 'PDA_PERCENTAGE: every base code must be a lower-priority rule in the same version' using errcode = '22023';
+  end if;
   return v_count;
 end;
 $$;
@@ -265,6 +384,12 @@ begin
   if not exists (select 1 from public.port_tariff_rules where tariff_version_id = p_version_id) then
     raise exception 'PDA_RULES: a tariff cannot be submitted without rules' using errcode = '55000';
   end if;
+  if exists (
+    select 1 from public.port_tariff_rules r join public.tariff_sources s on s.id = r.source_id
+    where r.tariff_version_id = p_version_id and s.authority not in ('official','agent','statutory')
+  ) then
+    raise exception 'PDA_SOURCE: every published rule requires trusted evidence' using errcode = '55000';
+  end if;
 end;
 $$;
 revoke all on function public.pda_submit_tariff_version(uuid, uuid) from public, anon, authenticated;
@@ -278,6 +403,7 @@ declare
   v public.port_tariff_versions%rowtype;
   v_source_authority text;
   v_overlap uuid;
+  v_overlap_count integer;
 begin
   perform public.fn_pda_assert_admin_actor(p_actor);
   select * into v from public.port_tariff_versions where id = p_version_id for update;
@@ -293,12 +419,15 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended(v.tariff_set_id::text, 0));
-  select x.id into v_overlap
+  select (array_agg(x.id))[1], count(*) into v_overlap, v_overlap_count
   from public.port_tariff_versions x
   where x.tariff_set_id = v.tariff_set_id and x.id <> v.id and x.status = 'published'
     and daterange(x.effective_from, coalesce(x.effective_to + 1, 'infinity'::date), '[)') &&
         daterange(v.effective_from, coalesce(v.effective_to + 1, 'infinity'::date), '[)')
-  order by x.published_at desc limit 1;
+  ;
+  if v_overlap_count > 1 then
+    raise exception 'PDA_OVERLAP: a version cannot replace multiple overlapping publications; withdraw or split the ranges first' using errcode = '23505';
+  end if;
   if v_overlap is not null and v.supersedes_id is distinct from v_overlap then
     raise exception 'PDA_OVERLAP: overlapping publication must explicitly supersede %', v_overlap using errcode = '23505';
   end if;
@@ -312,3 +441,19 @@ end;
 $$;
 revoke all on function public.pda_publish_tariff_version(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.pda_publish_tariff_version(uuid, uuid) to service_role;
+
+create or replace function public.pda_return_tariff_version(p_actor uuid, p_version_id uuid, p_note text)
+returns void
+language plpgsql security definer set search_path to ''
+as $$
+begin
+  perform public.fn_pda_assert_admin_actor(p_actor);
+  update public.port_tariff_versions
+  set status = 'draft', submitted_by = null, submitted_at = null,
+      notes = concat_ws(E'\n', notes, 'Returned by checker: ' || trim(p_note))
+  where id = p_version_id and status = 'in_review' and created_by <> p_actor and length(trim(p_note)) >= 3;
+  if not found then raise exception 'PDA_STATE: a different super-admin may return an in-review tariff with a note' using errcode = '55000'; end if;
+end;
+$$;
+revoke all on function public.pda_return_tariff_version(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.pda_return_tariff_version(uuid, uuid, text) to service_role;

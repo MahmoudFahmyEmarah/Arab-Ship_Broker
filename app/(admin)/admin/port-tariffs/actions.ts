@@ -34,6 +34,22 @@ export async function createPublisher(form: FormData) {
   rpcError(error, "Publisher saved");
 }
 
+export async function upsertTerminal(form: FormData) {
+  const { actorId, db } = await context();
+  const aliases = value(form, "aliases").split(",").map((item) => item.trim()).filter(Boolean);
+  const { error } = await db.rpc("pda_upsert_port_terminal", { p_actor: actorId, p_payload: {
+    id: optional(form, "terminalId"), portLocode: value(form, "portLocode").toUpperCase(),
+    name: value(form, "name"), aliases,
+  }});
+  rpcError(error, "Terminal saved for independent verification");
+}
+
+export async function verifyTerminal(form: FormData) {
+  const { actorId, db } = await context();
+  const { error } = await db.rpc("pda_verify_port_terminal", { p_actor: actorId, p_terminal_id: value(form, "terminalId") });
+  rpcError(error, "Terminal verified");
+}
+
 export async function registerSource(form: FormData) {
   const { actorId, db } = await context();
   const { error } = await db.rpc("pda_register_tariff_source", { p_actor: actorId, p_source: {
@@ -100,4 +116,12 @@ export async function publishVersion(form: FormData) {
   const { actorId, db } = await context();
   const { error } = await db.rpc("pda_publish_tariff_version", { p_actor: actorId, p_version_id: value(form, "versionId") });
   rpcError(error, "Tariff published");
+}
+
+export async function returnVersion(form: FormData) {
+  const { actorId, db } = await context();
+  const { error } = await db.rpc("pda_return_tariff_version", {
+    p_actor: actorId, p_version_id: value(form, "versionId"), p_note: value(form, "note"),
+  });
+  rpcError(error, "Tariff returned to its maker");
 }

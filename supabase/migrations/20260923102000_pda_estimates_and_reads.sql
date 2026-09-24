@@ -58,6 +58,13 @@ create table if not exists public.pda_estimate_lines (
   constraint pda_estimate_lines_no_ck check (line_no > 0),
   constraint pda_estimate_lines_amount_ck check (amount >= 0 and (converted_amount is null or converted_amount >= 0)),
   constraint pda_estimate_lines_json_ck check (jsonb_typeof(inputs) = 'object' and jsonb_typeof(evidence) = 'object'),
+  constraint pda_estimate_lines_basis_ck check (basis in (
+    'flat','per_call','per_day','per_hour','per_gt','per_nt','per_scnrt','per_dwt','per_loa',
+    'per_cargo_mt','per_unit','percentage','tiered_flat','tiered_rate','progressive','manual_quote','manual'
+  )),
+  constraint pda_estimate_lines_evidence_ck check (
+    is_manual or (tariff_rule_id is not null and source_id is not null)
+  ),
   constraint pda_estimate_lines_manual_ck check (
     (not is_manual and manual_reason is null) or (is_manual and length(trim(manual_reason)) >= 3 and entered_by_label is not null)
   ),
@@ -145,7 +152,7 @@ begin
   where s.port_locode = upper(trim(p_port_locode)) and s.is_active and v.status = 'published'
     and (s.terminal_id = p_terminal_id or s.terminal_id is null)
     and v.effective_from <= p_call_date and (v.effective_to is null or v.effective_to >= p_call_date)
-  order by (s.terminal_id = p_terminal_id and p_terminal_id is not null) desc, v.effective_from desc, v.version_no desc
+  order by (s.terminal_id is not null) desc, v.effective_from desc, v.version_no desc
   limit 1;
 
   if v_version.id is null then
@@ -335,6 +342,9 @@ begin
   if jsonb_typeof(p_result->'lines') <> 'array' or jsonb_typeof(p_result->'warnings') <> 'array' then
     raise exception 'PDA_INPUT: result lines/warnings must be arrays' using errcode = '22023';
   end if;
+  if v_coverage = 'published' and jsonb_array_length(p_result->'lines') = 0 then
+    raise exception 'PDA_COVERAGE: zero-line estimates cannot be published coverage' using errcode = '22023';
+  end if;
   select coalesce(sum((x->>'amount')::numeric), 0) into v_sum from jsonb_array_elements(p_result->'lines') x;
   if abs(v_sum - v_total) > 0.000001 then
     raise exception 'PDA_TOTAL: native total does not equal line sum' using errcode = '22023';
@@ -365,10 +375,11 @@ begin
     warnings, native_currency, native_total, converted_currency, converted_total,
     supersedes_id, generated_at
   ) values (
-    p_actor, p_owner_org_id, v_port, v_terminal, nullif(p_request->>'terminalName',''),
+    p_actor, p_owner_org_id, v_port, v_terminal,
+    (select t.name from public.port_terminals t where t.id = v_terminal),
     v_version, nullif(p_request#>>'{vessel,vesselId}','')::uuid,
     (p_request->>'callDate')::date, v_coverage, p_request,
-    jsonb_build_object('currency', p_request->>'convertedCurrency', 'rate', p_request->'fxRate'),
+    jsonb_build_object('currency', p_request->>'convertedCurrency', 'rate', p_request->'fxRate', 'source', 'member'),
     p_result->'warnings', upper(p_result->>'nativeCurrency'), v_total,
     nullif(upper(p_result->>'convertedCurrency'),''), nullif(p_result#>>'{totals,converted}','')::numeric,
     p_supersedes_id, coalesce(nullif(p_result->>'generatedAt','')::timestamptz, now())
@@ -413,7 +424,11 @@ as $$
     select 1 from public.pda_estimates e
     where e.id = p_estimate_id and (
       e.owner_user_id = public.fn_app_user_id()
-      or (e.owner_org_id is not null and e.owner_org_id = any(public.fn_my_org_ids()))
+      or (e.owner_org_id is not null and exists (
+        select 1 from public.organization_members m
+        where m.org_id = e.owner_org_id and m.user_id = public.fn_app_user_id()
+          and m.is_current and m.status = 'active'
+      ))
     )
   );
 $$;
@@ -449,4 +464,41 @@ $$;
 revoke all on function public.get_pda_estimate(uuid) from public, anon;
 grant execute on function public.get_pda_estimate(uuid) to authenticated, service_role;
 
+create or replace function public.fn_pda_estimate_header(p_estimate_id uuid)
+returns jsonb
+language plpgsql stable security definer set search_path to ''
+as $$
+declare v_result jsonb;
+begin
+  if not public.fn_can_read_pda_estimate(p_estimate_id) then
+    raise exception 'PDA_AUTH: estimate is not accessible' using errcode = '42501';
+  end if;
+  select jsonb_build_object(
+    'id', e.id,
+    'portLocode', e.port_locode,
+    'terminalId', e.terminal_id,
+    'terminalName', e.terminal_name,
+    'tariffVersionId', e.tariff_version_id,
+    'coverage', e.coverage,
+    'callDate', e.call_date,
+    'vesselId', e.vessel_id,
+    'nativeCurrency', e.native_currency,
+    'nativeTotal', e.native_total,
+    'convertedCurrency', e.converted_currency,
+    'convertedTotal', e.converted_total,
+    'fxRate', nullif(e.fx_snapshot->>'rate','')::numeric,
+    'fxSource', e.fx_snapshot->>'source',
+    'generatedAt', e.generated_at,
+    'isSuperseded', exists (select 1 from public.pda_estimates n where n.supersedes_id = e.id),
+    'lineCount', (select count(*) from public.pda_estimate_lines l where l.estimate_id = e.id),
+    'manualLineCount', (select count(*) from public.pda_estimate_lines l where l.estimate_id = e.id and l.is_manual),
+    'warningCount', jsonb_array_length(e.warnings)
+  ) into v_result
+  from public.pda_estimates e where e.id = p_estimate_id;
+  return v_result;
+end;
+$$;
+revoke all on function public.fn_pda_estimate_header(uuid) from public, anon, authenticated;
+
 comment on function public.fn_can_read_pda_estimate(uuid) is 'Cross-module helper for governed server-side access checks. Deliberately has no direct member execute grant.';
+comment on function public.fn_pda_estimate_header(uuid) is 'Minimal masked cross-module PDA snapshot. Deliberately has no direct member execute grant.';

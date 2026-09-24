@@ -41,6 +41,34 @@ begin
   if has_function_privilege('authenticated', 'public.fn_can_read_pda_estimate(uuid)', 'execute') then
     raise exception 'PDA TEST: cross-module helper exposed directly';
   end if;
+  if has_function_privilege('authenticated', 'public.fn_pda_estimate_header(uuid)', 'execute') then
+    raise exception 'PDA TEST: minimal cross-module header exposed directly';
+  end if;
+  if has_function_privilege('authenticated', 'public.pda_upsert_port_terminal(uuid,jsonb)', 'execute')
+     or has_function_privilege('authenticated', 'public.pda_verify_port_terminal(uuid,uuid)', 'execute')
+     or has_function_privilege('authenticated', 'public.pda_return_tariff_version(uuid,uuid,text)', 'execute') then
+    raise exception 'PDA TEST: administration RPC exposed to members';
+  end if;
+end;
+$$;
+
+do $$
+declare v_constraints integer;
+begin
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and indexname = 'port_tariff_sets_active_scope_uq'
+      and indexdef ilike '%unique%' and indexdef ilike '%nulls not distinct%'
+      and indexdef ilike '%where is_active%'
+  ) then raise exception 'PDA TEST: consolidated active tariff scope is not uniquely enforced'; end if;
+
+  select count(*) into v_constraints
+  from pg_constraint
+  where conrelid = 'public.pda_estimate_lines'::regclass
+    and conname in ('pda_estimate_lines_basis_ck','pda_estimate_lines_evidence_ck','pda_estimate_lines_manual_ck');
+  if v_constraints <> 3 then
+    raise exception 'PDA TEST: estimate line basis/evidence constraints missing';
+  end if;
 end;
 $$;
 

@@ -75,6 +75,37 @@ const noTariff = calculatePda(request, null);
 assert.equal(noTariff.coverage, "manual_required");
 assert.equal(noTariff.tariffVersionId, null);
 
+const noApplicable = calculatePda(
+  { ...request, call: { ...request.call, requestedServices: ["towage"] } },
+  { ...version, rules: [{ ...version.rules[0]!, applicability: { requestedServices: ["pilotage"] } }] },
+);
+assert.equal(noApplicable.lines.length, 0);
+assert.equal(noApplicable.coverage, "manual_required");
+assert.equal(noApplicable.warnings[0]?.code, "NO_APPLICABLE_RULES");
+
+assert.throws(
+  () => calculatePda(request, { ...version, rules: [{ ...version.rules[0]!, applicability: { minGt: "bad" } as never }] }),
+  /expected number/i,
+);
+assert.throws(
+  () => calculatePda(request, { ...version, rules: [{ ...version.rules[0]!, applicability: { minGt: 10_000, maxGt: 5_000 } }] }),
+  /maxGt must be greater than or equal to minGt/i,
+);
+assert.throws(
+  () => calculatePda(request, {
+    ...version,
+    rules: [{ ...version.rules[0]!, code: "vat", basis: "percentage", rate: 10, priority: 20, applicability: {} }],
+  }),
+  /requires at least one percentage base code/i,
+);
+assert.throws(
+  () => calculatePda(request, {
+    ...version,
+    rules: [{ ...version.rules[0]!, code: "vat", basis: "percentage", rate: 10, priority: 5, applicability: { percentageBaseCodes: ["port_dues"] } }],
+  }),
+  /lower-priority rule/i,
+);
+
 const mismatch = calculatePda({ ...request, portLocode: "EGALY" }, version);
 assert.equal(mismatch.coverage, "manual_required");
 assert.equal(mismatch.warnings[0]?.code, "PORT_MISMATCH");

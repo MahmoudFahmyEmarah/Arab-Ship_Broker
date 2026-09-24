@@ -211,6 +211,12 @@ create table if not exists public.port_tariff_bands (
 create index if not exists port_terminals_port_idx on public.port_terminals (port_locode, is_active, is_verified);
 create index if not exists tariff_staged_rules_batch_idx on public.tariff_staged_rules (batch_id, decision, row_no);
 create index if not exists port_tariff_sets_port_idx on public.port_tariff_sets (port_locode, terminal_id, is_active);
+-- Phase 1 intentionally publishes one consolidated tariff set per exact
+-- port/terminal scope. Separate charge-family sets would otherwise be
+-- silently omitted by the single-version estimate contract.
+create unique index if not exists port_tariff_sets_active_scope_uq
+  on public.port_tariff_sets (port_locode, terminal_id) nulls not distinct
+  where is_active;
 create index if not exists port_tariff_versions_effective_idx on public.port_tariff_versions (tariff_set_id, status, effective_from, effective_to);
 create index if not exists port_tariff_rules_version_idx on public.port_tariff_rules (tariff_version_id, priority, code);
 create index if not exists port_tariff_bands_rule_idx on public.port_tariff_bands (rule_id, band_order);

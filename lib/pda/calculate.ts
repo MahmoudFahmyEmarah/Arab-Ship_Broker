@@ -147,7 +147,10 @@ function automaticAmount(rule: PdaTariffRule, request: PdaRequest, prior: Map<st
     case "percentage": {
       const codes = rule.applicability?.percentageBaseCodes ?? [];
       if (!codes.length) throw new Error("INVALID_TARIFF:percentageBaseCodes required");
-      const quantity = codes.reduce((sum, code) => sum + (prior.get(code) ?? 0), 0);
+      const quantity = codes.reduce((sum, code) => {
+        if (!prior.has(code)) throw new Error(`MISSING_INPUT:calculated percentage base ${code}`);
+        return sum + prior.get(code)!;
+      }, 0);
       const rate = requireNumber(rule.rate, "percentage rate");
       return { amount: quantity * (rate / 100), quantity, rate };
     }
@@ -299,7 +302,7 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
         amount,
         ...(request.fxRate ? { convertedAmount: round(amount * request.fxRate, version.decimalPlaces, version.roundingMode) } : {}),
         explanation: makeExplanation(rule, calculated.quantity, calculated.rate, beforeTax, amount),
-        inputs: { vessel: request.vessel, call: request.call },
+        inputs: { quantity: calculated.quantity, rate: calculated.rate },
         manual: false,
         evidence: rule.source,
       });
@@ -344,7 +347,7 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
   const anyManual = lines.some((line) => line.manual);
 
   return {
-    coverage: incomplete ? (lines.length ? "partial" : "manual_required") : anyManual ? "partial" : "published",
+    coverage: !lines.length ? "manual_required" : incomplete ? "partial" : anyManual ? "partial" : "published",
     tariffVersionId: version.id,
     nativeCurrency: version.currency,
     ...(request.convertedCurrency && request.fxRate ? { convertedCurrency: request.convertedCurrency } : {}),

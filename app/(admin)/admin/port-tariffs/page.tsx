@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
-import { createDraft, createPublisher, decideStagedRule, publishVersion, registerSource, replaceRules, stageImport, submitVersion } from "./actions";
+import { createDraft, createPublisher, decideStagedRule, publishVersion, registerSource, replaceRules, returnVersion, stageImport, submitVersion, upsertTerminal, verifyTerminal } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +11,13 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
   await requireAdmin({ section: "datasync" });
   const db = getSupabaseAdminClient();
   const params = await searchParams;
-  const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }] = await Promise.all([
+  const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }, { data: terminals }] = await Promise.all([
     db.from("tariff_publishers").select("id,name,publisher_type,country").order("name"),
     db.from("tariff_sources").select("id,title,source_filename,authority,effective_from,sha256").order("registered_at", { ascending: false }).limit(50),
     db.from("port_tariff_sets").select("id,name,port_locode,terminal_id,publisher_id").order("created_at", { ascending: false }).limit(50),
     db.from("port_tariff_versions").select("id,tariff_set_id,version_no,status,currency,effective_from,effective_to,created_by,approved_by,published_at").order("created_at", { ascending: false }).limit(50),
     db.from("tariff_staged_rules").select("id,batch_id,row_no,raw_text,port_locode,source_page,source_sheet,confidence,validation_errors,decision").eq("decision", "pending").order("created_at").limit(30),
+    db.from("port_terminals").select("id,port_locode,name,is_verified,created_by").order("port_locode").order("name").limit(100),
   ]);
 
   return <div className="adm-page">
@@ -25,6 +26,9 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
     {params.error && <div className="adm-alert adm-alert--error">{params.error}</div>}
 
     <div className="adm-grid adm-grid--2">
+      <Panel title="0. Port terminals"><form action={upsertTerminal} className="adm-form">
+        <input name="portLocode" required placeholder="UN/LOCODE" maxLength={5}/><input name="name" required placeholder="Terminal name"/><input name="aliases" placeholder="Aliases, comma separated"/><button type="submit">Save for verification</button>
+      </form><div className="adm-version-list">{(terminals ?? []).map((terminal) => <article key={terminal.id}><div><strong>{terminal.port_locode} · {terminal.name}</strong><span>{terminal.is_verified ? "Verified" : "Awaiting independent verification"}</span></div>{!terminal.is_verified && <form action={verifyTerminal}><input type="hidden" name="terminalId" value={terminal.id}/><button>Verify as checker</button></form>}</article>)}</div></Panel>
       <Panel title="1. Publisher"><form action={createPublisher} className="adm-form">
         <input name="name" required placeholder="Publisher name"/><select name="publisherType" defaultValue="port_authority"><option value="port_authority">Port authority</option><option value="terminal">Terminal</option><option value="agent">Agent</option><option value="statutory">Statutory</option><option value="other">Other</option></select><input name="country" placeholder="Country"/><input name="website" placeholder="Website"/><button type="submit">Save publisher</button>
       </form></Panel>
@@ -45,7 +49,7 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
 
     <Panel title="Draft and publication workflow">
       <form action={replaceRules} className="adm-form adm-form--wide"><select name="versionId" required><option value="">Draft/review version</option>{(versions ?? []).filter((v) => ["draft","in_review"].includes(v.status)).map((v) => <option key={v.id} value={v.id}>{v.id.slice(0,8)} · v{v.version_no} · {v.status}</option>)}</select><textarea name="rulesJson" required rows={10} defaultValue={'[{"code":"port_dues","label":"Port dues","basis":"per_gt","rate":0,"priority":10,"sourceId":"SOURCE-UUID","sourcePage":"4","applicability":{"requestedServices":["port_dues"]},"bands":[]}]'}/><button type="submit">Validate and replace rules</button></form>
-      <div className="adm-version-list">{(versions ?? []).map((version) => { const set = (sets ?? []).find((item) => item.id === version.tariff_set_id); return <article key={version.id}><div><strong>{set?.port_locode ?? "—"} · {set?.name ?? version.tariff_set_id}</strong><span>v{version.version_no} · {version.currency} · {version.status} · from {version.effective_from}</span><code>{version.id}</code></div>{version.status === "draft" && <form action={submitVersion}><input type="hidden" name="versionId" value={version.id}/><button>Submit review</button></form>}{version.status === "in_review" && <form action={publishVersion}><input type="hidden" name="versionId" value={version.id}/><button>Publish as checker</button></form>}</article>})}</div>
+      <div className="adm-version-list">{(versions ?? []).map((version) => { const set = (sets ?? []).find((item) => item.id === version.tariff_set_id); return <article key={version.id}><div><strong>{set?.port_locode ?? "—"} · {set?.name ?? version.tariff_set_id}</strong><span>v{version.version_no} · {version.currency} · {version.status} · from {version.effective_from}</span><code>{version.id}</code></div>{version.status === "draft" && <form action={submitVersion}><input type="hidden" name="versionId" value={version.id}/><button>Submit review</button></form>}{version.status === "in_review" && <div><form action={publishVersion}><input type="hidden" name="versionId" value={version.id}/><button>Publish as checker</button></form><form action={returnVersion}><input type="hidden" name="versionId" value={version.id}/><input name="note" required minLength={3} placeholder="Return note"/><button>Return to maker</button></form></div>}</article>})}</div>
     </Panel>
     <style>{` .adm-grid{display:grid;gap:16px;margin:16px 0}.adm-grid--2{grid-template-columns:repeat(2,minmax(0,1fr))}.adm-panel{background:#fff;border:1px solid #d8e1e9;border-radius:10px;padding:16px;margin:16px 0}.adm-panel h2{margin:0 0 12px;font-size:16px}.adm-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.adm-form input,.adm-form select,.adm-form textarea,.adm-review-row input{border:1px solid #ccd7e1;border-radius:6px;padding:8px}.adm-form textarea{grid-column:1/-1}.adm-form button,.adm-review-row button,.adm-version-list button{background:#143f64;color:#fff;border:0;border-radius:6px;padding:9px 12px;font-weight:700}.adm-form--wide{grid-template-columns:1fr}.adm-review-row,.adm-version-list article{display:flex;justify-content:space-between;gap:16px;border-top:1px solid #e3e9ee;padding:12px 0}.adm-review-row p{margin:5px 0}.adm-review-row form{display:flex;gap:5px;align-items:center}.adm-version-list article div{display:grid;gap:3px}.adm-version-list article span,.adm-version-list code,.adm-muted{font-size:12px;color:#6b7d8e}.adm-alert{padding:10px;border-radius:7px;margin:12px 0}.adm-alert--success{background:#edf8e8;color:#356922}.adm-alert--error{background:#feeceb;color:#922f2a}@media(max-width:900px){.adm-grid--2,.adm-form{grid-template-columns:1fr}.adm-review-row{display:grid}.adm-review-row form{flex-wrap:wrap}} `}</style>
   </div>;
