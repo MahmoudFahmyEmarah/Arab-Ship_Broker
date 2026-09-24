@@ -26,9 +26,13 @@ declare
   v_version_id uuid;
   v_status text;
 begin
-  v_version_id := case when tg_table_name = 'port_tariff_bands' then (
-    select r.tariff_version_id from public.port_tariff_rules r where r.id = coalesce(new.rule_id, old.rule_id)
-  ) else coalesce(new.tariff_version_id, old.tariff_version_id) end;
+  if tg_table_name = 'port_tariff_bands' then
+    select r.tariff_version_id into v_version_id
+    from public.port_tariff_rules r
+    where r.id = case when tg_op = 'DELETE' then old.rule_id else new.rule_id end;
+  else
+    v_version_id := case when tg_op = 'DELETE' then old.tariff_version_id else new.tariff_version_id end;
+  end if;
   select status into v_status from public.port_tariff_versions where id = v_version_id;
   if v_status <> 'draft' then
     raise exception 'PDA_IMMUTABLE: submitted or published tariff children cannot change' using errcode = '55000';

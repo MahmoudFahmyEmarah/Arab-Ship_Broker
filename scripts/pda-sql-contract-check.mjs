@@ -29,6 +29,7 @@ assert.match(publication, /v_source_authority not in \('official','agent','statu
 assert.match(publication, /PDA_OVERLAP: overlapping publication must explicitly supersede/i);
 assert.match(publication, /PDA_IMMUTABLE: published tariff versions cannot be edited/i);
 assert.match(publication, /PDA_IMMUTABLE: submitted or published tariff children cannot change/i);
+assert.match(publication, /if tg_table_name = 'port_tariff_bands' then[\s\S]+case when tg_op = 'DELETE'/i);
 assert.match(publication, /where id = p_version_id and created_by = p_actor for update/i);
 assert.match(schema, /constraint port_tariff_rules_basis_value_ck/i);
 assert.match(schema, /constraint port_tariff_rules_percentage_ck/i);

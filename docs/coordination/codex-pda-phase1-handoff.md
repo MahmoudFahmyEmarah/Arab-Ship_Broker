@@ -32,6 +32,7 @@ The former King Abdullah-only, hard-coded Port DA screen is replaced by a govern
 - migrations `20260923100000` through `20260923103000`
 - `supabase/rollback/20260923_pda_down.sql`
 - PDA scripts/tests and this document
+- `supabase/tests/pda/contract.sql` and `supabase/tests/pda/behavior.sql`
 
 ## Database design
 
@@ -70,14 +71,15 @@ The two `Circular 1 - 2026` PDFs are byte-identical (`f171b583c9d2eb163dd08e8d68
 - TypeScript syntax transpilation check — pass.
 - Tariff source inventory and duplicate hashing — pass.
 - `git diff --check` — pass for tracked changes.
+- Reversible local-Supabase harness — pass: all four migrations, static catalog contract, transactional behavior suite, rollback, and exact pre/post schema fingerprint (`HARNESS: OK (4 migrations, 2 suites, 1 downs, target local)`).
+- Database behavior suite — pass: owner-only administration, malformed-band rejection, draft-child freezing, independent maker/checker publication, port/terminal selection, cross-port rejection, T3 estimate save/read, outsider and T2 denial, immutable snapshots, and staging without publication.
+- Browser integration QA against local Supabase — pass: real T3 member login, published tariff calculation (`USD 175.00`, two evidence-backed lines), immutable snapshot save, desktop/mobile no-horizontal-overflow assertions, and super-admin tariff console rendering without page/runtime errors.
+- Visual inspection — pass for 1440 px estimator/admin layouts and 390 px estimator layout. Existing global cookie-consent and Next development overlays were identified as non-PDA UI.
 
 ## Open environment gates
 
-- Executable migration/catalog smoke test: not yet run after the final SQL changes because Docker Desktop returns HTTP 500 for both API v1.54 and v1.47. The ready test is `supabase/tests/pda/contract.sql`.
 - Production webpack build: application compilation passed. The repository-wide Next type phase then failed on the pre-existing, unrelated export `BUDGET_MS` in `app/api/cron/dq-nightly/route.ts`; PDA-focused typecheck remains green.
-- Browser visual QA: the installed browser skill path was unavailable, and database-backed rendering also depends on applying the migrations.
-
-These gates must be rerun before merge. Do not interpret the static SQL contract check as a substitute for applying the migrations and testing rollback on a disposable database.
+- Reciprocal Fixture Room audit by Opus remains pending. The database and browser gates above are complete and must still be rerun after integration if shared files or migration ordering change.
 
 ## Requested Opus audit
 
