@@ -1,0 +1,142 @@
+/**
+ * Fixture Room · browser-suite seeding (Fixture Room-only file, 23 Sep 2026).
+ *
+ * The shared global-setup seeds ADMIN seats; a fixture needs two real MEMBER
+ * seats on opposite sides. This helper creates them on the LOCAL stack only
+ * (a charterer with a live cargo, an owner with a live position that the
+ * platform's own match rules pair with it), signs them in through the real
+ * login form, and removes everything afterwards.
+ */
+import { type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { execSync } from "node:child_process";
+
+export const PASSWORD = "e2e-Fixture-Passw0rd!";
+
+export interface FixtureSeed {
+  stamp: string;
+  charterer: { email: string; userId: string; orgId: string };
+  owner: { email: string; userId: string; orgId: string };
+  cargoId: string;
+  vesselId: string;
+  availabilityId: string;
+}
+
+function localKeys() {
+  let url = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
+  let service = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
+  if (!service) {
+    const out = execSync("npx supabase status -o env", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    service = out.match(/^SERVICE_ROLE_KEY="?([^"\n]+)"?/m)?.[1];
+    url = out.match(/^API_URL="?([^"\n]+)"?/m)?.[1] ?? url;
+  }
+  if (!service) throw new Error("no local service role key (E2E_SUPABASE_SERVICE_ROLE_KEY or `supabase status`)");
+  if (!/127\.0\.0\.1|localhost/.test(url)) throw new Error(`refusing to seed members against ${url}`);
+  return { url, service };
+}
+
+export async function seedFixture(): Promise<FixtureSeed> {
+  const { url, service } = localKeys();
+  const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
+  const stamp = Date.now().toString(36);
+  const mk = async (email: string, role: string, company: string) => {
+    const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
+    if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
+    const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: `E2E ${role}`, company, role, subscription_tier: "T3", is_active: true });
+    if (e2) throw new Error(`users: ${e2.message}`);
+    const { data: org, error: e3 } = await admin.from("organizations").insert({ name: company, org_type: role === "cargo_owner" ? "charterer" : "owner", desk_contact_name: "Desk" }).select("id").single();
+    if (e3) throw new Error(`org: ${e3.message}`);
+    await admin.from("organization_members").insert({ org_id: org.id, user_id: data.user.id, member_role: "admin", is_current: true, status: "active" });
+    // the account's profile row lets the dashboard shell show the workspace
+    await admin.from("profiles").insert({ account_id: data.user.id, profile_type: role === "cargo_owner" ? "cargo" : "vessel", display_name: `E2E ${role}`, is_active: true });
+    return { email, userId: data.user.id as string, orgId: org.id as string };
+  };
+  const charterer = await mk(`e2e-fx-ch-${stamp}@arabshipbroker.test`, "cargo_owner", `E2E Charterers ${stamp}`);
+  const owner = await mk(`e2e-fx-ow-${stamp}@arabshipbroker.test`, "vessel_owner", `E2E Owners ${stamp}`);
+  await admin.from("ports").upsert([
+    { locode: "ZZFXA", trade_name: "Fixture Load Port", country: "Egypt", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
+    { locode: "ZZFXB", trade_name: "Fixture Disch Port", country: "Turkey", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
+  ], { onConflict: "locode", ignoreDuplicates: true });
+  const d = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+  const { data: c, error: ce } = await admin.from("cargo_listings").insert({
+    ref: `E2EFX-${stamp}`, status: "IN", review_status: "APPROVED", cargo_type: "Dry Bulk", commodity_name: "E2E Wheat, Bulk", is_dg_cargo: false, is_grain_cargo: true,
+    qty_min_mt: 25000, qty_max_mt: 27500, load_port_locode: "ZZFXA", load_port_name: "Fixture Load Port", load_zone: "E.MED",
+    disch_port_locode: "ZZFXB", disch_port_name: "Fixture Disch Port", disch_zone: "E.MED", laycan_from: d(10), laycan_to: d(20), is_spot: false, load_terms: "FIOST", freight_idea_usd_mt: 24.5,
+  }).select("id").single();
+  if (ce) throw new Error(`cargo: ${ce.message}`);
+  await admin.from("cargo_listings").update({ status: "IN", review_status: "APPROVED" }).eq("id", c.id);
+  const { data: v, error: ve } = await admin.from("vessels").insert({ vessel_name: `E2E HULL ${stamp.toUpperCase()}`, imo_number: "9000003", vessel_type: "Bulk Carrier", dwt_grain: 30000, build_year: 2012, flag: "Malta", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false }).select("id").single();
+  if (ve) throw new Error(`vessel: ${ve.message}`);
+  const { data: a, error: ae } = await admin.from("vessel_availability").insert({ vessel_id: v.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(5), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 26, accepts_part_cargo: false }).select("id").single();
+  if (ae) throw new Error(`availability: ${ae.message}`);
+  await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", a.id);
+  const { error: oe } = await admin.from("listing_ownership").insert([
+    { listing_type: "cargo", listing_id: c.id, owner_user_id: charterer.userId, owner_org_id: charterer.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
+    { listing_type: "vessel_availability", listing_id: a.id, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
+  ]);
+  if (oe) throw new Error(`ownership: ${oe.message}`);
+  return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, availabilityId: a.id };
+}
+
+export function cleanupFixture(s: FixtureSeed) {
+  const sql = `
+set session_replication_role = replica;
+delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+delete from public.fixture_events where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+delete from public.fixture_recap_versions where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+delete from public.fixture_messages where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+delete from public.fixture_subjects where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+update public.fixture_terms set cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, agreed_proposal_id = null, status = 'open' where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+delete from public.fixture_proposals where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
+delete from public.fixture_rooms where cargo_listing_id = '${s.cargoId}';
+delete from public.listing_ownership where listing_id in ('${s.cargoId}', '${s.availabilityId}');
+delete from public.matches where cargo_id = '${s.cargoId}' or vessel_avail_id = '${s.availabilityId}';
+delete from public.vessel_availability where id = '${s.availabilityId}';
+delete from public.vessels where id = '${s.vesselId}';
+delete from public.cargo_listings where id = '${s.cargoId}';
+delete from public.profiles where account_id in ('${s.charterer.userId}', '${s.owner.userId}');
+delete from public.organization_members where user_id in ('${s.charterer.userId}', '${s.owner.userId}');
+delete from public.users where id in ('${s.charterer.userId}', '${s.owner.userId}');
+delete from auth.users where id in ('${s.charterer.userId}', '${s.owner.userId}');
+delete from public.organizations where id in ('${s.charterer.orgId}', '${s.owner.orgId}');
+`;
+  try {
+    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: sql, stdio: ["pipe", "ignore", "ignore"] });
+  } catch {
+    // leaving rows behind on a disposable database is not a test failure
+  }
+}
+
+/**
+ * The portal shell greets a member with two overlays that intercept clicks:
+ * the cookie-consent banner (first visit) and, for a vessel owner with an
+ * open position, the position check-in modal. A real member answers them
+ * once; so does the test. Both remember the answer for the context.
+ */
+export async function dismissOverlays(page: Page) {
+  const cookie = page.getByRole("dialog", { name: "Cookie consent" });
+  if (await cookie.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
+    await cookie.getByRole("button", { name: "Accept all" }).click();
+    await cookie.waitFor({ state: "hidden", timeout: 5000 }).catch(() => undefined);
+  }
+  const checkin = page.getByRole("dialog", { name: "Vessel position check-in" });
+  if (await checkin.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
+    await checkin.getByRole("button", { name: "Remind me later" }).click();
+    await checkin.waitFor({ state: "hidden", timeout: 5000 }).catch(() => undefined);
+  }
+}
+
+/** A fresh context signed in through the real login form, with the shell's overlays answered. */
+export async function signInAs(browser: Browser, baseURL: string, email: string): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await page.goto("/auth/login");
+  await page.locator('input[name="email"]').fill(email);
+  await page.locator('input[name="password"]').fill(PASSWORD);
+  await page.getByRole("button", { name: /sign in|log in/i }).first().click();
+  await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+  await dismissOverlays(page);
+  return { context, page };
+}
