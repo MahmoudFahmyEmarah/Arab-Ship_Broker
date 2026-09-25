@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { loadViewerContext } from "@/lib/portal/data";
-import { isLimitedTier } from "@/lib/portal/tier-gate";
+import { loadFixtureViewer } from "@/lib/fixture-room/viewer.server";
 import { MatchBuilder } from "@/components/fixture-room/MatchBuilder";
 import { FixtureLocked } from "@/components/fixture-room/FixtureLocked";
 import { loadMatchBuilder } from "../actions";
@@ -17,8 +16,9 @@ export default async function NewFixturePage({ searchParams }: { searchParams: P
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
-  const { tier, role } = await loadViewerContext();
-  if (role !== "admin" && isLimitedTier(tier)) return <FixtureLocked />;
+  // decision D3 through the one shared rule (canUseFixtureRoom, audit FR-M4)
+  const viewer = await loadFixtureViewer(supabase, user.id);
+  if (!viewer.canCreate) return <FixtureLocked />;
   const sp = await searchParams;
   const data = await loadMatchBuilder({ cargo: sp.cargo ?? null, vessel: sp.vessel ?? null });
   return <MatchBuilder data={data} />;

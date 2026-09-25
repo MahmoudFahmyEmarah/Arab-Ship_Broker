@@ -82,9 +82,11 @@ create or replace function public.create_fixture_room(
 as $$
 declare
   v_actor uuid; v_admin boolean; v_existing public.fixture_rooms; v_room public.fixture_rooms;
-  v_owns_cargo boolean; v_owns_vessel boolean; v_cargo jsonb; v_vessel jsonb; v_vessel_id uuid;
-  v_ref text; v_creator_org uuid; v_platform public.fixture_parties; v_creator public.fixture_parties; v_p public.fixture_parties;
-  v_cp jsonb; v_side text; t jsonb; v_codes text[] := '{}'; v_kind text; v_code text; v_sort int;
+  v_own_cargo jsonb; v_own_vessel jsonb; v_own jsonb; v_owns_cargo boolean; v_owns_vessel boolean;
+  v_cargo jsonb; v_vessel jsonb; v_vessel_id uuid;
+  v_ref text; v_creator_org uuid; v_creator_user uuid; v_platform public.fixture_parties; v_creator public.fixture_parties; v_p public.fixture_parties;
+  v_cp jsonb; v_side text; v_codes text[] := '{}'; v_code text;
+  v_version text; v_cat jsonb; v_def jsonb; v_supplied jsonb;
   v_brokerage jsonb; v_hash text; v_parties_payload jsonb := '[]'::jsonb; v_invites public.fixture_parties[] := '{}';
   v_first jsonb; v_last jsonb; v_n int := 0; v_label text;
 begin
@@ -124,8 +126,10 @@ begin
     raise exception 'FX_STATE: this vessel is sanctioned and cannot be fixed on the platform' using errcode = '55000';
   end if;
 
-  v_owns_cargo  := public.fn_fixture_owns_listing('cargo', p_cargo_listing_id);
-  v_owns_vessel := public.fn_fixture_owns_listing('vessel_availability', p_vessel_availability_id);
+  -- the identity the actor represents each listing as, from its ownership row (FR-H1)
+  v_own_cargo  := public.fn_fixture_owns_listing('cargo', p_cargo_listing_id);
+  v_own_vessel := public.fn_fixture_owns_listing('vessel_availability', p_vessel_availability_id);
+  v_owns_cargo := v_own_cargo is not null; v_owns_vessel := v_own_vessel is not null;
   if not (v_owns_cargo or v_owns_vessel or v_admin) then
     raise exception 'FX_AUTH: you must own or represent one side of the fixture' using errcode = '42501';
   end if;
@@ -146,32 +150,38 @@ begin
     raise exception 'FX_CONFLICT: room % (%) already covers this pairing', v_existing.id, v_existing.ref using errcode = '23505';
   end if;
 
-  -- the term catalogue (decision D5: TypeScript owns it, the room copies it)
-  if p_terms is null or jsonb_typeof(p_terms) <> 'array' or jsonb_array_length(p_terms) = 0 or jsonb_array_length(p_terms) > 40 then
-    raise exception 'FX_VALIDATION: the term catalogue must be an array of 1–40 terms' using errcode = '22023';
+  -- the term catalogue (decision D5, audit FR-H2): TypeScript owns it and the
+  -- database holds the same versioned definitions; the caller's copy must
+  -- match the version it names term for term — codes, labels, categories,
+  -- sort order, value kinds, units and required — with only the
+  -- listing-derived hint free to vary. Anything else is refused.
+  v_version := coalesce(nullif(btrim(coalesce(p_options->>'catalogueVersion', '')), ''), '2026-09-23.v1');
+  v_cat := public.fn_fixture_term_catalogue(v_version);
+  if v_cat is null then
+    raise exception 'FX_VALIDATION: unknown term catalogue version "%"', v_version using errcode = '22023';
   end if;
-  for t in select * from jsonb_array_elements(p_terms) loop
-    v_code := t->>'code'; v_kind := t->>'valueKind';
-    if v_code is null or v_code !~ '^[a-z][a-z0-9_]{1,39}$' then
-      raise exception 'FX_VALIDATION: term code "%" is invalid', coalesce(v_code, '') using errcode = '22023';
+  if p_terms is null or jsonb_typeof(p_terms) <> 'array' or jsonb_array_length(p_terms) <> jsonb_array_length(v_cat) then
+    raise exception 'FX_VALIDATION: term catalogue % holds exactly % terms', v_version, jsonb_array_length(v_cat) using errcode = '22023';
+  end if;
+  for v_def in select * from jsonb_array_elements(v_cat) loop
+    v_code := v_def->>'code';
+    select count(*) into v_n from jsonb_array_elements(p_terms) x where x->>'code' = v_code;
+    if v_n <> 1 then
+      raise exception 'FX_VALIDATION: term "%" of catalogue % must appear exactly once', v_code, v_version using errcode = '22023';
     end if;
-    if v_code = any (v_codes) then
-      raise exception 'FX_VALIDATION: term code "%" is repeated', v_code using errcode = '22023';
+    select x into v_supplied from jsonb_array_elements(p_terms) x where x->>'code' = v_code;
+    if btrim(coalesce(v_supplied->>'label', '')) is distinct from (v_def->>'label')
+       or nullif(btrim(coalesce(v_supplied->>'category', '')), '') is distinct from (v_def->>'category')
+       or (v_supplied->>'sortOrder') is distinct from (v_def->>'sortOrder')
+       or (v_supplied->>'valueKind') is distinct from (v_def->>'valueKind')
+       or nullif(btrim(coalesce(v_supplied->>'unit', '')), '') is distinct from (v_def->>'unit')
+       or (v_supplied->>'required') is distinct from 'true' then
+      raise exception 'FX_VALIDATION: term "%" does not match catalogue % (label, category, sort order, value kind, unit and required are fixed)', v_code, v_version using errcode = '22023';
+    end if;
+    if coalesce(length(v_supplied->>'hint'), 0) > 300 then
+      raise exception 'FX_VALIDATION: term "%" has an over-long hint', v_code using errcode = '22023';
     end if;
     v_codes := v_codes || v_code;
-    if coalesce(length(btrim(t->>'label')), 0) not between 1 and 80 then
-      raise exception 'FX_VALIDATION: term "%" needs a label of 1–80 characters', v_code using errcode = '22023';
-    end if;
-    if v_kind is null or v_kind not in ('text', 'number', 'money_per_mt', 'rate_pair', 'date_range', 'port_pair') then
-      raise exception 'FX_VALIDATION: term "%" has an unknown value kind', v_code using errcode = '22023';
-    end if;
-    begin v_sort := (t->>'sortOrder')::int; exception when others then v_sort := null; end;
-    if v_sort is null or v_sort < 1 or v_sort > 999 then
-      raise exception 'FX_VALIDATION: term "%" needs a sortOrder between 1 and 999', v_code using errcode = '22023';
-    end if;
-    if coalesce(length(t->>'unit'), 0) > 20 or coalesce(length(t->>'category'), 0) > 40 or coalesce(length(t->>'hint'), 0) > 300 then
-      raise exception 'FX_VALIDATION: term "%" has an over-long unit, category or hint', v_code using errcode = '22023';
-    end if;
   end loop;
 
   select s.value into v_brokerage from public.app_settings s where s.key = 'fixture_brokerage_terms';
@@ -179,9 +189,9 @@ begin
 
   begin
     insert into public.fixture_rooms (ref, cargo_listing_id, vessel_availability_id, vessel_id, status, mediation, created_by_user_id,
-                                      create_idempotency_key, cargo_snapshot, vessel_snapshot, snapshot_hash, brokerage_terms_snapshot)
+                                      create_idempotency_key, cargo_snapshot, vessel_snapshot, snapshot_hash, brokerage_terms_snapshot, term_catalogue_version)
     values (v_ref, p_cargo_listing_id, p_vessel_availability_id, v_vessel_id, 'draft', 'platform', v_actor,
-            p_idempotency_key, v_cargo, v_vessel, md5(v_cargo::text || v_vessel::text), v_brokerage)
+            p_idempotency_key, v_cargo, v_vessel, md5(v_cargo::text || v_vessel::text), v_brokerage, v_version)
     returning * into v_room;
   exception when unique_violation then
     raise exception 'FX_CONFLICT: a room for this pairing was created concurrently' using errcode = '23505';
@@ -193,13 +203,16 @@ begin
   returning * into v_platform;
   v_parties_payload := v_parties_payload || public.fn_fixture_party_payload(v_platform);
 
-  -- the creator's own side (a registered organisation or member: direct)
-  v_creator_org := public.fn_fixture_active_org(v_actor);
+  -- the creator's own side: exactly the identity the ownership row names
+  -- (FR-H1) — the owning organisation the actor holds a seat in, or the actor
+  -- personally; never a seat guessed from the actor's memberships
+  v_own := case when v_owns_cargo then v_own_cargo else v_own_vessel end;
+  v_creator_org := (v_own->>'org_id')::uuid; v_creator_user := (v_own->>'user_id')::uuid;
   foreach v_side in array array['cargo', 'vessel'] loop
     if (v_side = 'cargo' and v_owns_cargo) or (v_side = 'vessel' and v_owns_vessel) then
       insert into public.fixture_parties (room_id, side, capacity, participation_mode, org_id, user_id, display_label, status,
                                           invited_by_user_id, invited_at, accepted_at)
-      values (v_room.id, v_side, 'principal', 'direct', v_creator_org, case when v_creator_org is null then v_actor end,
+      values (v_room.id, v_side, 'principal', 'direct', v_creator_org, v_creator_user,
               case v_side when 'cargo' then 'Charterer side' else 'Owner side' end, 'active', v_actor, now(), now())
       returning * into v_creator;
       v_parties_payload := v_parties_payload || public.fn_fixture_party_payload(v_creator);
@@ -237,19 +250,24 @@ begin
     v_parties_payload := v_parties_payload || public.fn_fixture_party_payload(v_p);
   end loop;
 
-  for t in select * from jsonb_array_elements(p_terms) loop
+  -- the terms are copied from the catalogue definitions (never from the
+  -- caller's copy); only the hint comes from the caller
+  for v_def in select * from jsonb_array_elements(v_cat) loop
+    select x into v_supplied from jsonb_array_elements(p_terms) x where x->>'code' = v_def->>'code';
     insert into public.fixture_terms (room_id, code, label, category, sort_order, value_kind, unit, required, hint)
-    values (v_room.id, t->>'code', btrim(t->>'label'), nullif(btrim(coalesce(t->>'category', '')), ''), (t->>'sortOrder')::int, t->>'valueKind',
-            nullif(btrim(coalesce(t->>'unit', '')), ''), coalesce((t->>'required')::boolean, true), nullif(btrim(coalesce(t->>'hint', '')), ''));
+    values (v_room.id, v_def->>'code', v_def->>'label', v_def->>'category', (v_def->>'sortOrder')::int, v_def->>'valueKind',
+            v_def->>'unit', true, nullif(btrim(coalesce(v_supplied->>'hint', '')), ''));
   end loop;
 
   update public.fixture_rooms set status = 'invited', created_by_party_id = coalesce(v_creator.id, v_platform.id) where id = v_room.id;
 
+  -- the payload names the listings but not the vessel: event payloads reach
+  -- every party, and a TBN vessel's id is counterparty identity (FR-H3)
   v_first := public.fn_fixture_event(v_room.id, 'room.created', v_actor, coalesce(v_creator.id, v_platform.id), null, false,
     'create_fixture_room', p_idempotency_key, v_hash,
-    jsonb_build_object('ref', v_ref, 'cargoListingId', p_cargo_listing_id, 'vesselAvailabilityId', p_vessel_availability_id, 'vesselId', v_vessel_id,
-                       'snapshotHash', md5(v_cargo::text || v_vessel::text), 'termCodes', to_jsonb(v_codes), 'parties', v_parties_payload,
-                       'roomStatus', 'invited'),
+    jsonb_build_object('ref', v_ref, 'cargoListingId', p_cargo_listing_id, 'vesselAvailabilityId', p_vessel_availability_id,
+                       'snapshotHash', md5(v_cargo::text || v_vessel::text), 'termCatalogueVersion', v_version, 'termCodes', to_jsonb(v_codes),
+                       'parties', v_parties_payload, 'roomStatus', 'invited'),
     jsonb_build_object('roomId', v_room.id, 'ref', v_ref, 'status', 'invited'));
   v_last := v_first;
   foreach v_p in array v_invites loop
@@ -320,23 +338,39 @@ revoke all on function public.invite_fixture_party(uuid, text, text, uuid, uuid,
 grant execute on function public.invite_fixture_party(uuid, text, text, uuid, uuid, integer, text, uuid) to authenticated, service_role;
 
 -- ── respond_fixture_invitation ──────────────────────────────────────────────
-create or replace function public.respond_fixture_invitation(p_room_id uuid, p_accept boolean, p_expected_version integer, p_idempotency_key text)
+-- A member may hold more than one invitation in a room (an organisation
+-- seat and a personal one, say). With one, the answer is unambiguous; with
+-- several the caller names the party (audit FR-M3). The 4-argument signature
+-- of the first commit is dropped so a re-apply never leaves two overloads.
+drop function if exists public.respond_fixture_invitation(uuid, boolean, integer, text);
+create or replace function public.respond_fixture_invitation(
+  p_room_id uuid, p_accept boolean, p_expected_version integer, p_idempotency_key text, p_party_id uuid default null)
  returns jsonb language plpgsql volatile security definer set search_path to 'public'
 as $$
-declare v_actor uuid; r public.fixture_rooms; v_hash text; v_replay jsonb; v_p public.fixture_parties;
+declare v_actor uuid; r public.fixture_rooms; v_hash text; v_replay jsonb; v_p public.fixture_parties; v_n int;
 begin
   v_actor := public.fn_fixture_actor();
   r := public.fn_fixture_lock(p_room_id);
-  v_hash := md5(jsonb_build_object('cmd', 'respond_fixture_invitation', 'accept', p_accept)::text);
+  v_hash := md5(jsonb_build_object('cmd', 'respond_fixture_invitation', 'accept', p_accept, 'party', p_party_id)::text);
   v_replay := public.fn_fixture_replay(r.id, p_idempotency_key, v_hash);
   if v_replay is not null then return v_replay; end if;
   perform public.fn_fixture_check_version(r, p_expected_version);
   if public.fn_fixture_terminal(r.status) then
     raise exception 'FX_STATE: the room is %', r.status using errcode = '55000';
   end if;
-  select p.* into v_p from public.fn_fixture_actor_parties(r.id) p where p.status = 'invited' limit 1;
-  if v_p.id is null then
+  select count(*) into v_n from public.fn_fixture_actor_parties(r.id) p where p.status = 'invited';
+  if v_n = 0 then
     raise exception 'FX_STATE: you have no pending invitation in this room' using errcode = '55000';
+  end if;
+  if p_party_id is not null then
+    select p.* into v_p from public.fn_fixture_actor_parties(r.id) p where p.status = 'invited' and p.id = p_party_id;
+    if v_p.id is null then
+      raise exception 'FX_AUTH: that invitation is not yours to answer' using errcode = '42501';
+    end if;
+  elsif v_n > 1 then
+    raise exception 'FX_VALIDATION: you hold % invitations in this room — name the party you are answering for', v_n using errcode = '22023';
+  else
+    select p.* into v_p from public.fn_fixture_actor_parties(r.id) p where p.status = 'invited';
   end if;
   if coalesce(p_accept, false) then
     update public.fixture_parties set status = 'active', accepted_at = now() where id = v_p.id returning * into v_p;
@@ -347,8 +381,8 @@ begin
     'respond_fixture_invitation', p_idempotency_key, v_hash, public.fn_fixture_party_payload(v_p),
     jsonb_build_object('partyId', v_p.id, 'status', v_p.status));
 end $$;
-revoke all on function public.respond_fixture_invitation(uuid, boolean, integer, text) from public, anon, authenticated;
-grant execute on function public.respond_fixture_invitation(uuid, boolean, integer, text) to authenticated, service_role;
+revoke all on function public.respond_fixture_invitation(uuid, boolean, integer, text, uuid) from public, anon, authenticated;
+grant execute on function public.respond_fixture_invitation(uuid, boolean, integer, text, uuid) to authenticated, service_role;
 
 -- ── submit_fixture_proposal ─────────────────────────────────────────────────
 create or replace function public.submit_fixture_proposal(

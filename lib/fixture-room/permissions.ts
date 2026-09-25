@@ -73,6 +73,26 @@ export function computeCapabilities(
   };
 }
 
+/**
+ * Decision D3, one place for pages and scripts (audit FR-M4): the Fixture
+ * Room can be opened by an admin, a T3 / T4 member, or a market partner. The
+ * page gate and fn_fixture_tier_ok answer the same question; the RPC is the
+ * authority and refuses with FX_GATE regardless of what a page rendered. The
+ * market-partner flag is read explicitly and is false when the schema has no
+ * such column yet, so the approved path stays visible in the contract instead
+ * of being dropped silently.
+ */
+export interface FixtureViewerGate {
+  role: string | null | undefined;
+  tier: string | null | undefined;
+  isMarketPartner?: boolean | null;
+}
+export function canUseFixtureRoom(v: FixtureViewerGate): boolean {
+  if ((v.role ?? "").toLowerCase() === "admin") return true;
+  if (v.tier === "T3" || v.tier === "T4") return true;
+  return v.isMarketPartner === true;
+}
+
 /** The label a party's role gets in copy ("Charterer", "Owner", "Broker", "Viewer"). */
 export function roleLabel(side: FixtureSide, capacity: FixtureCapacity, isPlatform = false): string {
   if (isPlatform) return "Arab ShipBroker";

@@ -38,6 +38,11 @@ insert into fx_ids (k, v) values
   ('u_solo',  '00000000-0000-4000-8000-0000000000a6'),
   ('u_pend',  '00000000-0000-4000-8000-0000000000a7'),
   ('u_t1',    '00000000-0000-4000-8000-0000000000a8'),
+  ('u_two',   '00000000-0000-4000-8000-0000000000a9'),
+  ('u_pendcur','00000000-0000-4000-8000-0000000000aa'),
+  ('org_two', '00000000-0000-4000-8000-0000000000c4'),
+  ('org_x',   '00000000-0000-4000-8000-0000000000c5'),
+  ('c5',      '00000000-0000-4000-8000-0000000000e5'),
   ('contact', '00000000-0000-4000-8000-0000000000d1'),
   ('c1',      '00000000-0000-4000-8000-0000000000e1'),
   ('c2',      '00000000-0000-4000-8000-0000000000e2'),
@@ -106,6 +111,34 @@ create or replace function pg_temp.fx_terms() returns jsonb language sql immutab
   {"code":"laycan","label":"Laycan","category":"timing","sortOrder":4,"valueKind":"date_range","required":true},
   {"code":"ld_rates","label":"Load / discharge rates","category":"operations","sortOrder":5,"valueKind":"rate_pair","unit":"MT/day","required":true},
   {"code":"freight","label":"Freight & terms","category":"money","sortOrder":6,"valueKind":"money_per_mt","unit":"USD/MT","required":true}]$j$::jsonb $f$;
+-- the catalogue with one deviation, for the FR-H2 negatives (every one must be refused)
+create or replace function pg_temp.fx_terms_mut(p_op text) returns jsonb language plpgsql immutable as $f$
+declare c jsonb := pg_temp.fx_terms(); o jsonb := '[]'::jsonb; t jsonb;
+begin
+  for t in select * from jsonb_array_elements(c) loop
+    if p_op = 'missing' and t->>'code' = 'quantity' then continue; end if;
+    if p_op = 'relabelled' and t->>'code' = 'freight' then t := t || '{"label":"Freight"}'::jsonb; end if;
+    if p_op = 'retyped' and t->>'code' = 'quantity' then t := t || '{"valueKind":"text"}'::jsonb; end if;
+    if p_op = 'optionalised' and t->>'code' = 'laycan' then t := t || '{"required":false}'::jsonb; end if;
+    if p_op = 'reordered' and t->>'code' = 'ports' then t := t || '{"sortOrder":4}'::jsonb; end if;
+    if p_op = 'recategorised' and t->>'code' = 'ports' then t := t || '{"category":"money"}'::jsonb; end if;
+    if p_op = 'reunited' and t->>'code' = 'quantity' then t := t || '{"unit":"kg"}'::jsonb; end if;
+    if p_op = 'renamed' and t->>'code' = 'ld_rates' then t := t || '{"code":"rates"}'::jsonb; end if;
+    if p_op = 'unrequired' and t->>'code' = 'laycan' then t := t - 'required'; end if;
+    o := o || t;
+  end loop;
+  if p_op = 'extra' then o := o || '{"code":"demurrage","label":"Demurrage","category":"money","sortOrder":7,"valueKind":"number","required":true}'::jsonb; end if;
+  if p_op = 'duplicate' then o := o || (c->0); end if;
+  return o;
+end $f$;
+-- owner-level peek: the latest non-terminal room of a pairing (refs are monotonic; created_at is the transaction time)
+create or replace function pg_temp.fx_room(p_cargo uuid, p_avail uuid) returns uuid language sql stable security definer as $f$
+  select id from public.fixture_rooms where cargo_listing_id = p_cargo and vessel_availability_id = p_avail
+     and status not in ('withdrawn', 'failed', 'expired') order by ref desc limit 1 $f$;
+-- owner-level peek: the identity a principal party was recorded with
+create or replace function pg_temp.fx_party_identity(p_room uuid, p_side text) returns jsonb language sql stable security definer as $f$
+  select jsonb_build_object('org_id', org_id, 'user_id', user_id, 'mode', participation_mode) from public.fixture_parties
+   where room_id = p_room and side = p_side and capacity = 'principal' and status in ('invited', 'active') order by created_at limit 1 $f$;
 -- one agreeable value per term code
 create or replace function pg_temp.fx_value(p_code text) returns jsonb language sql immutable as $f$
   select ($j${"cargo_grade":{"text":"Wheat in bulk, 2026 crop"},"quantity":{"num":26000},
@@ -121,7 +154,9 @@ on conflict (id) do nothing;
 insert into public.organizations (id, name, org_type, desk_contact_name, desk_email, desk_phone, country, fleet_total) values
   (pg_temp.fx_id('org_ch'),  'Seed Charterers Ltd', 'charterer', 'Chartering Desk', 'desk@seed-charterers.test', '+20 100 000 0001', 'Egypt', null),
   (pg_temp.fx_id('org_ow'),  'Seed Owners SA',      'owner',     'Owner''s Desk',   'desk@seed-owners.test',     '+30 210 000 0002', 'Greece', 7),
-  (pg_temp.fx_id('org_out'), 'Seed Outsiders LLC',  'broker',    'Outsider Desk',   'desk@seed-outsiders.test',  null,               'UAE', null)
+  (pg_temp.fx_id('org_out'), 'Seed Outsiders LLC',  'broker',    'Outsider Desk',   'desk@seed-outsiders.test',  null,               'UAE', null),
+  (pg_temp.fx_id('org_two'), 'Seed Second Org',     'charterer', 'Second Desk',     'desk@seed-second.test',     null,               'Egypt', null),
+  (pg_temp.fx_id('org_x'),   'Seed Unrelated Co',   'broker',    'Unrelated Desk',  'desk@seed-unrelated.test',  null,               'Greece', null)
 on conflict do nothing;
 
 insert into public.users (id, supabase_user_id, email, full_name, company, role, subscription_tier, is_active) values
@@ -132,15 +167,27 @@ insert into public.users (id, supabase_user_id, email, full_name, company, role,
   (pg_temp.fx_id('u_adm'),  pg_temp.fx_id('u_adm'),  'u_adm@fixture.test',  'Seed Admin',         'Arab ShipBroker',     'admin',        'T4', true),
   (pg_temp.fx_id('u_solo'), pg_temp.fx_id('u_solo'), 'u_solo@fixture.test', 'Seed Solo Owner',    'Solo Shipping',       'vessel_owner', 'T3', true),
   (pg_temp.fx_id('u_pend'), pg_temp.fx_id('u_pend'), 'u_pend@fixture.test', 'Seed Pending',       'Seed Owners SA',      'vessel_owner', 'T3', true),
-  (pg_temp.fx_id('u_t1'),   pg_temp.fx_id('u_t1'),   'u_t1@fixture.test',   'Seed Tier One',      'Tier One Trading',    'cargo_owner',  'T1', true)
+  (pg_temp.fx_id('u_t1'),   pg_temp.fx_id('u_t1'),   'u_t1@fixture.test',   'Seed Tier One',      'Tier One Trading',    'cargo_owner',  'T1', true),
+  (pg_temp.fx_id('u_two'),  pg_temp.fx_id('u_two'),  'u_two@fixture.test',  'Seed Two Seats',     'Seed Second Org',     'cargo_owner',  'T3', true),
+  (pg_temp.fx_id('u_pendcur'), pg_temp.fx_id('u_pendcur'), 'u_pendcur@fixture.test', 'Seed Pending Current', 'Seed Owners SA', 'vessel_owner', 'T3', true)
 on conflict (id) do nothing;
 
+-- Seats. u_two holds two ACTIVE seats (admin in org_ch first, broker in
+-- org_two second) and owns C5 through org_two: a seat-guessing rule would
+-- pick org_ch (FR-H1). u_solo owns A4 personally and sits in an unrelated
+-- organisation (org_x): the party must be the member, never that seat.
+-- u_pend is pending and not current; u_pendcur is pending AND current, the
+-- legacy shape the Phase 0 review requires to be refused (FR-M1).
 insert into public.organization_members (org_id, user_id, member_role, is_current, status) values
   (pg_temp.fx_id('org_ch'),  pg_temp.fx_id('u_ch1'),  'admin',  true,  'active'),
   (pg_temp.fx_id('org_ch'),  pg_temp.fx_id('u_ch2'),  'broker', true,  'active'),
   (pg_temp.fx_id('org_ow'),  pg_temp.fx_id('u_ow1'),  'admin',  true,  'active'),
   (pg_temp.fx_id('org_out'), pg_temp.fx_id('u_out'),  'admin',  true,  'active'),
-  (pg_temp.fx_id('org_ow'),  pg_temp.fx_id('u_pend'), 'broker', false, 'pending')
+  (pg_temp.fx_id('org_ow'),  pg_temp.fx_id('u_pend'), 'broker', false, 'pending'),
+  (pg_temp.fx_id('org_ch'),  pg_temp.fx_id('u_two'),  'admin',  true,  'active'),
+  (pg_temp.fx_id('org_two'), pg_temp.fx_id('u_two'),  'broker', true,  'active'),
+  (pg_temp.fx_id('org_x'),   pg_temp.fx_id('u_solo'), 'admin',  true,  'active'),
+  (pg_temp.fx_id('org_ow'),  pg_temp.fx_id('u_pendcur'), 'broker', true, 'pending')
 on conflict do nothing;
 
 insert into public.contacts (id, kind, display_name, email, phone, role, source) values
@@ -167,7 +214,10 @@ insert into public.cargo_listings (id, ref, status, review_status, cargo_type, c
    '9000', '7000', 'FIOST', 18.00, 2.5, 11000, null, null, null),
   (pg_temp.fx_id('c4'), 'FXC-004', 'IN', 'APPROVED', 'Break Bulk', 'Steel coils', false, false, 12000, 13000, null,
    'ZZFXA', 'Fixture Load Port', 'E.MED', 'ZZFXB', 'Fixture Disch Port', 'E.MED', current_date + 8, current_date + 18, false,
-   '3000', '3000', 'FIOST', 31.00, 2.5, 15000, 'Seed Brokers Desk', 'desk@seed-brokers.test', pg_temp.fx_id('contact'))
+   '3000', '3000', 'FIOST', 31.00, 2.5, 15000, 'Seed Brokers Desk', 'desk@seed-brokers.test', pg_temp.fx_id('contact')),
+  (pg_temp.fx_id('c5'), 'FXC-005', 'IN', 'APPROVED', 'Dry Bulk', 'Corn', false, true, 24000, 26000, 1.30,
+   'ZZFXA', 'Fixture Load Port', 'E.MED', 'ZZFXB', 'Fixture Disch Port', 'E.MED', current_date + 11, current_date + 21, false,
+   '8000', '6000', 'FIOST', 23.00, 2.5, 11500, null, null, null)
 on conflict (id) do nothing;
 
 insert into public.vessels (id, vessel_name, imo_number, vessel_type, dwt_grain, build_year, flag, is_geared, grain_certified, dg_certified,
@@ -191,6 +241,7 @@ insert into public.listing_ownership (listing_type, listing_id, owner_user_id, o
   ('cargo', pg_temp.fx_id('c1'), pg_temp.fx_id('u_ch1'), pg_temp.fx_id('org_ch'), 'primary', true, 'initial_post'),
   ('cargo', pg_temp.fx_id('c2'), pg_temp.fx_id('u_t1'),  null,                    'primary', true, 'initial_post'),
   ('cargo', pg_temp.fx_id('c3'), pg_temp.fx_id('u_adm'), null,                    'primary', true, 'initial_post'),
+  ('cargo', pg_temp.fx_id('c5'), pg_temp.fx_id('u_two'), pg_temp.fx_id('org_two'), 'primary', true, 'initial_post'),
   ('vessel_availability', pg_temp.fx_id('a1'), pg_temp.fx_id('u_ow1'),  pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post'),
   ('vessel_availability', pg_temp.fx_id('a2'), pg_temp.fx_id('u_ow1'),  pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post'),
   ('vessel_availability', pg_temp.fx_id('a3'), pg_temp.fx_id('u_ow1'),  pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post'),
@@ -250,6 +301,44 @@ begin
   e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a1'), 'state-create-t1', '{}'));
   if e <> 'FX_GATE' then raise exception 'S2: a T1 owner must be FX_GATE, got %', e; end if;
   raise notice 'S2 ok: replay, duplicate pairing, mismatch, sanctioned vessel, empty catalogue, outsider and tier gate all answer as specified';
+end $$;
+
+-- ── S2b · the catalogue is the exact versioned term sheet (FR-H2) ──────────
+do $$
+declare e text; op text; v jsonb; r jsonb;
+begin
+  perform pg_temp.fx_as('u_ch1');
+  -- every deviation from catalogue 2026-09-23.v1 is refused: a missing, extra,
+  -- duplicated, renamed, relabelled, retyped, optionalised, reordered,
+  -- recategorised or re-united term, and a term without `required`
+  foreach op in array array['missing', 'extra', 'duplicate', 'renamed', 'relabelled', 'retyped', 'optionalised', 'reordered', 'recategorised', 'reunited', 'unrequired'] loop
+    e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms_mut(%L), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), op, 'state-cat-' || op, '{}'));
+    if e <> 'FX_VALIDATION' then raise exception 'S2b: a % catalogue must be FX_VALIDATION, got %', op, e; end if;
+  end loop;
+  -- an unknown catalogue version is refused
+  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), 'state-cat-version', '{"catalogueVersion":"2026-01-01.v9"}'));
+  if e <> 'FX_VALIDATION' then raise exception 'S2b: an unknown catalogue version must be FX_VALIDATION, got %', e; end if;
+  -- nothing was created by the refusals
+  if pg_temp.fx_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4')) is not null then
+    raise exception 'S2b: a refused catalogue must create no room'; end if;
+  -- the exact catalogue named explicitly is accepted (the room is withdrawn again so S5 can open its own on this pairing)
+  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'state-create-a4-explicit', '{"catalogueVersion":"2026-09-23.v1"}'::jsonb);
+  if (v->>'ok')::boolean is not true or (v->>'replayed')::boolean then raise exception 'S2b: the exact v1 catalogue named explicitly must be accepted, got %', v; end if;
+  r := public.get_fixture_room((v->'data'->>'roomId')::uuid);
+  if r->'room'->>'termCatalogueVersion' <> '2026-09-23.v1' then raise exception 'S2b: catalogue version not persisted: %', r->'room'; end if;
+  v := public.close_fixture_room((v->'data'->>'roomId')::uuid, 'withdrawn', 'catalogue check only', pg_temp.fx_ver((v->'data'->>'roomId')::uuid), 'state-close-a4-explicit');
+  -- the default (no option) is v1 as well: the S1 room carries it, and its ledger records it
+  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
+  if (v->>'replayed')::boolean is not true then raise exception 'S2b: the S1 key must replay, got %', v; end if;
+  r := public.get_fixture_room((v->'data'->>'roomId')::uuid);
+  if r->'room'->>'termCatalogueVersion' <> '2026-09-23.v1' then raise exception 'S2b: default catalogue version not persisted: %', r->'room'; end if;
+  if (select string_agg(x->>'code', ',' order by (x->>'sortOrder')::int) from jsonb_array_elements(r->'terms') x) <> 'cargo_grade,quantity,ports,laycan,ld_rates,freight'
+     or (select bool_and((x->>'required')::boolean) from jsonb_array_elements(r->'terms') x) is not true then
+    raise exception 'S2b: the room must carry the six required terms in catalogue order: %', r->'terms'; end if;
+  if (select x->>'hint' from jsonb_array_elements(r->'terms') x where x->>'code' = 'cargo_grade') <> 'Listing: Wheat, Bulk' then raise exception 'S2b: the listing hint must be kept'; end if;
+  if not exists (select 1 from jsonb_array_elements(r->'events') x where x->>'type' = 'room.created' and x->'payload'->>'termCatalogueVersion' = '2026-09-23.v1') then
+    raise exception 'S2b: the creation event must record the catalogue version'; end if;
+  raise notice 'S2b ok: eleven catalogue deviations and an unknown version are refused; the exact v1 sheet is accepted, its version persisted on the room and in the ledger';
 end $$;
 
 -- ── S3 · invitation, proposals, version conflict, agreement ────────────────
@@ -478,6 +567,57 @@ begin
   select x into p from jsonb_array_elements(r->'parties') x where x->>'side' = 'cargo' and x->>'capacity' = 'principal';
   if p->>'participationMode' <> 'relayed' or (p->>'resolved')::boolean or p->>'name' is not null then raise exception 'S6: unresolved anchored party expected: %', p; end if;
   raise notice 'S6 ok: contact-backed and anchored relayed parties, mediation on behalf (never for a direct party), subject failure → failed, terminal rooms are final, successor room allowed';
+end $$;
+
+-- ── S7 · identity comes from the ownership row (FR-H1); two invitations need a choice (FR-M3) ─
+do $$
+declare v jsonb; r jsonb; v_room uuid; v_a4 uuid; e text; p jsonb; v_broker uuid; v_principal uuid; v_n int;
+begin
+  -- u_two holds two active seats (admin in org_ch, broker in org_two) and owns C5 through org_two
+  perform pg_temp.fx_as('u_two');
+  v := public.create_fixture_room(pg_temp.fx_id('c5'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c5', '{}'::jsonb);
+  v_room := (v->'data'->>'roomId')::uuid;
+  p := pg_temp.fx_party_identity(v_room, 'cargo');
+  if (p->>'org_id')::uuid is distinct from pg_temp.fx_id('org_two') or p->>'user_id' is not null then
+    raise exception 'S7: the charterer party must be the owning organisation (org_two), got %', p; end if;
+  -- a colleague from the OTHER seat (org_ch) is no participant of a room owned through org_two
+  perform pg_temp.fx_as('u_ch2');
+  e := pg_temp.fx_err(format('select public.get_fixture_room(%L)', v_room));
+  if e <> 'FX_AUTH' then raise exception 'S7: an org_ch colleague must not reach a room owned through org_two, got %', e; end if;
+  -- personal ownership while the member sits in an unrelated organisation: the party is the member (S5 opened C1 + A4; A4 is u_solo''s)
+  v_a4 := pg_temp.fx_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'));
+  if v_a4 is null then raise exception 'S7: the S5 room on C1 + A4 should exist'; end if;
+  p := pg_temp.fx_party_identity(v_a4, 'vessel');
+  if p->>'org_id' is not null or (p->>'user_id')::uuid is distinct from pg_temp.fx_id('u_solo') or p->>'mode' <> 'direct' then
+    raise exception 'S7: a personally owned position must be represented by the member, not by an unrelated seat: %', p; end if;
+  -- and when that member opens a room on it, the creator party is the member too
+  perform pg_temp.fx_as('u_solo');
+  v := public.create_fixture_room(pg_temp.fx_id('c2'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'state-create-c2-a4', '{}'::jsonb);
+  p := pg_temp.fx_party_identity((v->'data'->>'roomId')::uuid, 'vessel');
+  if p->>'org_id' is not null or (p->>'user_id')::uuid is distinct from pg_temp.fx_id('u_solo') then
+    raise exception 'S7: the creator of a personally owned listing must be recorded personally: %', p; end if;
+  -- FR-M3: the platform invites u_ow1 personally as a vessel-side broker on the C5 room; u_ow1 now holds two invitations (org_ow principal + personal broker)
+  perform pg_temp.fx_as('u_adm', true);
+  v := public.invite_fixture_party(v_room, 'vessel', 'broker', null, pg_temp.fx_id('u_ow1'), pg_temp.fx_ver(v_room), 'state-c5-invite-ow1-broker');
+  v_broker := (v->'data'->>'partyId')::uuid;
+  v_principal := pg_temp.fx_party(v_room, 'vessel', 'principal');
+  perform pg_temp.fx_as('u_ow1');
+  r := public.get_fixture_room(v_room);
+  select count(*) into v_n from jsonb_array_elements(r->'parties') x where x->>'isViewer' = 'true' and x->>'status' = 'invited';
+  if v_n <> 2 then raise exception 'S7: u_ow1 should hold two invitations, got %', v_n; end if;
+  e := pg_temp.fx_err(format('select public.respond_fixture_invitation(%L, true, %s, %L)', v_room, pg_temp.fx_ver(v_room), 'state-c5-accept-ambiguous'));
+  if e <> 'FX_VALIDATION' then raise exception 'S7: answering two invitations without naming one must be FX_VALIDATION, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.respond_fixture_invitation(%L, true, %s, %L, %L)', v_room, pg_temp.fx_ver(v_room), 'state-c5-accept-foreign', pg_temp.fx_party(v_room, 'cargo', 'principal')));
+  if e <> 'FX_AUTH' then raise exception 'S7: naming a party that is not one of one''s own invitations must be FX_AUTH, got %', e; end if;
+  v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'state-c5-accept-broker', v_broker);
+  if v->'data'->>'partyId' <> v_broker::text or v->'data'->>'status' <> 'active' then raise exception 'S7: the named broker invitation must be the one accepted: %', v; end if;
+  r := public.get_fixture_room(v_room);
+  if not exists (select 1 from jsonb_array_elements(r->'parties') x where x->>'id' = v_principal::text and x->>'status' = 'invited') then
+    raise exception 'S7: the organisation principal must still be invited after the personal broker accepted'; end if;
+  -- with one invitation left, no party id is needed
+  v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'state-c5-accept-principal');
+  if v->'data'->>'partyId' <> v_principal::text then raise exception 'S7: the remaining single invitation must be answered without a party id: %', v; end if;
+  raise notice 'S7 ok: party identity is the ownership row (owning org with a seat there; the member personally, never a guessed seat); two invitations require naming one';
 end $$;
 
 do $$ begin raise notice 'FIXTURE STATE SMOKE: ALL ASSERTIONS PASSED'; end $$;

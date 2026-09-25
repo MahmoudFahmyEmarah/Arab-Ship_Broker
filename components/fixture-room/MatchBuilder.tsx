@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createFixtureRoomAction, loadMatchCandidates, type MatchBuilderData, type MatchCargoOption, type MatchVesselOption } from "@/app/(dashboard)/dashboard/fixture-room/actions";
-import { newIdempotencyKey } from "@/lib/fixture-room/client";
+import { GestureKeys, UNCERTAIN_MESSAGE, runGesture } from "@/lib/fixture-room/client";
 import { FIXTURE_ERROR_TITLE } from "@/lib/fixture-room/errors";
 
 type First = { kind: "cargo"; cargo: MatchCargoOption } | { kind: "vessel"; vessel: MatchVesselOption };
@@ -70,35 +70,48 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
   const [loadingCands, setLoadingCands] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(data.error);
-  const keyRef = React.useRef<string | null>(null);
+  // one key per pairing gesture, kept until the server has answered (audit FR-M5)
+  const keys = React.useMemo(() => new GestureKeys(), []);
 
   const pickFirst = async (f: First) => {
     setFirst(f);
     setLoadingCands(true);
-    setCandidates(await loadMatchCandidates(f.kind, f.kind === "cargo" ? f.cargo.id : f.vessel.availabilityId));
-    setLoadingCands(false);
+    try {
+      setCandidates(await loadMatchCandidates(f.kind, f.kind === "cargo" ? f.cargo.id : f.vessel.availabilityId));
+    } catch {
+      setCandidates({ cargo: [], vessels: [] });
+      setError("Could not load the ranked counterparts. Pick again to retry.");
+    } finally {
+      setLoadingCands(false);
+    }
   };
 
   const open = async (cargoListingId: string, vesselAvailabilityId: string) => {
     if (busy) return;
     setBusy(true);
     setError(null);
-    // one key per gesture, kept across retries of the same gesture
-    keyRef.current = keyRef.current ?? newIdempotencyKey();
-    const res = await createFixtureRoomAction({ cargoListingId, vesselAvailabilityId, idempotencyKey: keyRef.current });
-    if (res.ok) {
-      toast.success(res.replayed ? "Opening your existing room" : `Room ${res.data.ref} opened`);
-      router.push(`/dashboard/fixture-room/${res.data.roomId}`);
-      return;
+    try {
+      const outcome = await runGesture(keys, `open:${cargoListingId}:${vesselAvailabilityId}`, (idempotencyKey) =>
+        createFixtureRoomAction({ cargoListingId, vesselAvailabilityId, idempotencyKey }));
+      if (outcome.kind === "ok") {
+        toast.success(outcome.result.replayed ? "Opening your existing room" : `Room ${outcome.result.data.ref} opened`);
+        router.push(`/dashboard/fixture-room/${outcome.result.data.roomId}`);
+        return;
+      }
+      if (outcome.kind === "refused") {
+        if (outcome.error.code === "CONFLICT" && outcome.error.roomId) {
+          toast.message("A room already covers this pairing — opening it");
+          router.push(`/dashboard/fixture-room/${outcome.error.roomId}`);
+          return;
+        }
+        setError(`${FIXTURE_ERROR_TITLE[outcome.error.code]}: ${outcome.error.message}`);
+        return;
+      }
+      // uncertain: the room may exist; the key is kept, so "Open fixture" again replays instead of duplicating
+      setError(UNCERTAIN_MESSAGE);
+    } finally {
+      setBusy(false);
     }
-    keyRef.current = null;
-    if (res.code === "CONFLICT" && res.roomId) {
-      toast.message("A room already covers this pairing — opening it");
-      router.push(`/dashboard/fixture-room/${res.roomId}`);
-      return;
-    }
-    setError(`${FIXTURE_ERROR_TITLE[res.code]}: ${res.message}`);
-    setBusy(false);
   };
 
   const oppNoun = first ? (first.kind === "cargo" ? "vessel" : "cargo") : "";

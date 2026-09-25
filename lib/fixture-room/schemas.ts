@@ -54,7 +54,8 @@ export const invitePartySchema = commandBaseSchema.extend({
   userId: uuid.nullable().optional(),
 }).refine((v) => !!v.orgId !== !!v.userId, { message: "Name exactly one of an organisation or a member." });
 
-export const respondInvitationSchema = z.object({ roomId: uuid, accept: z.boolean(), expectedVersion, idempotencyKey });
+// partyId names the invitation when the member holds more than one in the room (FR-M3).
+export const respondInvitationSchema = z.object({ roomId: uuid, accept: z.boolean(), expectedVersion, idempotencyKey, partyId: uuid.nullable().optional() });
 
 export const submitProposalSchema = commandBaseSchema.extend({
   termId: uuid,

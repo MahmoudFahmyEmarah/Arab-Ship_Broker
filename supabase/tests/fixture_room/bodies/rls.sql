@@ -53,6 +53,16 @@ begin
   perform pg_temp.fx_as('u_pend');
   e := pg_temp.fx_err(format('select public.get_fixture_room(%L)', v_room));
   if e <> 'FX_AUTH' then raise exception 'R2: pending member read must be FX_AUTH, got %', e; end if;
+  -- a PENDING member whose seat row is nonetheless CURRENT (a legacy shape) has no access either (FR-M1: current AND active)
+  perform pg_temp.fx_as('u_pendcur');
+  e := pg_temp.fx_err(format('select public.get_fixture_room(%L)', v_room));
+  if e <> 'FX_AUTH' then raise exception 'R2: pending-but-current member read must be FX_AUTH, got %', e; end if;
+  e := pg_temp.fx_err(format('select to_jsonb(public.get_fixture_room_version(%L))', v_room));
+  if e <> 'FX_AUTH' then raise exception 'R2: pending-but-current member poll must be FX_AUTH, got %', e; end if;
+  v_list := public.list_fixture_rooms(null, 50);
+  if jsonb_array_length(v_list) <> 0 then raise exception 'R2: pending-but-current member inbox must be empty'; end if;
+  e := pg_temp.fx_err(format('select public.respond_fixture_invitation(%L, true, %s, %L)', v_room, pg_temp.fx_ver(v_room), 'rls-pendcur-accept'));
+  if e <> 'FX_AUTH' and e <> 'FX_STATE' then raise exception 'R2: pending-but-current member must not answer the organisation''s invitation, got %', e; end if;
   -- the charterer''s colleague (same organisation, broker seat) is a participant through the organisation party
   perform pg_temp.fx_as('u_ch2');
   v := public.get_fixture_room(v_room);
@@ -66,7 +76,7 @@ begin
   end;
   perform pg_temp.fx_owner();
   if not v_ok then raise exception 'R2: anon can execute get_fixture_room'; end if;
-  raise notice 'R2 ok: outsider, pending member and anon refused; a colleague of a party organisation is a participant';
+  raise notice 'R2 ok: outsider, pending member (current or not) and anon refused; a colleague of a party organisation is a participant';
 end $$;
 
 -- ── R3 · capacity: a viewer reads but cannot make commercial commands ───────

@@ -5,8 +5,10 @@
 -- commands) are built from. None of them is granted to members: they run
 -- only from the RPCs, which are SECURITY DEFINER and owned by postgres.
 --
---   identity     fn_fixture_actor · fn_fixture_user_from_auth · fn_fixture_active_org
---   entitlement  fn_fixture_tier_ok · fn_fixture_owns_listing · fn_fixture_listing_live
+--   identity     fn_fixture_actor · fn_fixture_user_from_auth · fn_fixture_member_org_ids
+--   entitlement  fn_fixture_tier_ok · fn_fixture_listing_owner · fn_fixture_owns_listing ·
+--                fn_fixture_listing_live
+--   catalogue    fn_fixture_term_catalogue (the versioned term sheet, audit FR-H2)
 --   parties      fn_fixture_actor_parties · fn_can_access_fixture ·
 --                fn_fixture_acting_party · fn_fixture_represented_party ·
 --                fn_fixture_resolve_counterparty
@@ -50,14 +52,19 @@ as $$
 $$;
 revoke all on function public.fn_fixture_user_from_auth(uuid) from public, anon, authenticated;
 
-create or replace function public.fn_fixture_active_org(p_user uuid)
- returns uuid language sql stable security definer set search_path to 'public'
+-- The organisations a member acts for: a CURRENT and ACTIVE seat, both (the
+-- Phase 0 review requires both; the shared fn_my_org_ids() checks is_current
+-- only — audit FR-M1). Defaults to the signed-in member.
+create or replace function public.fn_fixture_member_org_ids(p_user uuid default null)
+ returns uuid[] language sql stable security definer set search_path to 'public'
 as $$
-  select m.org_id from public.organization_members m
-   where m.user_id = p_user and m.is_current and m.status = 'active'
-   order by (m.member_role = 'admin') desc, m.added_at limit 1;
+  select coalesce(array_agg(m.org_id), '{}'::uuid[]) from public.organization_members m
+   where m.user_id = coalesce(p_user, public.fn_app_user_id()) and m.is_current and m.status = 'active';
 $$;
-revoke all on function public.fn_fixture_active_org(uuid) from public, anon, authenticated;
+revoke all on function public.fn_fixture_member_org_ids(uuid) from public, anon, authenticated;
+-- (fn_fixture_active_org, which guessed an organisation from the member's
+-- first seat, is gone: audit FR-H1. Identity comes from the ownership row.)
+drop function if exists public.fn_fixture_active_org(uuid);
 
 -- ── entitlement ─────────────────────────────────────────────────────────────
 -- Decision D3: creation needs T3+, market-partner status or admin. The
@@ -76,17 +83,46 @@ begin
 end $$;
 revoke all on function public.fn_fixture_tier_ok() from public, anon, authenticated;
 
-create or replace function public.fn_fixture_owns_listing(p_type text, p_listing_id uuid)
- returns boolean language sql stable security definer set search_path to 'public'
+-- The exact current primary ownership row of a listing: the organisation it is
+-- owned through (if any) and the member behind it as public.users.id.
+create or replace function public.fn_fixture_listing_owner(p_type text, p_listing_id uuid)
+ returns jsonb language sql stable security definer set search_path to 'public'
 as $$
-  select exists (
-    select 1 from public.listing_ownership lo
-     where lo.listing_type = p_type::public.listing_type_enum
-       and lo.listing_id = p_listing_id
-       and lo.is_current and lo.role = 'primary'
-       and (lo.owner_user_id = auth.uid()
-            or (lo.owner_org_id is not null and lo.owner_org_id = any (public.fn_my_org_ids()))));
+  select jsonb_build_object('org_id', lo.owner_org_id, 'user_id', public.fn_fixture_user_from_auth(lo.owner_user_id))
+    from public.listing_ownership lo
+   where lo.listing_type = p_type::public.listing_type_enum and lo.listing_id = p_listing_id
+     and lo.is_current and lo.role = 'primary'
+   order by lo.owned_from desc limit 1;
 $$;
+revoke all on function public.fn_fixture_listing_owner(text, uuid) from public, anon, authenticated;
+
+-- The identity the actor represents a listing AS, derived from that ownership
+-- row and nothing else (audit FR-H1): the owning organisation when the actor
+-- holds a current active seat in that exact organisation; the actor personally
+-- when the listing is owned personally by the actor. Null when the actor does
+-- not own it. An organisation is never inferred from the owner's other seats.
+-- (The return type changed from boolean; the old signature is dropped first so
+-- a re-apply never fails on it.)
+drop function if exists public.fn_fixture_owns_listing(text, uuid);
+create or replace function public.fn_fixture_owns_listing(p_type text, p_listing_id uuid)
+ returns jsonb language plpgsql stable security definer set search_path to 'public'
+as $$
+declare o jsonb; v_actor uuid := public.fn_app_user_id();
+begin
+  if v_actor is null then return null; end if;
+  o := public.fn_fixture_listing_owner(p_type, p_listing_id);
+  if o is null then return null; end if;
+  if (o->>'org_id') is not null then
+    if (o->>'org_id')::uuid = any (public.fn_fixture_member_org_ids(v_actor)) then
+      return jsonb_build_object('org_id', (o->>'org_id')::uuid);
+    end if;
+    return null;
+  end if;
+  if (o->>'user_id')::uuid = v_actor then
+    return jsonb_build_object('user_id', v_actor);
+  end if;
+  return null;
+end $$;
 revoke all on function public.fn_fixture_owns_listing(text, uuid) from public, anon, authenticated;
 
 create or replace function public.fn_fixture_listing_live(p_type text, p_listing_id uuid)
@@ -100,6 +136,30 @@ as $$
     else false end;
 $$;
 revoke all on function public.fn_fixture_listing_live(text, uuid) from public, anon, authenticated;
+
+-- ── the term catalogue, version by version (decision D5, audit FR-H2) ───────
+-- TypeScript owns the product catalogue (lib/fixture-room/terms.ts); the
+-- database holds the same definitions per version so create_fixture_room can
+-- refuse anything else. scripts/fixture-room-check.ts proves the two agree
+-- (it reads the JSON between the two marker lines below). Unknown → null.
+create or replace function public.fn_fixture_term_catalogue(p_version text)
+ returns jsonb language sql immutable set search_path to ''
+as $$
+  select case p_version
+    when '2026-09-23.v1' then
+      -- FIXTURE_TERM_CATALOGUE_JSON_BEGIN 2026-09-23.v1
+      $j$[
+        {"code":"cargo_grade","label":"Cargo & grade","category":"cargo","sortOrder":1,"valueKind":"text","required":true},
+        {"code":"quantity","label":"Quantity","category":"cargo","sortOrder":2,"valueKind":"number","unit":"MT","required":true},
+        {"code":"ports","label":"Load / discharge ports","category":"route","sortOrder":3,"valueKind":"port_pair","required":true},
+        {"code":"laycan","label":"Laycan","category":"timing","sortOrder":4,"valueKind":"date_range","required":true},
+        {"code":"ld_rates","label":"Load / discharge rates","category":"operations","sortOrder":5,"valueKind":"rate_pair","unit":"MT/day","required":true},
+        {"code":"freight","label":"Freight & terms","category":"money","sortOrder":6,"valueKind":"money_per_mt","unit":"USD/MT","required":true}
+      ]$j$::jsonb
+      -- FIXTURE_TERM_CATALOGUE_JSON_END
+    else null end;
+$$;
+revoke all on function public.fn_fixture_term_catalogue(text) from public, anon, authenticated;
 
 -- ── snapshots (allow-listed columns only; never contact PII) ────────────────
 create or replace function public.fn_fixture_snapshot_cargo(p_id uuid)
@@ -180,7 +240,9 @@ revoke all on function public.fn_fixture_snapshot_vessel(uuid) from public, anon
 -- (direct), a registered member (direct), an organisation without any seat
 -- (relayed), the listing's contact record (relayed), or nothing resolvable —
 -- an unresolved party anchored to the listing (relayed). A listing owned by a
--- platform admin is platform-synced: the platform relays it.
+-- platform admin is platform-synced: the platform relays it. The organisation
+-- is the one on the ownership row, never a seat the owner happens to hold
+-- (audit FR-H1): a personally owned listing is represented by the member.
 create or replace function public.fn_fixture_resolve_counterparty(p_type text, p_listing_id uuid)
  returns jsonb language plpgsql stable security definer set search_path to 'public'
 as $$
@@ -198,7 +260,6 @@ begin
       if v_role like '%admin%' then v_user := null; v_org := null; end if;   -- platform-synced listing
     end if;
   end if;
-  if v_org is null and v_user is not null then v_org := public.fn_fixture_active_org(v_user); end if;
   if v_org is not null then
     if exists (select 1 from public.organization_members m where m.org_id = v_org and m.is_current and m.status = 'active') then
       return jsonb_build_object('mode', 'direct', 'org_id', v_org);
@@ -224,7 +285,7 @@ revoke all on function public.fn_fixture_resolve_counterparty(text, uuid) from p
 create or replace function public.fn_fixture_actor_parties(p_room_id uuid)
  returns setof public.fixture_parties language plpgsql stable security definer set search_path to 'public'
 as $$
-declare v_actor uuid := public.fn_app_user_id(); v_admin boolean := public.fn_is_admin(); v_orgs uuid[] := public.fn_my_org_ids();
+declare v_actor uuid := public.fn_app_user_id(); v_admin boolean := public.fn_is_admin(); v_orgs uuid[] := public.fn_fixture_member_org_ids();
 begin
   return query
     select p.* from public.fixture_parties p
@@ -337,26 +398,30 @@ revoke all on function public.fn_fixture_check_version(public.fixture_rooms, int
 create or replace function public.fn_fixture_replay(p_room_id uuid, p_key text, p_hash text)
  returns jsonb language plpgsql stable security definer set search_path to 'public'
 as $$
-declare e public.fixture_events; v_seq integer;
+declare e public.fixture_events; v_seq integer; v_n integer;
 begin
   if p_key is null or btrim(p_key) = '' or length(p_key) > 200 then
     raise exception 'FX_VALIDATION: idempotency_key is required (1–200 characters)' using errcode = '22023';
   end if;
-  -- the FIRST event of the command carries the result; the LAST carries the final version
-  select * into e from public.fixture_events where room_id = p_room_id and idempotency_key = p_key order by seq limit 1;
-  if e.id is null then return null; end if;
-  if e.request_hash is distinct from p_hash then
+  -- The command's events share the key. Every one of them must carry the
+  -- request hash; the RESULT-bearing event carries the envelope (an
+  -- observation such as proposal.lapsed may precede it — audit FR-M2); the
+  -- last carries the final version.
+  select count(*), max(x.seq) into v_n, v_seq from public.fixture_events x where x.room_id = p_room_id and x.idempotency_key = p_key;
+  if coalesce(v_n, 0) = 0 then return null; end if;
+  if exists (select 1 from public.fixture_events x where x.room_id = p_room_id and x.idempotency_key = p_key and x.request_hash is distinct from p_hash) then
     raise exception 'FX_IDEMPOTENCY_MISMATCH: idempotency key % was already used with different arguments', p_key using errcode = 'P0001';
   end if;
-  select max(x.seq) into v_seq from public.fixture_events x where x.room_id = p_room_id and x.idempotency_key = p_key;
+  select * into e from public.fixture_events x where x.room_id = p_room_id and x.idempotency_key = p_key
+   order by (x.result is not null) desc, x.seq limit 1;
   return jsonb_build_object('ok', true, 'version', v_seq, 'eventId', e.id, 'replayed', true, 'data', coalesce(e.result, '{}'::jsonb));
 end $$;
 revoke all on function public.fn_fixture_replay(uuid, text, text) from public, anon, authenticated;
 
 -- Appends one event under the caller's room lock, bumps the version and
 -- returns the result envelope. Every event a command writes carries the
--- command's idempotency key and request hash; only the first carries the
--- result (fn_fixture_replay reads the result from the first and the final
+-- command's idempotency key and request hash; exactly one carries the
+-- result (fn_fixture_replay reads the result from that one and the final
 -- version from the last).
 create or replace function public.fn_fixture_event(
   p_room_id uuid, p_type text, p_actor_user uuid, p_actor_party uuid, p_on_behalf uuid, p_relayed boolean,
@@ -572,7 +637,10 @@ end $$;
 revoke all on function public.fn_fixture_capabilities(public.fixture_rooms, public.fixture_parties[], boolean, uuid[]) from public, anon, authenticated;
 
 -- ── listing status sync (decision D4) ───────────────────────────────────────
-create or replace function public.fn_fixture_listing_sync(r public.fixture_rooms)
+-- p_mask_vessel: the viewer must not learn the vessel's stable identifier (a
+-- TBN vessel seen from the cargo side before disclosure — audit FR-H3).
+drop function if exists public.fn_fixture_listing_sync(public.fixture_rooms);
+create or replace function public.fn_fixture_listing_sync(r public.fixture_rooms, p_mask_vessel boolean default false)
  returns jsonb language plpgsql stable security definer set search_path to 'public'
 as $$
 declare v_cargo text; v_vessel text; t jsonb := r.listing_sync_target;
@@ -584,11 +652,13 @@ begin
     'requiredAt', r.listing_sync_required_at,
     'cargo', jsonb_build_object('listingId', r.cargo_listing_id, 'target', t->>'cargo_status', 'current', v_cargo,
                                 'outstanding', (t->>'cargo_status') is distinct from v_cargo),
-    'vessel', jsonb_build_object('availabilityId', r.vessel_availability_id, 'vesselId', r.vessel_id, 'target', t->>'vessel_status', 'current', v_vessel,
+    'vessel', jsonb_build_object('availabilityId', r.vessel_availability_id,
+                                 'vesselId', case when coalesce(p_mask_vessel, false) then null else r.vessel_id end,
+                                 'target', t->>'vessel_status', 'current', v_vessel,
                                  'outstanding', (t->>'vessel_status') is distinct from v_vessel),
     'outstanding', ((t->>'cargo_status') is distinct from v_cargo) or ((t->>'vessel_status') is distinct from v_vessel));
 end $$;
-revoke all on function public.fn_fixture_listing_sync(public.fixture_rooms) from public, anon, authenticated;
+revoke all on function public.fn_fixture_listing_sync(public.fixture_rooms, boolean) from public, anon, authenticated;
 
 -- ── recap ───────────────────────────────────────────────────────────────────
 create or replace function public.fn_fixture_recap_build(r public.fixture_rooms)

@@ -57,6 +57,7 @@ create table if not exists public.fixture_rooms (
   snapshot_at               timestamptz not null default now(),
   snapshot_hash             text not null,
   brokerage_terms_snapshot  jsonb,
+  term_catalogue_version    text not null check (term_catalogue_version ~ '^\d{4}-\d{2}-\d{2}\.v\d+$'),
   counterparty_disclosed_at timestamptz,
   negotiation_window_ends_at timestamptz,
   fixed_on_subs_at          timestamptz,
@@ -76,6 +77,7 @@ create table if not exists public.fixture_rooms (
   constraint fixture_rooms_version_ck check (version >= 0)
 );
 comment on table public.fixture_rooms is 'Fixture Room aggregate: one cargo listing paired with one vessel availability. version = seq of the last fixture_events row. Snapshots are immutable copies of the listings at creation (no contact PII).';
+comment on column public.fixture_rooms.term_catalogue_version is 'The versioned term sheet the room was opened on (fn_fixture_term_catalogue); create_fixture_room refuses a catalogue that is not exactly that version (audit FR-H2).';
 comment on column public.fixture_rooms.listing_sync_target is 'Set when the room enters on_subjects / fixed (or leaves them): the listing statuses the marketplace should now show, e.g. {"cargo_status":"OUT","vessel_status":"ON SUBS"}. The room never writes the listings itself (decision D4).';
 
 create unique index if not exists fixture_rooms_active_pair_uq

@@ -21,10 +21,11 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { FIXTURE_TERM_CATALOGUE, buildTermCatalogue, openingValueFromListing, termHintsFromListing, validateTermCatalogue } from "@/lib/fixture-room/terms";
+import { FIXTURE_TERM_CATALOGUE, FIXTURE_TERM_CATALOGUE_VERSION, buildTermCatalogue, openingValueFromListing, termHintsFromListing, validateTermCatalogue } from "@/lib/fixture-room/terms";
 import { COMMAND_STATUSES, FIXTURE_ROOM_STATUSES, TRANSITIONS, canTransition, commandAllowedIn, isTerminal, reachableFrom, timelineSteps } from "@/lib/fixture-room/state-machine";
-import { computeCapabilities, roleLabel, type ViewerParty } from "@/lib/fixture-room/permissions";
-import { parseFixtureError } from "@/lib/fixture-room/errors";
+import { canUseFixtureRoom, computeCapabilities, roleLabel, type ViewerParty } from "@/lib/fixture-room/permissions";
+import { GestureKeys, runGesture } from "@/lib/fixture-room/client";
+import { parseFixtureError, type FixtureError } from "@/lib/fixture-room/errors";
 import { countdown, formatFixtureValue, parseFixtureInput, spreadLabel } from "@/lib/fixture-room/format";
 import { findMaskingLeaks } from "@/lib/fixture-room/masking-view";
 import { recapSections, renderRecapText } from "@/lib/fixture-room/recap";
@@ -50,6 +51,20 @@ ok(JSON.stringify(openingValueFromListing("freight", figures, "cargo")) === JSON
 ok(JSON.stringify(openingValueFromListing("freight", figures, "vessel")) === JSON.stringify({ num: 26, currency: "USD" }), "vessel side opening freight = the owner idea");
 ok(JSON.stringify(openingValueFromListing("laycan", { ...figures, isSpot: true }, "cargo")) === JSON.stringify({ spot: true }), "spot laycan");
 ok(openingValueFromListing("ld_rates", { ...figures, loadRate: 0 }, "cargo") === null, "a non-positive rate yields no opening figure");
+// the database holds the same versioned catalogue (fn_fixture_term_catalogue) and refuses anything else (FR-H2):
+// the two definitions must be identical, term for term
+{
+  const helpersSql = read("supabase/migrations/20260923201000_fixture_room_helpers.sql");
+  const marked = helpersSql.match(/FIXTURE_TERM_CATALOGUE_JSON_BEGIN ([^\r\n]+)[\s\S]*?\$j\$([\s\S]*?)\$j\$[\s\S]*?FIXTURE_TERM_CATALOGUE_JSON_END/);
+  const norm = (t: { code: string; label: string; category?: string; sortOrder: number; valueKind: string; unit?: string; required: boolean }) =>
+    JSON.stringify({ code: t.code, label: t.label, category: t.category ?? null, sortOrder: t.sortOrder, valueKind: t.valueKind, unit: t.unit ?? null, required: t.required });
+  let sqlTerms: unknown[] = [];
+  try { sqlTerms = marked ? (JSON.parse(marked[2]) as unknown[]) : []; } catch { sqlTerms = []; }
+  ok(!!marked && marked[1].trim() === FIXTURE_TERM_CATALOGUE_VERSION, `the SQL catalogue is marked with the TypeScript version (${FIXTURE_TERM_CATALOGUE_VERSION})`);
+  ok(new RegExp(`when '${FIXTURE_TERM_CATALOGUE_VERSION.replace(".", "\\.")}' then`).test(helpersSql), "fn_fixture_term_catalogue answers that version");
+  ok(sqlTerms.length === FIXTURE_TERM_CATALOGUE.length && sqlTerms.every((t, i) => norm(t as Parameters<typeof norm>[0]) === norm(FIXTURE_TERM_CATALOGUE[i])),
+     "the SQL catalogue and FIXTURE_TERM_CATALOGUE are identical term for term (code, label, category, sort order, value kind, unit, required)");
+}
 
 console.log("2 · state machine");
 ok(TRANSITIONS.every((t) => commandAllowedIn(t.by, t.from)), "every transition's command is allowed in its source state");
@@ -84,6 +99,12 @@ ok(!closed.canPropose && !closed.canMessage && !closed.canWithdraw && !closed.ca
 const fixedCaps = computeCapabilities("fixed", [P("cargo", "principal")], false);
 ok(!fixedCaps.canPropose && !fixedCaps.canWithdraw && fixedCaps.canPublishRecap && fixedCaps.canAcknowledgeRecap && fixedCaps.canMessage, "fixed: recap and messages only");
 ok(roleLabel("cargo", "principal") === "Charterer" && roleLabel("vessel", "principal") === "Owner" && roleLabel("mediator", "broker", true) === "Arab ShipBroker", "role labels");
+// decision D3 in one place (FR-M4): the page gate mirrors fn_fixture_tier_ok
+ok(canUseFixtureRoom({ role: "cargo_owner", tier: "T3" }) && canUseFixtureRoom({ role: "vessel_owner", tier: "T4" }), "T3 / T4 members may open rooms");
+ok(!canUseFixtureRoom({ role: "cargo_owner", tier: "T1" }) && !canUseFixtureRoom({ role: "broker", tier: "T2", isMarketPartner: false }), "T1 / T2 members may not");
+ok(canUseFixtureRoom({ role: "broker", tier: "T1", isMarketPartner: true }), "a T1 market partner may (the approved D3 path stays explicit)");
+ok(canUseFixtureRoom({ role: "admin", tier: "T1" }) && canUseFixtureRoom({ role: "Admin", tier: null }), "admins may regardless of tier");
+ok(!canUseFixtureRoom({ role: null, tier: null }) && !canUseFixtureRoom({ role: "cargo_owner", tier: "T1", isMarketPartner: null }), "an unknown viewer or a missing flag is refused");
 
 console.log("4 · error vocabulary");
 ok(parseFixtureError("FX_AUTH: you are not a participant in this room").code === "AUTH", "FX_AUTH");
@@ -115,9 +136,10 @@ const t0 = Date.now();
 ok(countdown(new Date(t0 + 702_000).toISOString(), t0) === "11:42" && countdown(new Date(t0 - 5000).toISOString(), t0) === "0:00", "countdown");
 
 console.log("6 · masking guard");
+const VESSEL_ID = "3d1f2c7e-0b6a-4c1d-9e8f-1a2b3c4d5e6f";
 const baseView = (): FixtureRoomView => ({
-  room: { id: "r", ref: "FX-2026-00001", status: "negotiating", version: 3, mediation: "platform", cargoListingId: "c", vesselAvailabilityId: "a", vesselId: "v", createdAt: "", updatedAt: "", fixedOnSubsAt: null, fixedAt: null, closedAt: null, closedReason: null, closedNote: null, counterpartyDisclosed: false, counterpartyDisclosedAt: null, negotiationWindowEndsAt: null, supersedesRoomId: null, snapshotAt: "", snapshotHash: "h", brokerageTerms: null, listingSync: null, serverNow: "" },
-  snapshot: { cargo: { commodity_name: "Wheat" }, vessel: { availability: {}, vessel: { vessel_name: "TBN" } }, vesselIdentityMasked: true },
+  room: { id: "r", ref: "FX-2026-00001", status: "negotiating", version: 3, mediation: "platform", cargoListingId: "c", vesselAvailabilityId: "a", vesselId: null, termCatalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION, createdAt: "", updatedAt: "", fixedOnSubsAt: null, fixedAt: null, closedAt: null, closedReason: null, closedNote: null, counterpartyDisclosed: false, counterpartyDisclosedAt: null, negotiationWindowEndsAt: null, supersedesRoomId: null, snapshotAt: "", snapshotHash: "h", brokerageTerms: null, listingSync: null, serverNow: "" },
+  snapshot: { cargo: { commodity_name: "Wheat" }, vessel: { availability: { vessel_id: null }, vessel: { id: null, vessel_name: "TBN", imo_number: null } }, vesselIdentityMasked: true },
   viewer: { partyIds: ["p1"], side: "cargo", isAdmin: false, isMediator: false, capabilities: computeCapabilities("negotiating", [P("cargo", "principal")], false) },
   parties: [
     { id: "p1", side: "cargo", capacity: "principal", participationMode: "direct", status: "active", isPlatform: false, label: "Charterer side", isViewer: true, disclosureAgreed: false, invitedAt: null, acceptedAt: null, resolved: true, name: "Seed Charterers Ltd", deskLabel: "Chartering Desk" },
@@ -134,6 +156,21 @@ const leakEmail = baseView(); leakEmail.messages = [{ id: "m", partyId: "p1", la
 ok(findMaskingLeaks(leakEmail).some((l) => /email/.test(l)), "an email pattern in a string is flagged");
 const adminView = baseView(); adminView.viewer.isAdmin = true; (adminView.parties[1] as unknown as Record<string, unknown>).orgId = "x";
 ok(findMaskingLeaks(adminView).length === 0, "admin views are exempt");
+// a masked TBN vessel: every stable identifier is a leak (FR-H3)
+const leakRoomVessel = baseView(); leakRoomVessel.room.vesselId = VESSEL_ID;
+ok(findMaskingLeaks(leakRoomVessel).some((l) => /room\.vesselId/.test(l)), "room.vesselId on a masked vessel is flagged");
+const leakSnapshotId = baseView(); (leakSnapshotId.snapshot.vessel.vessel as Record<string, unknown>).id = VESSEL_ID;
+ok(findMaskingLeaks(leakSnapshotId).some((l) => /vessel\.vessel\.id/.test(l)), "snapshot.vessel.vessel.id on a masked vessel is flagged");
+const leakAvailability = baseView(); (leakAvailability.snapshot.vessel.availability as Record<string, unknown>).vessel_id = VESSEL_ID;
+ok(findMaskingLeaks(leakAvailability).some((l) => /availability\.vessel_id/.test(l)), "snapshot.vessel.availability.vessel_id on a masked vessel is flagged");
+const leakSync = baseView(); leakSync.room.listingSync = { requiredAt: "", cargo: { listingId: "c", target: "OUT", current: "IN", outstanding: true }, vessel: { availabilityId: "a", vesselId: VESSEL_ID, target: "ON SUBS", current: "OPEN", outstanding: true }, outstanding: true };
+ok(findMaskingLeaks(leakSync).some((l) => /listingSync\.vessel\.vesselId/.test(l)), "listingSync.vessel.vesselId on a masked vessel is flagged");
+const leakEvent = baseView(); leakEvent.room.vesselId = VESSEL_ID; leakEvent.events = [{ id: 1, seq: 1, type: "room.created", at: "", command: "create_fixture_room", relayed: false, actorPartyId: "p1", onBehalfOfPartyId: null, actorLabel: "Charterer side", onBehalfOfLabel: null, payload: { vesselId: VESSEL_ID } }];
+ok(findMaskingLeaks(leakEvent).some((l) => /events\[0\]\.payload\.vesselId carries the masked vessel id/.test(l)), "an event payload carrying the masked vessel id is flagged");
+const leakHull = baseView(); (leakHull.snapshot.vessel.vessel as Record<string, unknown>).vessel_name = "SEED TBN HULL";
+ok(findMaskingLeaks(leakHull).some((l) => /names a masked vessel/.test(l)), "a hull name on a masked vessel is flagged");
+const revealed = baseView(); revealed.snapshot.vesselIdentityMasked = false; revealed.room.vesselId = VESSEL_ID; (revealed.snapshot.vessel.vessel as Record<string, unknown>).id = VESSEL_ID;
+ok(findMaskingLeaks(revealed).length === 0, "an unmasked vessel may carry its identifiers");
 
 console.log("7 · recap and listing sync");
 const content: FixtureRecapContent = {
@@ -147,9 +184,42 @@ const content: FixtureRecapContent = {
 const t1 = renderRecapText(content), t2 = renderRecapText(content);
 ok(t1 === t2 && /\[AGREED\]/.test(t1) && /\[OPEN\]/.test(t1) && /withheld/.test(t1), "recap text is deterministic and marks agreed / open terms");
 ok(recapSections(content)[2].lines[0].startsWith("2. Quantity") && recapSections(content)[2].lines[1].startsWith("6. Freight"), "terms render in sort order");
-const notice = listingSyncNotice({ cargoListingId: "c", vesselAvailabilityId: "a", vesselId: "v", listingSync: { requiredAt: "", cargo: { listingId: "c", target: "OUT", current: "IN", outstanding: true }, vessel: { availabilityId: "a", vesselId: "v", target: "ON SUBS", current: "OPEN", outstanding: true }, outstanding: true } });
-ok(!!notice && notice.outstanding && notice.links.length === 2 && notice.links[1].href === "/dashboard/vessels/v/availability/a/edit", "the sync notice links both existing edit flows");
-ok(listingSyncNotice({ cargoListingId: "c", vesselAvailabilityId: "a", vesselId: "v", listingSync: null }) === null, "no requirement → no notice");
+const syncBoth = { requiredAt: "", cargo: { listingId: "c", target: "OUT", current: "IN", outstanding: true }, vessel: { availabilityId: "a", vesselId: "v" as string | null, target: "ON SUBS", current: "OPEN", outstanding: true }, outstanding: true };
+const cargoNotice = listingSyncNotice({ cargoListingId: "c", vesselAvailabilityId: "a", vesselId: "v", listingSync: syncBoth }, "cargo");
+ok(!!cargoNotice && cargoNotice.outstanding && cargoNotice.lines.length === 2 && cargoNotice.links.length === 1 && cargoNotice.links[0].href === "/dashboard/cargo/c/edit", "the cargo side sees both requirements but links its own listing only (FR-H3)");
+const vesselNotice = listingSyncNotice({ cargoListingId: "c", vesselAvailabilityId: "a", vesselId: "v", listingSync: syncBoth }, "vessel");
+ok(!!vesselNotice && vesselNotice.links.length === 1 && vesselNotice.links[0].href === "/dashboard/vessels/v/availability/a/edit", "the vessel side links its own position only");
+const maskedNotice = listingSyncNotice({ cargoListingId: "c", vesselAvailabilityId: "a", vesselId: null, listingSync: { ...syncBoth, vessel: { ...syncBoth.vessel, vesselId: null } } }, "cargo");
+ok(!!maskedNotice && maskedNotice.links.length === 1 && maskedNotice.links.every((l) => !/vessels/.test(l.href)), "a masked vessel never yields a vessel link");
+const mediatorNotice = listingSyncNotice({ cargoListingId: "c", vesselAvailabilityId: "a", vesselId: "v", listingSync: syncBoth }, "mediator");
+ok(!!mediatorNotice && mediatorNotice.links.length === 0 && mediatorNotice.lines.length === 2, "the mediator sees the requirements without edit links");
+ok(listingSyncNotice({ cargoListingId: "c", vesselAvailabilityId: "a", vesselId: "v", listingSync: null }, "cargo") === null, "no requirement → no notice");
+
+console.log("7b · gesture keys (FR-M5)");
+{
+  let minted = 0;
+  const keys = new GestureKeys(() => `k${++minted}`);
+  const okEnvelope = { ok: true as const, version: 4, eventId: 9, replayed: false, data: {} };
+  const refusal: FixtureError = { ok: false, code: "STATE", message: "FX_STATE: no" };
+  const seen: string[] = [];
+  const attempt = (answer: "throw" | "ok" | "refused") => runGesture(keys, "submit:t1", async (k) => { seen.push(k); if (answer === "throw") throw new Error("network"); return answer === "ok" ? okEnvelope : refusal; });
+  (async () => {
+    const a = await attempt("throw");
+    ok(a.kind === "uncertain" && a.key === "k1" && keys.pending("submit:t1"), "a transport failure is uncertain and keeps the key");
+    const b = await attempt("ok");
+    ok(b.kind === "ok" && seen[1] === "k1" && !keys.pending("submit:t1"), "the retry of the same gesture reuses the key (so the server replays), then the key is released");
+    const c = await attempt("refused");
+    ok(c.kind === "refused" && seen[2] === "k2" && !keys.pending("submit:t1"), "a new gesture gets a new key; a typed refusal is definitive and releases it");
+    const d = await attempt("ok");
+    ok(d.kind === "ok" && seen[3] === "k3", "after a refusal the next gesture is a new command");
+    const other = await runGesture(keys, "submit:t2", async () => { throw new Error("network"); });
+    const again = await runGesture(keys, "submit:t2", async (k) => { seen.push(k); return okEnvelope; });
+    ok(other.kind === "uncertain" && again.kind === "ok" && seen.at(-1) === other.key, "gestures are keyed independently");
+    console.log(`\nFIXTURE ROOM CHECK: ${pass} passed, ${fail} failed`);
+    if (fail > 0) process.exit(1);
+    console.log("FIXTURE ROOM CHECK: ALL ASSERTIONS PASSED");
+  })().catch((e) => { console.error(e); process.exit(1); });
+}
 
 console.log("8 · source scans");
 const actions = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
@@ -186,7 +256,11 @@ for (const t of ["fixture_rooms", "fixture_parties", "fixture_terms", "fixture_p
   ok(new RegExp(`alter table public\\.${t}\\s+enable row level security`).test(allSql), `${t}: RLS enabled`);
 }
 ok(/revoke all on table public\.fixture_rooms, [^;]*from public, anon, authenticated/.test(allSql), "member table grants revoked on every fixture table");
-
-console.log(`\nFIXTURE ROOM CHECK: ${pass} passed, ${fail} failed`);
-if (fail > 0) process.exit(1);
-console.log("FIXTURE ROOM CHECK: ALL ASSERTIONS PASSED");
+// the audit corrections, as source facts
+ok(!/fn_my_org_ids\(\)/.test(allSqlCode) && !/fn_fixture_active_org\(/.test(allSqlCode.replace(/drop function if exists public\.fn_fixture_active_org\(uuid\);/, "")), "no Fixture statement uses fn_my_org_ids() or the removed seat-guessing helper (FR-M1, FR-H1)");
+ok(/fn_fixture_member_org_ids\(\)/.test(allSqlCode) && /is_current and m\.status = 'active'/.test(allSqlCode), "membership means a current AND active seat (FR-M1)");
+ok(/create or replace function public\.respond_fixture_invitation\([^)]*p_party_id uuid default null/.test(commands), "respond_fixture_invitation accepts the party being answered for (FR-M3)");
+ok(/'vesselId', case when v_mask_vessel then null else r\.vessel_id end/.test(read("supabase/migrations/20260923202000_fixture_room_reads.sql")), "the room header masks the vessel id with the identity (FR-H3)");
+ok(!/'vesselId', v_vessel_id/.test(commands), "the creation event payload carries no vessel id (FR-H3)");
+ok(/fn_fixture_term_catalogue\(v_version\)/.test(commands) && /term_catalogue_version/.test(commands), "creation verifies the catalogue against the versioned definitions and persists the version (FR-H2)");
+ok(/order by \(x\.result is not null\) desc, x\.seq/.test(helpers), "the replay returns the result-bearing event (FR-M2)");

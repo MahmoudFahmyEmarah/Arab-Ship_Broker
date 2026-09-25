@@ -1,14 +1,79 @@
 "use client";
 
-// Fixture Room · client helpers: idempotency keys per gesture and the version
-// poll (v1 uses polling instead of Realtime; the persisted state is the truth).
+// Fixture Room · client helpers: idempotency keys per gesture, the gesture
+// runner that keeps a key until the server has answered definitively (audit
+// FR-M5), and the version poll (v1 uses polling instead of Realtime; the
+// persisted state is the truth).
 import * as React from "react";
+import type { FixtureError } from "./errors";
 
 /** One key per user gesture; kept for the gesture's retries so a retry replays. */
 export function newIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `fx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
+
+/**
+ * The outcome of one attempt at a command:
+ *   ok        the server committed and answered (the envelope);
+ *   refused   the server answered with a typed refusal (FX_*): definitive,
+ *             nothing was written;
+ *   uncertain the transport failed before an answer arrived. The server MAY
+ *             have committed. The gesture's key is kept, so the next attempt
+ *             replays instead of repeating.
+ */
+export type CommandOutcome<T> =
+  | { kind: "ok"; result: T }
+  | { kind: "refused"; error: FixtureError }
+  | { kind: "uncertain"; error: unknown; key: string };
+
+/**
+ * Keys per gesture. A key lives from the first attempt until a definitive
+ * answer (ok or refused); a transport failure keeps it. Pure and synchronous
+ * so scripts/fixture-room-check.ts can prove the retry contract without React.
+ */
+export class GestureKeys {
+  private readonly keys = new Map<string, string>();
+  constructor(private readonly mint: () => string = newIdempotencyKey) {}
+  /** The key for this gesture: the retained one after an uncertain attempt, otherwise a fresh one. */
+  keyFor(gesture: string): string {
+    let k = this.keys.get(gesture);
+    if (!k) { k = this.mint(); this.keys.set(gesture, k); }
+    return k;
+  }
+  /** Called after a definitive answer: the next gesture of this name is a new command. */
+  settle(gesture: string) { this.keys.delete(gesture); }
+  /** Whether an earlier attempt of this gesture is still unanswered. */
+  pending(gesture: string): boolean { return this.keys.has(gesture); }
+}
+
+const isEnvelope = (x: unknown): x is { ok: boolean } => !!x && typeof x === "object" && "ok" in (x as Record<string, unknown>);
+
+/**
+ * Runs one attempt of a gesture. `send` receives the key to put in the
+ * command and returns the server's answer (an ok envelope or a FixtureError);
+ * a throw is a transport failure. The key is released only on an answer.
+ */
+export async function runGesture<T extends { ok: true }>(
+  keys: GestureKeys,
+  gesture: string,
+  send: (idempotencyKey: string) => Promise<T | FixtureError>,
+): Promise<CommandOutcome<T>> {
+  const key = keys.keyFor(gesture);
+  let answer: T | FixtureError;
+  try {
+    answer = await send(key);
+  } catch (error) {
+    return { kind: "uncertain", error, key };
+  }
+  if (!isEnvelope(answer)) return { kind: "uncertain", error: new Error("malformed answer"), key };
+  keys.settle(gesture);
+  if (answer.ok) return { kind: "ok", result: answer };
+  return { kind: "refused", error: answer };
+}
+
+/** The message a user sees after an uncertain attempt. */
+export const UNCERTAIN_MESSAGE = "The request did not get an answer. The room was refreshed; if your change is not there, try again — a retry reuses the same request and cannot double-apply.";
 
 /**
  * Polls the room version while the tab is visible and calls onChange when it

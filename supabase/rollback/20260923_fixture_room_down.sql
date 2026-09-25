@@ -35,6 +35,7 @@ drop function if exists public.reopen_fixture_term(uuid, uuid, text, integer, te
 drop function if exists public.accept_fixture_proposal(uuid, uuid, integer, text, uuid, uuid);
 drop function if exists public.withdraw_fixture_proposal(uuid, uuid, integer, text, uuid, uuid);
 drop function if exists public.submit_fixture_proposal(uuid, uuid, jsonb, text, boolean, integer, integer, text, uuid, uuid);
+drop function if exists public.respond_fixture_invitation(uuid, boolean, integer, text, uuid);
 drop function if exists public.respond_fixture_invitation(uuid, boolean, integer, text);
 drop function if exists public.invite_fixture_party(uuid, text, text, uuid, uuid, integer, text, uuid);
 drop function if exists public.create_fixture_room(uuid, uuid, jsonb, text, jsonb);
@@ -53,6 +54,7 @@ drop function if exists public.fn_fixture_proposal_json(public.fixture_proposals
 -- ── helpers (20260923201000) ────────────────────────────────────────────────
 drop function if exists public.fn_fixture_recap_text(jsonb);
 drop function if exists public.fn_fixture_recap_build(public.fixture_rooms);
+drop function if exists public.fn_fixture_listing_sync(public.fixture_rooms, boolean);
 drop function if exists public.fn_fixture_listing_sync(public.fixture_rooms);
 drop function if exists public.fn_fixture_capabilities(public.fixture_rooms, public.fixture_parties[], boolean, uuid[]);
 drop function if exists public.fn_fixture_event_json(public.fixture_events, jsonb, boolean);
@@ -72,9 +74,12 @@ drop function if exists public.fn_fixture_actor_parties(uuid);
 drop function if exists public.fn_fixture_resolve_counterparty(text, uuid);
 drop function if exists public.fn_fixture_snapshot_vessel(uuid);
 drop function if exists public.fn_fixture_snapshot_cargo(uuid);
+drop function if exists public.fn_fixture_term_catalogue(text);
 drop function if exists public.fn_fixture_listing_live(text, uuid);
 drop function if exists public.fn_fixture_owns_listing(text, uuid);
+drop function if exists public.fn_fixture_listing_owner(text, uuid);
 drop function if exists public.fn_fixture_tier_ok();
+drop function if exists public.fn_fixture_member_org_ids(uuid);
 drop function if exists public.fn_fixture_active_org(uuid);
 drop function if exists public.fn_fixture_user_from_auth(uuid);
 drop function if exists public.fn_fixture_actor();

@@ -7,6 +7,7 @@
 // retries, so a retried request replays instead of repeating.
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { parseFixtureError, type FixtureError } from "@/lib/fixture-room/errors";
+import { FIXTURE_TERM_CATALOGUE_VERSION } from "@/lib/fixture-room/terms";
 import type {
   FixtureCloseReason, FixtureCommandOk, FixtureRoomListItem, FixtureRoomStatus, FixtureRoomView, FixtureTermFlag, FixtureTermInput, FixtureValue,
 } from "@/lib/fixture-room/types";
@@ -64,13 +65,15 @@ export async function listFixtureRooms(supabase: SupabaseClient, statuses?: Fixt
 }
 
 // ── commands ────────────────────────────────────────────────────────────────
-export function createFixtureRoom(supabase: SupabaseClient, input: { cargoListingId: string; vesselAvailabilityId: string; terms: readonly FixtureTermInput[]; idempotencyKey: string }) {
+// The catalogue version is named explicitly: the database verifies the terms
+// against exactly that versioned sheet and refuses any deviation (FR-H2).
+export function createFixtureRoom(supabase: SupabaseClient, input: { cargoListingId: string; vesselAvailabilityId: string; terms: readonly FixtureTermInput[]; idempotencyKey: string; catalogueVersion?: string }) {
   return command<{ roomId: string; ref: string; status: FixtureRoomStatus }>(supabase, "create_fixture_room", {
     p_cargo_listing_id: input.cargoListingId,
     p_vessel_availability_id: input.vesselAvailabilityId,
     p_terms: input.terms,
     p_idempotency_key: input.idempotencyKey,
-    p_options: {},
+    p_options: { catalogueVersion: input.catalogueVersion ?? FIXTURE_TERM_CATALOGUE_VERSION },
   });
 }
 
@@ -80,9 +83,10 @@ export function inviteFixtureParty(supabase: SupabaseClient, input: CommandBase 
   });
 }
 
-export function respondFixtureInvitation(supabase: SupabaseClient, input: { roomId: string; accept: boolean; expectedVersion: number; idempotencyKey: string }) {
+export function respondFixtureInvitation(supabase: SupabaseClient, input: { roomId: string; accept: boolean; expectedVersion: number; idempotencyKey: string; partyId?: string | null }) {
   return command<{ partyId: string; status: string }>(supabase, "respond_fixture_invitation", {
     p_room_id: input.roomId, p_accept: input.accept, p_expected_version: input.expectedVersion, p_idempotency_key: input.idempotencyKey,
+    p_party_id: input.partyId ?? null,
   });
 }
 

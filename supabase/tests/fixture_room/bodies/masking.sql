@@ -70,17 +70,62 @@ begin
   if r->'snapshot'->'vessel'->'vessel'->>'vessel_name' <> 'TBN' or (r->'snapshot'->'vessel'->'vessel'->>'imo_number') is not null or (r->'snapshot'->>'vesselIdentityMasked')::boolean is not true then
     raise exception 'M3: charterer must see TBN: %', r->'snapshot'->'vessel'->'vessel'; end if;
   if r::text like '%SEED TBN HULL%' then raise exception 'M3: TBN hull name leaked'; end if;
+  -- the stable identifiers are the vessel's identity too (FR-H3): none on the room, the snapshot, the listing-sync view or any event payload
+  if (r->'room'->>'vesselId') is not null or (r->'snapshot'->'vessel'->'vessel'->>'id') is not null or (r->'snapshot'->'vessel'->'availability'->>'vessel_id') is not null then
+    raise exception 'M3: a stable vessel identifier reached the cargo side: room.vesselId=% vessel.id=% availability.vessel_id=%',
+      r->'room'->>'vesselId', r->'snapshot'->'vessel'->'vessel'->>'id', r->'snapshot'->'vessel'->'availability'->>'vessel_id'; end if;
+  if r::text like '%' || pg_temp.fx_id('v3')::text || '%' then raise exception 'M3: the TBN vessel id is somewhere in the cargo-side payload'; end if;
   if (select x->'vessel'->>'name' from jsonb_array_elements(public.list_fixture_rooms(null, 50)) x where x->>'id' = v_room::text) <> 'TBN' then raise exception 'M3: inbox must mask TBN too'; end if;
+  if public.list_fixture_rooms(null, 50)::text like '%' || pg_temp.fx_id('v3')::text || '%' then raise exception 'M3: the TBN vessel id is in the inbox payload'; end if;
   perform pg_temp.fx_as('u_ow1');
   v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'mask-tbn-accept');
   r := public.get_fixture_room(v_room);
   if r->'snapshot'->'vessel'->'vessel'->>'vessel_name' <> 'SEED TBN HULL' then raise exception 'M3: the owner sees its own hull'; end if;
+  if (r->'room'->>'vesselId')::uuid is distinct from pg_temp.fx_id('v3') or (r->'snapshot'->'vessel'->'vessel'->>'id')::uuid is distinct from pg_temp.fx_id('v3') then
+    raise exception 'M3: the owner must see its own vessel identifiers: %', r->'room'; end if;
+  -- on subjects the listing-sync view exists: the cargo side gets no vessel id there either
   v := public.agree_fixture_disclosure(v_room, pg_temp.fx_ver(v_room), 'mask-tbn-disc-ow');
   perform pg_temp.fx_as('u_ch1');
+  r := public.get_fixture_room(v_room);
+  if (r->'room'->>'vesselId') is not null then raise exception 'M3: one side agreeing must not reveal the vessel id'; end if;
   v := public.agree_fixture_disclosure(v_room, pg_temp.fx_ver(v_room), 'mask-tbn-disc-ch');
   r := public.get_fixture_room(v_room);
   if r->'snapshot'->'vessel'->'vessel'->>'vessel_name' <> 'SEED TBN HULL' then raise exception 'M3: disclosure must reveal the hull'; end if;
-  raise notice 'M3 ok: TBN masked from the cargo side (room and inbox) until disclosure; the owner always sees its hull';
+  if (r->'room'->>'vesselId')::uuid is distinct from pg_temp.fx_id('v3') or (r->'snapshot'->'vessel'->'availability'->>'vessel_id')::uuid is distinct from pg_temp.fx_id('v3') then
+    raise exception 'M3: disclosure must reveal the vessel identifiers: %', r->'room'; end if;
+  raise notice 'M3 ok: TBN name, IMO and every stable identifier masked from the cargo side (room, snapshot, inbox, events) until disclosure; the owner always sees its hull';
+end $$;
+
+-- ── M3b · a masked TBN room on subjects: the listing-sync view carries no vessel id for the cargo side ─
+do $$
+declare v jsonb; r jsonb; v_room uuid; v_tid uuid; v_pid uuid; v_code text;
+begin
+  perform pg_temp.fx_as('u_ow1');
+  v := public.create_fixture_room(pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'mask-create-tbn-c2', '{}'::jsonb);
+  v_room := (v->'data'->>'roomId')::uuid;
+  perform pg_temp.fx_as('u_t1');
+  v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'mask-tbn-c2-accept');
+  foreach v_code in array array['cargo_grade', 'quantity', 'ports', 'laycan', 'ld_rates', 'freight'] loop
+    v_tid := pg_temp.fx_term(v_room, v_code);
+    perform pg_temp.fx_as('u_ow1');
+    v := public.submit_fixture_proposal(v_room, v_tid, pg_temp.fx_value(v_code), null, false, null, pg_temp.fx_ver(v_room), 'mask-tbn-c2-offer-' || v_code);
+    v_pid := (v->'data'->>'proposalId')::uuid;
+    perform pg_temp.fx_as('u_t1');
+    v := public.accept_fixture_proposal(v_room, v_pid, pg_temp.fx_ver(v_room), 'mask-tbn-c2-accept-' || v_code);
+  end loop;
+  perform pg_temp.fx_as('u_ow1');
+  v := public.add_fixture_subject(v_room, 'Sub owners'' approval', null, 'vessel', null, pg_temp.fx_ver(v_room), 'mask-tbn-c2-sub');
+  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'mask-tbn-c2-fix');
+  perform pg_temp.fx_as('u_t1');
+  r := public.get_fixture_room(v_room);
+  if (r->'snapshot'->>'vesselIdentityMasked')::boolean is not true or (r->'room'->'listingSync'->>'outstanding')::boolean is not true then raise exception 'M3b: masked room on subjects expected: %', r->'room'; end if;
+  if (r->'room'->'listingSync'->'vessel'->>'vesselId') is not null or (r->'room'->>'vesselId') is not null then
+    raise exception 'M3b: the listing-sync view leaked the vessel id to the cargo side: %', r->'room'->'listingSync'; end if;
+  if r::text like '%' || pg_temp.fx_id('v3')::text || '%' then raise exception 'M3b: the TBN vessel id is in the payload'; end if;
+  perform pg_temp.fx_as('u_ow1');
+  r := public.get_fixture_room(v_room);
+  if (r->'room'->'listingSync'->'vessel'->>'vesselId')::uuid is distinct from pg_temp.fx_id('v3') then raise exception 'M3b: the owner needs the vessel id to open its own position: %', r->'room'->'listingSync'; end if;
+  raise notice 'M3b ok: on subjects the cargo side sees the sync requirement without the vessel id; the owner side keeps it';
 end $$;
 
 -- ── M4 · message visibility and redaction; relayed contact never exposes email ─

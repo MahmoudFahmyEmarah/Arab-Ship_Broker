@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { loadViewerContext } from "@/lib/portal/data";
-import { isLimitedTier } from "@/lib/portal/tier-gate";
+import { loadFixtureViewer } from "@/lib/fixture-room/viewer.server";
 import { RoomInbox } from "@/components/fixture-room/RoomInbox";
 import { FixtureLocked } from "@/components/fixture-room/FixtureLocked";
 import { loadFixtureRooms } from "./actions";
@@ -11,14 +10,16 @@ export const metadata = { title: "Fixture Room Arab ShipBroker" };
 export const dynamic = "force-dynamic";
 
 // The inbox: every room the signed-in member is a party to (admins see all,
-// audited). Creation is T3+ (decision D3); participation is by invitation,
-// so a limited-tier member with rooms still sees them.
+// audited). Creation follows decision D3 through canUseFixtureRoom (T3+,
+// market partner or admin — the same rule as fn_fixture_tier_ok);
+// participation is by invitation, so a limited-tier member with rooms still
+// sees them.
 export default async function FixtureRoomInboxPage() {
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
-  const { tier, role } = await loadViewerContext();
-  const canCreate = role === "admin" || !isLimitedTier(tier);
+  const viewer = await loadFixtureViewer(supabase, user.id);
+  const canCreate = viewer.canCreate;
   const rooms = await loadFixtureRooms({ limit: 100 });
   if (!Array.isArray(rooms)) {
     return (
@@ -31,5 +32,5 @@ export default async function FixtureRoomInboxPage() {
     );
   }
   if (!canCreate && rooms.length === 0) return <FixtureLocked />;
-  return <RoomInbox rooms={rooms} canCreate={canCreate} isAdmin={role === "admin"} />;
+  return <RoomInbox rooms={rooms} canCreate={canCreate} isAdmin={viewer.isAdmin} />;
 }

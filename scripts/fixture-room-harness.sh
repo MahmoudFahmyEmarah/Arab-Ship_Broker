@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Fixture Room · migration and smoke harness (23 Sep 2026).
 #
-#   scripts/fixture-room-harness.sh [--target local|linked] [--no-down] [--reapply]
+#   scripts/fixture-room-harness.sh [--target local|linked] [--no-down] [--reapply] [--from-applied]
 #
+# 0. checks the starting state (audit FR-L2): the baseline fingerprint must be
+#    taken WITHOUT the module, otherwise the forward chain is a no-op, the
+#    DOWN removes the module and the comparison reports a false failure. When
+#    the module is present the run refuses, unless --from-applied is given,
+#    in which case the DOWN runs first (rooms are kept as *_bak tables);
 # 1. assembles the self-contained smoke files from the shared seed and the
 #    bodies (supabase/tests/fixture_room/bodies/*.sql), so the seed in every
 #    smoke is byte-identical to seed_fixture_shape.sql;
@@ -23,12 +28,13 @@
 set -uo pipefail
 RESIDUE='(pda_|tariff|_pda|_bak_20260923200000)'
 cd "$(dirname "$0")/.."
-TARGET=local; DOWN=1; REAPPLY=0
+TARGET=local; DOWN=1; REAPPLY=0; FROM_APPLIED=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --target) TARGET="$2"; shift 2;;
     --no-down) DOWN=0; shift;;
     --reapply) REAPPLY=1; shift;;
+    --from-applied) FROM_APPLIED=1; shift;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
 done
@@ -42,6 +48,25 @@ CHAIN=(
   "$M/20260923203000_fixture_room_commands.sql"
 )
 DOWNS=("supabase/rollback/20260923_fixture_room_down.sql")
+
+# ── 0 · starting state (FR-L2) ──────────────────────────────────────────────
+if [ "$TARGET" = local ]; then
+  PSQL0="${HARNESS_PSQL:-docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres}"
+  applied=$($PSQL0 -At -c "select (to_regclass('public.fixture_rooms') is not null) or exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'fn_fixture_actor')" 2>/dev/null | tr -d '[:space:]')
+  if [ "$applied" = t ]; then
+    if [ $FROM_APPLIED = 1 ]; then
+      echo "module present at the baseline: applying the DOWN first (--from-applied)"
+      $PSQL0 -v ON_ERROR_STOP=1 -q -1 -f - < "${DOWNS[0]}" > /dev/null || { echo " FAIL  the DOWN did not complete"; exit 1; }
+    else
+      echo " STOP  the Fixture Room module is already applied on the local database."
+      echo "       The harness needs a baseline WITHOUT it: otherwise the forward chain is a no-op,"
+      echo "       the DOWN removes the module and the fingerprint comparison reports a false failure."
+      echo "       Run again with --from-applied to roll it back first (rooms are kept as *_bak tables),"
+      echo "       or apply supabase/rollback/20260923_fixture_room_down.sql yourself."
+      exit 2
+    fi
+  fi
+fi
 
 # ── 1 · assemble the smoke files ────────────────────────────────────────────
 declare -A MARK=(

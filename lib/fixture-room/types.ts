@@ -226,7 +226,8 @@ export interface FixtureListingSyncSide {
 export interface FixtureListingSync {
   requiredAt: string | null;
   cargo: FixtureListingSyncSide & { listingId: string };
-  vessel: FixtureListingSyncSide & { availabilityId: string; vesselId: string };
+  /** vesselId is null for a viewer the vessel identity is masked from (a TBN vessel seen from the cargo side). */
+  vessel: FixtureListingSyncSide & { availabilityId: string; vesselId: string | null };
   outstanding: boolean;
 }
 
@@ -238,7 +239,10 @@ export interface FixtureRoomHeader {
   mediation: "platform" | "member";
   cargoListingId: string;
   vesselAvailabilityId: string;
-  vesselId: string;
+  /** Null while the vessel identity is masked from this viewer (snapshot.vesselIdentityMasked). */
+  vesselId: string | null;
+  /** The versioned term sheet the room was opened on (fn_fixture_term_catalogue). */
+  termCatalogueVersion: string;
   createdAt: string;
   updatedAt: string;
   fixedOnSubsAt: string | null;

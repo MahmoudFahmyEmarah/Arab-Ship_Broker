@@ -11,10 +11,14 @@
 --     disclosure; afterwards its trade / organisation name and desk label —
 --     never a person's name, email or phone (decision D2);
 --   · raw org / user / contact ids are returned to admins only;
---   · a TBN vessel's name and IMO are withheld from the cargo side until
---     disclosure;
+--   · a TBN vessel's name, IMO and stable identifiers (vessel id on the room,
+--     the snapshot and the listing-sync view) are withheld from the cargo
+--     side until disclosure — the vessel IS the counterparty's identity;
 --   · side-private and mediator-private messages are filtered by side.
--- Every admin read writes fixture_access_log (durable, never pruned).
+-- Every CONTENT-BEARING admin read (get_fixture_room, list_fixture_rooms)
+-- writes fixture_access_log (durable, never pruned). The five-second version
+-- poll (get_fixture_room_version) returns one integer and is not logged: a
+-- row per poll would be volume without evidence (audit FR-L1 boundary).
 --
 -- Idempotent. DOWN: supabase/rollback/20260923_fixture_room_down.sql
 -- ════════════════════════════════════════════════════════════════════════
@@ -100,6 +104,8 @@ begin
   v_mask_vessel := v_tbn and not (v_unmasked or v_disclosed or coalesce(v_side, '') in ('vessel', 'mediator'));
   if v_mask_vessel then
     v_vessel := jsonb_set(jsonb_set(v_vessel, '{vessel,vessel_name}', '"TBN"'::jsonb), '{vessel,imo_number}', 'null'::jsonb);
+    -- the stable identifiers are the vessel's identity too (audit FR-H3)
+    v_vessel := jsonb_set(jsonb_set(v_vessel, '{vessel,id}', 'null'::jsonb), '{availability,vessel_id}', 'null'::jsonb);
   end if;
 
   select coalesce(jsonb_agg(public.fn_fixture_party_json(p, v_party_ids, v_side, v_disclosed, v_unmasked)
@@ -188,14 +194,16 @@ begin
 
   v_room := jsonb_build_object(
     'id', r.id, 'ref', r.ref, 'status', r.status, 'version', r.version, 'mediation', r.mediation,
-    'cargoListingId', r.cargo_listing_id, 'vesselAvailabilityId', r.vessel_availability_id, 'vesselId', r.vessel_id,
+    'cargoListingId', r.cargo_listing_id, 'vesselAvailabilityId', r.vessel_availability_id,
+    'vesselId', case when v_mask_vessel then null else r.vessel_id end,
+    'termCatalogueVersion', r.term_catalogue_version,
     'createdAt', r.created_at, 'updatedAt', r.updated_at,
     'fixedOnSubsAt', r.fixed_on_subs_at, 'fixedAt', r.fixed_at,
     'closedAt', r.closed_at, 'closedReason', r.closed_reason, 'closedNote', r.closed_note,
     'counterpartyDisclosed', v_disclosed, 'counterpartyDisclosedAt', r.counterparty_disclosed_at,
     'negotiationWindowEndsAt', r.negotiation_window_ends_at, 'supersedesRoomId', r.supersedes_room_id,
     'snapshotAt', r.snapshot_at, 'snapshotHash', r.snapshot_hash, 'brokerageTerms', r.brokerage_terms_snapshot,
-    'listingSync', public.fn_fixture_listing_sync(r), 'serverNow', now());
+    'listingSync', public.fn_fixture_listing_sync(r, v_mask_vessel), 'serverNow', now());
   if v_unmasked then
     v_room := v_room || jsonb_build_object('createdByUserId', r.created_by_user_id, 'createdByPartyId', r.created_by_party_id,
                                            'closedByUserId', r.closed_by_user_id, 'createIdempotencyKey', r.create_idempotency_key);
@@ -219,7 +227,7 @@ declare v_actor uuid; v_admin boolean; v_orgs uuid[]; v_out jsonb;
 begin
   v_actor := public.fn_fixture_actor();
   v_admin := public.fn_is_admin();
-  v_orgs := public.fn_my_org_ids();
+  v_orgs := public.fn_fixture_member_org_ids();
   if v_admin then
     insert into public.fixture_access_log (room_id, user_id, is_admin, reason) values (null, v_actor, true, 'list');
   end if;

@@ -31,6 +31,11 @@ insert into fx_ids (k, v) values
   ('u_solo',  '00000000-0000-4000-8000-0000000000a6'),
   ('u_pend',  '00000000-0000-4000-8000-0000000000a7'),
   ('u_t1',    '00000000-0000-4000-8000-0000000000a8'),
+  ('u_two',   '00000000-0000-4000-8000-0000000000a9'),
+  ('u_pendcur','00000000-0000-4000-8000-0000000000aa'),
+  ('org_two', '00000000-0000-4000-8000-0000000000c4'),
+  ('org_x',   '00000000-0000-4000-8000-0000000000c5'),
+  ('c5',      '00000000-0000-4000-8000-0000000000e5'),
   ('contact', '00000000-0000-4000-8000-0000000000d1'),
   ('c1',      '00000000-0000-4000-8000-0000000000e1'),
   ('c2',      '00000000-0000-4000-8000-0000000000e2'),
@@ -99,6 +104,34 @@ create or replace function pg_temp.fx_terms() returns jsonb language sql immutab
   {"code":"laycan","label":"Laycan","category":"timing","sortOrder":4,"valueKind":"date_range","required":true},
   {"code":"ld_rates","label":"Load / discharge rates","category":"operations","sortOrder":5,"valueKind":"rate_pair","unit":"MT/day","required":true},
   {"code":"freight","label":"Freight & terms","category":"money","sortOrder":6,"valueKind":"money_per_mt","unit":"USD/MT","required":true}]$j$::jsonb $f$;
+-- the catalogue with one deviation, for the FR-H2 negatives (every one must be refused)
+create or replace function pg_temp.fx_terms_mut(p_op text) returns jsonb language plpgsql immutable as $f$
+declare c jsonb := pg_temp.fx_terms(); o jsonb := '[]'::jsonb; t jsonb;
+begin
+  for t in select * from jsonb_array_elements(c) loop
+    if p_op = 'missing' and t->>'code' = 'quantity' then continue; end if;
+    if p_op = 'relabelled' and t->>'code' = 'freight' then t := t || '{"label":"Freight"}'::jsonb; end if;
+    if p_op = 'retyped' and t->>'code' = 'quantity' then t := t || '{"valueKind":"text"}'::jsonb; end if;
+    if p_op = 'optionalised' and t->>'code' = 'laycan' then t := t || '{"required":false}'::jsonb; end if;
+    if p_op = 'reordered' and t->>'code' = 'ports' then t := t || '{"sortOrder":4}'::jsonb; end if;
+    if p_op = 'recategorised' and t->>'code' = 'ports' then t := t || '{"category":"money"}'::jsonb; end if;
+    if p_op = 'reunited' and t->>'code' = 'quantity' then t := t || '{"unit":"kg"}'::jsonb; end if;
+    if p_op = 'renamed' and t->>'code' = 'ld_rates' then t := t || '{"code":"rates"}'::jsonb; end if;
+    if p_op = 'unrequired' and t->>'code' = 'laycan' then t := t - 'required'; end if;
+    o := o || t;
+  end loop;
+  if p_op = 'extra' then o := o || '{"code":"demurrage","label":"Demurrage","category":"money","sortOrder":7,"valueKind":"number","required":true}'::jsonb; end if;
+  if p_op = 'duplicate' then o := o || (c->0); end if;
+  return o;
+end $f$;
+-- owner-level peek: the latest non-terminal room of a pairing (refs are monotonic; created_at is the transaction time)
+create or replace function pg_temp.fx_room(p_cargo uuid, p_avail uuid) returns uuid language sql stable security definer as $f$
+  select id from public.fixture_rooms where cargo_listing_id = p_cargo and vessel_availability_id = p_avail
+     and status not in ('withdrawn', 'failed', 'expired') order by ref desc limit 1 $f$;
+-- owner-level peek: the identity a principal party was recorded with
+create or replace function pg_temp.fx_party_identity(p_room uuid, p_side text) returns jsonb language sql stable security definer as $f$
+  select jsonb_build_object('org_id', org_id, 'user_id', user_id, 'mode', participation_mode) from public.fixture_parties
+   where room_id = p_room and side = p_side and capacity = 'principal' and status in ('invited', 'active') order by created_at limit 1 $f$;
 -- one agreeable value per term code
 create or replace function pg_temp.fx_value(p_code text) returns jsonb language sql immutable as $f$
   select ($j${"cargo_grade":{"text":"Wheat in bulk, 2026 crop"},"quantity":{"num":26000},
@@ -114,7 +147,9 @@ on conflict (id) do nothing;
 insert into public.organizations (id, name, org_type, desk_contact_name, desk_email, desk_phone, country, fleet_total) values
   (pg_temp.fx_id('org_ch'),  'Seed Charterers Ltd', 'charterer', 'Chartering Desk', 'desk@seed-charterers.test', '+20 100 000 0001', 'Egypt', null),
   (pg_temp.fx_id('org_ow'),  'Seed Owners SA',      'owner',     'Owner''s Desk',   'desk@seed-owners.test',     '+30 210 000 0002', 'Greece', 7),
-  (pg_temp.fx_id('org_out'), 'Seed Outsiders LLC',  'broker',    'Outsider Desk',   'desk@seed-outsiders.test',  null,               'UAE', null)
+  (pg_temp.fx_id('org_out'), 'Seed Outsiders LLC',  'broker',    'Outsider Desk',   'desk@seed-outsiders.test',  null,               'UAE', null),
+  (pg_temp.fx_id('org_two'), 'Seed Second Org',     'charterer', 'Second Desk',     'desk@seed-second.test',     null,               'Egypt', null),
+  (pg_temp.fx_id('org_x'),   'Seed Unrelated Co',   'broker',    'Unrelated Desk',  'desk@seed-unrelated.test',  null,               'Greece', null)
 on conflict do nothing;
 
 insert into public.users (id, supabase_user_id, email, full_name, company, role, subscription_tier, is_active) values
@@ -125,15 +160,27 @@ insert into public.users (id, supabase_user_id, email, full_name, company, role,
   (pg_temp.fx_id('u_adm'),  pg_temp.fx_id('u_adm'),  'u_adm@fixture.test',  'Seed Admin',         'Arab ShipBroker',     'admin',        'T4', true),
   (pg_temp.fx_id('u_solo'), pg_temp.fx_id('u_solo'), 'u_solo@fixture.test', 'Seed Solo Owner',    'Solo Shipping',       'vessel_owner', 'T3', true),
   (pg_temp.fx_id('u_pend'), pg_temp.fx_id('u_pend'), 'u_pend@fixture.test', 'Seed Pending',       'Seed Owners SA',      'vessel_owner', 'T3', true),
-  (pg_temp.fx_id('u_t1'),   pg_temp.fx_id('u_t1'),   'u_t1@fixture.test',   'Seed Tier One',      'Tier One Trading',    'cargo_owner',  'T1', true)
+  (pg_temp.fx_id('u_t1'),   pg_temp.fx_id('u_t1'),   'u_t1@fixture.test',   'Seed Tier One',      'Tier One Trading',    'cargo_owner',  'T1', true),
+  (pg_temp.fx_id('u_two'),  pg_temp.fx_id('u_two'),  'u_two@fixture.test',  'Seed Two Seats',     'Seed Second Org',     'cargo_owner',  'T3', true),
+  (pg_temp.fx_id('u_pendcur'), pg_temp.fx_id('u_pendcur'), 'u_pendcur@fixture.test', 'Seed Pending Current', 'Seed Owners SA', 'vessel_owner', 'T3', true)
 on conflict (id) do nothing;
 
+-- Seats. u_two holds two ACTIVE seats (admin in org_ch first, broker in
+-- org_two second) and owns C5 through org_two: a seat-guessing rule would
+-- pick org_ch (FR-H1). u_solo owns A4 personally and sits in an unrelated
+-- organisation (org_x): the party must be the member, never that seat.
+-- u_pend is pending and not current; u_pendcur is pending AND current, the
+-- legacy shape the Phase 0 review requires to be refused (FR-M1).
 insert into public.organization_members (org_id, user_id, member_role, is_current, status) values
   (pg_temp.fx_id('org_ch'),  pg_temp.fx_id('u_ch1'),  'admin',  true,  'active'),
   (pg_temp.fx_id('org_ch'),  pg_temp.fx_id('u_ch2'),  'broker', true,  'active'),
   (pg_temp.fx_id('org_ow'),  pg_temp.fx_id('u_ow1'),  'admin',  true,  'active'),
   (pg_temp.fx_id('org_out'), pg_temp.fx_id('u_out'),  'admin',  true,  'active'),
-  (pg_temp.fx_id('org_ow'),  pg_temp.fx_id('u_pend'), 'broker', false, 'pending')
+  (pg_temp.fx_id('org_ow'),  pg_temp.fx_id('u_pend'), 'broker', false, 'pending'),
+  (pg_temp.fx_id('org_ch'),  pg_temp.fx_id('u_two'),  'admin',  true,  'active'),
+  (pg_temp.fx_id('org_two'), pg_temp.fx_id('u_two'),  'broker', true,  'active'),
+  (pg_temp.fx_id('org_x'),   pg_temp.fx_id('u_solo'), 'admin',  true,  'active'),
+  (pg_temp.fx_id('org_ow'),  pg_temp.fx_id('u_pendcur'), 'broker', true, 'pending')
 on conflict do nothing;
 
 insert into public.contacts (id, kind, display_name, email, phone, role, source) values
@@ -160,7 +207,10 @@ insert into public.cargo_listings (id, ref, status, review_status, cargo_type, c
    '9000', '7000', 'FIOST', 18.00, 2.5, 11000, null, null, null),
   (pg_temp.fx_id('c4'), 'FXC-004', 'IN', 'APPROVED', 'Break Bulk', 'Steel coils', false, false, 12000, 13000, null,
    'ZZFXA', 'Fixture Load Port', 'E.MED', 'ZZFXB', 'Fixture Disch Port', 'E.MED', current_date + 8, current_date + 18, false,
-   '3000', '3000', 'FIOST', 31.00, 2.5, 15000, 'Seed Brokers Desk', 'desk@seed-brokers.test', pg_temp.fx_id('contact'))
+   '3000', '3000', 'FIOST', 31.00, 2.5, 15000, 'Seed Brokers Desk', 'desk@seed-brokers.test', pg_temp.fx_id('contact')),
+  (pg_temp.fx_id('c5'), 'FXC-005', 'IN', 'APPROVED', 'Dry Bulk', 'Corn', false, true, 24000, 26000, 1.30,
+   'ZZFXA', 'Fixture Load Port', 'E.MED', 'ZZFXB', 'Fixture Disch Port', 'E.MED', current_date + 11, current_date + 21, false,
+   '8000', '6000', 'FIOST', 23.00, 2.5, 11500, null, null, null)
 on conflict (id) do nothing;
 
 insert into public.vessels (id, vessel_name, imo_number, vessel_type, dwt_grain, build_year, flag, is_geared, grain_certified, dg_certified,
@@ -184,6 +234,7 @@ insert into public.listing_ownership (listing_type, listing_id, owner_user_id, o
   ('cargo', pg_temp.fx_id('c1'), pg_temp.fx_id('u_ch1'), pg_temp.fx_id('org_ch'), 'primary', true, 'initial_post'),
   ('cargo', pg_temp.fx_id('c2'), pg_temp.fx_id('u_t1'),  null,                    'primary', true, 'initial_post'),
   ('cargo', pg_temp.fx_id('c3'), pg_temp.fx_id('u_adm'), null,                    'primary', true, 'initial_post'),
+  ('cargo', pg_temp.fx_id('c5'), pg_temp.fx_id('u_two'), pg_temp.fx_id('org_two'), 'primary', true, 'initial_post'),
   ('vessel_availability', pg_temp.fx_id('a1'), pg_temp.fx_id('u_ow1'),  pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post'),
   ('vessel_availability', pg_temp.fx_id('a2'), pg_temp.fx_id('u_ow1'),  pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post'),
   ('vessel_availability', pg_temp.fx_id('a3'), pg_temp.fx_id('u_ow1'),  pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post'),

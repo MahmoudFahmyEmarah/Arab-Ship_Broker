@@ -54,3 +54,40 @@ begin
   if (w->>'replayed')::boolean is not true or w->'data'->>'roomId' <> v_room::text then raise exception 'I2: create replay %', w; end if;
   raise notice 'I2 ok: a two-event command replays at its final version with its original result; create replays the room';
 end $$;
+
+-- ── I3 · a lapse observation precedes the result-bearing event; the replay still returns the result (FR-M2) ─
+do $$
+declare v jsonb; w jsonb; v_room uuid; v_tid uuid; v_pid uuid; n1 bigint; n2 bigint; e text;
+begin
+  perform pg_temp.fx_as('u_ch1');
+  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
+  v_room := (v->'data'->>'roomId')::uuid;
+  perform pg_temp.fx_as('u_ow1');
+  v_tid := pg_temp.fx_term(v_room, 'ld_rates');
+  v := public.submit_fixture_proposal(v_room, v_tid, '{"load": 8000, "disch": 6000}'::jsonb, null, false, 1, pg_temp.fx_ver(v_room), 'idem-offer-rates-1');
+  v_pid := (v->'data'->>'proposalId')::uuid;
+  -- the one-minute offer lapses: now() is the transaction time, so the row is backdated as the table owner with
+  -- the append-only trigger switched off for that one statement (the suite is rolled back; nothing persists)
+  perform pg_temp.fx_owner();
+  execute 'alter table public.fixture_proposals disable trigger trg_fixture_proposals_immutable';
+  update public.fixture_proposals set expires_at = now() - interval '1 minute' where id = v_pid;
+  execute 'alter table public.fixture_proposals enable trigger trg_fixture_proposals_immutable';
+  -- the owner replaces it: proposal.lapsed (no result) precedes proposal.submitted (the result)
+  perform pg_temp.fx_as('u_ow1');
+  v := public.submit_fixture_proposal(v_room, v_tid, '{"load": 8500, "disch": 6500}'::jsonb, 'renewed', false, null, pg_temp.fx_ver(v_room), 'idem-offer-rates-2');
+  if pg_temp.fx_event_types(v_room) not like '%proposal.lapsed,proposal.submitted' then raise exception 'I3: ledger %', pg_temp.fx_event_types(v_room); end if;
+  if (v->>'version')::int <> pg_temp.fx_ver(v_room) then raise exception 'I3: the envelope must carry the final version'; end if;
+  n1 := pg_temp.fx_events(v_room);
+  -- the retry: same key and arguments, the stale expected_version a retried request carries
+  w := public.submit_fixture_proposal(v_room, v_tid, '{"load": 8500, "disch": 6500}'::jsonb, 'renewed', false, null, pg_temp.fx_ver(v_room) - 2, 'idem-offer-rates-2');
+  n2 := pg_temp.fx_events(v_room);
+  if (w->>'replayed')::boolean is not true then raise exception 'I3: retry must replay: %', w; end if;
+  if w->'data'->>'proposalId' <> v->'data'->>'proposalId' or w->'data'->>'displayValue' <> v->'data'->>'displayValue' then
+    raise exception 'I3: the replay must return the proposal result, not the lapse observation: % vs %', v, w; end if;
+  if (w->>'version')::int <> (v->>'version')::int or w->>'eventId' <> v->>'eventId' then raise exception 'I3: replay version / event id: % vs %', v, w; end if;
+  if n2 <> n1 then raise exception 'I3: the replay wrote % event(s)', n2 - n1; end if;
+  -- a reused key with other arguments is refused across the whole event group
+  e := pg_temp.fx_err(format('select public.submit_fixture_proposal(%L, %L, %L::jsonb, %L, false, null, %s, %L)', v_room, v_tid, '{"load": 9000, "disch": 6500}', 'renewed', pg_temp.fx_ver(v_room), 'idem-offer-rates-2'));
+  if e <> 'FX_IDEMPOTENCY_MISMATCH' then raise exception 'I3: reused key with other arguments must be FX_IDEMPOTENCY_MISMATCH, got %', e; end if;
+  raise notice 'I3 ok: with a lapse event ahead of the submission, the replay returns the submission result at the final version and writes nothing';
+end $$;

@@ -134,6 +134,15 @@ async function main() {
     const out = await signIn(url, anon, `fx-out-${stamp}@fixture.test`);
 
     console.log("1 · create through the API");
+    // the catalogue is verified server-side against the versioned sheet (FR-H2): a forged one is refused over the API
+    const two = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null).slice(0, 2), idempotencyKey: `int-forged-two-${stamp}` });
+    ok(two.ok === false && two.code === "VALIDATION", `a two-term catalogue is refused (${two.ok ? "accepted" : two.code})`);
+    const optional = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null).map((t) => ({ ...t, required: t.code === "laycan" ? false : t.required })), idempotencyKey: `int-forged-optional-${stamp}` });
+    ok(optional.ok === false && optional.code === "VALIDATION", `an optionalised term is refused (${optional.ok ? "accepted" : optional.code})`);
+    const relabelled = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null).map((t) => ({ ...t, label: t.code === "freight" ? "Freight" : t.label })), idempotencyKey: `int-forged-label-${stamp}` });
+    ok(relabelled.ok === false && relabelled.code === "VALIDATION", `a relabelled term is refused (${relabelled.ok ? "accepted" : relabelled.code})`);
+    const badVersion = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null), idempotencyKey: `int-forged-version-${stamp}`, catalogueVersion: "2026-01-01.v9" });
+    ok(badVersion.ok === false && badVersion.code === "VALIDATION", `an unknown catalogue version is refused (${badVersion.ok ? "accepted" : badVersion.code})`);
     const created = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null), idempotencyKey: `int-create-${stamp}` });
     ok(created.ok === true, `charterer creates a room (${created.ok ? created.data.ref : created.message})`);
     if (!created.ok) throw new Error("cannot continue");
@@ -150,6 +159,7 @@ async function main() {
     ok(!!events.error, "direct event-ledger read refused for a member");
     const view = await sdk.getFixtureRoom(ch, roomId);
     ok(view.room.status === "invited" && view.viewer.side === "cargo" && view.terms.length === 6, "charterer reads the masked room");
+    ok(view.room.termCatalogueVersion === "2026-09-23.v1" && view.terms.every((t) => t.required), "the room carries the catalogue version and six required terms");
     const ownerParty = view.parties.find((p) => p.side === "vessel" && p.capacity === "principal");
     ok(!!ownerParty && ownerParty.name === null && ownerParty.status === "invited" && !("orgId" in ownerParty), "owner is a label-only invited principal");
     ok(!JSON.stringify(view).includes(ids.orgOw) && !JSON.stringify(view).includes("+30 210"), "no owner org id or phone in the payload");

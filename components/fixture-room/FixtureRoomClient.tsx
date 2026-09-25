@@ -13,7 +13,7 @@ import type { FixtureError } from "@/lib/fixture-room/errors";
 import { FIXTURE_ERROR_TITLE, isFixtureError } from "@/lib/fixture-room/errors";
 import { ROOM_STATUS_LABEL, isTerminal, timelineSteps } from "@/lib/fixture-room/state-machine";
 import { listingSyncNotice } from "@/lib/fixture-room/listing-sync";
-import { newIdempotencyKey, useNow, useRoomVersionPoll } from "@/lib/fixture-room/client";
+import { GestureKeys, UNCERTAIN_MESSAGE, runGesture, useNow, useRoomVersionPoll } from "@/lib/fixture-room/client";
 import { relativeTime } from "@/lib/fixture-room/format";
 import {
   acceptFixtureProposalAction, acknowledgeFixtureRecapAction, addFixtureSubjectAction, agreeFixtureDisclosureAction, closeFixtureRoomAction,
@@ -55,8 +55,11 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   const [activeTermId, setActiveTermId] = React.useState<string | null>(() => initial.terms.find((t) => t.status !== "agreed")?.id ?? initial.terms[0]?.id ?? null);
   const [actFor, setActFor] = React.useState<string | null>(null);
   const [confirmWithdraw, setConfirmWithdraw] = React.useState(false);
+  const [inviteParty, setInviteParty] = React.useState<string | null>(null);
   const now = useNow();
   const roomId = view.room.id;
+  // one idempotency key per gesture, kept until the server has answered (audit FR-M5)
+  const keys = React.useMemo(() => new GestureKeys(), []);
 
   const refetch = React.useCallback(async (): Promise<FixtureRoomView | null> => {
     const v = await loadFixtureRoom(roomId);
@@ -77,31 +80,40 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
     if (busy) return false;
     setBusy(true);
     setConflict(null);
-    const key = newIdempotencyKey();
     try {
-      const args = build({ roomId, expectedVersion: view.room.version, idempotencyKey: key });
-      const res = await (ACTIONS[name] as (input: unknown) => Promise<{ ok: true; replayed: boolean; version: number } | FixtureError>)(args);
-      if (res.ok) {
-        const v = await refetch();
-        setAnnounce(`Done. Room is at version ${res.version}.`);
+      // the gesture is the command plus its own arguments (never the version or the key):
+      // a retry of the same gesture reuses the key and replays; a different gesture gets its own
+      const probe = build({ roomId, expectedVersion: 0, idempotencyKey: "" });
+      const gesture = `${name}:${JSON.stringify({ ...probe, expectedVersion: undefined, idempotencyKey: undefined })}`;
+      const outcome = await runGesture(keys, gesture, (idempotencyKey) =>
+        (ACTIONS[name] as (input: unknown) => Promise<{ ok: true; replayed: boolean; version: number } | FixtureError>)(
+          build({ roomId, expectedVersion: view.room.version, idempotencyKey }),
+        ));
+      if (outcome.kind === "ok") {
+        const v = await refetch().catch(() => null);
+        setAnnounce(`Done. Room is at version ${outcome.result.version}.`);
         if (name === "fix" && v?.room.status === "fixed") toast.success("Clean fixed");
         return true;
       }
-      if (res.code === "VERSION_CONFLICT") {
-        await refetch();
-        setConflict(`${res.message} The room was refreshed; review the latest positions and try again.`);
-        setAnnounce("The room moved on; it was refreshed.");
+      if (outcome.kind === "refused") {
+        if (outcome.error.code === "VERSION_CONFLICT") {
+          await refetch().catch(() => null);
+          setConflict(`${outcome.error.message} The room was refreshed; review the latest positions and try again.`);
+          setAnnounce("The room moved on; it was refreshed.");
+          return false;
+        }
+        toast.error(`${FIXTURE_ERROR_TITLE[outcome.error.code]}: ${outcome.error.message}`);
         return false;
       }
-      toast.error(`${FIXTURE_ERROR_TITLE[res.code]}: ${res.message}`);
-      return false;
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "The request failed. Nothing was changed.");
+      // uncertain: no answer arrived, the server may have committed; the key is kept so a retry replays
+      await refetch().catch(() => null);
+      toast.error(UNCERTAIN_MESSAGE);
+      setAnnounce("No answer from the server; the room was refreshed.");
       return false;
     } finally {
       setBusy(false);
     }
-  }, [busy, roomId, view.room.version, refetch]);
+  }, [busy, keys, roomId, view.room.version, refetch]);
 
   const { room, viewer, snapshot } = view;
   const caps = viewer.capabilities;
@@ -112,7 +124,9 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   const agreedCount = view.terms.filter((t) => t.status === "agreed").length;
   const requiredOpen = view.terms.filter((t) => t.required && t.status !== "agreed").map((t) => t.label);
   const openSubjects = view.subjects.filter((s) => s.status === "open").length;
-  const sync = listingSyncNotice(room);
+  const sync = listingSyncNotice(room, viewer.side);
+  const myInvites = view.parties.filter((p) => p.isViewer && p.status === "invited");
+  const invitePartyId = myInvites.length > 1 ? (myInvites.some((p) => p.id === inviteParty) ? inviteParty : myInvites[0].id) : null;
   const terminal = isTerminal(room.status);
   const steps = timelineSteps(room.status);
   const mySideLabel = viewer.side === "cargo" ? "You are on the cargo side" : viewer.side === "vessel" ? "You are on the vessel side" : viewer.isMediator ? "You mediate this room" : "You are observing";
@@ -183,10 +197,20 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
         )}
         {caps.canRespondInvitation && (
           <div className="fxr-banner is-info" role="status" data-testid="invitation-banner">
-            <div className="fxr-banner__body"><div className="fxr-banner__title">You are invited into this room</div>Accept to negotiate; decline to step back.</div>
+            <div className="fxr-banner__body">
+              <div className="fxr-banner__title">You are invited into this room</div>Accept to negotiate; decline to step back.
+              {myInvites.length > 1 && (
+                <label className="fxr-field" style={{ marginTop: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--asb-gray-500)" }}>You hold {myInvites.length} invitations · answering as</span>
+                  <select value={invitePartyId ?? ""} onChange={(e) => setInviteParty(e.target.value || null)} data-testid="invitation-party">
+                    {myInvites.map((p) => <option key={p.id} value={p.id}>{p.label} · {p.capacity}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
             <div className="fxr-foot__cta">
-              <button type="button" className="asb-btn primary" disabled={busy} data-testid="invitation-accept" onClick={() => run("respond", (b) => ({ roomId: b.roomId, accept: true, expectedVersion: b.expectedVersion, idempotencyKey: b.idempotencyKey }))}>Accept invitation</button>
-              <button type="button" className="asb-btn" disabled={busy} onClick={() => run("respond", (b) => ({ roomId: b.roomId, accept: false, expectedVersion: b.expectedVersion, idempotencyKey: b.idempotencyKey }))}>Decline</button>
+              <button type="button" className="asb-btn primary" disabled={busy} data-testid="invitation-accept" onClick={() => run("respond", (b) => ({ roomId: b.roomId, accept: true, expectedVersion: b.expectedVersion, idempotencyKey: b.idempotencyKey, partyId: invitePartyId }))}>Accept invitation</button>
+              <button type="button" className="asb-btn" disabled={busy} onClick={() => run("respond", (b) => ({ roomId: b.roomId, accept: false, expectedVersion: b.expectedVersion, idempotencyKey: b.idempotencyKey, partyId: invitePartyId }))}>Decline</button>
             </div>
           </div>
         )}
