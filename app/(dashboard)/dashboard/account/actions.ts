@@ -124,9 +124,9 @@ export async function updatePassword(
   return { success: true };
 }
 
-// Real self-serve account deletion. Removes the app account row (cascades to
-// profiles) and the Supabase auth user via the service-role admin client, so
-// the login is permanently gone. Irreversible.
+// Real self-serve account erasure. Commercial history keeps an anonymous
+// app-user UUID, so the database scrubs mutable PII/access first and Auth is
+// then soft-deleted. This avoids breaking immutable PDA/Fixture audit rows.
 export async function deleteMyAccount(): Promise<ActionResult> {
   const supabase = await buildServerClient();
   const {
@@ -141,14 +141,30 @@ export async function deleteMyAccount(): Promise<ActionResult> {
     return { success: false, error: "Account deletion isn't available right now." };
   }
 
-  // Remove the app account row (profiles cascade via account_id ON DELETE
-  // CASCADE). Match on either key shape to be safe.
-  await admin.from("users").delete().eq("supabase_user_id", user.id);
-  await admin.from("users").delete().eq("id", user.id);
+  const { error: anonymizeError } = await admin.rpc("fn_anonymize_account", {
+    p_auth_user_id: user.id,
+  });
+  if (anonymizeError) {
+    return {
+      success: false,
+      error: `Account erasure could not be completed: ${anonymizeError.message}`,
+    };
+  }
 
-  // Remove the auth login itself.
-  const { error } = await admin.auth.admin.deleteUser(user.id);
-  if (error) return { success: false, error: error.message };
+  // A hard delete would cascade through public.users and collide with retained
+  // audit history. Supabase soft deletion removes the login's identifying data
+  // while preserving the FK anchor.
+  const { error: authDeleteError } = await admin.auth.admin.deleteUser(
+    user.id,
+    true,
+  );
+  if (authDeleteError) {
+    return {
+      success: false,
+      error:
+        "Your application data was anonymized, but sign-in removal is still pending. Please contact support.",
+    };
+  }
 
   return { success: true };
 }
