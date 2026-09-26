@@ -317,3 +317,203 @@ seed, a T1 member under the `authenticated` role updated its own
 `subscription_tier`, `role` and `admin_tier` through the baseline policy
 "users: own row" — 1 row. Reported to the integration owner; the Fixture
 branch trusts none of those columns for an admin decision.
+
+## 8 · SQL suites on top of the shared privilege boundary (26 Sep 2026)
+
+The integration owner closed mailbox O2C-004 with `7fb2064`
+(`20260923330000_user_privilege_boundary.sql`: member self-update limited to
+`full_name`/`company`/`phone` by a `BEFORE UPDATE` guard trigger, privileged
+`users` columns service-owned, `fn_is_admin()` = JWT claim AND active admin
+row, promotions synchronise the Auth claim). The local database is shared
+between the two agents and carried that migration, so the six Fixture SQL
+suites were run standalone against it (each file is `BEGIN … ROLLBACK`;
+nothing was applied or dropped, the harness was not run because the
+integration owner was re-applying his chain on the same database):
+
+```
+for f in supabase/tests/fixture_room/fixture_*_smoke.sql; do
+  docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres     -v ON_ERROR_STOP=1 -q -f - < "$f" | grep "ALL ASSERTIONS PASSED"; done
+```
+
+| Suite | Result | Note |
+|---|---|---|
+| `fixture_idempotency_smoke` | pass (67 s) | |
+| `fixture_immutability_smoke` | pass (48 s) | |
+| `fixture_masking_smoke` | pass (32 s) | |
+| `fixture_rls_smoke` | pass (24 s) | first run failed at R5 with "erased member read must be FX_AUTH, got OK" while the integration owner's re-apply was in flight (the database briefly held the `ebd6544` `fn_fixture_actor()` without the inactive-account refusal); with the `783b681` functions in place the suite passed twice, once with diagnostics (`fn_app_user_id()` resolves the tombstone by `id`, `is_active = false`, `auth.role() = 'authenticated'`, `fn_is_admin() = false`) and once unmodified |
+| `fixture_snapshot_smoke` | pass (54 s) | |
+| `fixture_state_smoke` | pass (59 s) | |
+
+What the boundary changes for the Fixture ledgers: nothing. R4 still sees an
+admin because the seed gives `u_adm` both the claim (`fx_as(k, true)`) and an
+active `role = 'admin'` row; R5's tombstone update runs as the owner with the
+JWT claims cleared, so the guard's `auth.role()` bypass applies exactly as it
+does for the service-role erasure command; `fn_fixture_actor()` keeps its own
+inactive-account refusal. The browser admin seed (`seedAdmin`) already sets
+both facts too.
+
+Probe behind mailbox O2C-005 (rolled back, `scratchpad/probe_rq_guard.sql`):
+a provisioned admin session (`fn_is_admin() = true`) can REJECT a pending
+`review_queue` item, but APPROVE, AMEND and FLAG fail with
+`ASB_USER_PROFILE: a member may update only their own profile` because the
+baseline trigger `fn_rq_on_review` bumps the submitter's `clean_posts` /
+`strike_count` inside the admin's own `authenticated` session and the new
+guard refuses any cross-account write there. The same approve succeeds under
+service-role claims. `app/(admin)/admin/queue/actions.ts` performs the review
+through the cookie client, so listing review breaks on the integration branch
+until the integration owner routes that write through the service client or
+lets the guard admit the nested counter update. Not a Fixture file; reported.
+
+## 9 · Deferred proposal-lapse sweep evidence (not in this release, 26 Sep 2026)
+
+This section records the Fixture feature branch's validation of the optional
+expiry sweep. Migration `20260923204000_fixture_room_expiry_sweep.sql` is not
+present in this integration release, is not scheduled, and must not be applied
+with the initial production chain. Lazy command-time lapse observation remains
+the released behaviour.
+
+What the commit adds: migration `20260923204000_fixture_room_expiry_sweep.sql`
+(`sweep_fixture_proposal_lapses(p_limit integer default 200)`, service_role
+only, described in the module doc), a guard in `submit_fixture_proposal` so
+the submit path writes no second `proposal.lapsed` when the ledger already
+holds one, the DOWN drop, the harness chain entry and the new `expiry` suite
+(`bodies/expiry.sql`, X1–X5), and ten pure checks.
+
+Why a second database: the shared local `postgres` database now carries the
+integration owner's chain, and his `fixture_pda_links` references
+`fixture_rooms`, so the Fixture DOWN would cut his module out from under
+him (mailbox O2C-006). The harness therefore ran in `asb_fixture`, a second
+database in the same container, built from repository artifacts only:
+
+```
+docker exec supabase_db_arab-ship-broker createdb -U postgres asb_fixture
+bash scripts/db-rebuild.sh --db asb_fixture      # stops at 20260815101000_group_mail_cron.sql
+```
+
+The rebuild stops there because pg_cron installs only into
+`cron.database_name` (`postgres`); that is a property of the extension, as
+the rebuild script's header says. Four migrations touch cron
+(`20260815101000`, `20260817100000`, `20260904203209`, `20260904212310`) and
+they use only `cron.job`, `cron.schedule(name, schedule, command)`,
+`cron.schedule(schedule, command)` and `cron.unschedule(id | name)`. A
+scratch script installed a stub `cron` schema with exactly that surface
+(nothing runs), dropped the one `create extension if not exists pg_cron;`
+line from the copy fed to psql, and applied the remaining 71 migrations in
+name order, each in its own transaction with `ON_ERROR_STOP`, recording
+them in `supabase_migrations.schema_migrations`. Result: 117 migrations
+recorded, 9 Fixture tables, the sweep present, no PDA object, no users
+guard trigger (that is integration-branch SQL). The stub and the
+continuation script live outside the repository; if a repo-owned
+`--cron-stub` option for `db-rebuild.sh` is wanted, that is a shared-script
+change for the integration owner (housekeeping request to follow).
+
+```
+HARNESS_PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_fixture" \
+  bash scripts/fixture-room-harness.sh --from-applied --reapply
+```
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 206 passed, 0 failed (10 new sweep checks) |
+| harness on `asb_fixture` (`--from-applied --reapply`) | OK: 5 migrations, 7 suites, DOWN, fingerprint identical, residue 0, chain re-applied; 50 s |
+| `fixture_expiry_smoke` X1–X5 | pass (standalone twice, then inside the harness) |
+| harness on `asb_fixture`, upgrade-safe form (C2O-003): original `20260923203000`, then `20260923204000` alone | OK: 5 migrations, 7 suites (X2 = one lapse after sweep + replacement), DOWN, fingerprint identical, residue 0, re-applied; 92 s |
+| `tsc --noEmit` (project) | 0 errors |
+| `eslint scripts/fixture-room-check.ts` | clean |
+| race, API integration, browser suites | not re-run: they run through the shared stack's PostgREST, whose Fixture functions are the integration branch's; the sweep is service-only with no SDK or page surface, and no member-facing RPC changed shape |
+
+What the expiry suite proves: X1 a live one-minute offer, backdated as the
+owner, is observed once by the sweep (`actor_user_id` null, command
+`sweep_fixture_proposal_lapses`, key `sweep:<proposal>`, payload with
+proposal, term, side, display value and `expiredAt`), the room version moves
+by exactly one, pointers and term status are untouched, a second sweep
+writes nothing, and the counterparty's read model shows the position
+`lapsed` with the ledger entry labelled "System"; X2 the owner's replacement
+offer adds `proposal.submitted` only (no second lapse), and the lapsed offer
+still cannot be accepted (`FX_STATE`); X3 an agreed term is never swept even
+when its proposal row carries a past validity; X4 a withdrawn room is never
+swept; X5 `authenticated` and `anon` cannot execute the sweep, service_role
+can, and the limit clamps to 1..1000 with 200 as the default.
+
+**Upgrade-safe form (C2O-003, 26 Sep 2026).** Codex's focused audit of
+`98bda61` accepted the sweep but refused the way the submit-path guard was
+delivered: an in-place edit of `20260923203000_fixture_room_commands.sql`,
+which an environment that had already applied that file would never
+receive, so a sweep followed by the member's replacement would still write
+two `proposal.lapsed` events there. The correction: `20260923203000` is
+byte-identical to its accepted `783b681` version again, and
+`20260923204000` REPLACES `submit_fixture_proposal` with the same body plus
+the one guard before it creates the sweep, re-issuing the function's grants.
+`scripts/fixture-room-check.ts` now proves that the command migration
+carries no guard, that the sweep migration replaces the function, that the
+replaced body is byte-identical to the accepted one apart from the guard
+(no drift), and that the grant is re-issued. The harness chain is the
+upgrade path itself: the original `20260923203000` first, then
+`20260923204000` alone, and X2 of the expiry suite is the regression
+(sweep, then the owner's replacement, exactly one `proposal.lapsed`).
+Codex's release decision is to defer the sweep from the initial Fixture
+Room release (lazy lapse stays the release behaviour; nothing is
+scheduled); the branch carries the upgrade-safe form so that reopening it
+needs no further correction.
+
+Two corrections while writing the suite, both in the suite: a fresh room
+needs the owner's `respond_fixture_invitation` before the first offer (the
+idempotency suite's I3 replays an already-accepted room, which is why it
+needs none), and direct peeks at `fixture_events` / `fixture_terms` must run
+as the owner, because members hold no table grant. That refusal is the
+boundary the RLS suite asserts, so it is the suite that changed, not the
+grants.
+
+## 10 · Admin console: keyboard, names, focus and layout (26 Sep 2026)
+
+Two Fixture-owned suites extend §5's member coverage to the admin fixtures
+console, run against a production build of the worktree with the local
+stack's keys, served by `next start -p 3101` (the 3100 server belongs to the
+integration owner and was not touched):
+
+```
+E2E_BASE_URL=http://localhost:3101 E2E_SUPABASE_SERVICE_ROLE_KEY=… E2E_SUPABASE_ANON_KEY=…   npx playwright test e2e/fixture-room-admin-a11y.spec.ts e2e/fixture-room-admin-responsive.spec.ts e2e/fixture-room-admin.spec.ts --project=edit
+```
+
+`fixture-room-admin-a11y.spec.ts` (4 tests): the status filter is a
+`tablist` named "Room status" whose chips are links with `aria-selected`,
+reachable by keyboard, with a visible focus ring, and activated by Enter;
+the rooms table is a real table with column headers and row links named by
+the room ref; on the room page there is one `h1`, every card is a `section`
+with exactly one `h2`, the redaction input is named "Redaction reason", the
+close form's reason and note are labelled by wrapping labels and its button
+is named, focus is visible on the redaction input and the close reason;
+Tab alone reaches the header links, the redaction control and the close
+button in document order; the flash is a `role="status"` region and an
+admin with the claim sees no claim notice.
+
+`fixture-room-admin-responsive.spec.ts` (8 tests, 390 / 768 / 1280 /
+1440 px): no horizontal page scroll on the list or the room page; when a
+table is wider than its container the container scrolls (`overflow-x`
+auto or scroll), never the page; the messages card, the close card and the
+close button stay inside the viewport.
+
+Two findings on the first run, both fixed before the second:
+
+- the new suites used the shared 10 s assertion budget, and a Link
+  navigation on the loaded machine took longer; they now carry the same
+  60 s budget as the other console spec (every assertion is about rendered
+  or persisted state);
+- at 768 px the shared `.adm-table` container clips its content
+  (`overflow: hidden`; the `overflow-x: auto` rule applies at ≤760 px only),
+  so a wide table lost its right-hand columns with no way to pan. The
+  shared stylesheet is not a Fixture file (mailbox O2C-007); the two console
+  pages set an inline `overflowX: auto` on their table wrappers, so the
+  fixtures console pans at every width. In the same commit the close form
+  grid wraps (`repeat(auto-fit, minmax(180px, 1fr))` instead of three
+  fixed columns) and the redaction form wraps, both for 390 px, and the
+  claim notice states the post-`7fb2064` rule (claim AND active admin row,
+  written on promotion).
+
+| Gate | Result |
+|---|---|
+| `npm run build` equivalent (`next build`, local keys) | exit 0, 163 s, `/admin/fixtures` and `/admin/fixtures/[id]` emitted, client bundle on the local stack |
+| `fixture-room-admin-a11y.spec.ts` + `fixture-room-admin-responsive.spec.ts` + `fixture-room-admin.spec.ts` against `next start -p 3101` | **15 passed (4.8 min)**: 4 keyboard/name/focus, 8 layout, 3 regression |
+| first run, before the two fixes | 2 failed (the 10 s budget on a Link navigation; the 768 px clipped table), 5 passed, the rest skipped by serial mode |
+| `scripts/fixture-room-check.ts` | 212 passed, 0 failed |
+| `tsc --noEmit` (project) / `eslint` on the console and the specs | 0 errors / clean |

@@ -105,7 +105,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
       </div>
 
       <Card title="Parties" sub={claim ? "identities unmasked for the admin read" : "masked: no admin claim on this session"} testId="fixtures-parties">
-        <div className="adm-table">
+        <div className="adm-table" style={{ overflowX: "auto" }}>
           <table>
             <thead><tr><th>Side</th><th>Capacity</th><th>Mode</th><th>Status</th><th>Label</th><th>Name · desk</th><th>Org</th><th>Member</th><th>Contact</th><th>Anchor</th></tr></thead>
             <tbody>
@@ -125,7 +125,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
       </Card>
 
       <Card title="Terms" sub={`${terms.filter((t) => t.status === "agreed").length}/${terms.length} agreed`} testId="fixtures-terms">
-        <div className="adm-table">
+        <div className="adm-table" style={{ overflowX: "auto" }}>
           <table>
             <thead><tr><th className="num">#</th><th>Term</th><th>Status</th><th>Cargo position</th><th>Vessel position</th><th>Agreed</th><th>Holder</th><th className="num">Round</th></tr></thead>
             <tbody>
@@ -146,7 +146,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
       <div className="adm-cols-2">
         <Card title="Subjects" sub={`${subjects.filter((s) => s.status === "open").length} open`} testId="fixtures-subjects">
           {subjects.length === 0 ? <div className="adm-card__sub">None recorded.</div> : (
-            <div className="adm-table"><table>
+            <div className="adm-table" style={{ overflowX: "auto" }}><table>
               <thead><tr><th className="num">#</th><th>Subject</th><th>Side</th><th>Status</th><th>Deadline</th></tr></thead>
               <tbody>{subjects.map((s) => (
                 <tr key={s.id}><td className="num">{s.seq}</td><td>{s.title}</td><td>{s.responsibleSide ?? "—"}</td><td>{s.status}</td><td>{s.deadlineAt ? shortDateTime(s.deadlineAt) : "—"}</td></tr>
@@ -156,7 +156,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
         </Card>
         <Card title="Recaps" sub={`${recaps.length} version${recaps.length === 1 ? "" : "s"}`} testId="fixtures-recaps">
           {recaps.length === 0 ? <div className="adm-card__sub">None published.</div> : (
-            <div className="adm-table"><table>
+            <div className="adm-table" style={{ overflowX: "auto" }}><table>
               <thead><tr><th className="num">v</th><th>Published</th><th>By</th><th className="num">Acks</th><th>Invalidated</th></tr></thead>
               <tbody>{recaps.map((rv) => (
                 <tr key={rv.id}><td className="num">{rv.versionNo}</td><td>{shortDateTime(rv.publishedAt)}</td><td>{rv.publishedByLabel ?? "—"}</td><td className="num">{rv.acknowledgements.length}</td><td>{rv.invalidatedAt ? shortDateTime(rv.invalidatedAt) : "—"}</td></tr>
@@ -168,7 +168,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
 
       <Card title="Messages" sub="room, side and mediator threads; redaction withholds the text and keeps the event" testId="fixtures-messages">
         {messages.length === 0 ? <div className="adm-card__sub">No messages.</div> : (
-          <div className="adm-table"><table>
+          <div className="adm-table" style={{ overflowX: "auto" }}><table>
             <thead><tr><th>When</th><th>From</th><th>Visibility</th><th>Kind</th><th>Body</th><th>Redact</th></tr></thead>
             <tbody>{messages.map((m) => (
               <tr key={m.id}>
@@ -176,7 +176,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
                 <td>{m.redacted ? <span className="adm-badge inactive">redacted</span> : m.body}</td>
                 <td>
                   {m.redacted ? "—" : (
-                    <form action={redactFixtureMessageAdmin} style={{ display: "flex", gap: 6, alignItems: "center" }} data-testid={`fixtures-redact-${m.id}`}>
+                    <form action={redactFixtureMessageAdmin} style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", minWidth: 0 }} data-testid={`fixtures-redact-${m.id}`}>
                       <input type="hidden" name="roomId" value={room.id} />
                       <input type="hidden" name="messageId" value={m.id} />
                       <input type="hidden" name="expectedVersion" value={room.version} />
@@ -193,7 +193,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
       </Card>
 
       <Card title="Ledger" sub={`${events.length} event${events.length === 1 ? "" : "s"} · seq = room version`} testId="fixtures-ledger">
-        <div className="adm-table"><table>
+        <div className="adm-table" style={{ overflowX: "auto" }}><table>
           <thead><tr><th className="num">Seq</th><th>Type</th><th>When</th><th>Actor</th><th>On behalf of</th><th>Command</th><th>Idempotency key</th><th>Payload</th></tr></thead>
           <tbody>{events.map((e) => (
             <tr key={e.id}>
@@ -208,7 +208,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
 
       <Card title="Access log" sub="every content-bearing admin read of this room, durable; the version poll is not logged" testId="fixtures-access-log">
         {log.length === 0 ? <div className="adm-card__sub">{claim ? "No admin read recorded before this one." : "Admin-only; not readable without the claim."}</div> : (
-          <div className="adm-table"><table>
+          <div className="adm-table" style={{ overflowX: "auto" }}><table>
             <thead><tr><th>When</th><th>Who</th><th>User id</th><th>Reason</th></tr></thead>
             <tbody>{log.map((l) => (
               <tr key={l.id}><td className="adm-card__sub">{shortDateTime(l.at)}</td><td>{l.userLabel}{l.isAdmin ? " · admin" : ""}</td><td><Mono value={l.userId} /></td><td>{l.reason}</td></tr>
@@ -219,7 +219,7 @@ function RoomBody({ view, log, claim }: { view: FixtureRoomView; log: sdk.Fixtur
 
       {closable && (
         <Card title="Close the room" sub="a platform decision: failed or expired; withdrawal belongs to a principal" testId="fixtures-close">
-          <form action={closeFixtureRoomAdmin} style={{ display: "grid", gridTemplateColumns: "180px 1fr auto", gap: 8, alignItems: "end" }}>
+          <form action={closeFixtureRoomAdmin} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, alignItems: "end" }} data-testid="fixtures-close-form">
             <input type="hidden" name="roomId" value={room.id} />
             <input type="hidden" name="expectedVersion" value={room.version} />
             <input type="hidden" name="idempotencyKey" value={key()} />
