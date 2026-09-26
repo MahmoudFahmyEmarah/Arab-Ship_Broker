@@ -121,6 +121,47 @@ begin
   end if;
   execute 'reset role';
 
+  -- An approved review writes the submitter's reputation counters through the
+  -- service-owned review path. An authenticated administrator remains unable
+  -- to change those counters directly (the server action is statically pinned
+  -- to the service client by user-privilege-boundary-check.mjs).
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', json_build_object(
+    'role', 'service_role', 'app_metadata', '{}'::jsonb
+  )::text, true);
+  execute 'set local role service_role';
+  update public.users
+     set role = 'admin', admin_tier = 'super', subscription_tier = 'T4'
+   where id = v_app_one;
+  insert into public.review_queue (
+    listing_type, listing_id, submitted_by, trust_tier_at_submit, status
+  ) values (
+    'cargo', 'f3000000-0000-4000-8000-000000000099', v_app_two, 'NEW', 'PENDING'
+  );
+  update public.review_queue
+     set status = 'APPROVED', action_taken = 'approved', reviewed_by = v_app_one
+   where submitted_by = v_app_two and status = 'PENDING';
+  if (select clean_posts from public.users where id = v_app_two) <> 1 then
+    raise exception 'U7: service-owned review did not increment clean_posts';
+  end if;
+
+  perform set_config('request.jwt.claim.sub', v_auth_one::text, true);
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', v_auth_one, 'role', 'authenticated',
+    'app_metadata', json_build_object('role', 'admin')
+  )::text, true);
+  execute 'set local role authenticated';
+  v_failed := false;
+  begin
+    update public.users set clean_posts = clean_posts + 1 where id = v_app_two;
+  exception when insufficient_privilege then
+    v_failed := true;
+  end;
+  if not v_failed then
+    raise exception 'U7: authenticated admin directly updated a member counter';
+  end if;
+  execute 'reset role';
+
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'users' and policyname = 'users: own row') then
     raise exception 'U6: broad users: own row policy still exists';
   end if;

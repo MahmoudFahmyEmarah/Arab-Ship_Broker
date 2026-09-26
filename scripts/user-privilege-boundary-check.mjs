@@ -7,6 +7,7 @@ const migration = readFileSync(
   "utf8",
 );
 const gate = readFileSync(resolve(process.cwd(), "lib/admin/require-admin.ts"), "utf8");
+const reviewActions = readFileSync(resolve(process.cwd(), "app/(admin)/admin/queue/actions.ts"), "utf8");
 const smoke = readFileSync(
   resolve(process.cwd(), "supabase/tests/integration/user_privilege_boundary_smoke.sql"),
   "utf8",
@@ -24,5 +25,6 @@ assert.match(smoke, /trust_tier/i);
 assert.match(migration, /raw_app_meta_data/i);
 assert.match(migration, /fn_is_admin/i);
 assert.match(gate, /user\.app_metadata\?\.role !== "admin"/);
+assert.match(reviewActions, /async function executeReviewAction[\s\S]*?const supabase = getSupabaseAdminClient\(\)/);
 
 console.log("user-privilege-boundary-check: PASS");

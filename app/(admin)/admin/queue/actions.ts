@@ -37,7 +37,10 @@ async function executeReviewAction(
   amendmentDetail: string | null,
   adminUserId: string,
 ) {
-  const supabase = await getServerClient();
+  // The action's caller has already passed requireAdmin. Review approval can
+  // trigger the service-owned clean-post/strike counters on the submitter,
+  // which an authenticated session must never be allowed to update directly.
+  const supabase = getSupabaseAdminClient();
 
   const { data: item, error: fetchErr } = await supabase
     .from("review_queue")
