@@ -24,12 +24,16 @@ function profileRole(hasCargo: boolean, hasVessel: boolean): PortalRole {
 
 function DashboardShell({
   serverRole,
+  tier,
   userName,
+  isMarketPartner,
   sidebarStyle,
   children,
 }: {
   serverRole: AppRole | null;
+  tier: Tier;
   userName: string | null;
+  isMarketPartner: boolean;
   sidebarStyle: SidebarStyle;
   children: React.ReactNode;
 }) {
@@ -48,7 +52,7 @@ function DashboardShell({
   return (
     <div className="asb-portal" data-sidebar={sidebarStyle}>
       <div className="shell">
-        <PortalSidebar role={role} userName={displayName} basePath="/dashboard" showCargo={showCargo} showVessel={showVessel} />
+        <PortalSidebar role={role} userName={displayName} basePath="/dashboard" showCargo={showCargo} showVessel={showVessel} fixtureEligible={isMarketPartner || tier === "T3" || tier === "T4" || role === "admin"} />
         <main
           style={{
             flex: 1,
@@ -62,7 +66,7 @@ function DashboardShell({
           {children}
         </main>
       </div>
-      <PortalMobileNav role={role} basePath="/dashboard" showCargo={showCargo} showVessel={showVessel} />
+      <PortalMobileNav role={role} basePath="/dashboard" showCargo={showCargo} showVessel={showVessel} fixtureEligible={isMarketPartner || tier === "T3" || tier === "T4" || role === "admin"} />
       {/* Position check-in: vessel persona only, never admin (admins are
           routed to /admin before this shell). Renders nothing for users with
           no open positions, so mounting per-shell is safe. */}
@@ -76,19 +80,21 @@ export function DashboardShellClient({
   tier,
   role,
   userName,
+  isMarketPartner = false,
   sidebarStyle = "classic",
   children,
 }: {
   tier: Tier;
   role: AppRole | null;
   userName: string | null;
+  isMarketPartner?: boolean;
   sidebarStyle?: SidebarStyle;
   children: React.ReactNode;
 }) {
   return (
     <TierProvider tier={tier}>
       <DashboardProvider>
-        <DashboardShell serverRole={role} userName={userName} sidebarStyle={sidebarStyle}>
+        <DashboardShell serverRole={role} tier={tier} userName={userName} isMarketPartner={isMarketPartner} sidebarStyle={sidebarStyle}>
           {children}
         </DashboardShell>
       </DashboardProvider>

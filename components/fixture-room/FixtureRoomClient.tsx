@@ -20,6 +20,7 @@ import {
   extendFixtureSubjectAction, failFixtureSubjectAction, fixFixtureOnSubjectsAction, inviteFixturePartyAction, liftFixtureSubjectAction, loadFixtureRoom,
   pollFixtureRoomVersion, postFixtureMessageAction, publishFixtureRecapAction, reopenFixtureTermAction, respondFixtureInvitationAction,
   setFixtureTermFlagAction, submitFixtureProposalAction, withdrawFixtureProposalAction,
+  syncFixtureListingStatusAction,
 } from "@/app/(dashboard)/dashboard/fixture-room/actions";
 import { TermRow } from "./TermRow";
 import { ActivityFeed, CounterpartyCard, MessagesPanel, RecapRail, SubjectsRail } from "./RoomRails";
@@ -42,6 +43,7 @@ const ACTIONS = {
   close: closeFixtureRoomAction,
   respond: respondFixtureInvitationAction,
   invite: inviteFixturePartyAction,
+  syncListing: syncFixtureListingStatusAction,
 } as const;
 export type CommandName = keyof typeof ACTIONS;
 export interface CommandBaseArgs { roomId: string; expectedVersion: number; idempotencyKey: string }
@@ -190,9 +192,17 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
             <div className="fxr-banner__body">
               <div className="fxr-banner__title">{sync.headline}</div>
               <ul>{sync.lines.map((l) => <li key={l}>{l}</li>)}</ul>
-              <div style={{ marginTop: 4, fontSize: 11 }}>The room never changes a listing itself: update it through the listing page so the market and the fixture agree.</div>
+              <div style={{ marginTop: 4, fontSize: 11 }}>Sync applies only the listing you own; it cannot change the counterparty’s listing.</div>
             </div>
-            <div className="fxr-foot__cta">{sync.links.map((l) => <Link key={l.href} href={l.href} className="asb-btn">{l.label} →</Link>)}</div>
+            <div className="fxr-foot__cta">
+              {(viewer.side === "cargo" || viewer.side === "vessel") && (
+                <button type="button" className="asb-btn primary" disabled={busy} data-testid="sync-listing-status"
+                  onClick={() => void run("syncListing", (b) => ({ ...b }))}>
+                  Sync my listing
+                </button>
+              )}
+              {sync.links.map((l) => <Link key={l.href} href={l.href} className="asb-btn">{l.label} →</Link>)}
+            </div>
           </div>
         )}
         {caps.canRespondInvitation && (

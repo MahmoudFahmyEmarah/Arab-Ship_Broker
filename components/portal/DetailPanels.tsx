@@ -211,6 +211,7 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
           );
         })()}
 
+        <FixtureRoomLink href={`/dashboard/fixture-room/new?cargo=${encodeURIComponent(cargo.id)}`} />
         <EstimateVoyageLink href={`/dashboard/voyage-estimator?cargo=${cargo.id}`} />
 
         <PrivacyNote text="Your data is encrypted end-to-end. Visible only to Arab ShipBroker until your listing is approved." />
@@ -306,6 +307,7 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
 
         <VesselOwnership vesselId={v.vesselId} />
 
+        <FixtureRoomLink href={`/dashboard/fixture-room/new?vessel=${encodeURIComponent(v.id)}`} />
         <EstimateVoyageLink href={`/dashboard/voyage-estimator?vessel=${v.vesselId ?? v.id}`} />
 
         <PrivacyNote text="Your vessel data is encrypted. Visible only to Arab ShipBroker until you publish a position." />
@@ -391,6 +393,17 @@ function EstimateVoyageLink({ href }: { href: string }) {
       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 16, padding: "10px 12px", background: "var(--asb-blue-light)", border: "0.5px solid var(--asb-blue)", borderRadius: "var(--r-chip, 4px)", color: "var(--asb-blue)", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
     >
       Estimate voyage →
+    </a>
+  );
+}
+
+function FixtureRoomLink({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 16, padding: "10px 12px", background: "var(--asb-white)", border: "0.5px solid var(--asb-blue)", borderRadius: "var(--r-chip, 4px)", color: "var(--asb-blue)", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+    >
+      Start Fixture Room →
     </a>
   );
 }

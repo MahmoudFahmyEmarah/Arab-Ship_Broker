@@ -9,7 +9,7 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { parseFixtureError, type FixtureError } from "@/lib/fixture-room/errors";
 import { FIXTURE_TERM_CATALOGUE_VERSION } from "@/lib/fixture-room/terms";
 import type {
-  FixtureCloseReason, FixtureCommandOk, FixtureRoomListItem, FixtureRoomStatus, FixtureRoomView, FixtureTermFlag, FixtureTermInput, FixtureValue,
+  FixtureCloseReason, FixtureCommandOk, FixturePdaLinkDisplay, FixtureRoomListItem, FixtureRoomStatus, FixtureRoomView, FixtureTermFlag, FixtureTermInput, FixtureValue,
 } from "@/lib/fixture-room/types";
 
 export class FixtureRequestError extends Error {
@@ -62,6 +62,13 @@ export async function listFixtureRooms(supabase: SupabaseClient, statuses?: Fixt
   const { data, error } = await supabase.rpc("list_fixture_rooms", { p_status: statuses ?? null, p_limit: limit });
   if (error) throw new FixtureRequestError(toError(error));
   return (data ?? []) as FixtureRoomListItem[];
+}
+
+/** Safe, shared PDA headers already attached to a room. The PDA estimate itself remains separately permissioned. */
+export async function listFixturePdaLinks(supabase: SupabaseClient, roomId: string): Promise<FixturePdaLinkDisplay[]> {
+  const { data, error } = await supabase.rpc("list_fixture_pda_links", { p_room_id: roomId });
+  if (error) throw new FixtureRequestError(toError(error));
+  return (data ?? []) as FixturePdaLinkDisplay[];
 }
 
 // ── commands ────────────────────────────────────────────────────────────────
@@ -133,6 +140,20 @@ export function extendFixtureSubject(supabase: SupabaseClient, input: CommandBas
 
 export function fixFixtureOnSubjects(supabase: SupabaseClient, input: CommandBase) {
   return command<{ roomStatus: FixtureRoomStatus; openSubjects: number }>(supabase, "fix_fixture_on_subjects", base(input));
+}
+
+/** Applies only the caller-owned marketplace listing targets recorded by the room (decision D4). */
+export function syncFixtureListingStatus(supabase: SupabaseClient, input: Pick<CommandBase, "roomId" | "expectedVersion" | "idempotencyKey">) {
+  return command<{ cargoUpdated: boolean; vesselUpdated: boolean; outstanding: boolean }>(supabase, "sync_fixture_listing_status", {
+    p_room_id: input.roomId, p_expected_version: input.expectedVersion, p_idempotency_key: input.idempotencyKey,
+  });
+}
+
+/** Links a PDA through its permission-checked, vessel-safe header contract. */
+export function linkFixturePdaEstimate(supabase: SupabaseClient, input: CommandBase & { pdaEstimateId: string; purpose: "load" | "discharge" | "other" }) {
+  return command<{ pdaLink: FixturePdaLinkDisplay }>(supabase, "link_fixture_pda_estimate", {
+    ...base(input), p_pda_estimate_id: input.pdaEstimateId, p_purpose: input.purpose,
+  });
 }
 
 export function publishFixtureRecap(supabase: SupabaseClient, input: CommandBase) {

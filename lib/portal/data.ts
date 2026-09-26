@@ -378,19 +378,24 @@ import { viewerTierFrom } from "@/lib/tiers";
 import { normalizeRole, type AppRole } from "@/lib/role";
 import type { Tier } from "./tier";
 
-export async function loadViewerContext(): Promise<{ tier: Tier; role: AppRole | null; userName: string | null }> {
-  if (!isSupabaseConfigured()) return { tier: "T3", role: null, userName: null };
+export async function loadViewerContext(): Promise<{ tier: Tier; role: AppRole | null; userName: string | null; isMarketPartner: boolean }> {
+  if (!isSupabaseConfigured()) return { tier: "T3", role: null, userName: null, isMarketPartner: false };
   try {
     const supabase = await getSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { tier: "T3", role: null, userName: null };
+    if (!user) return { tier: "T3", role: null, userName: null, isMarketPartner: false };
     const data = await getAppUserRow<{ role?: string; full_name?: string; subscription_tier?: string | null; is_market_partner?: boolean | null }>(
-      supabase, user.id, "role, full_name, subscription_tier");
+      supabase, user.id, "role, full_name, subscription_tier, is_market_partner");
     const vt = viewerTierFrom(data as { subscription_tier?: string | null; is_market_partner?: boolean | null } | null);
     const tier = (vt.isMarketPartner ? "T3" : vt.tier) as Tier;
-    return { tier, role: normalizeRole((data as { role?: string } | null)?.role), userName: (data as { full_name?: string } | null)?.full_name ?? null };
+    return {
+      tier,
+      role: normalizeRole((data as { role?: string } | null)?.role),
+      userName: (data as { full_name?: string } | null)?.full_name ?? null,
+      isMarketPartner: vt.isMarketPartner,
+    };
   } catch (err) {
     console.error("[portal] viewer context load failed:", err);
-    return { tier: "T3", role: null, userName: null };
+    return { tier: "T3", role: null, userName: null, isMarketPartner: false };
   }
 }

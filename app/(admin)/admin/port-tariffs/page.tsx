@@ -8,7 +8,7 @@ import { createDraft, createPublisher, decideStagedRule, publishVersion, registe
 export const dynamic = "force-dynamic";
 
 export default async function PortTariffsPage({ searchParams }: { searchParams: Promise<{ message?: string; error?: string }> }) {
-  await requireAdmin({ section: "datasync" });
+  await requireAdmin({ section: "porttariffs" });
   const db = getSupabaseAdminClient();
   const params = await searchParams;
   const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }, { data: terminals }] = await Promise.all([

@@ -5,6 +5,7 @@
 // market-partner tag from the original are deferred to a later phase; the
 // visual structure and classes are otherwise identical.)
 import * as React from "react";
+import Link from "next/link";
 import { CargoView, VesselView } from "@/lib/portal/types";
 import { MatchesPopover } from "./MatchesPopover";
 import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
@@ -225,6 +226,15 @@ export function CargoCard({
             {limited ? "🔒" : matches}
           </span>
         </div>
+        <Link
+          href={`/dashboard/fixture-room/new?cargo=${encodeURIComponent(c.id)}`}
+          className="cc-foot-col"
+          style={{ color: "var(--asb-blue)", textDecoration: "none", fontSize: 11, fontWeight: 600, alignSelf: "stretch", display: "flex", alignItems: "center" }}
+          title="Start a Fixture Room from this cargo"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Fixture →
+        </Link>
       </div>
       {matchesOpen && (
         <MatchesPopover source={{ kind: "cargo", view: c }} pool={matchPool ?? []} count={matches}

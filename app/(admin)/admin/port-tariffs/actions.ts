@@ -10,9 +10,8 @@ const value = (form: FormData, key: string) => String(form.get(key) ?? "").trim(
 const optional = (form: FormData, key: string) => value(form, key) || null;
 
 async function context() {
-  // Conservative Phase-1 gate: Data Sync is owner-only. Integration will add
-  // a dedicated porttariffs section before delegating this to sub-admins.
-  const actor = await requireAdmin({ section: "datasync", edit: true });
+  // Financial source authority stays owner-only, under its own admin section.
+  const actor = await requireAdmin({ section: "porttariffs", edit: true });
   return { actorId: actor.rowId, db: getSupabaseAdminClient() };
 }
 

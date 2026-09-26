@@ -14,7 +14,7 @@ import { PortalEventTracker } from "@/components/portal/PortalEventTracker";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [{ tier, role, userName }, betaMode, comingSoonDesign, sidebarStyle] = await Promise.all([
+  const [{ tier, role, userName, isMarketPartner }, betaMode, comingSoonDesign, sidebarStyle] = await Promise.all([
     loadViewerContext(),
     getBetaMode(),
     getComingSoonDesign(),
@@ -24,7 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // the Dashboard; BetaGate covers every other page with a "coming soon" lock,
   // using the admin-selected design(s) (radar / beacon / compass, rotating).
   return (
-    <DashboardShellClient tier={tier} role={role} userName={userName} sidebarStyle={sidebarStyle}>
+    <DashboardShellClient tier={tier} role={role} userName={userName} isMarketPartner={isMarketPartner} sidebarStyle={sidebarStyle}>
       <PortalEventTracker />
       <BetaGate betaMode={betaMode} isAdmin={role === "admin"} comingSoonDesign={comingSoonDesign}>
         {children}

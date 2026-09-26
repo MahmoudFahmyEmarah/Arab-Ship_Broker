@@ -159,6 +159,17 @@ export function IconVoyage({ size = 16, color, className }: IconProps) {
   );
 }
 
+/** A compact negotiation/fixture glyph: two commercial positions meeting at a term sheet. */
+export function IconFixture({ size = 16, color, className }: IconProps) {
+  return (
+    <svg {...base(size, color, className)}>
+      <path d="M4 7.5h5l2 2.2 2-2.2h7" />
+      <path d="M4 16.5h5l2-2.2 2 2.2h7" />
+      <path d="M10 9.7 8.2 12 10 14.3M14 9.7l1.8 2.3-1.8 2.3" />
+    </svg>
+  );
+}
+
 export function IconSettings({ size = 16, color, className }: IconProps) {
   return (
     <svg {...base(size, color, className)}>

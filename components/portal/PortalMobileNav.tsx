@@ -7,7 +7,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconDashboard, IconCargo, IconVessel, IconMap, IconUser, IconShield } from "./icons";
+import { IconDashboard, IconCargo, IconVessel, IconMap, IconUser, IconShield, IconFixture } from "./icons";
 import type { PortalRole } from "./PortalSidebar";
 
 type Tab = { href: string; label: string; icon: (active: boolean) => React.ReactNode };
@@ -17,11 +17,13 @@ export function PortalMobileNav({
   basePath = "/dashboard",
   showCargo,
   showVessel,
+  fixtureEligible = false,
 }: {
   role: PortalRole;
   basePath?: string;
   showCargo?: boolean;
   showVessel?: boolean;
+  fixtureEligible?: boolean;
 }) {
   const pathname = usePathname();
   const isCargo = showCargo ?? (role === "broker" || role === "cargo_owner" || role === "admin");
@@ -43,6 +45,9 @@ export function PortalMobileNav({
       label: "Mine",
       icon: (a) => <IconMap size={20} color={c(a)} />,
     },
+    ...(fixtureEligible
+      ? [{ href: `${basePath}/fixture-room`, label: "Fixture", icon: (a: boolean) => <IconFixture size={20} color={c(a)} /> }]
+      : []),
     { href: `${basePath}/account`, label: "Account", icon: (a) => <IconUser size={20} color={c(a)} /> },
     // Admins get the console on the phone bar too — the console's own top
     // scroller (admin shell ≤760px) takes over from there.

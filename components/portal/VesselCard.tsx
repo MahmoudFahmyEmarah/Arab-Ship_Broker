@@ -3,6 +3,7 @@
 // VesselCard — ported from the Claude design (asb/cards.jsx) to TS.
 // (Rules-engine tooltips + voyage deep-link deferred; structure/classes intact.)
 import * as React from "react";
+import Link from "next/link";
 import { VesselView, CargoView } from "@/lib/portal/types";
 import { MatchesPopover } from "./MatchesPopover";
 import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
@@ -123,6 +124,14 @@ export function VesselCard({
           ) : (
             <span className="asb-match" title={masked ? "Matches are a Subscriber feature" : v.matches === 0 ? "No matching cargoes on the market right now" : undefined}>{v.matches} matches</span>
           )}
+          <Link
+            href={`/dashboard/fixture-room/new?vessel=${encodeURIComponent(v.id)}`}
+            style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-blue)", textDecoration: "none" }}
+            title="Start a Fixture Room from this vessel position"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Fixture →
+          </Link>
           <a style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-blue)", textDecoration: "none" }}>
             Estimate voyage →
           </a>

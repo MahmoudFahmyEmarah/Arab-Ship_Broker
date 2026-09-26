@@ -24,6 +24,7 @@ import {
   IconShield,
   IconPortDA,
   IconSuezToll,
+  IconFixture,
 } from "./icons";
 
 export type PortalRole = "cargo_owner" | "vessel_owner" | "broker" | "admin";
@@ -93,6 +94,7 @@ export function PortalSidebar({
   basePath = "/dashboard",
   showCargo,
   showVessel,
+  fixtureEligible = false,
 }: {
   role?: PortalRole;
   userName?: string;
@@ -102,6 +104,8 @@ export function PortalSidebar({
   // both" sees the cargo workspace too without being relabelled a broker.
   showCargo?: boolean;
   showVessel?: boolean;
+  /** Server-derived entitlement: T3/T4, market partner, or admin. */
+  fixtureEligible?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -144,6 +148,7 @@ export function PortalSidebar({
           { href: `${basePath}/vessels/post`, label: "Post Position", action: true, glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} plus /> },
         ]
       : []),
+    { href: `${basePath}/fixture-room`, label: "Fixture Room", disabled: !fixtureEligible, glyph: (a: boolean) => <IconFixture className="nav-icon" size={16} color={c(a)} /> },
     { section: "Discover" },
     ...(isCargo ? [{ href: `${basePath}/cargo`, label: "Cargo Market", glyph: (a: boolean) => <IconCargo className="nav-icon" size={16} color={c(a)} /> }] : []),
     ...(isVessel ? [{ href: `${basePath}/vessels/browse`, label: "Tonnage Market", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> }] : []),

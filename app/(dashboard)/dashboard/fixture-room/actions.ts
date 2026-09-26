@@ -257,6 +257,13 @@ export async function fixFixtureOnSubjectsAction(input: unknown) {
   return sdk.fixFixtureOnSubjects(await getSupabaseServerClient(), p.value);
 }
 
+/** D4: one server-authoritative action, scoped by the listing ownership row. */
+export async function syncFixtureListingStatusAction(input: unknown) {
+  const p = parse(commandBaseSchema, input);
+  if (!p.ok) return p.error;
+  return sdk.syncFixtureListingStatus(await getSupabaseServerClient(), p.value);
+}
+
 export async function publishFixtureRecapAction(input: unknown) {
   const p = parse(commandBaseSchema, input);
   if (!p.ok) return p.error;
