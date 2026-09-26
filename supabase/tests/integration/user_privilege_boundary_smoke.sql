@@ -46,6 +46,7 @@ begin
     'strike_count = 1',
     'clean_posts = 99',
     'is_active = false',
+    'is_market_partner = true',
     'supabase_user_id = ''f3000000-0000-4000-8000-000000000002''::uuid'
   ] loop
     v_failed := false;
@@ -70,7 +71,8 @@ begin
     where id = v_app_one
       and (role <> 'broker' or subscription_tier <> 'T1' or admin_tier is not null
         or admin_perms is not null or trust_tier <> 'NEW' or strike_count <> 0
-        or clean_posts <> 0 or not is_active or supabase_user_id <> v_auth_one)
+        or clean_posts <> 0 or not is_active or is_market_partner
+        or supabase_user_id <> v_auth_one)
   ) then
     raise exception 'U2: privileged values changed despite the guard';
   end if;

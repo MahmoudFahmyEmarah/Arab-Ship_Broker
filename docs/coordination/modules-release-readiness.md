@@ -44,7 +44,7 @@ the release behaviour.
 
 1. Approve merging the current `feature/modules-integration` release branch to
    `dev`; its reviewed application-code baseline is `2fa02d3`.
-2. Review the eleven ordered migrations before applying them to the target
+2. Review the twelve ordered migrations before applying them to the target
    Supabase database. Apply through the normal reviewed migration deployment
    process; do not run rollback harnesses against a populated environment.
 3. Have every existing administrator sign out and sign in once after the user

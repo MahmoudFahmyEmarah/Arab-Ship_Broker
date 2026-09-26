@@ -22,15 +22,16 @@ const numberOrNull = (value: string) => {
 const money = (value: number, currency: string) => new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
 
 export function PdaEstimator({ ports, coverage, terminals, vessels }: Props) {
+  const initialVessel = vessels[0] ?? null;
   const [portLocode, setPortLocode] = React.useState(coverage[0]?.portLocode ?? ports[0]?.locode ?? "");
   const [terminalId, setTerminalId] = React.useState("");
   const [callDate, setCallDate] = React.useState(() => new Date().toISOString().slice(0, 10));
-  const [vesselId, setVesselId] = React.useState(vessels[0]?.id ?? "");
-  const [gt, setGt] = React.useState("");
+  const [vesselId, setVesselId] = React.useState(initialVessel?.id ?? "");
+  const [gt, setGt] = React.useState(initialVessel?.gt == null ? "" : String(initialVessel.gt));
   const [nt, setNt] = React.useState("");
   const [scnrt, setScnrt] = React.useState("");
-  const [dwt, setDwt] = React.useState("");
-  const [loa, setLoa] = React.useState("");
+  const [dwt, setDwt] = React.useState(initialVessel?.dwt?.replaceAll(",", "") ?? "");
+  const [loa, setLoa] = React.useState(initialVessel?.loaM == null ? "" : String(initialVessel.loaM));
   const [draft, setDraft] = React.useState("");
   const [days, setDays] = React.useState("3");
   const [hours, setHours] = React.useState("");
@@ -50,12 +51,13 @@ export function PdaEstimator({ ports, coverage, terminals, vessels }: Props) {
   const terminalOptions = terminals.filter((item) => item.portLocode === portLocode);
   const covered = coverage.some((item) => item.portLocode === portLocode);
 
-  React.useEffect(() => {
-    if (!vessel) return;
-    setGt(vessel.gt == null ? "" : String(vessel.gt));
-    setDwt(vessel.dwt?.replaceAll(",", "") ?? "");
-    setLoa(vessel.loaM == null ? "" : String(vessel.loaM));
-  }, [vessel]);
+  function selectVessel(nextId: string) {
+    const nextVessel = vessels.find((item) => item.id === nextId) ?? null;
+    setVesselId(nextId);
+    setGt(nextVessel?.gt == null ? "" : String(nextVessel.gt));
+    setDwt(nextVessel?.dwt?.replaceAll(",", "") ?? "");
+    setLoa(nextVessel?.loaM == null ? "" : String(nextVessel.loaM));
+  }
 
   function request(): PdaRequest {
     return {
@@ -125,7 +127,7 @@ export function PdaEstimator({ ports, coverage, terminals, vessels }: Props) {
         </div><div className={`pda-coverage ${covered ? "is-covered" : "is-manual"}`}>{covered ? "Current published coverage exists; the selected call date is verified when you calculate." : "No current published tariff is available. An authorized manual quotation is required."}</div></section>
 
         <section className="pda-card"><h2>2. Vessel particulars</h2>
-          <label>Vessel<select value={vesselId} onChange={(e) => setVesselId(e.target.value)}><option value="">Enter manually</option>{vessels.map((item) => <option key={item.id} value={item.id}>{item.name} · IMO {item.imo}</option>)}</select></label>
+          <label>Vessel<select value={vesselId} onChange={(e) => selectVessel(e.target.value)}><option value="">Enter manually</option>{vessels.map((item) => <option key={item.id} value={item.id}>{item.name} · IMO {item.imo}</option>)}</select></label>
           <div className="pda-grid pda-grid--six">
             <Numeric label="GT" value={gt} set={setGt}/><Numeric label="NT" value={nt} set={setNt}/><Numeric label="SCNRT" value={scnrt} set={setScnrt}/><Numeric label="DWT" value={dwt} set={setDwt}/><Numeric label="LOA (m)" value={loa} set={setLoa}/><Numeric label="Draft (m)" value={draft} set={setDraft}/>
           </div>
