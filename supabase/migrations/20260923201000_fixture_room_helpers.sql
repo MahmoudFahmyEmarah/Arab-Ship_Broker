@@ -33,11 +33,19 @@
 create or replace function public.fn_fixture_actor()
  returns uuid language plpgsql stable security definer set search_path to 'public'
 as $$
-declare v uuid;
+declare v uuid; v_active boolean;
 begin
   v := public.fn_app_user_id();
   if v is null then
     raise exception 'FX_AUTH: sign in to use the Fixture Room' using errcode = '42501';
+  end if;
+  -- An inactive account is no actor. Account erasure (integration INT-H1)
+  -- keeps the users row as an anonymous tombstone with is_active = false so
+  -- the ledgers' foreign keys hold; whatever token that account still holds
+  -- must not read, poll, answer or create as its former party.
+  select u.is_active into v_active from public.users u where u.id = v;
+  if coalesce(v_active, false) is not true then
+    raise exception 'FX_AUTH: this account is not active' using errcode = '42501';
   end if;
   return v;
 end $$;

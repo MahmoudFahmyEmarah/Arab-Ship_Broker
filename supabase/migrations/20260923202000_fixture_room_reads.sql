@@ -219,6 +219,33 @@ end $$;
 revoke all on function public.get_fixture_room(uuid, integer) from public, anon, authenticated;
 grant execute on function public.get_fixture_room(uuid, integer) to authenticated, service_role;
 
+-- ── admin: the access log of a room ─────────────────────────────────────────
+-- For the admin console (app/(admin)/admin/fixtures). Admin-only through the
+-- same authority as every other admin read (fn_is_admin(), the JWT claim);
+-- reading the log is not itself logged — it IS the log. Members get FX_AUTH.
+create or replace function public.admin_fixture_access_log(p_room_id uuid, p_limit integer default 100)
+ returns jsonb language plpgsql stable security definer set search_path to 'public'
+as $$
+declare v_out jsonb;
+begin
+  perform public.fn_fixture_actor();
+  if not public.fn_is_admin() then
+    raise exception 'FX_AUTH: the access log is an admin read' using errcode = '42501';
+  end if;
+  if p_room_id is null or not exists (select 1 from public.fixture_rooms r where r.id = p_room_id) then
+    raise exception 'FX_NOT_FOUND: room % not found', p_room_id using errcode = 'P0002';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', l.id, 'userId', l.user_id, 'isAdmin', l.is_admin, 'reason', l.reason, 'at', l.at,
+      'userLabel', coalesce(nullif(btrim(u.full_name), ''), 'Admin')) order by l.at desc), '[]'::jsonb)
+    into v_out
+    from (select * from public.fixture_access_log x where x.room_id = p_room_id order by x.at desc limit least(greatest(coalesce(p_limit, 100), 1), 500)) l
+    left join public.users u on u.id = l.user_id;
+  return v_out;
+end $$;
+revoke all on function public.admin_fixture_access_log(uuid, integer) from public, anon, authenticated;
+grant execute on function public.admin_fixture_access_log(uuid, integer) to authenticated, service_role;
+
 -- ── inbox ───────────────────────────────────────────────────────────────────
 create or replace function public.list_fixture_rooms(p_status text[] default null, p_limit integer default 50)
  returns jsonb language plpgsql volatile security definer set search_path to 'public'

@@ -337,20 +337,38 @@ export interface FixtureCommandOk<T = Record<string, unknown>> {
  * Display shape for a future PDA link (integration migration 2026092330xxxx).
  * Nothing in the Fixture Room branch persists or returns this yet; it exists
  * so the room can render a link the moment the integration owner ships it.
+ *
+ * Aligned (26 Sep 2026, mailbox O2C-002) to the guarded
+ * `fn_pda_estimate_header(uuid)` the PDA owner will provide: the safe display
+ * header only. Deliberately absent: the estimate's `vessel_id` (validation-only
+ * on the integration path; it would defeat TBN masking), the input snapshot,
+ * line inputs and any `enteredBy` label (a person's name). The link event
+ * snapshots exactly this header at link time.
  */
 export interface FixturePdaLinkDisplay {
   id: string;
   purpose: "load" | "discharge" | "other";
   pdaEstimateId: string;
   portLocode: string | null;
+  terminalId: string | null;
   terminalName: string | null;
   tariffVersionId: string | null;
   coverage: "published" | "partial" | "manual_required" | null;
+  /** The port-call date the estimate was made for. */
+  callDate: string | null;
   nativeCurrency: string | null;
   nativeTotal: number | null;
   convertedCurrency: string | null;
   convertedTotal: number | null;
+  /** The rate behind convertedTotal and where it came from ("member" = typed by the estimate's owner). */
+  fxRate: number | null;
+  fxSource: "member" | null;
   generatedAt: string | null;
+  /** True once the owner saved a newer estimate that supersedes this one. */
+  isSuperseded: boolean | null;
+  lineCount: number | null;
+  manualLineCount: number | null;
+  warningCount: number | null;
   linkedByLabel: string | null;
   supersededByLinkId: string | null;
 }

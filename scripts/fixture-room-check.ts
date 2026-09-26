@@ -264,3 +264,17 @@ ok(/'vesselId', case when v_mask_vessel then null else r\.vessel_id end/.test(re
 ok(!/'vesselId', v_vessel_id/.test(commands), "the creation event payload carries no vessel id (FR-H3)");
 ok(/fn_fixture_term_catalogue\(v_version\)/.test(commands) && /term_catalogue_version/.test(commands), "creation verifies the catalogue against the versioned definitions and persists the version (FR-H2)");
 ok(/order by \(x\.result is not null\) desc, x\.seq/.test(helpers), "the replay returns the result-bearing event (FR-M2)");
+ok(/if coalesce\(v_active, false\) is not true then/.test(helpers), "fn_fixture_actor refuses an inactive (anonymised) account (INT-H1, Fixture side)");
+// the admin console (app/(admin)/admin/fixtures): its own gate, every read and write through the RPCs with the admin's session
+const consoleFiles = ["page.tsx", "[id]/page.tsx", "actions.ts", "ui.tsx"].map((f) => read(`app/(admin)/admin/fixtures/${f}`));
+ok(consoleFiles.every((s) => !/getSupabaseAdminClient|SUPABASE_SERVICE_ROLE_KEY|from\("fixture_/.test(s)), "the admin console uses no service-role client and reads no fixture table directly");
+ok(/requireAdmin\(\{ section: "fixtures" \}\)/.test(consoleFiles[0]) && /requireAdmin\(\{ section: "fixtures" \}\)/.test(consoleFiles[1]) && (consoleFiles[2].match(/requireAdmin\(\{ section: "fixtures", edit: true \}\)/g) ?? []).length === 2, "both console pages gate on section \"fixtures\"; both actions require edit access");
+ok(/adminFixtureAccessLog\(/.test(consoleFiles[1]) && /app_metadata/.test(consoleFiles[1]) && /app_metadata/.test(consoleFiles[0]), "the console reads the access log through the RPC and states the JWT-claim dependency on both pages");
+const reads = read("supabase/migrations/20260923202000_fixture_room_reads.sql");
+ok(/create or replace function public\.admin_fixture_access_log\(p_room_id uuid, p_limit integer default 100\)[\s\S]*?if not public\.fn_is_admin\(\) then/.test(reads) && /grant execute on function public\.admin_fixture_access_log\(uuid, integer\) to authenticated/.test(reads), "admin_fixture_access_log is admin-only inside and granted explicitly");
+ok(/drop function if exists public\.admin_fixture_access_log\(uuid, integer\)/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops admin_fixture_access_log");
+// The caller's admin authority is fn_is_admin() (the JWT claim) in every read and command; the one read of a
+// users.role in the helpers classifies a LISTING OWNER as platform-synced (fn_fixture_resolve_counterparty),
+// never the caller.
+const callerSql = (reads + commands).split(/\r?\n/).filter((l) => !/^\s*--/.test(l)).join("\n");
+ok(!/users\.role|u\.role|->>'role'/.test(callerSql) && (callerSql.match(/fn_is_admin\(\)/g) ?? []).length >= 5, "no read or command trusts users.role for the caller's admin decision; fn_is_admin() is the authority (mailbox O2C-004)");

@@ -46,6 +46,7 @@ drop function if exists public.fn_fixture_rep(public.fixture_parties, uuid, bool
 drop function if exists public.fn_fixture_terminal(text);
 
 -- ── reads (20260923202000) ──────────────────────────────────────────────────
+drop function if exists public.admin_fixture_access_log(uuid, integer);
 drop function if exists public.list_fixture_rooms(text[], integer);
 drop function if exists public.get_fixture_room(uuid, integer);
 drop function if exists public.get_fixture_room_version(uuid);

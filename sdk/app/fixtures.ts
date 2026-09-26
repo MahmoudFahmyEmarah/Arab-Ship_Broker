@@ -64,6 +64,22 @@ export async function listFixtureRooms(supabase: SupabaseClient, statuses?: Fixt
   return (data ?? []) as FixtureRoomListItem[];
 }
 
+/** One durable access-log row of a room (admin console only; the RPC refuses members). */
+export interface FixtureAccessLogEntry {
+  id: number;
+  userId: string | null;
+  userLabel: string;
+  isAdmin: boolean;
+  reason: string;
+  at: string;
+}
+
+export async function adminFixtureAccessLog(supabase: SupabaseClient, roomId: string, limit = 100): Promise<FixtureAccessLogEntry[]> {
+  const { data, error } = await supabase.rpc("admin_fixture_access_log", { p_room_id: roomId, p_limit: limit });
+  if (error) throw new FixtureRequestError(toError(error));
+  return (data ?? []) as FixtureAccessLogEntry[];
+}
+
 // ── commands ────────────────────────────────────────────────────────────────
 // The catalogue version is named explicitly: the database verifies the terms
 // against exactly that versioned sheet and refuses any deviation (FR-H2).

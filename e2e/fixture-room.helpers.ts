@@ -78,6 +78,54 @@ export async function seedFixture(): Promise<FixtureSeed> {
   return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, availabilityId: a.id };
 }
 
+export interface AdminSeed { email: string; userId: string }
+
+/**
+ * A super admin whose session carries the claim the ledger's admin check reads
+ * (app_metadata.role = 'admin'), set through the Auth admin API — the shared
+ * global setup seeds sub-admins without it. Local stack only; removed by
+ * cleanupAdmin.
+ */
+export async function seedAdmin(stamp: string): Promise<AdminSeed> {
+  const { url, service } = localKeys();
+  const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
+  const email = `e2e-fx-adm-${stamp}@arabshipbroker.test`;
+  const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true, app_metadata: { role: "admin" } });
+  if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
+  const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: "E2E Fixture Admin", company: "Arab ShipBroker", role: "admin", admin_tier: "super", subscription_tier: "T4", is_active: true });
+  if (e2) throw new Error(`users (admin): ${e2.message}`);
+  return { email, userId: data.user.id as string };
+}
+
+export function cleanupAdmin(a: AdminSeed) {
+  const sql = `
+set session_replication_role = replica;
+delete from public.fixture_access_log where user_id = '${a.userId}';
+delete from public.users where id = '${a.userId}';
+delete from auth.users where id = '${a.userId}';
+`;
+  try {
+    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: sql, stdio: ["pipe", "ignore", "ignore"] });
+  } catch {
+    // leaving rows behind on a disposable database is not a test failure
+  }
+}
+
+/** A supabase-js client signed in as a seeded member, for API calls the browser is not needed for. */
+export async function apiClientAs(email: string): Promise<SupabaseClient> {
+  const url = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
+  let anon = process.env.E2E_SUPABASE_ANON_KEY;
+  if (!anon) {
+    const out = execSync("npx supabase status -o env", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    anon = out.match(/^ANON_KEY="?([^"\n]+)"?/m)?.[1];
+  }
+  if (!anon) throw new Error("no local anon key (E2E_SUPABASE_ANON_KEY or `supabase status`)");
+  const c = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error } = await c.auth.signInWithPassword({ email, password: PASSWORD });
+  if (error) throw new Error(`sign in ${email}: ${error.message}`);
+  return c;
+}
+
 export function cleanupFixture(s: FixtureSeed) {
   const sql = `
 set session_replication_role = replica;
