@@ -5,6 +5,7 @@ const migration = await readFile("supabase/migrations/20260923320000_fixture_pda
 const rollback = await readFile("supabase/rollback/20260923_fixture_pda_shared_integration_down.sql", "utf8");
 const fixtureTypes = await readFile("lib/fixture-room/types.ts", "utf8");
 const fixtureSdk = await readFile("sdk/app/fixtures.ts", "utf8");
+const portalSidebar = await readFile("components/portal/PortalSidebar.tsx", "utf8");
 
 assert.match(migration, /create or replace function public\.sync_fixture_listing_status/i);
 assert.match(migration, /fn_fixture_owns_listing\('cargo', r\.cargo_listing_id\)/i);
@@ -33,5 +34,7 @@ assert.match(rollback, /drop function if exists public\.link_fixture_pda_estimat
 assert.match(fixtureTypes, /"listing_sync\.applied" \| "pda\.linked"/i);
 assert.match(fixtureSdk, /export function syncFixtureListingStatus/i);
 assert.match(fixtureSdk, /export function linkFixturePdaEstimate/i);
+assert.match(portalSidebar, /href: `\$\{basePath\}\/ports-da`[^\n]*disabled: econLocked/i);
+assert.doesNotMatch(portalSidebar, /href: `\$\{basePath\}\/ports-da`[^\n]*comingSoon/i);
 
 console.log("MODULE INTEGRATION CONTRACT: ALL ASSERTIONS PASSED");

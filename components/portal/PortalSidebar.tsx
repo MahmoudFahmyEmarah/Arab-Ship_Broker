@@ -154,7 +154,7 @@ export function PortalSidebar({
     ...(isVessel ? [{ href: `${basePath}/vessels/browse`, label: "Tonnage Market", glyph: (a: boolean) => <IconVessel className="nav-icon" size={16} color={c(a)} /> }] : []),
     { section: "Economic Calculators" },
     { href: `${basePath}/voyage-estimator`, label: "Voyage Estimator", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconVoyage className="nav-icon" size={16} color={c(a)} /> },
-    { href: `${basePath}/ports-da`, label: "Ports DA Calculator", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconPortDA className="nav-icon" size={16} color={c(a)} /> },
+    { href: `${basePath}/ports-da`, label: "Ports DA Calculator", disabled: econLocked, glyph: (a: boolean) => <IconPortDA className="nav-icon" size={16} color={c(a)} /> },
     { href: `${basePath}/suez-toll`, label: "Suez Canal Toll", comingSoon: role !== "admin", disabled: econLocked, glyph: (a: boolean) => <IconSuezToll className="nav-icon" size={16} color={c(a)} /> },
     ...(role === "admin"
       ? [
