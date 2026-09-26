@@ -743,7 +743,9 @@ a.adm-stat:hover { transform: var(--lift); box-shadow: var(--adm-sh-hover); }
   background: var(--asb-white);
   border: var(--adm-ridge);
   border-radius: var(--adm-r-card);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   font-size: var(--fs-body-sm);
   box-shadow: var(--adm-sh);
 }
