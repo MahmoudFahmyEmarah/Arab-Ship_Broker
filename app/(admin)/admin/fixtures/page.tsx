@@ -62,7 +62,7 @@ export default async function AdminFixturesPage({ searchParams }: { searchParams
         <div className="adm-empty" data-testid="fixtures-empty">No {filter.label.toLowerCase()} rooms.</div>
       ) : (
         <Card title="Rooms" sub={`${filter.label} · newest activity first`} testId="fixtures-table">
-          <div className="adm-table">
+          <div className="adm-table" style={{ overflowX: "auto" }}>
             <table>
               <thead>
                 <tr>

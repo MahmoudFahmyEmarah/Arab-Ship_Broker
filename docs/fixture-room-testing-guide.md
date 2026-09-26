@@ -461,3 +461,57 @@ needs none), and direct peeks at `fixture_events` / `fixture_terms` must run
 as the owner, because members hold no table grant. That refusal is the
 boundary the RLS suite asserts, so it is the suite that changed, not the
 grants.
+
+## 10 · Admin console: keyboard, names, focus and layout (26 Sep 2026)
+
+Two Fixture-owned suites extend §5's member coverage to the admin fixtures
+console, run against a production build of the worktree with the local
+stack's keys, served by `next start -p 3101` (the 3100 server belongs to the
+integration owner and was not touched):
+
+```
+E2E_BASE_URL=http://localhost:3101 E2E_SUPABASE_SERVICE_ROLE_KEY=… E2E_SUPABASE_ANON_KEY=…   npx playwright test e2e/fixture-room-admin-a11y.spec.ts e2e/fixture-room-admin-responsive.spec.ts e2e/fixture-room-admin.spec.ts --project=edit
+```
+
+`fixture-room-admin-a11y.spec.ts` (4 tests): the status filter is a
+`tablist` named "Room status" whose chips are links with `aria-selected`,
+reachable by keyboard, with a visible focus ring, and activated by Enter;
+the rooms table is a real table with column headers and row links named by
+the room ref; on the room page there is one `h1`, every card is a `section`
+with exactly one `h2`, the redaction input is named "Redaction reason", the
+close form's reason and note are labelled by wrapping labels and its button
+is named, focus is visible on the redaction input and the close reason;
+Tab alone reaches the header links, the redaction control and the close
+button in document order; the flash is a `role="status"` region and an
+admin with the claim sees no claim notice.
+
+`fixture-room-admin-responsive.spec.ts` (8 tests, 390 / 768 / 1280 /
+1440 px): no horizontal page scroll on the list or the room page; when a
+table is wider than its container the container scrolls (`overflow-x`
+auto or scroll), never the page; the messages card, the close card and the
+close button stay inside the viewport.
+
+Two findings on the first run, both fixed before the second:
+
+- the new suites used the shared 10 s assertion budget, and a Link
+  navigation on the loaded machine took longer; they now carry the same
+  60 s budget as the other console spec (every assertion is about rendered
+  or persisted state);
+- at 768 px the shared `.adm-table` container clips its content
+  (`overflow: hidden`; the `overflow-x: auto` rule applies at ≤760 px only),
+  so a wide table lost its right-hand columns with no way to pan. The
+  shared stylesheet is not a Fixture file (mailbox O2C-007); the two console
+  pages set an inline `overflowX: auto` on their table wrappers, so the
+  fixtures console pans at every width. In the same commit the close form
+  grid wraps (`repeat(auto-fit, minmax(180px, 1fr))` instead of three
+  fixed columns) and the redaction form wraps, both for 390 px, and the
+  claim notice states the post-`7fb2064` rule (claim AND active admin row,
+  written on promotion).
+
+| Gate | Result |
+|---|---|
+| `npm run build` equivalent (`next build`, local keys) | exit 0, 163 s, `/admin/fixtures` and `/admin/fixtures/[id]` emitted, client bundle on the local stack |
+| `fixture-room-admin-a11y.spec.ts` + `fixture-room-admin-responsive.spec.ts` + `fixture-room-admin.spec.ts` against `next start -p 3101` | **15 passed (4.8 min)**: 4 keyboard/name/focus, 8 layout, 3 regression |
+| first run, before the two fixes | 2 failed (the 10 s budget on a Link navigation; the 768 px clipped table), 5 passed, the rest skipped by serial mode |
+| `scripts/fixture-room-check.ts` | 212 passed, 0 failed |
+| `tsc --noEmit` (project) / `eslint` on the console and the specs | 0 errors / clean |
