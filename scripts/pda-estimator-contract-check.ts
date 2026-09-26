@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   buildPdaEstimatorCatalog,
+  markPdaEstimatorCatalogUnavailable,
   parsePdaEstimatorHandoff,
   resolvePdaEstimatorBootstrap,
   type PdaEstimatorPortOption,
@@ -107,6 +108,7 @@ const resolved = resolvePdaEstimatorBootstrap(catalog, {
   cargoId: "cargo-ref-1",
   vesselId: "vessel-1",
 });
+assert.equal(resolved.catalogState, "ready");
 assert.deepEqual(resolved.initial, {
   vesselId: "availability-1",
   cargoId: "cargo-1",
@@ -160,5 +162,13 @@ assert.deepEqual(
   ranged.notices.map((notice) => notice.code),
   ["CARGO_LOAD_PORT_NEEDS_CHOICE", "CARGO_DISCHARGE_PORT_NEEDS_CHOICE"],
 );
+
+const unavailable = markPdaEstimatorCatalogUnavailable(resolved);
+assert.equal(unavailable.catalogState, "unavailable");
+assert.equal(unavailable.catalog.vessels.length, 0);
+assert.equal(unavailable.catalog.cargos.length, 0);
+assert.equal(unavailable.initial.vesselId, null);
+assert.equal(unavailable.initial.cargoId, null);
+assert.deepEqual(unavailable.notices.map((notice) => notice.code), ["LIVE_CATALOG_UNAVAILABLE"]);
 
 console.log("PDA ESTIMATOR CONTRACT CHECK: ALL ASSERTIONS PASSED");

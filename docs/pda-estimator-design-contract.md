@@ -62,6 +62,8 @@ boundary. Opus-owned components receive only:
 - an authorised, serialisable vessel catalog;
 - an authorised, serialisable cargo catalog;
 - verified active port options;
+- a `catalogState` that prevents sample fallback records from entering the
+  estimator when either live catalog fails;
 - a resolved initial selection;
 - safe handoff notices.
 

@@ -67,6 +67,7 @@ export interface PdaEstimatorHandoff {
 }
 
 export type PdaEstimatorNoticeCode =
+  | "LIVE_CATALOG_UNAVAILABLE"
   | "HANDOFF_SOURCE_IGNORED"
   | "HANDOFF_CARGO_NOT_FOUND"
   | "HANDOFF_VESSEL_NOT_FOUND"
@@ -95,6 +96,7 @@ export interface PdaEstimatorInitialSelection {
 }
 
 export interface PdaEstimatorBootstrap {
+  catalogState: "ready" | "unavailable";
   catalog: PdaEstimatorCatalog;
   initial: PdaEstimatorInitialSelection;
   notices: PdaEstimatorNotice[];
@@ -311,6 +313,7 @@ export function resolvePdaEstimatorBootstrap(
   }
 
   return {
+    catalogState: "ready",
     catalog,
     initial: {
       vesselId: vessel?.id ?? null,
@@ -324,5 +327,27 @@ export function resolvePdaEstimatorBootstrap(
       ref: handoff.ref,
     },
     notices,
+  };
+}
+
+export function markPdaEstimatorCatalogUnavailable(
+  bootstrap: PdaEstimatorBootstrap,
+): PdaEstimatorBootstrap {
+  return {
+    ...bootstrap,
+    catalogState: "unavailable",
+    catalog: { ...bootstrap.catalog, vessels: [], cargos: [] },
+    initial: {
+      ...bootstrap.initial,
+      vesselId: null,
+      cargoId: null,
+      loadPortLocode: null,
+      dischargePortLocode: null,
+      quantityMt: null,
+    },
+    notices: [{
+      code: "LIVE_CATALOG_UNAVAILABLE",
+      message: "Live vessel or cargo records could not be loaded. Refresh before creating an estimate.",
+    }],
   };
 }
