@@ -22,7 +22,7 @@ const expect = baseExpect.configure({ timeout: 90_000 });
 import { cleanupFixture, dismissOverlays, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
-test.describe.configure({ mode: "serial", timeout: 900_000 });   // dev-mode route compiles and actions are slow on the local stack
+test.describe.configure({ mode: "serial", timeout: 180_000 });
 
 let seed: FixtureSeed;
 let roomUrl = "";

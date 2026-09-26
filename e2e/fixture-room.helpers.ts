@@ -7,7 +7,7 @@
  * platform's own match rules pair with it), signs them in through the real
  * login form, and removes everything afterwards.
  */
-import { type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
 
@@ -184,7 +184,10 @@ export async function signInAs(browser: Browser, baseURL: string, email: string)
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(PASSWORD);
   await page.getByRole("button", { name: /sign in|log in/i }).first().click();
-  await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+  // The app uses client-side routing after the auth call. Waiting for a page
+  // `load` event can miss that transition even when the dashboard is already
+  // rendered, so assert the observable URL instead.
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
   await dismissOverlays(page);
   return { context, page };
 }

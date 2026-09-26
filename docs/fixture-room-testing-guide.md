@@ -229,8 +229,12 @@ landing correctly in the dev log:
   at the same time, the stall being inside the dev Next process) exceeded
   the 30 s and then the 90 s assertion budgets while the bid, the accept and
   the acknowledgement all landed. Budgets are now 90 s per assertion, 120 s
-  for the cross-tab waits and 900 s per test: every assertion is about
-  persisted state, so a wide budget hides nothing.
+  for the cross-tab waits and, since the suites run against the production
+  build, 180 s per test (mirrored on 26 Sep from the integration branch's
+  `b88d676`, which also made the sign-in helper assert the observable URL
+  with `toHaveURL` instead of waiting for a page load the client-side
+  router never emits): every assertion is about persisted state, so a wide
+  budget hides nothing.
 
 Then against the **production build** (`npm run build` with the local
 stack's keys, served by `next start -p 3100`; the login page answers in
