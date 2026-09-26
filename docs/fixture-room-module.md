@@ -37,7 +37,9 @@ those names, and a later re-apply's `create … if not exists` would otherwise
 skip every named index and bring the module back without its unique
 indexes (found and fixed 25 Sep 2026).
 
-Reads: `get_fixture_room`, `get_fixture_room_version`, `list_fixture_rooms`.
+Reads: `get_fixture_room`, `get_fixture_room_version`, `list_fixture_rooms`,
+and for the admin console `admin_fixture_access_log` (admin-only inside;
+reading the log is not itself logged).
 Commands: `create_fixture_room`, `invite_fixture_party`,
 `respond_fixture_invitation`, `submit_fixture_proposal`,
 `withdraw_fixture_proposal`, `accept_fixture_proposal`, `reopen_fixture_term`,
@@ -47,7 +49,10 @@ Commands: `create_fixture_room`, `invite_fixture_party`,
 `agree_fixture_disclosure`, `close_fixture_room`, `redact_fixture_message`.
 
 Every command: resolves the actor as `public.users.id` through
-`fn_app_user_id()` and its seats through `fn_fixture_member_org_ids()`
+`fn_app_user_id()` and refuses an inactive account (`users.is_active = false`
+— the shape account erasure leaves behind, so an anonymised member cannot
+read, poll, answer or create as its former party), its seats through
+`fn_fixture_member_org_ids()`
 (current AND active; the shared `fn_my_org_ids()` checks current only — audit
 FR-M1), locks the room `FOR UPDATE`, replays a repeated `idempotency_key`
 (same arguments → the result-bearing event's envelope at the final version,
@@ -125,6 +130,23 @@ Not in this branch (by the freeze): `fixture_pda_links`,
   `MatchBuilder`, `RoomInbox`, `RecapPrint`, `FixtureLocked`,
   `fixture-room.css` (tokens only).
 
+## Admin console (26 Sep 2026)
+
+`app/(admin)/admin/fixtures` lists every room and opens one with the read
+model exactly as the database returns it to an admin: identities unmasked,
+the ledger with actor ids and idempotency keys, recaps, and the room's
+durable access log. Two platform actions: redact a message and close a room
+as failed or expired; each form carries the idempotency key it was rendered
+with, so a resubmit replays. The pages gate on admin section `fixtures`,
+which the shared registry does not know yet (request S5), so `canAccess`
+admits the owner and bounces every sub-admin until it is registered. Every
+read and write uses the admin's own session through the governed RPCs; no
+service-role client and no direct table read. The database's admin authority
+is `fn_is_admin()` (the JWT claim); a session without the claim is told so on
+both pages and is treated as a member by the ledger. The console has no
+member-facing surface; the member room already gives admins the mediator's
+tools.
+
 ## Known limitations and data assumptions
 
 - `mediation` is always `platform` in v1: Arab ShipBroker is the explicit
@@ -148,3 +170,12 @@ Not in this branch (by the freeze): `fixture_pda_links`,
   on its ownership row only; a colleague from the member's other seat is not
   a participant. A personally owned listing is represented by the member
   even when the member also holds seats elsewhere.
+- The admin authority for every Fixture read and command is `fn_is_admin()`
+  (the JWT claim `app_metadata.role = 'admin'`), never `users.role`: on the
+  current baseline a member can update their own `users` row (policy
+  "users: own row" with no column restriction), so `role`, `subscription_tier`
+  and the admin columns are not trustworthy from inside the database. That
+  also bounds the D3 tier gate, which reads `users.subscription_tier`. Both
+  are platform-level and raised with the integration owner (mailbox
+  O2C-004, 26 Sep 2026); the Fixture branch adds nothing that trusts those
+  columns.

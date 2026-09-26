@@ -143,5 +143,77 @@ begin
   exception when others then
     if sqlerrm not like 'FX_IMMUTABLE:%' then raise; end if;
   end;
-  raise notice 'R4 ok: T1 invitee acts; admin reads are unmasked and logged; member reads are not; the log is append-only';
+  -- the admin console reads the log through admin_fixture_access_log: admins only, and reading it is not logged
+  perform pg_temp.fx_as('u_ow1');
+  e := pg_temp.fx_err(format('select public.admin_fixture_access_log(%L, 50)', v_room));
+  if e <> 'FX_AUTH' then raise exception 'R4: a member reading the access log must be FX_AUTH, got %', e; end if;
+  perform pg_temp.fx_owner();
+  select count(*) into v_before from public.fixture_access_log where room_id = v_room;
+  perform pg_temp.fx_as('u_adm', true);
+  r := public.admin_fixture_access_log(v_room, 50);
+  perform pg_temp.fx_owner();
+  select count(*) into v_after from public.fixture_access_log where room_id = v_room;
+  -- (an admin who is the platform party of the room is logged as 'mediate'; an admin who is not, as 'inspect')
+  if jsonb_array_length(r) < 1 or not exists (select 1 from jsonb_array_elements(r) x where x->>'reason' in ('inspect', 'mediate') and (x->>'isAdmin')::boolean and x->>'userId' = pg_temp.fx_id('u_adm')::text) then
+    raise exception 'R4: the access log read must list the admin inspection: %', r; end if;
+  if v_after <> v_before then raise exception 'R4: reading the access log must not write to it'; end if;
+  perform pg_temp.fx_as('u_adm', true);
+  e := pg_temp.fx_err(format('select public.admin_fixture_access_log(%L, 50)', gen_random_uuid()));
+  if e <> 'FX_NOT_FOUND' then raise exception 'R4: an unknown room must be FX_NOT_FOUND, got %', e; end if;
+  perform pg_temp.fx_owner();
+  raise notice 'R4 ok: T1 invitee acts; admin reads are unmasked and logged; member reads are not; the log is append-only and admin-only to read';
+end $$;
+
+-- ── R5 · an anonymised member (the INT-H1 tombstone) cannot act as its former party; the counterparty keeps the room ─
+do $$
+declare v jsonb; r jsonb; v_room uuid; e text; p jsonb; v_tid uuid;
+begin
+  -- the charterer opens a room on the solo owner's position; the owner accepts, offers, and agrees to disclose
+  perform pg_temp.fx_as('u_ch1');
+  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'rls-create-a4', '{}'::jsonb);
+  v_room := (v->'data'->>'roomId')::uuid;
+  perform pg_temp.fx_as('u_solo');
+  v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'rls-a4-accept');
+  v_tid := pg_temp.fx_term(v_room, 'freight');
+  v := public.submit_fixture_proposal(v_room, v_tid, '{"num": 26}'::jsonb, null, false, null, pg_temp.fx_ver(v_room), 'rls-a4-offer');
+  v := public.agree_fixture_disclosure(v_room, pg_temp.fx_ver(v_room), 'rls-a4-disc-solo');
+  -- the platform erases the solo owner: the tombstone shape fn_anonymize_account leaves behind
+  -- (integration branch b6aed98): row kept, PII scrubbed, inactive, login link severed, seats rejected
+  perform pg_temp.fx_owner();
+  update public.users set full_name = 'Deleted account', company = null, email = null, phone = null, role = null,
+         is_active = false, subscription_tier = 'T1', supabase_user_id = null where id = pg_temp.fx_id('u_solo');
+  update public.organization_members set is_current = false, status = 'rejected' where user_id = pg_temp.fx_id('u_solo');
+  -- a token the erased account still held is refused at the Fixture boundary: read, poll, inbox, answer, act, create
+  perform pg_temp.fx_as('u_solo');
+  e := pg_temp.fx_err(format('select public.get_fixture_room(%L)', v_room));
+  if e <> 'FX_AUTH' then raise exception 'R5: erased member read must be FX_AUTH, got %', e; end if;
+  e := pg_temp.fx_err(format('select to_jsonb(public.get_fixture_room_version(%L))', v_room));
+  if e <> 'FX_AUTH' then raise exception 'R5: erased member poll must be FX_AUTH, got %', e; end if;
+  e := pg_temp.fx_err('select public.list_fixture_rooms(null, 50)');
+  if e <> 'FX_AUTH' then raise exception 'R5: erased member inbox must be FX_AUTH, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.submit_fixture_proposal(%L, %L, %L::jsonb, null, false, null, %s, %L)', v_room, v_tid, '{"num": 25}', pg_temp.fx_ver(v_room), 'rls-a4-erased-offer'));
+  if e <> 'FX_AUTH' then raise exception 'R5: erased member proposing must be FX_AUTH, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.respond_fixture_invitation(%L, true, %s, %L)', v_room, pg_temp.fx_ver(v_room), 'rls-a4-erased-answer'));
+  if e <> 'FX_AUTH' then raise exception 'R5: erased member answering must be FX_AUTH, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.post_fixture_message(%L, %L, %L, %L, null, %s, %L)', v_room, 'still here?', 'note', 'room', pg_temp.fx_ver(v_room), 'rls-a4-erased-msg'));
+  if e <> 'FX_AUTH' then raise exception 'R5: erased member messaging must be FX_AUTH, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a4'), 'rls-a4-erased-create', '{}'));
+  if e <> 'FX_AUTH' then raise exception 'R5: erased member creating must be FX_AUTH, got %', e; end if;
+  -- the counterparty keeps the room and its history, and never sees a person behind the vacated seat
+  perform pg_temp.fx_as('u_ch1');
+  r := public.get_fixture_room(v_room);
+  select x into p from jsonb_array_elements(r->'parties') x where x->>'side' = 'vessel' and x->>'capacity' = 'principal';
+  if p->>'label' <> 'Owner side' or p->>'status' <> 'active' then raise exception 'R5: the vacated seat must keep its label and status: %', p; end if;
+  if not exists (select 1 from jsonb_array_elements(r->'terms') x where x->>'code' = 'freight' and x->'vesselPosition'->>'displayValue' = '$26.00/MT') then
+    raise exception 'R5: the erased member''s offer must remain on the record'; end if;
+  if r::text like '%Seed Solo Owner%' or r::text like '%u_solo@fixture.test%' or r::text like '%Solo Shipping%' then
+    raise exception 'R5: PII of the erased member reached the counterparty'; end if;
+  -- disclosure completes from the charterer's side: the tombstone discloses as a generic label, never a person
+  v := public.agree_fixture_disclosure(v_room, pg_temp.fx_ver(v_room), 'rls-a4-disc-ch');
+  if (v->'data'->>'disclosed')::boolean is not true then raise exception 'R5: both principals agreed, disclosure expected'; end if;
+  r := public.get_fixture_room(v_room);
+  select x into p from jsonb_array_elements(r->'parties') x where x->>'side' = 'vessel' and x->>'capacity' = 'principal';
+  if p->>'name' <> 'Registered member' or p->>'deskLabel' is not null then raise exception 'R5: an erased member discloses as "Registered member" only, got %', p; end if;
+  if r::text like '%Deleted account%' then raise exception 'R5: the tombstone name must not surface either'; end if;
+  raise notice 'R5 ok: an anonymised member is refused on read, poll, inbox, answer, act and create; the counterparty keeps the room, the history and a person-free label';
 end $$;

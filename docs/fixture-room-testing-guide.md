@@ -60,7 +60,7 @@ first and refuses with an instruction when the module is present, unless
 | suite | proves |
 |---|---|
 | `fixture_state_smoke.sql` | creation (parties, snapshot, version, ref), replay / duplicate / mismatch / sanctioned / catalogue / outsider / tier refusals, invited → negotiating on the first proposal, stale version refused, one accepted proposal = the agreed value, fix on subs (clean when no subjects), subjects added / extended / wrong side refused, reopen on subs → negotiating + sync back to market, last lift → fixed atomically, contact-backed and anchored relayed parties, mediation on behalf (never for a direct party), subject failure → failed, terminal rooms final, successor room. **S2b (FR-H2):** eleven catalogue deviations (missing, extra, duplicated, renamed, relabelled, retyped, optionalised, reordered, recategorised, re-united, no `required`) and an unknown version are refused and create nothing; the exact v1 sheet is accepted with its listing hint, its version persisted on the room and in the `room.created` payload. **S7 (FR-H1, FR-M3):** a member with two active seats represents a listing as the organisation on its ownership row, and a colleague from the other seat is refused; a personally owned position is represented by the member even though the member sits in an unrelated organisation, both as counterparty and as creator; a member holding two invitations (organisation principal + personal broker) is refused without naming one, refused naming a party that is not theirs, accepts the named one, and answers the remaining single one without a party id |
-| `fixture_rls_smoke.sql` | every fixture table and internal helper closed to `authenticated`; outsider / pending member (not current) / **pending-but-current member (FR-M1: read, poll, inbox and invitation answer all refused)** / anon refused; a colleague of a party organisation is a participant; a viewer reads and messages but every commercial command is refused server-side; a T1 invitee acts; admin reads are unmasked and logged, member reads are not, the log is append-only |
+| `fixture_rls_smoke.sql` | every fixture table and internal helper closed to `authenticated`; outsider / pending member (not current) / **pending-but-current member (FR-M1: read, poll, inbox and invitation answer all refused)** / anon refused; a colleague of a party organisation is a participant; a viewer reads and messages but every commercial command is refused server-side; a T1 invitee acts; admin reads are unmasked and logged, member reads are not, the log is append-only. **R5 (INT-H1, Fixture side):** a member who accepted, offered and agreed to disclose is then erased into the tombstone shape the integration branch's `fn_anonymize_account` leaves (row kept, PII scrubbed, inactive, login link severed, seats rejected); a token that account still held is refused on read, poll, inbox, proposal, invitation answer, message and room creation (`FX_AUTH`); the counterparty keeps the room, the offer on the record and a person-free label, and once disclosure completes the vacated seat discloses as "Registered member", never the person or the tombstone name |
 | `fixture_masking_smoke.sql` | labels only before disclosure; no identity keys, names, emails, phones or listing notes in member payloads; own organisation visible to itself; disclosure needs both principals, then name + desk label only; TBN masked from the cargo side (room and inbox) until disclosure, **including every stable identifier — `room.vesselId`, `snapshot.vessel.vessel.id`, `snapshot.vessel.availability.vessel_id`, the inbox, and the whole payload text (FR-H3); the owner keeps them; one side agreeing reveals nothing; disclosure reveals them. M3b: a masked room on subjects shows the cargo side the sync requirement without the vessel id while the owner keeps it**; side / mediator message privacy; event payloads carry no message text; admin redaction; a contact-backed party discloses a desk name only |
 | `fixture_idempotency_smoke.sql` | a retry (same key, old expected_version) replays the original envelope with no new event; reuse with other arguments is `FX_IDEMPOTENCY_MISMATCH`; a missing key is `FX_VALIDATION`; a two-event command replays at its final version; create replays the room. **I3 (FR-M2):** an expired live offer is replaced, so `proposal.lapsed` precedes `proposal.submitted` under one key; the replay returns the submission's result and event id at the final version, writes nothing, and a reuse with other arguments is refused across the whole group |
 | `fixture_immutability_smoke.sql` | events, proposals and rooms-with-history refuse UPDATE / DELETE as `postgres` and as `service_role`; only redaction, invalidation and subject-resolution columns may change |
@@ -174,6 +174,7 @@ their rows afterwards.
 | `fixture-room.spec.ts` | builder from `?cargo=`, room at v2 invited, invitation in the owner's inbox and accepted, bid → holder chip, the owner's tab picks it up by polling, counter-offer, stale tab refused with the conflict banner and refreshed, accept → one agreed value on both tabs, recap published and acknowledged, masked activity feed, reload reconstructs the same room, printable recap |
 | `fixture-room-a11y.spec.ts` | term strips are buttons with `aria-expanded`, toggle with Enter and Space, labelled composer fields, visible focus ring, polite live region, Tab reaches the strips |
 | `fixture-room-responsive.spec.ts` | 390 / 768 / 1280 / 1440 px: no horizontal overflow, rail beside the main column above 1120 px and below it otherwise, footer reachable |
+| `fixture-room-admin.spec.ts` (26 Sep) | a seeded super admin whose session carries `app_metadata.role = 'admin'` (set through the Auth admin API; the shared global setup's sub-admin seats carry no claim) opens `/admin/fixtures`: the room a charterer opened through the RPCs is listed, its parties are unmasked (both organisation names and a raw org id), the ledger shows `message.posted` without the text and the message panel shows it, a reload shows the access log recording the admin read, the redact form withholds the text and writes `message.redacted`, the close form marks the room failed with a note; a member is bounced off the console |
 
 Result (24–25 Sep 2026, local stack, dev server on port 3100 because port
 3000 was held by another dev server):
@@ -279,3 +280,40 @@ Correction commit, 25 Sep 2026 (the same gates on the corrected sources):
   **exit 0**.
 - `npm run build`: **exit 0**, compiled in 2.2 min, the four Fixture routes
   emitted as dynamic routes.
+
+## 7 · Follow-up commit, 26 Sep 2026 (on top of the accepted `ebd6544`)
+
+Scope: `fn_fixture_actor()` refuses an inactive / anonymised account
+(INT-H1, Fixture side); RLS suite R5 (erasure) and the R4 extension for the
+admin-only `admin_fixture_access_log` read; the admin fixtures console
+(`app/(admin)/admin/fixtures`, section `fixtures`, owner-only until the
+registry knows it); `FixturePdaLinkDisplay` aligned to the PDA header
+contract without a vessel id; seven new source scans. The gates, in the
+order they ran, every one on the final sources:
+
+| gate | result |
+|---|---|
+| `node --import tsx scripts/fixture-room-check.ts` | **196 passed, 0 failed** |
+| `scripts/fixture-room-harness.sh --reapply --from-applied` | **HARNESS: OK** (4 migrations, 6 suites, 1 down), fingerprint identical, 0 residue, re-applied |
+| `fixture_race_two_sessions.sh` | **8/8** |
+| `scripts/fixture-room-integration-check.ts` | **25 passed, 0 failed** |
+| `npx tsc --noEmit --incremental false` (whole project) | **0 errors** |
+| `npx eslint` over the console, spec, helpers, SDK and check script | **exit 0** |
+| `npm run build` (local keys, for the browser run) | **exit 0**, 95 s, `/admin/fixtures` and `/admin/fixtures/[id]` emitted |
+| `fixture-room-admin.spec.ts` against `next start -p 3100` | **3 passed (1.4 min)** |
+| `fixture-room.spec.ts` against the same server (regression) | **4 passed (3.9 min)** |
+
+Two suite bodies needed correcting before the harness passed, both test
+bugs: the new R4 assertion expected the admin read's reason to be `inspect`
+where an admin who is the room's platform party is logged as `mediate`
+(now either), and its unknown-room probe ran as the database owner, who has
+no session (now as the admin). One check-script scan was too broad: it
+caught the counterparty resolver's read of a listing owner's `users.role`
+(platform-synced classification, not a caller decision) and now covers the
+reads and commands only.
+
+Probe behind mailbox O2C-004 (not a suite; rolled back): with the Fixture
+seed, a T1 member under the `authenticated` role updated its own
+`subscription_tier`, `role` and `admin_tier` through the baseline policy
+"users: own row" — 1 row. Reported to the integration owner; the Fixture
+branch trusts none of those columns for an admin decision.
