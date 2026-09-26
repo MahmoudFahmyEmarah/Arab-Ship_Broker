@@ -14,7 +14,7 @@ use it at `/dashboard/fixture-room` (inbox), `/new` (match builder), `/[id]`
 governed RPC; the fixture tables have RLS and no member grant, so PostgREST
 cannot serve them directly.
 
-## Database (migrations `20260923200000` … `20260923203000`)
+## Database (migrations `20260923200000` … `20260923204000`)
 
 | Object | Purpose |
 |---|---|
@@ -159,8 +159,16 @@ tools.
 - A relayed party never becomes direct: if the organisation behind it later
   gains a seat, the mediator invites that organisation explicitly.
 - A room cannot pair two listings owned by the same organisation or member.
-- Proposal expiry is lazy: a lapsed proposal is refused on acceptance and
-  reported by the read model; no sweep marks lapses.
+- Proposal expiry is observed, not enforced by a clock: a lapsed proposal is
+  refused on acceptance and reported by the read model; the ledger gains its
+  `proposal.lapsed` observation either when its own side replaces it or when
+  the service-only `sweep_fixture_proposal_lapses(p_limit)` (migration
+  `20260923204000`, 26 Sep 2026) runs. The sweep appends one actor-less
+  event per live, expired proposal in a room that is still negotiating
+  (rendered "System"; the room version moves so open tabs refresh), is
+  idempotent through the ledger, takes rooms `FOR UPDATE SKIP LOCKED`, and
+  rewrites nothing. Scheduling it (pg_cron or an external cron with the
+  service role) is the owner's decision; this branch schedules nothing.
 - `expired` is a mediator / admin close reason; `negotiation_window_ends_at`
   is informational.
 - Recap invalidation follows agreed content changes (accept, reopen, subject

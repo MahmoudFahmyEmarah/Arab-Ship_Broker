@@ -363,3 +363,75 @@ service-role claims. `app/(admin)/admin/queue/actions.ts` performs the review
 through the cookie client, so listing review breaks on the integration branch
 until the integration owner routes that write through the service client or
 lets the guard admit the nested counter update. Not a Fixture file; reported.
+
+## 9 · Proposal-lapse sweep, run on an isolated harness database (26 Sep 2026)
+
+What the commit adds: migration `20260923204000_fixture_room_expiry_sweep.sql`
+(`sweep_fixture_proposal_lapses(p_limit integer default 200)`, service_role
+only, described in the module doc), a guard in `submit_fixture_proposal` so
+the submit path writes no second `proposal.lapsed` when the ledger already
+holds one, the DOWN drop, the harness chain entry and the new `expiry` suite
+(`bodies/expiry.sql`, X1–X5), and ten pure checks.
+
+Why a second database: the shared local `postgres` database now carries the
+integration owner's chain, and his `fixture_pda_links` references
+`fixture_rooms`, so the Fixture DOWN would cut his module out from under
+him (mailbox O2C-006). The harness therefore ran in `asb_fixture`, a second
+database in the same container, built from repository artifacts only:
+
+```
+docker exec supabase_db_arab-ship-broker createdb -U postgres asb_fixture
+bash scripts/db-rebuild.sh --db asb_fixture      # stops at 20260815101000_group_mail_cron.sql
+```
+
+The rebuild stops there because pg_cron installs only into
+`cron.database_name` (`postgres`); that is a property of the extension, as
+the rebuild script's header says. Four migrations touch cron
+(`20260815101000`, `20260817100000`, `20260904203209`, `20260904212310`) and
+they use only `cron.job`, `cron.schedule(name, schedule, command)`,
+`cron.schedule(schedule, command)` and `cron.unschedule(id | name)`. A
+scratch script installed a stub `cron` schema with exactly that surface
+(nothing runs), dropped the one `create extension if not exists pg_cron;`
+line from the copy fed to psql, and applied the remaining 71 migrations in
+name order, each in its own transaction with `ON_ERROR_STOP`, recording
+them in `supabase_migrations.schema_migrations`. Result: 117 migrations
+recorded, 9 Fixture tables, the sweep present, no PDA object, no users
+guard trigger (that is integration-branch SQL). The stub and the
+continuation script live outside the repository; if a repo-owned
+`--cron-stub` option for `db-rebuild.sh` is wanted, that is a shared-script
+change for the integration owner (housekeeping request to follow).
+
+```
+HARNESS_PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_fixture" \
+  bash scripts/fixture-room-harness.sh --from-applied --reapply
+```
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 206 passed, 0 failed (10 new sweep checks) |
+| harness on `asb_fixture` (`--from-applied --reapply`) | OK: 5 migrations, 7 suites, DOWN, fingerprint identical, residue 0, chain re-applied; 50 s |
+| `fixture_expiry_smoke` X1–X5 | pass (standalone twice, then inside the harness) |
+| `tsc --noEmit` (project) | 0 errors |
+| `eslint scripts/fixture-room-check.ts` | clean |
+| race, API integration, browser suites | not re-run: they run through the shared stack's PostgREST, whose Fixture functions are the integration branch's; the sweep is service-only with no SDK or page surface, and no member-facing RPC changed shape |
+
+What the expiry suite proves: X1 a live one-minute offer, backdated as the
+owner, is observed once by the sweep (`actor_user_id` null, command
+`sweep_fixture_proposal_lapses`, key `sweep:<proposal>`, payload with
+proposal, term, side, display value and `expiredAt`), the room version moves
+by exactly one, pointers and term status are untouched, a second sweep
+writes nothing, and the counterparty's read model shows the position
+`lapsed` with the ledger entry labelled "System"; X2 the owner's replacement
+offer adds `proposal.submitted` only (no second lapse), and the lapsed offer
+still cannot be accepted (`FX_STATE`); X3 an agreed term is never swept even
+when its proposal row carries a past validity; X4 a withdrawn room is never
+swept; X5 `authenticated` and `anon` cannot execute the sweep, service_role
+can, and the limit clamps to 1..1000 with 200 as the default.
+
+Two corrections while writing the suite, both in the suite: a fresh room
+needs the owner's `respond_fixture_invitation` before the first offer (the
+idempotency suite's I3 replays an already-accepted room, which is why it
+needs none), and direct peeks at `fixture_events` / `fixture_terms` must run
+as the owner, because members hold no table grant. That refusal is the
+boundary the RLS suite asserts, so it is the suite that changed, not the
+grants.

@@ -433,7 +433,10 @@ begin
   v_prev_id := case rep.side when 'cargo' then t.cargo_proposal_id else t.vessel_proposal_id end;
   if v_prev_id is not null then
     select * into v_prev from public.fixture_proposals x where x.id = v_prev_id;
-    if v_prev.expires_at is not null and v_prev.expires_at < now() then
+    -- observe the lapse once: the sweep (20260923204000) may already have written it
+    if v_prev.expires_at is not null and v_prev.expires_at < now()
+       and not exists (select 1 from public.fixture_events e where e.room_id = r.id and e.type = 'proposal.lapsed'
+                          and e.payload->>'proposalId' = v_prev.id::text) then
       v_last := public.fn_fixture_event(r.id, 'proposal.lapsed', v_actor, acting.id, null, false, 'submit_fixture_proposal', p_idempotency_key, v_hash,
         jsonb_build_object('proposalId', v_prev.id, 'termId', t.id, 'termCode', t.code, 'side', rep.side, 'displayValue', v_prev.display_value, 'expiredAt', v_prev.expires_at), null);
     end if;

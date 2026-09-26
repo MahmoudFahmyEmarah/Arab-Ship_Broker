@@ -278,3 +278,18 @@ ok(/drop function if exists public\.admin_fixture_access_log\(uuid, integer\)/.t
 // never the caller.
 const callerSql = (reads + commands).split(/\r?\n/).filter((l) => !/^\s*--/.test(l)).join("\n");
 ok(!/users\.role|u\.role|->>'role'/.test(callerSql) && (callerSql.match(/fn_is_admin\(\)/g) ?? []).length >= 5, "no read or command trusts users.role for the caller's admin decision; fn_is_admin() is the authority (mailbox O2C-004)");
+
+// ── proposal-lapse sweep (26 Sep 2026, migration 20260923204000) ──────────────
+const sweep = read("supabase/migrations/20260923204000_fixture_room_expiry_sweep.sql");
+const sweepCode = sweep.split(/\r?\n/).filter((l) => !/^\s*--/.test(l)).join("\n");
+ok(/create or replace function public\.sweep_fixture_proposal_lapses\(p_limit integer default 200\)/.test(sweep) && /least\(greatest\(coalesce\(p_limit, 200\), 1\), 1000\)/.test(sweepCode), "the sweep exists with a bounded, clamped limit");
+ok(/revoke all on function public\.sweep_fixture_proposal_lapses\(integer\) from public, anon, authenticated;/.test(sweep) && /grant execute on function public\.sweep_fixture_proposal_lapses\(integer\) to service_role;/.test(sweep) && !/to (authenticated|anon)/.test(sweepCode), "the sweep is service_role only");
+ok(!/fn_fixture_actor\(\)/.test(sweepCode) && /'proposal\.lapsed', null, null, null, false,\s*'sweep_fixture_proposal_lapses'/.test(sweepCode), "the sweep has no member session: no actor, and the event names the sweep as its command");
+ok(/for update skip locked/.test(sweepCode) && /rm\.status not in \('withdrawn', 'failed', 'expired', 'fixed'\)/.test(sweepCode) && /t\.status in \('open', 'countered'\)/.test(sweepCode), "the sweep locks rooms without waiting and skips closed rooms and agreed terms");
+ok((sweepCode.match(/e\.type = 'proposal\.lapsed'/g) ?? []).length >= 2, "the sweep is idempotent through the ledger (candidate query and re-check under the lock)");
+ok(/-- observe the lapse once[\s\S]*?and not exists \(select 1 from public\.fixture_events e where e\.room_id = r\.id and e\.type = 'proposal\.lapsed'/.test(commands), "submit_fixture_proposal skips its own lapse observation when the ledger already holds one");
+ok(/drop function if exists public\.sweep_fixture_proposal_lapses\(integer\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops the sweep");
+const harnessSh = read("scripts/fixture-room-harness.sh");
+ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
+ok(!/40001/.test(sweepCode) && !/(pda_|tariff)/.test(sweepCode) && !/update public\.fixture_(proposals|terms)/.test(sweepCode), "the sweep raises no 40001, touches no PDA object and rewrites no proposal or term");
+ok(/X1 ok|X5 ok/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")) && /has_function_privilege\('authenticated', 'public\.sweep_fixture_proposal_lapses\(integer\)', 'execute'\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite covers the sweep and proves the member cannot execute it");
