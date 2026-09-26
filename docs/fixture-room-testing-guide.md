@@ -317,3 +317,49 @@ seed, a T1 member under the `authenticated` role updated its own
 `subscription_tier`, `role` and `admin_tier` through the baseline policy
 "users: own row" — 1 row. Reported to the integration owner; the Fixture
 branch trusts none of those columns for an admin decision.
+
+## 8 · SQL suites on top of the shared privilege boundary (26 Sep 2026)
+
+The integration owner closed mailbox O2C-004 with `7fb2064`
+(`20260923330000_user_privilege_boundary.sql`: member self-update limited to
+`full_name`/`company`/`phone` by a `BEFORE UPDATE` guard trigger, privileged
+`users` columns service-owned, `fn_is_admin()` = JWT claim AND active admin
+row, promotions synchronise the Auth claim). The local database is shared
+between the two agents and carried that migration, so the six Fixture SQL
+suites were run standalone against it (each file is `BEGIN … ROLLBACK`;
+nothing was applied or dropped, the harness was not run because the
+integration owner was re-applying his chain on the same database):
+
+```
+for f in supabase/tests/fixture_room/fixture_*_smoke.sql; do
+  docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres     -v ON_ERROR_STOP=1 -q -f - < "$f" | grep "ALL ASSERTIONS PASSED"; done
+```
+
+| Suite | Result | Note |
+|---|---|---|
+| `fixture_idempotency_smoke` | pass (67 s) | |
+| `fixture_immutability_smoke` | pass (48 s) | |
+| `fixture_masking_smoke` | pass (32 s) | |
+| `fixture_rls_smoke` | pass (24 s) | first run failed at R5 with "erased member read must be FX_AUTH, got OK" while the integration owner's re-apply was in flight (the database briefly held the `ebd6544` `fn_fixture_actor()` without the inactive-account refusal); with the `783b681` functions in place the suite passed twice, once with diagnostics (`fn_app_user_id()` resolves the tombstone by `id`, `is_active = false`, `auth.role() = 'authenticated'`, `fn_is_admin() = false`) and once unmodified |
+| `fixture_snapshot_smoke` | pass (54 s) | |
+| `fixture_state_smoke` | pass (59 s) | |
+
+What the boundary changes for the Fixture ledgers: nothing. R4 still sees an
+admin because the seed gives `u_adm` both the claim (`fx_as(k, true)`) and an
+active `role = 'admin'` row; R5's tombstone update runs as the owner with the
+JWT claims cleared, so the guard's `auth.role()` bypass applies exactly as it
+does for the service-role erasure command; `fn_fixture_actor()` keeps its own
+inactive-account refusal. The browser admin seed (`seedAdmin`) already sets
+both facts too.
+
+Probe behind mailbox O2C-005 (rolled back, `scratchpad/probe_rq_guard.sql`):
+a provisioned admin session (`fn_is_admin() = true`) can REJECT a pending
+`review_queue` item, but APPROVE, AMEND and FLAG fail with
+`ASB_USER_PROFILE: a member may update only their own profile` because the
+baseline trigger `fn_rq_on_review` bumps the submitter's `clean_posts` /
+`strike_count` inside the admin's own `authenticated` session and the new
+guard refuses any cross-account write there. The same approve succeeds under
+service-role claims. `app/(admin)/admin/queue/actions.ts` performs the review
+through the cookie client, so listing review breaks on the integration branch
+until the integration owner routes that write through the service client or
+lets the guard admit the nested counter update. Not a Fixture file; reported.

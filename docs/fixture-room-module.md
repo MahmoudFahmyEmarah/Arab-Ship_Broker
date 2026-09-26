@@ -142,8 +142,11 @@ which the shared registry does not know yet (request S5), so `canAccess`
 admits the owner and bounces every sub-admin until it is registered. Every
 read and write uses the admin's own session through the governed RPCs; no
 service-role client and no direct table read. The database's admin authority
-is `fn_is_admin()` (the JWT claim); a session without the claim is told so on
-both pages and is treated as a member by the ledger. The console has no
+is `fn_is_admin()`; since the integration commit `7fb2064` (26 Sep 2026) that
+is the JWT claim `app_metadata.role = 'admin'` AND a current, active `users`
+row with role admin, so a session without the claim, or demoted after its
+token was issued, is told so on both pages and is treated as a member by the
+ledger. The console has no
 member-facing surface; the member room already gives admins the mediator's
 tools.
 
@@ -170,12 +173,16 @@ tools.
   on its ownership row only; a colleague from the member's other seat is not
   a participant. A personally owned listing is represented by the member
   even when the member also holds seats elsewhere.
-- The admin authority for every Fixture read and command is `fn_is_admin()`
-  (the JWT claim `app_metadata.role = 'admin'`), never `users.role`: on the
-  current baseline a member can update their own `users` row (policy
-  "users: own row" with no column restriction), so `role`, `subscription_tier`
-  and the admin columns are not trustworthy from inside the database. That
-  also bounds the D3 tier gate, which reads `users.subscription_tier`. Both
-  are platform-level and raised with the integration owner (mailbox
-  O2C-004, 26 Sep 2026); the Fixture branch adds nothing that trusts those
-  columns.
+- The admin authority for every Fixture read and command is `fn_is_admin()`,
+  never a Fixture-side read of `users.role`. On the pre-integration baseline
+  a member could update their own `users` row (policy "users: own row" with
+  no column restriction), so `role`, `subscription_tier` and the admin
+  columns were not trustworthy from inside the database, which also bounded
+  the D3 tier gate (`users.subscription_tier`). Raised as mailbox O2C-004
+  (26 Sep 2026) and closed by the integration commit `7fb2064`
+  (`20260923330000_user_privilege_boundary.sql`): a member's self-update is
+  limited to `full_name`, `company` and `phone` by a guard trigger, the
+  privileged columns are service-owned, `fn_is_admin()` requires the JWT
+  claim AND an active admin row, and promotions keep the Auth claim in step.
+  The Fixture branch still adds nothing that trusts those columns on its
+  own; the SQL suites were re-run on top of that boundary (testing guide §8).
