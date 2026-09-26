@@ -39,6 +39,7 @@ export async function seedFixture(): Promise<FixtureSeed> {
   const { url, service } = localKeys();
   const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
   const stamp = Date.now().toString(36);
+  const testImo = String(1_000_000 + (Number.parseInt(stamp, 36) % 9_000_000));
   const mk = async (email: string, role: string, company: string) => {
     const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
     if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
@@ -65,7 +66,7 @@ export async function seedFixture(): Promise<FixtureSeed> {
   }).select("id").single();
   if (ce) throw new Error(`cargo: ${ce.message}`);
   await admin.from("cargo_listings").update({ status: "IN", review_status: "APPROVED" }).eq("id", c.id);
-  const { data: v, error: ve } = await admin.from("vessels").insert({ vessel_name: `E2E HULL ${stamp.toUpperCase()}`, imo_number: "9000003", vessel_type: "Bulk Carrier", dwt_grain: 30000, build_year: 2012, flag: "Malta", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false }).select("id").single();
+  const { data: v, error: ve } = await admin.from("vessels").insert({ vessel_name: `E2E HULL ${stamp.toUpperCase()}`, imo_number: testImo, vessel_type: "Bulk Carrier", dwt_grain: 30000, build_year: 2012, flag: "Malta", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false }).select("id").single();
   if (ve) throw new Error(`vessel: ${ve.message}`);
   const { data: a, error: ae } = await admin.from("vessel_availability").insert({ vessel_id: v.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(5), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 26, accepts_part_cargo: false }).select("id").single();
   if (ae) throw new Error(`availability: ${ae.message}`);
@@ -187,7 +188,12 @@ export async function signInAs(browser: Browser, baseURL: string, email: string)
   // The app uses client-side routing after the auth call. Waiting for a page
   // `load` event can miss that transition even when the dashboard is already
   // rendered, so assert the observable URL instead.
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 90_000 });
+  // Wait for the router transition itself, not only its early URL update.
+  // Starting the next navigation while the login transition is still
+  // rendering can let its pending router.push win and send the test back to
+  // /dashboard after it has requested a Fixture page.
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible({ timeout: 90_000 });
   await dismissOverlays(page);
   return { context, page };
 }
