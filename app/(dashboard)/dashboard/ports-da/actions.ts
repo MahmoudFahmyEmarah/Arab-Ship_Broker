@@ -2,8 +2,13 @@
 
 import { getAppUserRow } from "@/lib/app-user";
 import { calculatePda } from "@/lib/pda/calculate";
+import { aggregatePdaRoutePreview, derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
+import { pdaRoutePreviewSchema } from "@/lib/pda/route-schema";
+import type { PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
 import { pdaRequestSchema } from "@/lib/pda/schemas";
 import type { PdaCalculationResult, PdaRequest } from "@/lib/pda/types";
+import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
+import type { CargoView, VesselView } from "@/lib/portal/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaCalculationContext, savePdaEstimate } from "@/sdk/app/pda";
@@ -44,6 +49,94 @@ function attributeManualLines(request: PdaRequest, enteredBy: string): PdaReques
   };
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function numberFromDisplay(value: string): number | null {
+  const parsed = Number(value.replaceAll(",", "").trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function authoritativeVesselFacts(request: PdaRequest, vessel: VesselView): PdaRequest["vessel"] {
+  return {
+    ...request.vessel,
+    vesselId: vessel.vesselId && UUID.test(vessel.vesselId) ? vessel.vesselId : null,
+    vesselName: vessel.name,
+    imo: vessel.imo,
+    vesselType: vessel.type,
+    gt: vessel.gt ?? request.vessel.gt ?? null,
+    scnrt: vessel.scnrt ?? request.vessel.scnrt ?? null,
+    dwt: numberFromDisplay(vessel.dwt) ?? request.vessel.dwt ?? null,
+    loaM: vessel.loaM ?? request.vessel.loaM ?? null,
+  };
+}
+
+function canonicalRouteLeg(input: {
+  request: PdaRequest;
+  vessel: VesselView;
+  cargo: CargoView;
+  quantityMt: number;
+  days: number;
+  derivedDate: string | null;
+  manualActorLabel: string;
+}): PdaRequest {
+  return attributeManualLines({
+    ...input.request,
+    callDate: input.derivedDate?.slice(0, 10) ?? input.request.callDate,
+    vessel: authoritativeVesselFacts(input.request, input.vessel),
+    call: {
+      ...input.request.call,
+      days: input.days,
+      cargoQuantityMt: input.quantityMt,
+      cargoType: input.cargo.type,
+    },
+  }, input.manualActorLabel);
+}
+
+function forDisplayCurrency(
+  request: PdaRequest,
+  nativeCurrency: string | null,
+  displayCurrency: string,
+): PdaRequest {
+  if (nativeCurrency === displayCurrency) {
+    return { ...request, convertedCurrency: null, fxRate: null };
+  }
+  return { ...request, convertedCurrency: displayCurrency };
+}
+
+async function requireRouteSelections(
+  selection: PdaRoutePreviewInput["selection"],
+): Promise<{ vessel: VesselView; cargo: CargoView }> {
+  const [vessels, cargos] = await Promise.all([
+    loadVesselViews({ mine: true }),
+    loadCargoViews({ mine: true }),
+  ]);
+  if (vessels.source !== "live" || cargos.source !== "live") {
+    throw new Error("Live vessel or cargo records could not be loaded");
+  }
+  const vessel = vessels.views.find((item) => item.id === selection.vesselAvailabilityId);
+  if (!vessel) throw new Error("The selected vessel is not available to this account");
+  const cargo = cargos.views.find((item) => item.id === selection.cargoId);
+  if (!cargo) throw new Error("The selected cargo is not available to this account");
+  return { vessel, cargo };
+}
+
+async function requireVerifiedPorts(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  locodes: string[],
+): Promise<void> {
+  const unique = [...new Set(locodes)];
+  const { data, error } = await supabase
+    .from("ports")
+    .select("locode")
+    .in("locode", unique)
+    .eq("is_active", true)
+    .eq("is_verified", true);
+  if (error) throw new Error(error.message);
+  const found = new Set((data ?? []).map((row) => row.locode));
+  const missing = unique.filter((code) => !found.has(code));
+  if (missing.length) throw new Error(`Verified port not found: ${missing.join(", ")}`);
+}
+
 export async function previewPda(raw: PdaRequest): Promise<ActionResult<PdaCalculationResult>> {
   try {
     const parsed = pdaRequestSchema.parse(raw) as PdaRequest;
@@ -72,5 +165,72 @@ export async function persistPda(raw: PdaRequest): Promise<ActionResult<{ estima
     return { ok: true, data: { estimateId, result } };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Unable to save PDA" };
+  }
+}
+
+export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<ActionResult<PdaRoutePreviewResult>> {
+  try {
+    const input = pdaRoutePreviewSchema.parse(raw) as PdaRoutePreviewInput;
+    const { supabase, manualActorLabel } = await viewer();
+    const [{ vessel, cargo }] = await Promise.all([
+      requireRouteSelections(input.selection),
+      requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
+    ]);
+    const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
+    let loadRequest = canonicalRouteLeg({
+      request: input.load,
+      vessel,
+      cargo,
+      quantityMt: input.selection.quantityMt,
+      days: timeline.loadPortDays,
+      derivedDate: timeline.etaLoad,
+      manualActorLabel,
+    });
+    let dischargeRequest = canonicalRouteLeg({
+      request: input.discharge,
+      vessel,
+      cargo,
+      quantityMt: input.selection.quantityMt,
+      days: timeline.dischargePortDays,
+      derivedDate: timeline.etaDischarge,
+      manualActorLabel,
+    });
+    const [loadContext, dischargeContext] = await Promise.all([
+      getPdaCalculationContext(supabase, loadRequest),
+      getPdaCalculationContext(supabase, dischargeRequest),
+    ]);
+    loadRequest = forDisplayCurrency(
+      loadRequest,
+      loadContext.tariffVersion?.currency ?? null,
+      input.displayCurrency,
+    );
+    dischargeRequest = forDisplayCurrency(
+      dischargeRequest,
+      dischargeContext.tariffVersion?.currency ?? null,
+      input.displayCurrency,
+    );
+    const load = calculatePda(loadRequest, loadContext.tariffVersion ?? null);
+    const discharge = calculatePda(dischargeRequest, dischargeContext.tariffVersion ?? null);
+
+    return {
+      ok: true,
+      data: aggregatePdaRoutePreview({
+        displayCurrency: input.displayCurrency,
+        allocation: input.allocation,
+        canonical: {
+          vesselAvailabilityId: vessel.id,
+          vesselId: vessel.vesselId && UUID.test(vessel.vesselId) ? vessel.vesselId : null,
+          cargoId: cargo.id,
+          quantityMt: input.selection.quantityMt,
+          loadRequest,
+          dischargeRequest,
+        },
+        load,
+        discharge,
+        timeline,
+      }),
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Unable to calculate route PDA" };
   }
 }

@@ -74,8 +74,14 @@ or functions that calculate money. It may collect inputs and render results.
 
 - Each port call uses the existing governed `PdaRequest` and calculation
   engine through authenticated server actions.
-- A future route action calculates the two legs independently and computes all
-  monetary aggregates server-side.
+- `previewPdaRoute` validates the selected vessel availability and cargo
+  against the viewer's own live catalogs, refuses sample fallback records,
+  verifies both ports are active database ports, calculates the two legs
+  independently and computes all monetary aggregates server-side.
+- Server-authoritative vessel identity/registered facts, cargo type, quantity,
+  port-stay days and derived dates replace their client copies before pricing.
+  Missing technical particulars that are not held on the selected record may
+  still be supplied explicitly.
 - A client input change invalidates the full paired result and save token.
 - Unsupported values are `{ amount: null, reasonCode }`, never zero.
 - Verification comes only from published tariff maker/checker state. Disputes

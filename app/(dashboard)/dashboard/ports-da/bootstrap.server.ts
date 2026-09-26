@@ -23,8 +23,8 @@ export async function loadPdaEstimatorPageData(
   callDate: string,
 ): Promise<PdaEstimatorPageData> {
   const [vessels, cargos, coverage, terminals, portsResult] = await Promise.all([
-    loadVesselViews(),
-    loadCargoViews(),
+    loadVesselViews({ mine: true }),
+    loadCargoViews({ mine: true }),
     listPdaCoverage(supabase, callDate),
     listPdaTerminals(supabase),
     supabase
