@@ -1,0 +1,176 @@
+/*
+ * Shared, opt-in controls used by the standalone-aligned PDA and Fixture
+ * workspaces. Keep every selector below .asb-ds so the portal shell and admin
+ * console cannot be changed by a module redesign.
+ */
+
+.asb-ds {
+  --ds-surface: var(--asb-white, #fff);
+  --ds-canvas: var(--asb-gray-50, #f5f7fa);
+  --ds-line: var(--asb-gray-200, #dde2ea);
+  --ds-line-strong: var(--asb-gray-400, #b6bfcc);
+  --ds-ink: var(--asb-ink, #1a1a1a);
+  --ds-muted: var(--asb-gray-600, #5f6b7d);
+  --ds-navy: var(--asb-navy, #0d2545);
+  --ds-blue: var(--asb-blue, #185fa5);
+  --ds-blue-soft: var(--asb-blue-light, #e6f1fb);
+  --ds-green: var(--asb-green, #2a9962);
+  --ds-green-soft: var(--asb-green-bg, #def1e2);
+  --ds-amber: var(--asb-amber, #b17311);
+  --ds-amber-soft: var(--asb-amber-bg, #fbf2df);
+  --ds-red: var(--asb-red, #c84a4a);
+  --ds-red-soft: var(--asb-red-bg, #fae5e5);
+  --ds-radius: 8px;
+  --ds-radius-small: 5px;
+  --ds-shadow: 0 1px 3px rgb(13 37 69 / 8%);
+  color: var(--ds-ink);
+  font-family: var(--asb-font, Inter, system-ui, sans-serif);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-ds,
+.asb-ds * {
+  box-sizing: border-box;
+}
+
+.asb-ds :where(button, input, select, textarea) {
+  font: inherit;
+}
+
+.asb-ds .asb-control {
+  min-height: 34px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-surface);
+  color: var(--ds-ink);
+  padding: 7px 10px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.asb-ds .asb-control:hover {
+  border-color: var(--ds-line-strong);
+}
+
+.asb-ds .asb-control:focus-visible,
+.asb-ds .asb-button:focus-visible,
+.asb-ds .asb-tab:focus-visible {
+  border-color: var(--ds-blue);
+  box-shadow: 0 0 0 3px rgb(24 95 165 / 18%);
+  outline: none;
+}
+
+.asb-ds .asb-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--ds-line-strong);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-surface);
+  color: var(--ds-navy);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 7px 12px;
+}
+
+.asb-ds .asb-button:hover:not(:disabled) {
+  border-color: var(--ds-blue);
+  color: var(--ds-blue);
+}
+
+.asb-ds .asb-button--primary {
+  border-color: var(--ds-navy);
+  background: var(--ds-navy);
+  color: #fff;
+}
+
+.asb-ds .asb-button--primary:hover:not(:disabled) {
+  border-color: var(--ds-blue);
+  background: var(--ds-blue);
+  color: #fff;
+}
+
+.asb-ds .asb-button:disabled,
+.asb-ds .asb-control:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.asb-ds .asb-card {
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius);
+  background: var(--ds-surface);
+  box-shadow: var(--ds-shadow);
+}
+
+.asb-ds .asb-tabs {
+  display: flex;
+  align-items: end;
+  gap: 2px;
+  border-bottom: 1px solid var(--ds-line);
+}
+
+.asb-ds .asb-tab {
+  min-height: 36px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ds-muted);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 14px;
+}
+
+.asb-ds .asb-tab[aria-selected="true"] {
+  border-bottom-color: var(--ds-blue);
+  color: var(--ds-navy);
+}
+
+.asb-ds .asb-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+
+.asb-ds .asb-status--success {
+  background: var(--ds-green-soft);
+  color: var(--ds-green);
+}
+
+.asb-ds .asb-status--warning {
+  background: var(--ds-amber-soft);
+  color: var(--ds-amber);
+}
+
+.asb-ds .asb-status--danger {
+  background: var(--ds-red-soft);
+  color: var(--ds-red);
+}
+
+.asb-ds .asb-sr-only {
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media print {
+  .asb-ds .asb-no-print {
+    display: none !important;
+  }
+
+  .asb-ds .asb-card {
+    box-shadow: none;
+  }
+}
