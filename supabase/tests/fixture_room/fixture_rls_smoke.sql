@@ -471,6 +471,29 @@ begin
   raise notice 'R5 ok: an anonymised member is refused on read, poll, inbox, answer, act and create; the counterparty keeps the room, the history and a person-free label';
 end $$;
 
+-- ── R6 · market partner: a T1 member flagged is_market_partner passes the tier gate (integration migration 20260923340000); skipped where the column is absent ─
+do $$
+declare v jsonb; e text; v_room uuid;
+begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'users' and column_name = 'is_market_partner') then
+    raise notice 'R6 skipped: users.is_market_partner is absent on this database (the integration chain restores it in 20260923340000)';
+    return;
+  end if;
+  -- without the flag the T1 member is refused on a free pairing (c2 + a3: R4 holds c2 + a1 open, a2 is the seed's sanctioned vessel)
+  perform pg_temp.fx_as('u_t1');
+  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), 'rls-r6-t1-nopartner', '{}'));
+  if e <> 'FX_GATE' then raise exception 'R6: a T1 member without the flag must be FX_GATE, got %', e; end if;
+  -- the platform grants the flag: a service-owned column, written here as the owner with no JWT (the same bypass the service role has)
+  perform pg_temp.fx_owner();
+  execute format('update public.users set is_market_partner = true where id = %L', pg_temp.fx_id('u_t1'));
+  perform pg_temp.fx_as('u_t1');
+  v := public.create_fixture_room(pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'rls-r6-t1-partner', '{}'::jsonb);
+  v_room := (v->'data'->>'roomId')::uuid;
+  if v_room is null then raise exception 'R6: a flagged T1 member must open a room, got %', v; end if;
+  if pg_temp.fx_status(v_room) <> 'invited' then raise exception 'R6: the room must be invited, got %', pg_temp.fx_status(v_room); end if;
+  raise notice 'R6 ok: a T1 market partner passes the tier gate (FX_GATE without the flag, a room with it)';
+end $$;
+
 do $$ begin raise notice 'FIXTURE RLS SMOKE: ALL ASSERTIONS PASSED'; end $$;
 
 rollback;

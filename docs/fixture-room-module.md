@@ -114,8 +114,8 @@ Not in this branch (by the freeze): `fixture_pda_links`,
   `fn_fixture_capabilities`, and `canUseFixtureRoom`: decision D3 in one
   place for the pages, mirroring `fn_fixture_tier_ok` — audit FR-M4),
   `viewer.server.ts` (the signed-in viewer for the page gates; the
-  market-partner flag is read explicitly and is false while the column does
-  not exist), `format.ts` (mirror of `fn_fixture_display_value`),
+  market-partner flag is read explicitly and is false wherever the column
+  is absent), `format.ts` (mirror of `fn_fixture_display_value`),
   `schemas.ts` (Zod), `recap.ts`, `masking-view.ts` (guard, incl. TBN
   identifiers), `listing-sync.ts`, `client.ts` (`GestureKeys` + `runGesture`:
   one idempotency key per gesture, kept across transport failures until the
@@ -175,8 +175,12 @@ tools.
   changes, fix, close), not new proposals.
 - The tier gate reads `users.subscription_tier` (T3 / T4) and, when the column
   exists, `is_market_partner`; admins always pass. The page gate uses the
-  same rule (`canUseFixtureRoom`); the market-partner column does not exist
-  in the current schema, so that approved path answers false until it does.
+  same rule (`canUseFixtureRoom`). The column was missing from the active
+  baseline; the integration migration `20260923340000_user_market_partner_flag.sql`
+  (Codex, `b73fd42`, 26 Sep 2026) restores it as a service-managed flag the
+  privilege guard keeps out of a member's own reach, so the approved path
+  is live on the integration chain. R6 of the RLS suite proves it wherever
+  the column exists and reports a skip where it does not.
 - A member with two active seats represents a listing as the organisation
   on its ownership row only; a colleague from the member's other seat is not
   a participant. A personally owned listing is represented by the member

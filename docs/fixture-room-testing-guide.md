@@ -515,3 +515,26 @@ Two findings on the first run, both fixed before the second:
 | first run, before the two fixes | 2 failed (the 10 s budget on a Link navigation; the 768 px clipped table), 5 passed, the rest skipped by serial mode |
 | `scripts/fixture-room-check.ts` | 212 passed, 0 failed |
 | `tsc --noEmit` (project) / `eslint` on the console and the specs | 0 errors / clean |
+
+## 11 · Market-partner entitlement (26 Sep 2026, integration `b73fd42`)
+
+The integration owner restored `users.is_market_partner`
+(`20260923340000_user_market_partner_flag.sql`, service-managed, kept out of
+a member's own reach by the privilege guard). `fn_fixture_tier_ok()` has
+read that flag from the row since Phase 1 (`to_jsonb(u)`, so an absent
+column reads as false) and `canUseFixtureRoom` mirrors it, so the approved
+path is live on the integration chain without a Fixture change. R6 of the
+RLS suite now proves it: where the column exists, a T1 member is refused
+(`FX_GATE`) on a free pairing and admitted once the platform sets the flag;
+where the column is absent (the isolated `asb_fixture` rebuild, which has no
+integration migrations) the block reports a skip and the suite still
+passes. Run both ways: the harness on `asb_fixture` (skip) and the assembled
+`fixture_rls_smoke.sql` standalone against the shared `postgres` database
+(`BEGIN … ROLLBACK`, column present, R6 executes).
+
+| Run | Result |
+|---|---|
+| harness on `asb_fixture` (`--from-applied --reapply`), column absent | HARNESS OK: 5 migrations, 7 suites (R6 reports the skip), DOWN, fingerprint identical, residue 0, re-applied |
+| `fixture_rls_smoke.sql` standalone on the shared `postgres` database, column present | `R6 ok: a T1 market partner passes the tier gate (FX_GATE without the flag, a room with it)`; ALL ASSERTIONS PASSED |
+| first attempt | R6 paired the T1 cargo with `a2`, whose vessel is the seed's deliberately sanctioned one, so the create was refused for the wrong reason; it now uses `a3` (R4 holds `c2 + a1`) |
+| `scripts/fixture-room-check.ts` | 212 passed, 0 failed |
