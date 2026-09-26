@@ -415,6 +415,7 @@ HARNESS_PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d as
 | `scripts/fixture-room-check.ts` | 206 passed, 0 failed (10 new sweep checks) |
 | harness on `asb_fixture` (`--from-applied --reapply`) | OK: 5 migrations, 7 suites, DOWN, fingerprint identical, residue 0, chain re-applied; 50 s |
 | `fixture_expiry_smoke` X1–X5 | pass (standalone twice, then inside the harness) |
+| harness on `asb_fixture`, upgrade-safe form (C2O-003): original `20260923203000`, then `20260923204000` alone | OK: 5 migrations, 7 suites (X2 = one lapse after sweep + replacement), DOWN, fingerprint identical, residue 0, re-applied; 92 s |
 | `tsc --noEmit` (project) | 0 errors |
 | `eslint scripts/fixture-room-check.ts` | clean |
 | race, API integration, browser suites | not re-run: they run through the shared stack's PostgREST, whose Fixture functions are the integration branch's; the sweep is service-only with no SDK or page surface, and no member-facing RPC changed shape |
@@ -431,6 +432,27 @@ still cannot be accepted (`FX_STATE`); X3 an agreed term is never swept even
 when its proposal row carries a past validity; X4 a withdrawn room is never
 swept; X5 `authenticated` and `anon` cannot execute the sweep, service_role
 can, and the limit clamps to 1..1000 with 200 as the default.
+
+**Upgrade-safe form (C2O-003, 26 Sep 2026).** Codex's focused audit of
+`98bda61` accepted the sweep but refused the way the submit-path guard was
+delivered: an in-place edit of `20260923203000_fixture_room_commands.sql`,
+which an environment that had already applied that file would never
+receive, so a sweep followed by the member's replacement would still write
+two `proposal.lapsed` events there. The correction: `20260923203000` is
+byte-identical to its accepted `783b681` version again, and
+`20260923204000` REPLACES `submit_fixture_proposal` with the same body plus
+the one guard before it creates the sweep, re-issuing the function's grants.
+`scripts/fixture-room-check.ts` now proves that the command migration
+carries no guard, that the sweep migration replaces the function, that the
+replaced body is byte-identical to the accepted one apart from the guard
+(no drift), and that the grant is re-issued. The harness chain is the
+upgrade path itself: the original `20260923203000` first, then
+`20260923204000` alone, and X2 of the expiry suite is the regression
+(sweep, then the owner's replacement, exactly one `proposal.lapsed`).
+Codex's release decision is to defer the sweep from the initial Fixture
+Room release (lazy lapse stays the release behaviour; nothing is
+scheduled); the branch carries the upgrade-safe form so that reopening it
+needs no further correction.
 
 Two corrections while writing the suite, both in the suite: a fresh room
 needs the owner's `respond_fixture_invitation` before the first offer (the

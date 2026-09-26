@@ -256,7 +256,7 @@ set local session_replication_role = origin;
 -- transaction; assembled into fixture_expiry_smoke.sql by scripts/fixture-room-harness.sh.
 
 -- ── X1 · the sweep observes a live, expired proposal once; the room version moves; a second run writes nothing ─
--- ── X2 · the submit path does not observe the same lapse again; the lapsed offer stays unacceptable ─
+-- ── X2 · UPGRADE REGRESSION (C2O-003): the harness applies the original 20260923203000 first and 20260923204000 alone after it; sweep -> member replacement leaves exactly one proposal.lapsed ─
 -- ── X3 · an agreed term is never swept, whatever its proposal's validity says ─
 -- ── X4 · a closed room is never swept ─
 do $$
