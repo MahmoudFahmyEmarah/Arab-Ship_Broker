@@ -23,7 +23,7 @@ export function PromoteControl({ userId }: { userId: string }) {
         disabled={pending}
         onClick={() => start(async () => {
           const r = await promoteToSubAdmin(userId, preset);
-          if (r.success) toast.success("Promoted to sub-admin");
+          if (r.success) toast.success("Promoted to sub-admin. They should sign in again to begin an admin session.");
           else toast.error(r.error);
         })}
         className="px-3 h-8 text-xs font-semibold bg-asb-blue hover:bg-asb-navy text-white rounded transition-colors disabled:opacity-60"
@@ -43,7 +43,7 @@ export function DemoteControl({ userId }: { userId: string }) {
         if (!window.confirm("Remove this sub-admin's access?")) return;
         start(async () => {
           const r = await demoteSubAdmin(userId);
-          if (r.success) toast.success("Sub-admin removed");
+          if (r.success) toast.success("Sub-admin removed. Existing access is now blocked.");
           else toast.error(r.error);
         });
       }}

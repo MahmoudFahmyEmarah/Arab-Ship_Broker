@@ -48,7 +48,15 @@ export async function requireAdmin(
     admin_tier?: string | null; admin_perms?: AdminPerms | null;
   }>(supabase, user.id, "full_name, email, role, is_active, admin_tier, admin_perms");
 
-  if (!appUser || normalizeRole(appUser.role) !== "admin") {
+  // The database row provides the current tier and is_active state, while the
+  // Auth app_metadata claim is the non-forgeable proof that this session was
+  // provisioned as an administrator.  Requiring both also rejects a stale
+  // token immediately after a demotion.
+  if (
+    !appUser ||
+    normalizeRole(appUser.role) !== "admin" ||
+    user.app_metadata?.role !== "admin"
+  ) {
     redirect(appUser ? "/dashboard" : "/auth/login");
   }
 
