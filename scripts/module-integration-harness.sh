@@ -2,8 +2,8 @@
 # PDA + Fixture Room combined migration harness.
 #
 # It starts without either module, applies both module chains and their shared
-# integration migration, then applies the downs in dependency order and checks
-# an exact schema fingerprint.  --from-applied is intentionally explicit:
+# integration/security migrations, then applies the downs in dependency order
+# and checks an exact schema fingerprint. --from-applied is intentionally explicit:
 # rolling back a populated local development database is never implicit.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -28,17 +28,44 @@ CHAIN=(
   "$M/20260923201000_fixture_room_helpers.sql"
   "$M/20260923202000_fixture_room_reads.sql"
   "$M/20260923203000_fixture_room_commands.sql"
+  "$M/20260923310000_account_anonymisation.sql"
   "$M/20260923320000_fixture_pda_shared_integration.sql"
+  "$M/20260923330000_user_privilege_boundary.sql"
+  "$M/20260923340000_user_market_partner_flag.sql"
 )
 DOWNS=(
+  "supabase/rollback/20260923340000_user_market_partner_flag_down.sql"
+  "supabase/rollback/20260923330000_user_privilege_boundary_down.sql"
   "supabase/rollback/20260923_fixture_pda_shared_integration_down.sql"
+  "supabase/rollback/20260923310000_account_anonymisation_down.sql"
   "supabase/rollback/20260923_fixture_room_down.sql"
   "supabase/rollback/20260923_pda_down.sql"
+)
+SHARED_SMOKE="$(mktemp -t fixture-pda-shared.XXXXXX.sql)"
+trap 'rm -f "$SHARED_SMOKE"' EXIT
+{
+  echo 'begin;'
+  cat supabase/tests/fixture_room/seed_fixture_shape.sql
+  cat supabase/tests/integration/fixture_pda_shared_smoke.sql
+  echo 'rollback;'
+} > "$SHARED_SMOKE"
+SMOKES=(
+  "supabase/tests/pda/contract.sql"
+  "supabase/tests/pda/behavior.sql"
+  "supabase/tests/fixture_room/fixture_state_smoke.sql"
+  "supabase/tests/fixture_room/fixture_rls_smoke.sql"
+  "supabase/tests/fixture_room/fixture_masking_smoke.sql"
+  "supabase/tests/fixture_room/fixture_idempotency_smoke.sql"
+  "supabase/tests/fixture_room/fixture_immutability_smoke.sql"
+  "supabase/tests/fixture_room/fixture_snapshot_smoke.sql"
+  "supabase/tests/integration/account_anonymisation_smoke.sql"
+  "supabase/tests/integration/user_privilege_boundary_smoke.sql"
+  "$SHARED_SMOKE"
 )
 
 if [ "$TARGET" = local ]; then
   PSQL="${HARNESS_PSQL:-docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres}"
-  applied=$($PSQL -At -c "select to_regclass('public.fixture_pda_links') is not null or to_regclass('public.fixture_rooms') is not null or to_regclass('public.pda_estimates') is not null" 2>/dev/null | tr -d '[:space:]')
+  applied=$($PSQL -At -c "select to_regclass('public.fixture_pda_links') is not null or to_regclass('public.fixture_rooms') is not null or to_regclass('public.pda_estimates') is not null or exists (select 1 from information_schema.columns where table_schema='public' and table_name='users' and column_name in ('erased_at','is_market_partner'))" 2>/dev/null | tr -d '[:space:]')
   if [ "$applied" = t ]; then
     if [ "$FROM_APPLIED" = 1 ]; then
       echo "module present at baseline: rolling it back first (--from-applied)"
@@ -53,7 +80,7 @@ if [ "$TARGET" = local ]; then
   fi
 fi
 
-bash scripts/migration-harness.sh --target "$TARGET" --chain "${CHAIN[@]}" --downs "${DOWNS[@]}"
+bash scripts/migration-harness.sh --target "$TARGET" --chain "${CHAIN[@]}" --smokes "${SMOKES[@]}" --downs "${DOWNS[@]}"
 rc=$?
 
 if [ "$REAPPLY" = 1 ] && [ "$TARGET" = local ] && [ "$rc" = 0 ]; then

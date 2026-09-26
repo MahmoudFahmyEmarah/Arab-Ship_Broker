@@ -19,10 +19,13 @@ async function viewer() {
     full_name: string | null;
     role: string | null;
     subscription_tier: string | null;
+    is_market_partner: boolean | null;
     is_active: boolean;
-  }>(supabase, user.id, "id, full_name, role, subscription_tier, is_active");
+  }>(supabase, user.id, "id, full_name, role, subscription_tier, is_market_partner, is_active");
   if (!appUser?.is_active) throw new Error("Active account required");
-  const entitled = appUser.role?.toLowerCase() === "admin" || ["T3", "T4"].includes(appUser.subscription_tier ?? "T1");
+  const entitled = appUser.role?.toLowerCase() === "admin"
+    || appUser.is_market_partner === true
+    || ["T3", "T4"].includes(appUser.subscription_tier ?? "T1");
   if (!entitled) throw new Error("PDA Estimator requires Subscriber tier (T3+)");
   const { data: membership } = await supabase.rpc("fn_my_membership");
   const member = (Array.isArray(membership) ? membership[0] : membership) as { org_id?: string; status?: string } | null;

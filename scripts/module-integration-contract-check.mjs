@@ -6,6 +6,7 @@ const rollback = await readFile("supabase/rollback/20260923_fixture_pda_shared_i
 const fixtureTypes = await readFile("lib/fixture-room/types.ts", "utf8");
 const fixtureSdk = await readFile("sdk/app/fixtures.ts", "utf8");
 const portalSidebar = await readFile("components/portal/PortalSidebar.tsx", "utf8");
+const harness = await readFile("scripts/module-integration-harness.sh", "utf8");
 
 assert.match(migration, /create or replace function public\.sync_fixture_listing_status/i);
 assert.match(migration, /fn_fixture_owns_listing\('cargo', r\.cargo_listing_id\)/i);
@@ -29,12 +30,22 @@ assert.doesNotMatch(migration, /'vesselId', v_header/i);
 assert.match(migration, /create or replace function public\.list_fixture_pda_links/i);
 assert.match(migration, /grant execute on function public\.list_fixture_pda_links\(uuid\) to authenticated, service_role/i);
 assert.match(migration, /'pda\.linked'/i);
+assert.match(migration, /a\.attname = 'type'[\s\S]+a\.attnum = any\(c\.conkey\)/i);
 assert.match(rollback, /drop table if exists public\.fixture_pda_links/i);
 assert.match(rollback, /drop function if exists public\.link_fixture_pda_estimate/i);
+assert.match(rollback, /a\.attname = 'type'[\s\S]+a\.attnum = any\(c\.conkey\)/i);
 assert.match(fixtureTypes, /"listing_sync\.applied" \| "pda\.linked"/i);
 assert.match(fixtureSdk, /export function syncFixtureListingStatus/i);
 assert.match(fixtureSdk, /export function linkFixturePdaEstimate/i);
 assert.match(portalSidebar, /href: `\$\{basePath\}\/ports-da`[^\n]*disabled: econLocked/i);
 assert.doesNotMatch(portalSidebar, /href: `\$\{basePath\}\/ports-da`[^\n]*comingSoon/i);
+for (const version of [
+  "20260923100000", "20260923101000", "20260923102000", "20260923103000",
+  "20260923200000", "20260923201000", "20260923202000", "20260923203000",
+  "20260923310000", "20260923320000", "20260923330000", "20260923340000",
+]) assert.match(harness, new RegExp(version), `combined harness is missing ${version}`);
+assert.match(harness, /account_anonymisation_smoke\.sql/i);
+assert.match(harness, /user_privilege_boundary_smoke\.sql/i);
+assert.match(harness, /fixture_pda_shared_smoke\.sql/i);
 
 console.log("MODULE INTEGRATION CONTRACT: ALL ASSERTIONS PASSED");

@@ -175,11 +175,11 @@ tools.
   a participant. A personally owned listing is represented by the member
   even when the member also holds seats elsewhere.
 - The admin authority for every Fixture read and command is `fn_is_admin()`
-  (the JWT claim `app_metadata.role = 'admin'`), never `users.role`: on the
-  current baseline a member can update their own `users` row (policy
-  "users: own row" with no column restriction), so `role`, `subscription_tier`
-  and the admin columns are not trustworthy from inside the database. That
-  also bounds the D3 tier gate, which reads `users.subscription_tier`. Both
-  are platform-level and raised with the integration owner (mailbox
-  O2C-004, 26 Sep 2026); the Fixture branch adds nothing that trusts those
-  columns.
+  together with an active administrator row, never `users.role` alone.
+  Migration `20260923330000_user_privilege_boundary.sql` closes the former
+  self-update escalation path: authenticated members may update only their
+  own `full_name`, `company`, `phone` and `updated_at`; role, tier, partner
+  entitlement, trust and administrator fields remain service-managed. The
+  migration also synchronises the Auth `app_metadata.role = 'admin'` claim,
+  while `fn_is_admin()` requires both that claim and the current active admin
+  row. Mailbox issue O2C-004 is closed on the integration release.

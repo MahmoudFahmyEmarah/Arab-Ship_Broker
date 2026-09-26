@@ -108,7 +108,12 @@ language sql stable security definer set search_path to ''
 as $$
   select public.fn_is_admin() or exists (
     select 1 from public.users u
-    where u.id = public.fn_app_user_id() and u.is_active and u.subscription_tier::text in ('T3','T4')
+    where u.id = public.fn_app_user_id()
+      and u.is_active
+      and (
+        u.subscription_tier::text in ('T3','T4')
+        or coalesce((to_jsonb(u)->>'is_market_partner')::boolean, false)
+      )
   );
 $$;
 revoke all on function public.fn_pda_member_entitled() from public, anon, authenticated;
@@ -318,9 +323,13 @@ begin
     raise exception 'PDA_AUTH: active app user actor required' using errcode = '42501';
   end if;
   if not exists (
-    select 1 from public.users
-    where id = p_actor and is_active
-      and (lower(coalesce(role, '')) = 'admin' or subscription_tier::text in ('T3','T4'))
+    select 1 from public.users u
+    where u.id = p_actor and u.is_active
+      and (
+        lower(coalesce(u.role, '')) = 'admin'
+        or u.subscription_tier::text in ('T3','T4')
+        or coalesce((to_jsonb(u)->>'is_market_partner')::boolean, false)
+      )
   ) then
     raise exception 'PDA_TIER: actor requires Subscriber tier (T3+)' using errcode = '42501';
   end if;

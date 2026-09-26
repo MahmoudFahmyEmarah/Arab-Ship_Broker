@@ -6,6 +6,8 @@ const publication = await readFile("supabase/migrations/20260923101000_pda_tarif
 const estimates = await readFile("supabase/migrations/20260923102000_pda_estimates_and_reads.sql", "utf8");
 const ingestion = await readFile("supabase/migrations/20260923103000_pda_admin_ingestion.sql", "utf8");
 const rollback = await readFile("supabase/rollback/20260923_pda_down.sql", "utf8");
+const actions = await readFile("app/(dashboard)/dashboard/ports-da/actions.ts", "utf8");
+const estimator = await readFile("components/pda/PdaEstimator.tsx", "utf8");
 
 for (const table of [
   "port_terminals", "tariff_publishers", "tariff_sources", "tariff_import_batches", "tariff_staged_rules",
@@ -47,6 +49,7 @@ assert.match(publication, /PDA_PERCENTAGE: every base code must be a lower-prior
 assert.match(publication, /v_overlap_count > 1/i);
 assert.match(publication, /s\.authority not in \('official','agent','statutory'\)/i);
 assert.match(estimates, /PDA_IMMUTABLE: estimate snapshots and lines cannot change/i);
+assert.match(estimates, /to_jsonb\(u\)->>'is_market_partner'/i);
 assert.match(estimates, /s\.port_locode = v_port[\s\S]{0,100}s\.terminal_id is null or s\.terminal_id = v_terminal/i);
 assert.match(estimates, /order by \(s\.terminal_id is not null\) desc/i);
 assert.match(estimates, /PDA_COVERAGE: zero-line estimates cannot be published coverage/i);
@@ -64,5 +67,7 @@ assert.match(rollback, /drop function if exists public\.fn_pda_estimate_header\(
 assert.match(ingestion, /Stages untrusted PDF\/spreadsheet extraction only/i);
 assert.doesNotMatch(ingestion, /insert into public\.port_tariff_versions/i);
 assert.doesNotMatch(ingestion, /update public\.port_tariff_versions/i);
+assert.match(actions, /is_market_partner[\s\S]+appUser\.is_market_partner === true/i);
+assert.match(estimator, /React\.useEffect\(\(\) => \{[\s\S]+setResult\(null\)[\s\S]+manualLines/i);
 
 console.log("PDA SQL CONTRACT: ALL ASSERTIONS PASSED");

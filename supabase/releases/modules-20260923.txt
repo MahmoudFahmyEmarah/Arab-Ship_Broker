@@ -1,0 +1,13 @@
+# PDA Estimator + Fixture Room + shared security/integration release.
+20260923100000_pda_tariff_schema.sql
+20260923101000_pda_tariff_publication.sql
+20260923102000_pda_estimates_and_reads.sql
+20260923103000_pda_admin_ingestion.sql
+20260923200000_fixture_room_tables.sql
+20260923201000_fixture_room_helpers.sql
+20260923202000_fixture_room_reads.sql
+20260923203000_fixture_room_commands.sql
+20260923310000_account_anonymisation.sql
+20260923320000_fixture_pda_shared_integration.sql
+20260923330000_user_privilege_boundary.sql
+20260923340000_user_market_partner_flag.sql

@@ -265,6 +265,33 @@ begin
   end;
   if not denied then raise exception 'PDA TEST: T2 actor saved an estimate'; end if;
 
+  -- A service-managed market-partner flag is equivalent to Subscriber
+  -- entitlement even when the account remains T1/T2.  The migration that
+  -- adds the column follows the PDA migration, so the function itself reads
+  -- it through to_jsonb and remains valid both before and after that addition.
+  update public.users set subscription_tier = 'T1', is_market_partner = true where id = outsider;
+  if not public.fn_pda_member_entitled() then
+    raise exception 'PDA TEST: flagged T1 market partner was refused by the PDA read gate';
+  end if;
+  context := public.get_pda_calculation_context(port_code, terminal, '2026-06-01');
+  if context#>>'{tariffVersion,id}' <> terminal_version::text then
+    raise exception 'PDA TEST: flagged T1 market partner could not load calculation context';
+  end if;
+  estimate := public.pda_save_estimate(outsider, null, jsonb_build_object(
+    'portLocode',port_code,'terminalId',terminal,'callDate','2026-06-01',
+    'vessel',jsonb_build_object('vesselName','PDA MARKET PARTNER'),
+    'call',jsonb_build_object('days',1,'requestedServices',jsonb_build_array('terminal_fee'))
+  ), jsonb_build_object(
+    'coverage','published','tariffVersionId',terminal_version,'nativeCurrency','USD','totals',jsonb_build_object('native',250),
+    'warnings','[]'::jsonb,'generatedAt',now(),
+    'lines',jsonb_build_array(jsonb_build_object(
+      'ruleId',terminal_rule,'ruleCode','terminal_fee','label','Terminal fee','basis','per_call','quantity',1,'rate',250,'amount',250,
+      'explanation','Terminal fee per call','inputs',jsonb_build_object('quantity',1,'rate',250),'manual',false,
+      'evidence',jsonb_build_object('sourceId',source,'title','PDA Test Tariff 2026','page','5')
+    ))
+  ), null);
+  if estimate is null then raise exception 'PDA TEST: flagged T1 market partner could not save an estimate'; end if;
+
   select count(*) into before_versions from public.port_tariff_versions where status = 'published';
   batch := public.pda_stage_tariff_import(maker, source, 'behavior-test', jsonb_build_array(jsonb_build_object(
     'rawText','Towage subject to agent quote','sourcePage','8','confidence',0.9,'portLocode',port_code,

@@ -1,6 +1,8 @@
 # PDA Estimator and Fixture Room: release readiness
 
-Candidate: `feature/modules-integration` at `2fa02d3` (26 September 2026).
+Candidate: `feature/modules-integration` (final validation in progress,
+26 September 2026). Merge, push, deployment and hosted migration are paused
+for owner feedback.
 
 This candidate is ready for owner-approved merge to `dev`. It has not been
 merged, pushed, deployed, or applied to a hosted database.
@@ -13,6 +15,9 @@ merged, pushed, deployed, or applied to a hosted database.
   admin console, account-anonymisation compatibility, and guarded PDA links.
 - Account privilege boundary: members can change only profile fields; admin
   authority requires both the Auth claim and an active admin record.
+- Market-partner entitlement is service-managed and is enforced consistently
+  by the portal, the PDA server action, and both PDA and Fixture database
+  gates. No member-facing action can grant the flag.
 - The review-queue counter fix: administrator decisions use the service-owned
   mutation path only after server-side section and edit permission checks.
 - Port-tariff evidence inventory. It inventories the supplied source material;
@@ -32,9 +37,9 @@ the release behaviour.
 - Fixture pure checks: 197 passing on the included candidate.
 - Browser acceptance: 15 passing Fixture member, responsive, accessibility,
   and administrator checks against a production build.
-- Combined PDA/Fixture migration harness: ordered forward application,
-  exact rollback fingerprint, and reapplication passed on an empty local
-  module schema.
+- Combined PDA/Fixture migration harness: all twelve ordered release
+  migrations, all six DOWN files, exact rollback fingerprint, and
+  reapplication are part of the final validation gate.
 - Fixture RLS, masking, idempotency, immutability, snapshot, shared PDA link,
   account-anonymisation, and user-privilege transaction smoke suites passed.
 - U7 verifies a service-owned review approval increments the submitter's
@@ -42,8 +47,8 @@ the release behaviour.
 
 ## Owner approval and deployment checklist
 
-1. Approve merging the current `feature/modules-integration` release branch to
-   `dev`; its reviewed application-code baseline is `2fa02d3`.
+1. Review the final local validation report and approve merging the exact
+   reported `feature/modules-integration` commit to `dev`.
 2. Review the twelve ordered migrations before applying them to the target
    Supabase database. Apply through the normal reviewed migration deployment
    process; do not run rollback harnesses against a populated environment.
@@ -57,3 +62,6 @@ the release behaviour.
 6. Keep proposal-lapse scheduling disabled. Reconsider it only when the owner
    selects pg_cron or an external service-owned scheduler and approves the
    corrected upgrade-safe migration.
+7. Keep `is_market_partner` false unless the owner deliberately grants it
+   through a service-owned administration operation. It is an entitlement,
+   not an editable profile field.

@@ -5,10 +5,32 @@
 -- to pda_estimates: the Fixture module can remain independently deployable,
 -- while runtime access is governed by fn_can_read_pda_estimate().
 
--- The Fixture event ledger is closed to arbitrary event names.  Add the two
--- integration events explicitly, retaining every v1 event type.
+-- The Fixture event ledger is closed to arbitrary event names. Add the two
+-- integration events explicitly, retaining every v1 event type. A populated
+-- Fixture rollback preserves backup tables; PostgreSQL may then auto-name a
+-- re-created table's check `fixture_events_type_check1` (or a later suffix)
+-- because the backup still owns the original name. Remove the type check by
+-- column identity rather than by one assumed name so this migration is safe
+-- on both clean installs and real rollback/reapply paths.
+do $fixture_event_type$
+declare v_constraint record;
+begin
+  for v_constraint in
+    select c.conname
+      from pg_constraint c
+      join pg_attribute a
+        on a.attrelid = c.conrelid
+       and a.attname = 'type'
+       and a.attnum = any(c.conkey)
+     where c.conrelid = 'public.fixture_events'::regclass
+       and c.contype = 'c'
+  loop
+    execute format('alter table public.fixture_events drop constraint %I', v_constraint.conname);
+  end loop;
+end
+$fixture_event_type$;
+
 alter table public.fixture_events
-  drop constraint if exists fixture_events_type_check,
   add constraint fixture_events_type_check check (type in (
     'room.created','party.invited','party.accepted','party.declined','party.removed',
     'party.disclosure_agreed','room.counterparty_disclosed',

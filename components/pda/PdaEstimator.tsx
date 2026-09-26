@@ -51,6 +51,15 @@ export function PdaEstimator({ ports, coverage, terminals, vessels }: Props) {
   const terminalOptions = terminals.filter((item) => item.portLocode === portLocode);
   const covered = coverage.some((item) => item.portLocode === portLocode);
 
+  React.useEffect(() => {
+    setResult(null);
+    setSavedId(null);
+  }, [
+    portLocode, terminalId, callDate, vesselId, gt, nt, scnrt, dwt, loa,
+    draft, days, hours, cargoQuantity, cargoStatus, location, services,
+    convertedCurrency, fxRate, manualLines,
+  ]);
+
   function selectVessel(nextId: string) {
     const nextVessel = vessels.find((item) => item.id === nextId) ?? null;
     setVesselId(nextId);
