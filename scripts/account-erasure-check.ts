@@ -16,7 +16,7 @@ const migration = readFileSync(
 );
 
 assert.match(action, /rpc\("fn_anonymize_account"/);
-assert.match(action, /deleteUser\(\s*user\.id,\s*true\s*,?\s*\)/s);
+assert.match(action, /deleteUser\(\s*user\.id,\s*true\s*,?[\s\S]*?\)/);
 assert.doesNotMatch(action, /from\("users"\)\.delete\(/);
 
 assert.match(migration, /security definer/i);

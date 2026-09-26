@@ -12,6 +12,7 @@
     "test:port-tariff-inventory": "node scripts/port-tariff-inventory-check.mjs",
     "test:pda": "node --import tsx scripts/pda-check.ts && node scripts/pda-sql-contract-check.mjs",
     "test:fixture-room": "node --import tsx scripts/fixture-room-check.ts",
+    "test:fixture-room:e2e": "playwright test --config=playwright.fixture-room.config.ts",
     "test:module-integration": "node scripts/module-integration-contract-check.mjs",
     "prebuild": "npm run test:route-alerts && npm run test:zones && npm run test:llm-providers && npm run test:user-privileges && npm run test:port-tariff-inventory && npm run test:pda && npm run test:fixture-room && npm run test:module-integration",
     "build": "next build",
