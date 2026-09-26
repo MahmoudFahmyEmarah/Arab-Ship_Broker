@@ -132,6 +132,18 @@ create table if not exists public.fixture_pda_links (
     (converted_total is null or converted_total >= 0)
   )
 );
+-- Safe PDA-header expansion agreed with Fixture Room.  It is kept in this
+-- idempotent integration migration because neither module has been deployed;
+-- importantly, vessel_id is still validation-only and never has a column here.
+alter table public.fixture_pda_links
+  add column if not exists terminal_id uuid,
+  add column if not exists call_date date,
+  add column if not exists fx_rate numeric,
+  add column if not exists fx_source text,
+  add column if not exists is_superseded boolean,
+  add column if not exists line_count integer,
+  add column if not exists manual_line_count integer,
+  add column if not exists warning_count integer;
 comment on table public.fixture_pda_links is 'Append-only, allow-listed PDA headers shared into a Fixture Room. pda_estimate_id intentionally has no foreign key so the Fixture module remains independently deployable; link creation calls fn_can_read_pda_estimate instead.';
 create index if not exists fixture_pda_links_room_idx on public.fixture_pda_links(room_id, created_at desc);
 create index if not exists fixture_pda_links_estimate_idx on public.fixture_pda_links(pda_estimate_id);
@@ -148,14 +160,22 @@ as $$
     'purpose', l.purpose,
     'pdaEstimateId', l.pda_estimate_id,
     'portLocode', l.port_locode,
+    'terminalId', l.terminal_id,
     'terminalName', l.terminal_name,
     'tariffVersionId', l.tariff_version_id,
     'coverage', l.coverage,
+    'callDate', l.call_date,
     'nativeCurrency', l.native_currency,
     'nativeTotal', l.native_total,
     'convertedCurrency', l.converted_currency,
     'convertedTotal', l.converted_total,
+    'fxRate', l.fx_rate,
+    'fxSource', l.fx_source,
     'generatedAt', l.generated_at,
+    'isSuperseded', l.is_superseded,
+    'lineCount', l.line_count,
+    'manualLineCount', l.manual_line_count,
+    'warningCount', l.warning_count,
     'linkedByLabel', p.display_label,
     'supersededByLinkId', (
       select n.id from public.fixture_pda_links n where n.supersedes_link_id = l.id order by n.created_at desc limit 1
@@ -247,11 +267,15 @@ begin
 
   v_safe := jsonb_build_object(
     'id', v_link_id, 'purpose', v_purpose, 'pdaEstimateId', p_pda_estimate_id,
-    'portLocode', v_header->>'portLocode', 'terminalName', v_header->>'terminalName',
+    'portLocode', v_header->>'portLocode', 'terminalId', v_header->>'terminalId', 'terminalName', v_header->>'terminalName',
     'tariffVersionId', v_header->>'tariffVersionId', 'coverage', v_header->>'coverage',
+    'callDate', v_header->>'callDate',
     'nativeCurrency', v_header->>'nativeCurrency', 'nativeTotal', v_header->'nativeTotal',
     'convertedCurrency', v_header->>'convertedCurrency', 'convertedTotal', v_header->'convertedTotal',
-    'generatedAt', v_header->>'generatedAt', 'linkedByLabel', v_acting.display_label,
+    'fxRate', v_header->'fxRate', 'fxSource', v_header->>'fxSource',
+    'generatedAt', v_header->>'generatedAt', 'isSuperseded', v_header->'isSuperseded',
+    'lineCount', v_header->'lineCount', 'manualLineCount', v_header->'manualLineCount', 'warningCount', v_header->'warningCount',
+    'linkedByLabel', v_acting.display_label,
     'supersededByLinkId', null
   );
   v_event := public.fn_fixture_event(
@@ -261,15 +285,18 @@ begin
     jsonb_build_object('pdaLink', v_safe)
   );
   insert into public.fixture_pda_links (
-    id, room_id, pda_estimate_id, purpose, port_locode, terminal_name, tariff_version_id, coverage,
-    native_currency, native_total, converted_currency, converted_total, generated_at,
+    id, room_id, pda_estimate_id, purpose, port_locode, terminal_id, terminal_name, tariff_version_id, coverage, call_date,
+    native_currency, native_total, converted_currency, converted_total, fx_rate, fx_source, generated_at,
+    is_superseded, line_count, manual_line_count, warning_count,
     linked_by_party_id, linked_by_user_id, linked_event_id, supersedes_link_id
   ) values (
-    v_link_id, r.id, p_pda_estimate_id, v_purpose, v_header->>'portLocode', v_header->>'terminalName',
-    nullif(v_header->>'tariffVersionId', '')::uuid, v_header->>'coverage',
+    v_link_id, r.id, p_pda_estimate_id, v_purpose, v_header->>'portLocode', nullif(v_header->>'terminalId', '')::uuid, v_header->>'terminalName',
+    nullif(v_header->>'tariffVersionId', '')::uuid, v_header->>'coverage', nullif(v_header->>'callDate', '')::date,
     v_header->>'nativeCurrency', nullif(v_header->>'nativeTotal', '')::numeric,
     v_header->>'convertedCurrency', nullif(v_header->>'convertedTotal', '')::numeric,
-    nullif(v_header->>'generatedAt', '')::timestamptz,
+    nullif(v_header->>'fxRate', '')::numeric, nullif(v_header->>'fxSource', ''), nullif(v_header->>'generatedAt', '')::timestamptz,
+    nullif(v_header->>'isSuperseded', '')::boolean, nullif(v_header->>'lineCount', '')::integer,
+    nullif(v_header->>'manualLineCount', '')::integer, nullif(v_header->>'warningCount', '')::integer,
     v_acting.id, v_actor, (v_event->>'eventId')::bigint, v_previous
   );
   return v_event;

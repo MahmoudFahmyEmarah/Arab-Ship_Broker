@@ -30,7 +30,7 @@ begin
     fx_snapshot, warnings, native_currency, native_total, generated_at
   ) values
     (v_estimate, pg_temp.fx_id('u_ch1'), 'ZZFXA', pg_temp.fx_id('v1'), current_date, 'manual_required', '{}'::jsonb,
-     '{}'::jsonb, '[]'::jsonb, 'USD', 1234.56, now()),
+     '{"rate":1.25,"source":"member"}'::jsonb, '[{"code":"manual"}]'::jsonb, 'USD', 1234.56, now()),
     (v_wrong_estimate, pg_temp.fx_id('u_ch1'), 'ZZFXA', pg_temp.fx_id('v2'), current_date, 'manual_required', '{}'::jsonb,
      '{}'::jsonb, '[]'::jsonb, 'USD', 10, now());
 
@@ -62,6 +62,12 @@ begin
   end if;
   v_links := public.list_fixture_pda_links(v_room);
   if jsonb_array_length(v_links) <> 1 or v_links::text ilike '%vesselId%' then raise exception 'INT1: unsafe PDA link read %', v_links; end if;
+  if v_links->0->>'callDate' <> current_date::text
+     or (v_links->0->>'fxRate')::numeric <> 1.25
+     or v_links->0->>'fxSource' <> 'member'
+     or (v_links->0->>'warningCount')::integer <> 1 then
+    raise exception 'INT1: approved safe PDA header fields were not snapshotted %', v_links;
+  end if;
 
   v_err := pg_temp.fx_err(format('select public.link_fixture_pda_estimate(%L, %L, %L, %s, %L)', v_room, v_wrong_estimate, 'discharge', pg_temp.fx_ver(v_room), 'shared-link-wrong-vessel'));
   if v_err <> 'FX_VALIDATION' then raise exception 'INT1: mismatched PDA vessel must be refused, got %', v_err; end if;

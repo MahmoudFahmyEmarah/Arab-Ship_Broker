@@ -19,6 +19,9 @@ assert.doesNotMatch(migration, /pda_estimate_id\s+uuid[^\n]*references public\.p
 assert.match(migration, /if not public\.fn_can_read_pda_estimate\(p_pda_estimate_id\)/i);
 assert.match(migration, /v_header := public\.fn_pda_estimate_header\(p_pda_estimate_id\)/i);
 assert.match(migration, /The vessel id is validation-only\. It is never persisted here or returned\./i);
+for (const field of ["terminal_id", "call_date", "fx_rate", "fx_source", "is_superseded", "line_count", "manual_line_count", "warning_count"]) {
+  assert.match(migration, new RegExp(field, "i"));
+}
 assert.match(migration, /alter table public\.fixture_pda_links enable row level security/i);
 assert.match(migration, /revoke all on table public\.fixture_pda_links from public, anon, authenticated/i);
 assert.doesNotMatch(migration, /'vesselId', v_header/i);
