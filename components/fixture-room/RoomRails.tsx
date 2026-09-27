@@ -94,8 +94,8 @@ export function CounterpartyCard({ view, run, busy, actForPartyId }: { view: Fix
   );
 }
 
-export function RecapRail({ view, run, busy, actForPartyId, hoverSlot, onHover }: {
-  view: FixtureRoomView; run: RunCommand; busy: boolean; actForPartyId: string | null; hoverSlot: string | null; onHover: (id: string | null) => void;
+export function RecapRail({ view, run, busy, actForPartyId, hoverSlot, onHover, justAgreed }: {
+  view: FixtureRoomView; run: RunCommand; busy: boolean; actForPartyId: string | null; hoverSlot: string | null; onHover: (id: string | null) => void; justAgreed?: Set<string>;
 }) {
   const caps = view.viewer.capabilities;
   const latest = view.recaps[0] ?? null;
@@ -114,7 +114,7 @@ export function RecapRail({ view, run, busy, actForPartyId, hoverSlot, onHover }
           const cv = locked ? t.agreed?.displayValue ?? "" : t.cargoPosition?.displayValue ?? "—";
           const vv = locked ? t.agreed?.displayValue ?? "" : t.vesselPosition?.displayValue ?? "—";
           return (
-            <div key={t.id} className={`rc-item${locked ? " is-locked" : ""}${hoverSlot === t.id ? " is-linked" : ""}`} data-testid={`recap-slot-${t.code}`}
+            <div key={t.id} className={`rc-item${locked ? " is-locked" : ""}${hoverSlot === t.id ? " is-linked" : ""}${justAgreed?.has(t.id) ? " is-just-filled" : ""}`} data-testid={`recap-slot-${t.code}`}
               onMouseEnter={() => onHover(t.id)} onMouseLeave={() => onHover(null)} title={cv === vv ? cv : `Cargo ${cv} · Vessel ${vv}`}>
               <div className="rc-item__top"><span className="rc-item__k">{t.sortOrder} · {t.label}</span>{locked && <span className="rc-item__lock">✓ agreed</span>}{t.status === "withdrawn" && <span className="rc-item__lock">withdrawn</span>}</div>
               <div className="rc-item__vals">

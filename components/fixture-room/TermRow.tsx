@@ -276,6 +276,10 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
               <div className="fx-acts2">
                 {listingFigure && <button type="button" className="fx-chip2" onClick={() => setFields(valueToFields(term.valueKind, listingFigure))}>Use listing figure</button>}
                 {live && !liveLapsed && <button type="button" className="fx-chip2" onClick={() => setFields(valueToFields(term.valueKind, live.value))}>Match their figure</button>}
+                {caps.canMessage && otherSide && term.holder === otherSide && (
+                  <button type="button" className="fx-chip2" disabled={busy} data-testid={`nudge-${term.code}`} title={`Ask the ${otherSide} side to answer on ${term.label.toLowerCase()}`}
+                    onClick={() => run("message", (b) => ({ ...b, body: `Awaiting your answer on ${term.label.toLowerCase()}.`, kind: "nudge", visibility: "room", termId: term.id }))}>↑ Nudge {sideNoun(otherSide)}</button>
+                )}
                 <span className="fx-acts2__sep" />
                 <label className="fx-field is-check"><input id={`fx-${term.code}-final`} type="checkbox" checked={isFinal} onChange={(e) => setIsFinal(e.target.checked)} /><span>Final position</span></label>
                 <label className="fx-field is-check" htmlFor={`fx-${term.code}-validity`}><span>Valid for</span>

@@ -32,6 +32,7 @@ import {
 import { TermRow } from "./TermRow";
 import { ActivityFeed, CounterpartyCard, MessagesPanel, RecapRail, SubjectsRail, eventText } from "./RoomRails";
 import { phaseClass } from "./RoomInbox";
+import { RecapComposer } from "./RecapComposer";
 import { IcAnchor, IcBarrel, IcDownload, IcMail, IcRefresh, IcVolume, IcVolumeOff } from "./icons";
 
 const ACTIONS = {
@@ -96,6 +97,9 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   const [inviteParty, setInviteParty] = React.useState<string | null>(null);
   const [toasts, setToasts] = React.useState<Toast[]>([]);
   const [bunker, setBunker] = React.useState(false);
+  const [recapOpen, setRecapOpen] = React.useState(false);
+  const [justAgreed, setJustAgreed] = React.useState<Set<string>>(() => new Set());
+  const prevStatus = React.useRef<Record<string, string>>(Object.fromEntries(initial.terms.map((t) => [t.id, t.status])));
   const [soundOn, setSoundOn] = React.useState(true);
   const audioRef = React.useRef<AudioContext | null>(null);
   const lastSeqRef = React.useRef<number>(Math.max(0, ...initial.events.map((e) => e.seq)));
@@ -142,6 +146,16 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
     noticeNewEvents(v);
     return v;
   }, [roomId, noticeNewEvents]);
+
+  React.useEffect(() => {
+    const prev = prevStatus.current;
+    const fresh = view.terms.filter((t) => t.status === "agreed" && prev[t.id] && prev[t.id] !== "agreed").map((t) => t.id);
+    prevStatus.current = Object.fromEntries(view.terms.map((t) => [t.id, t.status]));
+    if (fresh.length === 0) return;
+    setJustAgreed(new Set(fresh));
+    const timer = setTimeout(() => setJustAgreed(new Set()), 900);
+    return () => clearTimeout(timer);
+  }, [view.terms]);
 
   const onVersionChange = React.useCallback((version: number) => {
     void refetch().then((v) => { if (v) setAnnounce(`Room updated to version ${version}.`); });
@@ -209,8 +223,15 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
     vessel: sidePresence(view.events, view.parties, "vessel", now),
   }), [view.events, view.parties, now]);
   const windowLeft = room.negotiationWindowEndsAt && now > 0 ? Date.parse(room.negotiationWindowEndsAt) - now : null;
-  const pdaHref = `/dashboard/ports-da?from=fixture&roomId=${encodeURIComponent(room.id)}${room.vesselId ? `&vesselId=${encodeURIComponent(room.vesselId)}` : ""}`
-    + `&load=${encodeURIComponent(String(cargo.load_port_locode ?? ""))}&disch=${encodeURIComponent(String(cargo.disch_port_locode ?? ""))}&mt=${encodeURIComponent(String(cargo.qty_max_mt ?? ""))}`;
+  // the estimator's frozen hand-off contract (C2O-007): ids, ports and quantity; the vessel
+  // name only once the owner has disclosed it; the estimator re-resolves every value
+  const pdaParams = new URLSearchParams({ from: "fixture", ref: room.ref, cargoId: room.cargoListingId });
+  if (room.vesselId) pdaParams.set("vesselId", room.vesselId);
+  if (!snapshot.vesselIdentityMasked && vessel.vessel_name) pdaParams.set("vessel", String(vessel.vessel_name));
+  if (cargo.load_port_locode) pdaParams.set("load", String(cargo.load_port_locode));
+  if (cargo.disch_port_locode) pdaParams.set("disch", String(cargo.disch_port_locode));
+  if (cargo.qty_max_mt != null) pdaParams.set("mt", String(cargo.qty_max_mt));
+  const pdaHref = `/dashboard/ports-da?${pdaParams.toString()}`;
 
   const exportSummary = () => {
     downloadText(`Fixture-${room.ref}-summary.txt`, buildDealSummary(view));
@@ -260,7 +281,8 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
             <button type="button" className={`nr-newfix is-icon${soundOn ? " is-on" : ""}`} onClick={toggleSound} title={soundOn ? "Sound on for incoming moves" : "Sound muted"} aria-label="Toggle sound" aria-pressed={soundOn}>{soundOn ? <IcVolume /> : <IcVolumeOff />}</button>
             <button type="button" className="nr-newfix is-icon" onClick={exportSummary} title="Export deal summary" aria-label="Export deal summary" data-testid="export-summary"><IcDownload /></button>
             <Link href={pdaHref} className="nr-newfix is-icon" title="Open both port calls in the Ports Cost Estimator" aria-label="Ports Cost Estimator"><IcAnchor /></Link>
-            <Link href={`/dashboard/fixture-room/${room.id}/recap`} className="nr-newfix is-icon" title="Fixture recap" aria-label="Fixture recap" data-testid="open-recap"><IcMail /></Link>
+            <button type="button" className="nr-newfix is-icon" onClick={() => setRecapOpen(true)} title="Send recap to both principals" aria-label="Send recap" data-testid="open-recap-composer"><IcMail /></button>
+            <Link href={`/dashboard/fixture-room/${room.id}/recap`} className="nr-newfix is-icon" title="Printable recap" aria-label="Printable recap" data-testid="open-recap">▤</Link>
             <Link href="/dashboard/fixture-room/new" className="nr-newfix is-icon" title="Start a different match" aria-label="New fixture"><IcRefresh /></Link>
             <span className={`nr-phase ${phaseClass(room.status)}`} data-testid="room-status">
               <span className="nr-phase__dot" aria-hidden="true" />
@@ -371,12 +393,14 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
         {/* ── right rail ─────────────────────────────────────────── */}
         <div className="nr-rail">
           <CounterpartyCard view={view} run={run} busy={busy} actForPartyId={actFor} />
-          <RecapRail view={view} run={run} busy={busy} actForPartyId={actFor} hoverSlot={hoverSlot} onHover={setHoverSlot} />
+          <RecapRail view={view} run={run} busy={busy} actForPartyId={actFor} hoverSlot={hoverSlot} onHover={setHoverSlot} justAgreed={justAgreed} />
           <SubjectsRail view={view} run={run} busy={busy} actForPartyId={actFor} now={now} />
           <MessagesPanel view={view} run={run} busy={busy} now={now} />
           <ActivityFeed view={view} now={now} />
         </div>
       </div>
+
+      {recapOpen && <RecapComposer view={view} onClose={() => setRecapOpen(false)} />}
 
       {/* ── footer state machine ───────────────────────────────────── */}
       <div className={`nr-foot${room.status === "fixed" ? " is-fixed" : terminal ? " is-void" : requiredOpen.length === 0 && room.status === "negotiating" ? " is-ready" : ""}`} data-testid="room-footer">

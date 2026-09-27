@@ -582,3 +582,22 @@ card reads "Your side · fixed"; the holder chip reads "→ Vessel" / "→ Cargo
 the stale tab is now simulated by hiding the document (the room's poll pauses
 while hidden) instead of aborting its requests, which fought the production
 router; the per-assertion budget is 180 s and the per-test budget 600 s.
+
+## 13 · Phase 1.1 · commit 2 (28 Sep 2026)
+
+Adds the design's recap composer (`RecapComposer`: Email / WhatsApp tabs,
+recipients, subject and body from the published recap or the masked deal
+summary; Copy and Download work, delivery waits for the notification module
+per D-2), the estimator hand-off in the estimator's frozen format (`from,
+ref, cargoId, vesselId, vessel, load, disch, mt`; `vessel` only once the
+vessel is disclosed), a "Nudge" chip that posts a governed nudge pinned to
+the term, and a recap-slot pulse when a term is agreed (reduced-motion
+aware). Separate icons now open the composer and the printable recap.
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 233 passed, 0 failed (4 new: hand-off contract, disclosed-only vessel name, composer sends nothing, nudge is governed) |
+| `tsc --noEmit` / `eslint` | 0 errors / clean |
+| production build, local keys | exit 0, 176 s |
+| `fixture-room-a11y.spec.ts` + `fixture-room-responsive.spec.ts` | 8 passed (3.4 min) |
+| `fixture-room.spec.ts` (two-browser) | not re-run; still needs a runner with memory headroom (section 12) |
