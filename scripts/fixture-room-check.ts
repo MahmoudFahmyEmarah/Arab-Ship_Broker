@@ -307,3 +307,37 @@ const harnessSh = read("scripts/fixture-room-harness.sh");
 ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
 ok(!/40001/.test(sweepCode) && !/(pda_|tariff)/.test(sweepCode) && !/update public\.fixture_(proposals|terms)/.test(sweepFnCode), "the sweep raises no 40001, touches no PDA object and rewrites no proposal or term");
 ok(/X1 ok|X5 ok/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")) && /has_function_privilege\('authenticated', 'public\.sweep_fixture_proposal_lapses\(integer\)', 'execute'\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite covers the sweep and proves the member cannot execute it");
+
+// ── Phase 1.1 · design alignment, commit 1 (27 Sep 2026) ───────────────────────
+// The room, the match builder, the inbox and the tier lock render the approved
+// design's markup on its stylesheet, lifted from the standalone bundle onto the
+// shared tokens. The governed layer did not change; these checks pin the
+// presentation contract the browser suites and the masking rules rely on.
+const fxCss = read("components/fixture-room/fixture-room.css");
+const fxCssCode = fxCss.replace(/\/\*[\s\S]*?\*\//g, "");
+ok(!/#[0-9a-fA-F]{3,8}\b/.test(fxCssCode), "the Fixture stylesheet carries no colour literal (design rules on shared tokens)");
+ok(/^\.nr \{/m.test(fxCss) && /^\.fx-strip \{/m.test(fxCss) && /^\.fxm-card \{/m.test(fxCss) && /^\.nrx \{/m.test(fxCss) && /^\.rc-item\b/m.test(fxCss) && /^\.estimator-locked \{/m.test(fxCss), "the stylesheet carries the design's nr / fx / fxm / nrx / rc / lock rule families");
+ok(/C · portal fit/.test(fxCss) && /\.nr \.nr-foot \{ position: sticky/.test(fxCss) && /\.nr \.nr-body, \.nr \.nr-main, \.nr \.nr-items \{ overflow: visible/.test(fxCss), "the portal-fit block lets the page scroll and sticks the footer");
+ok(/@media \(max-width: 1120px\)/.test(fxCss), "the design's 1120 px rail breakpoint is the one the responsive suite asserts");
+const fxUi = [
+  "components/fixture-room/FixtureRoomClient.tsx", "components/fixture-room/TermRow.tsx", "components/fixture-room/RoomRails.tsx",
+  "components/fixture-room/MatchBuilder.tsx", "components/fixture-room/RoomInbox.tsx", "components/fixture-room/FixtureLocked.tsx",
+  "app/(dashboard)/dashboard/fixture-room/page.tsx", "app/(dashboard)/dashboard/fixture-room/new/page.tsx",
+  "app/(dashboard)/dashboard/fixture-room/[id]/page.tsx", "app/(dashboard)/dashboard/fixture-room/loading.tsx",
+].map(read);
+ok(fxUi.every((src) => !/fxr-/.test(src)), "no Fixture page or component keeps the pre-design fxr- vocabulary");
+ok(/className="nr"/.test(fxUi[0]) && /className="nr fxm-wrap"/.test(fxUi[3]) && /className="nr fxm-wrap"/.test(fxUi[4]) && /className="nr"/.test(fxUi[5]), "every Fixture screen mounts on the design's .nr root");
+ok(/data-testid="room-header"/.test(fxUi[0]) && /data-testid="room-footer"/.test(fxUi[0]) && /data-testid="counterparty-chip"/.test(fxUi[0]) && /data-testid=\{`term-strip-\$\{term\.code\}`\}/.test(fxUi[1]) && /data-testid=\{`term-holder-\$\{term\.code\}`\}/.test(fxUi[1]) && /data-testid="counterparty-card"/.test(fxUi[2]) && /data-testid="recap-rail"/.test(fxUi[2]) && /className="fxm__lockedtag"/.test(fxUi[3]), "the browser suites' anchors survive the redesign");
+ok(/id=\{`fx-\$\{kind\}-\$\{name\}`\}/.test(fxUi[1]) && /htmlFor=\{`fx-\$\{kind\}-\$\{name\}`\}/.test(fxUi[1]), "composer inputs keep their labelled ids (the accessibility suite reads label[for=fx-money_per_mt-num])");
+ok(!/window\.__resources|PDAPRICE|ASBData|ASB_COMPANIES|localStorage\.setItem\("asb\.fx\.pair/.test(fxUi.join("\n")), "no prototype data source or browser-store pairing leaked into the room");
+ok(/setInterval|Math\.random\(\)\s*<\s*0\.\d/.test(fxUi[0]) === false, "the room simulates nothing: no interval-driven or random state");
+ok(/sidePresence\(view\.events, view\.parties, "cargo", now\)/.test(fxUi[0]) && /sidePresence\(view\.events, view\.parties, "vessel", now\)/.test(fxUi[0]), "presence chips come from the ledger-derived helper");
+const fxPresence = read("lib/fixture-room/presence.ts");
+ok(/export function sidePresence\(/.test(fxPresence) && !/setInterval|Math\.random|fetch\(|supabase/.test(fxPresence), "presence is a pure derivation from events, never simulated or fetched");
+const fxSummary = read("lib/fixture-room/summary.ts").replace(/\/\/.*$/gm, "");
+ok(/export function buildDealSummary\(/.test(fxSummary) && !/email|phone|userId|contactId|imo_number|orgId/i.test(fxSummary), "the deal summary references no person, email, phone, id or vessel identifier field");
+ok(/p\.name \?\? `\$\{p\.label\} \(via ASB, masked\)`/.test(fxSummary) && /vesselIdentityMasked \? " · identity withheld"/.test(fxSummary), "the deal summary keeps the counterparty and TBN masking of the read model");
+const fxGlossary = read("lib/fixture-room/glossary.ts");
+ok(/MOLOO/.test(fxGlossary) && /FIOST/.test(fxGlossary) && /SHINC/.test(fxGlossary) && /export function glossTokens/.test(fxGlossary), "the glossary carries the design's abbreviations");
+ok(/export function assessFit\(/.test(fxUi[3]) && !/rpc\(|fetch\(/.test(fxUi[3].split("export function assessFit")[1].split("\n}")[0]), "the match builder's fit reasons only explain the platform's candidates from listing fields (no scorer of its own)");
+ok(/href=\{pdaHref\}/.test(fxUi[0]) && /from=fixture&roomId=/.test(fxUi[0]) && !/imo_number|vessel_name=/.test(fxUi[0].split("const pdaHref")[1].split(";")[0]), "the estimator hand-off carries ids, ports and quantity, never a vessel name or IMO");

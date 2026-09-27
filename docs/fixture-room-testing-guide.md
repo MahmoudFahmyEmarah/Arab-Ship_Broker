@@ -538,3 +538,47 @@ passes. Run both ways: the harness on `asb_fixture` (skip) and the assembled
 | `fixture_rls_smoke.sql` standalone on the shared `postgres` database, column present | `R6 ok: a T1 market partner passes the tier gate (FX_GATE without the flag, a room with it)`; ALL ASSERTIONS PASSED |
 | first attempt | R6 paired the T1 cargo with `a2`, whose vessel is the seed's deliberately sanctioned one, so the create was refused for the wrong reason; it now uses `a3` (R4 holds `c2 + a1`) |
 | `scripts/fixture-room-check.ts` | 212 passed, 0 failed |
+
+## 12 · Phase 1.1 design alignment · commit 1 (27 Sep 2026)
+
+Scope: the stylesheet port, the match builder, the room shell (header
+actions, phase pill, clock, timeline, toasts, presence chips, banners,
+footer), the strips and threads, the right rail and the tier lock, all on
+the design's markup; the recap print page moved to the same vocabulary.
+Governed layer unchanged. Details in the module doc, "Presentation".
+
+Gates run on the worktree: `scripts/fixture-room-check.ts` with twenty-two
+new checks (no colour literal in the stylesheet, the design rule families,
+the portal-fit block, the 1120 px breakpoint, no `fxr-` left, the `.nr`
+root on every screen, the suites' anchors, the labelled composer ids, no
+prototype data source, no simulated state, ledger-derived presence, a
+summary free of person and contact fields, the glossary, the fit reasons
+without a scorer, the estimator hand-off without a vessel name or IMO);
+`tsc --noEmit`; `eslint` on every changed file; a production build with the
+local keys served on port 3101; the six browser suites (member negotiation,
+accessibility, responsive; admin regression, accessibility, responsive)
+against it.
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 229 passed, 0 failed |
+| `tsc --noEmit` / `eslint` on every changed file | 0 errors / clean |
+| production build, local keys | exit 0; `/dashboard/fixture-room`, `/new`, `/[id]`, `/[id]/recap` emitted |
+| `fixture-room-a11y.spec.ts`, `fixture-room-responsive.spec.ts` | pass (3 + 5) |
+| `fixture-room-admin.spec.ts`, `-admin-a11y`, `-admin-responsive` | pass (3 + 4 + 8) |
+| `fixture-room.spec.ts` | 3 of 4 pass (opens a room from the match builder, invitation accept, printable recap); **"bid, counter-offer, stale tab refused, accept" not green on this runner**, see below |
+
+The two-browser negotiation test failed five times at five different steps
+(accept answered after more than 90 s; the owner's tab reloaded itself on a
+failed server action and hung on the loading screen; the 600 s test budget
+ran out, whole run 17 min). The runner had 558–1,200 MB free and the server
+log shows only database statement timeouts (the portal cargo loader hitting
+the 8 s `authenticated` limit). A simple bid took 65 s to appear. Every step
+the test exercises also passes in the other suites. It needs one re-run on a
+machine with headroom before this commit is composed.
+
+Spec changes made to follow the design, not to weaken the test: the locked
+card reads "Your side · fixed"; the holder chip reads "→ Vessel" / "→ Cargo";
+the stale tab is now simulated by hiding the document (the room's poll pauses
+while hidden) instead of aborting its requests, which fought the production
+router; the per-assertion budget is 180 s and the per-test budget 600 s.

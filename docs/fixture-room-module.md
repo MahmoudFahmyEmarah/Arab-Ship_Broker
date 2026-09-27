@@ -109,6 +109,58 @@ Not in this branch (by the freeze): `fixture_pda_links`,
 
 ## Application
 
+### Presentation (Phase 1.1, design alignment · commit 1, 27 Sep 2026)
+
+The room, the match builder, the inbox and the tier lock render the approved
+standalone design (`asb/negotiation-room`) on its own stylesheet, lifted rule
+for rule from the design bundle onto `app/design-tokens.css` (no colour
+literal survives; `components/fixture-room/fixture-room.css`, sections A–C).
+The vocabulary is the design's: `nr-*` for the shell, header, rail, footer
+and banners; `fx-*` for the term strips, threads, composer, timeline and
+toasts; `fxm-*` for the match builder and the inbox head; `rc-*` for the
+recap slots; `estimator-locked` for the tier lock. The buttons and inputs are
+the portal's `.asb-btn` / `.asb-input`, as on the Post Cargo and Post
+Position pages. A short portal-fit block lets the page scroll and sticks the
+footer, because the prototype filled a fixed frame. What the design adds and
+how it maps to the governed model:
+
+- header actions: bunker ticker (the portal's `BunkerTicker`), sound toggle
+  (a WebAudio chime on the other side's moves, preference in the browser),
+  export deal summary (`lib/fixture-room/summary.ts`, built from the masked
+  read model; the PDF of commit 4 replaces the text file), the Ports Cost
+  Estimator hand-off (`/dashboard/ports-da?from=fixture&roomId&vesselId&load&disch&mt`,
+  ids and ports only, honoured once the estimator reads the parameters), the
+  recap page and "new fixture"; the phase pill and the reply-window clock
+  (`negotiationWindowEndsAt`);
+- toasts for the other side's moves, derived from the events that arrive
+  between two version polls (never invented);
+- presence chips per side from the ledger (`lib/fixture-room/presence.ts`:
+  the latest event a side wrote → online within five minutes, away within
+  the hour, off beyond; decision D-3, no Realtime);
+- strips: holder chip with a presence dot, both figures with turn and final
+  highlights, spread text and a gap bar against the first-round gap, the
+  validity countdown of the figure awaiting an answer, the round badge;
+- threads: presence row with the validity ring, three lanes (cargo, broker,
+  vessel) of bids, offers, notes and nudges pinned to the term, the composer
+  with labelled fields for the viewer's seat, "Use listing figure", "Match
+  their figure", final and validity controls, hold and refer for the
+  mediator, lapse recovery ("Re-send · fresh 12:00" resubmits the same
+  figure with a twelve-minute validity), the final-position flags (decision
+  D-4: each side's `isFinal`; agreement stays by accept);
+- rail: the counterparty card with the two disclosure ticks (decision D-1:
+  no fee amount), recap slots mirroring the strips with linked hover,
+  subjects as the design's checklist buttons, messages as thread bubbles,
+  the activity log;
+- match builder: cards with a fit tier (strong / possible / weak) and up to
+  three reasons computed only from the listing fields the card shows
+  (capacity, rate alignment, laycan vs open date, gear for breakbulk); the
+  candidates themselves still come from the platform's match RPCs;
+- glossary tooltips on chartering abbreviations (`lib/fixture-room/glossary.ts`).
+
+Nothing in the governed layer changed: same RPCs, same envelope, same
+masking, same test ids for the browser suites.
+
+
 - `lib/fixture-room/` — `terms.ts` (catalogue, hints, opening figures),
   `types.ts`, `errors.ts`, `state-machine.ts`, `permissions.ts` (mirror of
   `fn_fixture_capabilities`, and `canUseFixtureRoom`: decision D3 in one

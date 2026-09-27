@@ -23,10 +23,10 @@ export default async function FixtureRoomInboxPage() {
   const rooms = await loadFixtureRooms({ limit: 100 });
   if (!Array.isArray(rooms)) {
     return (
-      <div className="fxr">
-        <div className="fxr-page">
-          <h1 className="fxr-title">Fixture Room</h1>
-          <div className="fxr-banner is-error" role="alert">{rooms.message}</div>
+      <div className="nr fxm-wrap">
+        <div className="fxm">
+          <div className="fxm__head"><div><h1 className="fxm__title">Fixture Room</h1></div></div>
+          <div className="nr-banner is-error" role="alert"><div className="nr-banner__body">{rooms.message}</div></div>
         </div>
       </div>
     );

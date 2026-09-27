@@ -22,9 +22,9 @@ export default async function FixtureRoomPage({ params }: { params: Promise<{ id
   if (isFixtureError(view)) {
     if (view.code === "AUTH" || view.code === "NOT_FOUND") notFound();
     return (
-      <div className="fxr">
-        <div className="fxr-page">
-          <div className="fxr-banner is-error" role="alert">{view.message}</div>
+      <div className="nr fxm-wrap">
+        <div className="fxm">
+          <div className="nr-banner is-error" role="alert"><div className="nr-banner__body">{view.message}</div></div>
         </div>
       </div>
     );
