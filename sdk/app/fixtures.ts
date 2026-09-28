@@ -64,6 +64,17 @@ export async function listFixtureRooms(supabase: SupabaseClient, statuses?: Fixt
   return (data ?? []) as FixtureRoomListItem[];
 }
 
+/**
+ * Ranked counterparts for one of the actor's own listings (C2O-011). The RPC
+ * refuses a listing the actor does not own or represent, never returns a
+ * vessel id or IMO, and names a TBN hull 'TBN'. Rows are camelCase JSON.
+ */
+export async function listFixtureMatchCandidates(supabase: SupabaseClient, kind: "cargo" | "vessel", listingId: string): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabase.rpc("list_fixture_match_candidates", { p_kind: kind, p_listing_id: listingId });
+  if (error) throw new FixtureRequestError(toError(error));
+  return (data ?? []) as Record<string, unknown>[];
+}
+
 /** One durable access-log row of a room (admin console only; the RPC refuses members). */
 export interface FixtureAccessLogEntry {
   id: number;

@@ -543,11 +543,11 @@
 .fxm-card__route {font-size: 11.5px; color: var(--asb-gray-700);}
 .fxm-card__route .arr {color: var(--asb-gray-400);}
 .fxm-card__meta {font-size: 10.5px; color: var(--asb-gray-500);}
-.fxm-reasons {display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;}
+.fxm-reasons {display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none;}
 .fxm-reason {font-size: 9.5px; font-weight: 600; padding: 2px 7px; border-radius: 99px;
   display: inline-flex; align-items: center; gap: 3px;}
 .fxm-reason.ok {color: var(--asb-green); background: var(--asb-green-bg);}
-.fxm-reason.no {color: var(--asb-gray-500); background: var(--asb-gray-100);}
+.fxm-reason.info {color: var(--asb-gray-500); background: var(--asb-gray-100);}
 .fxm-card__cta {margin-top: 9px; align-self: flex-start; padding: 5px 12px; font-size: 11.5px;}
 .fxm__locked {display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   padding: 12px 14px; margin-bottom: 20px;
@@ -1012,3 +1012,4 @@
 .nr .fx-new { display: inline-flex; align-items: center; font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border-radius: var(--r-chip); background: var(--asb-blue); color: var(--asb-white); }
 .nr .nr-log__item.is-new .nr-log__txt { font-weight: 600; }
 .nr .nr-log__since { margin: 2px 0 12px; padding: 3px 0; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--asb-blue); border-top: 1px dashed var(--asb-blue); }
+

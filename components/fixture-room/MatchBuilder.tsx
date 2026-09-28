@@ -1,58 +1,62 @@
 "use client";
 
 // The match builder as designed (fxm): pick your side, then the ranked
-// opposite side, open the room. Candidates come from the existing match RPCs
-// (one matching source, never a client-side scorer); the fit tier and the
-// reasons on each card only explain what the platform's match already says,
-// from the same listing fields the card shows. State is transient; the room
-// is the record.
+// opposite side, open the room. Candidates come from the governed
+// list_fixture_match_candidates (one matching source, never a client-side
+// scorer; own listings only; a TBN hull is named "TBN" and carries no vessel
+// id or IMO). The reasons on each card are the facts of the rule that matched
+// the pair, as the database reports them, so an explanation can never
+// contradict a valid match (C2O-012 item 4). State is transient; the room is
+// the record.
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createFixtureRoomAction, loadMatchCandidates, type MatchBuilderData, type MatchCargoOption, type MatchVesselOption } from "@/app/(dashboard)/dashboard/fixture-room/actions";
+import { createFixtureRoomAction, loadMatchCandidates, type MatchBuilderData, type MatchCargoOption, type MatchFacts, type MatchVesselOption } from "@/app/(dashboard)/dashboard/fixture-room/actions";
 import { GestureKeys, UNCERTAIN_MESSAGE, runGesture } from "@/lib/fixture-room/client";
 import { FIXTURE_ERROR_TITLE } from "@/lib/fixture-room/errors";
 
 type First = { kind: "cargo"; cargo: MatchCargoOption } | { kind: "vessel"; vessel: MatchVesselOption };
-type Fit = { tier: "strong" | "possible" | "weak"; reasons: { ok: boolean; txt: string }[] };
+type Reason = { kind: "ok" | "info"; txt: string };
+type Fit = { tier: "strong" | "possible" | "weak"; reasons: Reason[] };
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : Number(n).toLocaleString("en-US"));
 const laycan = (c: MatchCargoOption) => (c.isSpot ? "SPOT" : c.laycanFrom || c.laycanTo ? `${c.laycanFrom ?? "—"} – ${c.laycanTo ?? "—"}` : "—");
 
-/** Why the platform's match holds, in the cargo's and vessel's own figures. */
-export function assessFit(c: MatchCargoOption, v: MatchVesselOption): Fit {
-  const reasons: { ok: boolean; txt: string }[] = [];
+/**
+ * Why the governed match holds, from the facts the matcher reports (zone, laycan
+ * rule, grain / DG certification, gear, capacity band). Every fact is a rule the
+ * pair passed, so each reads as a tick; the freight ideas are shown for
+ * information only, since they are not a matching rule. The tier ranks within
+ * valid matches: rate alignment and how closely the hull fits the parcel.
+ */
+export function assessFit(c: MatchCargoOption, v: MatchVesselOption, f: MatchFacts | undefined): Fit {
+  const reasons: Reason[] = [];
   let score = 0;
-  if (v.dwt != null) {
-    if (v.dwt >= c.qtyMax) { score += 2; reasons.push({ ok: true, txt: `Fits ${fmt(c.qtyMax)} MT` }); }
-    else if (v.dwt >= c.qtyMin) { score += 1; reasons.push({ ok: true, txt: `Fits ${fmt(c.qtyMin)} MT min` }); }
-    else reasons.push({ ok: false, txt: "Under capacity" });
+  if (f) {
+    const band = f.partCargo ? "part cargo, 80–120 %" : "90–110 %";
+    const close = c.qtyMax > 0 && f.dwtDelta <= c.qtyMax * 0.05;
+    score += close ? 2 : 1;
+    reasons.push({ kind: "ok", txt: `Fits ${fmt(c.qtyMin)}–${fmt(c.qtyMax)} MT (${band})` });
+    reasons.push({ kind: "ok", txt: f.zone === "load" ? "Open in the load zone" : "Open in the discharge zone" });
+    reasons.push({ kind: "ok", txt: f.laycan === "spot" ? "Spot cargo · prompt tonnage" : "Opens within the laycan window (−21 / +14 days)" });
+    if (f.laycan === "window") score += 1;
+    if (f.grain) reasons.push({ kind: "ok", txt: "Grain certified" });
+    if (f.dg) reasons.push({ kind: "ok", txt: "DG certified" });
+    if (f.gearRequired) reasons.push({ kind: "ok", txt: "Geared, as the cargo requires" });
   }
-  if (c.rateAligned === true || v.rateAligned === true) { score += 2; reasons.push({ ok: true, txt: "Rate aligned" }); }
-  else if (c.freightIdea != null && v.freightIdea != null) reasons.push({ ok: Math.abs(c.freightIdea - v.freightIdea) <= Math.max(1, c.freightIdea * 0.1), txt: `Idea $${Number(c.freightIdea).toFixed(2)} vs $${Number(v.freightIdea).toFixed(2)}` });
-  if (!c.isSpot && c.laycanFrom && v.openDate) {
-    const open = Date.parse(v.openDate), from = Date.parse(c.laycanFrom), to = c.laycanTo ? Date.parse(c.laycanTo) : from;
-    if (!Number.isNaN(open) && !Number.isNaN(from)) {
-      if (open <= to + 86_400_000) { score += 1; reasons.push({ ok: true, txt: "Open within laycan" }); }
-      else reasons.push({ ok: false, txt: "Opens after laycan" });
-    }
-  } else if (c.isSpot && v.openDate) { score += 1; reasons.push({ ok: true, txt: "Prompt tonnage" }); }
-  if (/break/i.test(c.type) && v.geared != null) {
-    if (v.geared) { score += 1; reasons.push({ ok: true, txt: "Geared" }); }
-    else reasons.push({ ok: false, txt: "Gearless" });
-  }
+  if (c.rateAligned === true || v.rateAligned === true) { score += 2; reasons.push({ kind: "ok", txt: "Freight ideas aligned (within $5)" }); }
+  else if (c.freightIdea != null && v.freightIdea != null) reasons.push({ kind: "info", txt: `Ideas $${Number(c.freightIdea).toFixed(2)} vs $${Number(v.freightIdea).toFixed(2)}` });
   return { tier: score >= 4 ? "strong" : score >= 2 ? "possible" : "weak", reasons };
 }
 
 function Reasons({ fit }: { fit?: Fit }) {
   if (!fit) return null;
+  // every reason is shown: a truncated list could hide the one the reader needs (C2O-012 item 4)
   return (
-    <>
-      <div className="fxm-reasons">
-        {fit.reasons.slice(0, 3).map((r, i) => <span key={i} className={`fxm-reason ${r.ok ? "ok" : "no"}`}>{r.ok ? "✓" : "✕"} {r.txt}</span>)}
-      </div>
-    </>
+    <ul className="fxm-reasons" aria-label="Why this matches">
+      {fit.reasons.map((r, i) => <li key={i} className={`fxm-reason ${r.kind === "ok" ? "ok" : "info"}`}><span aria-hidden="true">{r.kind === "ok" ? "✓" : "·"}</span> {r.txt}</li>)}
+    </ul>
   );
 }
 
@@ -84,7 +88,7 @@ function VesselPick({ v, cta, onPick, locked, fit, testId }: { v: MatchVesselOpt
         {fit && <span className={`fxm-match ${fit.tier}`}>{fit.tier}</span>}
         {v.mine && <span className="nr-tag">mine</span>}
       </div>
-      <div className="fxm-card__name">{v.name}</div>
+      <div className="fxm-card__name">{v.name}{v.isTbn && v.name === "TBN" && <span className="nr-tag" title="The owner discloses the hull when the fixture allows it">identity withheld</span>}</div>
       <div className="fxm-card__spec">{fmt(v.dwt)} DWT{v.geared != null ? ` · ${v.geared ? "geared" : "gearless"}` : ""}</div>
       <div className="fxm-card__route">Open {v.openPort ?? "—"}{v.openZone ? ` (${v.openZone})` : ""}</div>
       <div className="fxm-card__meta">{v.openDate ?? "open date —"}{v.freightIdea != null ? ` · idea $${Number(v.freightIdea).toFixed(2)}/MT` : ""}</div>
@@ -119,7 +123,9 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
     setFirst(f);
     setLoadingCands(true);
     try {
-      setCandidates(await loadMatchCandidates(f.kind, f.kind === "cargo" ? f.cargo.id : f.vessel.availabilityId));
+      const res = await loadMatchCandidates(f.kind, f.kind === "cargo" ? f.cargo.id : f.vessel.availabilityId);
+      setCandidates({ cargo: res.cargo, vessels: res.vessels });
+      setError(res.error ?? null);
     } catch {
       setCandidates({ cargo: [], vessels: [] });
       setError("Could not load the ranked counterparts. Pick again to retry.");
@@ -220,8 +226,8 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
             )}
             <div className="fxm__grid">
               {first.kind === "cargo"
-                ? candidates.vessels.map((v) => <VesselPick key={v.availabilityId} v={v} fit={assessFit(first.cargo, v)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(first.cargo.id, v.availabilityId)} testId={`cand-vessel-${v.availabilityId}`} />)
-                : candidates.cargo.map((c) => <CargoPick key={c.id} c={c} fit={assessFit(c, first.vessel)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(c.id, first.vessel.availabilityId)} testId={`cand-cargo-${c.id}`} />)}
+                ? candidates.vessels.map((v) => <VesselPick key={v.availabilityId} v={v} fit={assessFit(first.cargo, v, v.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(first.cargo.id, v.availabilityId)} testId={`cand-vessel-${v.availabilityId}`} />)
+                : candidates.cargo.map((c) => <CargoPick key={c.id} c={c} fit={assessFit(c, first.vessel, c.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(c.id, first.vessel.availabilityId)} testId={`cand-cargo-${c.id}`} />)}
             </div>
           </>
         )}

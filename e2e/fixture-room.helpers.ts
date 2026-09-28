@@ -19,7 +19,10 @@ export interface FixtureSeed {
   owner: { email: string; userId: string; orgId: string };
   cargoId: string;
   vesselId: string;
+  vesselImo: string;
   availabilityId: string;
+  /** a TBN hull of the owner that also matches the cargo (C2O-011): its name and id must never reach the cargo side */
+  tbn: { vesselId: string; name: string; availabilityId: string };
 }
 
 function localKeys() {
@@ -71,12 +74,19 @@ export async function seedFixture(): Promise<FixtureSeed> {
   const { data: a, error: ae } = await admin.from("vessel_availability").insert({ vessel_id: v.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(5), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 26, accepts_part_cargo: false }).select("id").single();
   if (ae) throw new Error(`availability: ${ae.message}`);
   await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", a.id);
+  const tbnName = `E2E SECRET HULL ${stamp.toUpperCase()}`;
+  const { data: tv, error: tve } = await admin.from("vessels").insert({ vessel_name: tbnName, imo_number: null, vessel_type: "Bulk Carrier", dwt_grain: 29000, build_year: 2016, flag: "Liberia", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false, is_tbn: true }).select("id").single();
+  if (tve) throw new Error(`tbn vessel: ${tve.message}`);
+  const { data: ta, error: tae } = await admin.from("vessel_availability").insert({ vessel_id: tv.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(7), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 27, accepts_part_cargo: false }).select("id").single();
+  if (tae) throw new Error(`tbn availability: ${tae.message}`);
+  await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", ta.id);
   const { error: oe } = await admin.from("listing_ownership").insert([
     { listing_type: "cargo", listing_id: c.id, owner_user_id: charterer.userId, owner_org_id: charterer.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
     { listing_type: "vessel_availability", listing_id: a.id, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
+    { listing_type: "vessel_availability", listing_id: ta.id, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
   ]);
   if (oe) throw new Error(`ownership: ${oe.message}`);
-  return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, availabilityId: a.id };
+  return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, vesselImo: testImo, availabilityId: a.id, tbn: { vesselId: tv.id, name: tbnName, availabilityId: ta.id } };
 }
 
 export interface AdminSeed { email: string; userId: string }
@@ -140,10 +150,10 @@ delete from public.fixture_proposals where room_id in (select id from public.fix
 delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
 delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
 delete from public.fixture_rooms where cargo_listing_id = '${s.cargoId}';
-delete from public.listing_ownership where listing_id in ('${s.cargoId}', '${s.availabilityId}');
-delete from public.matches where cargo_id = '${s.cargoId}' or vessel_avail_id = '${s.availabilityId}';
-delete from public.vessel_availability where id = '${s.availabilityId}';
-delete from public.vessels where id = '${s.vesselId}';
+delete from public.listing_ownership where listing_id in ('${s.cargoId}', '${s.availabilityId}', '${s.tbn.availabilityId}');
+delete from public.matches where cargo_id = '${s.cargoId}' or vessel_avail_id in ('${s.availabilityId}', '${s.tbn.availabilityId}');
+delete from public.vessel_availability where id in ('${s.availabilityId}', '${s.tbn.availabilityId}');
+delete from public.vessels where id in ('${s.vesselId}', '${s.tbn.vesselId}');
 delete from public.cargo_listings where id = '${s.cargoId}';
 delete from public.profiles where account_id in ('${s.charterer.userId}', '${s.owner.userId}');
 delete from public.organization_members where user_id in ('${s.charterer.userId}', '${s.owner.userId}');

@@ -306,7 +306,7 @@ ok(/grant execute on function public\.submit_fixture_proposal\([^)]*\) to authen
 ok(/UPGRADE REGRESSION \(C2O-003\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite names X2 as the upgrade regression (original 203000, then 204000 alone)");
 ok(/drop function if exists public\.sweep_fixture_proposal_lapses\(integer\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops the sweep");
 const harnessSh = read("scripts/fixture-room-harness.sh");
-ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry( notify)?; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
+ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry( notify)?( candidates)?; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
 ok(!/40001/.test(sweepCode) && !/(pda_|tariff)/.test(sweepCode) && !/update public\.fixture_(proposals|terms)/.test(sweepFnCode), "the sweep raises no 40001, touches no PDA object and rewrites no proposal or term");
 ok(/X1 ok|X5 ok/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")) && /has_function_privilege\('authenticated', 'public\.sweep_fixture_proposal_lapses\(integer\)', 'execute'\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite covers the sweep and proves the member cannot execute it");
 
@@ -407,3 +407,22 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const ls = read("lib/fixture-room/last-seen.ts");
   ok(/try \{[\s\S]*localStorage\.getItem[\s\S]*\} catch \{ return null; \}/.test(ls) && /catch \{ \/\* convenience only \*\/ \}/.test(ls) && !/fetch\(|supabase|rpc\(/.test(ls), "the marker is browser-only and survives blocked storage");
 }
+
+// -- C2O-011 . governed match candidates: own listings only, no vessel identity --
+{
+  const mig = read("supabase/migrations/20260923206000_fixture_room_match_candidates.sql").replace(/--.*$/gm, "");
+  ok(/create or replace function public\.list_fixture_match_candidates\(p_kind text, p_listing_id uuid\)/.test(mig) && /fn_fixture_owns_listing\(case p_kind when 'cargo' then 'cargo' else 'vessel_availability' end, p_listing_id\) is null then\s+raise exception 'FX_AUTH/.test(mig), "candidates are listed only for a listing the actor owns or represents");
+  ok(!/'vesselId'|'vesselRef'|'imo'|m\.vessel_ref|imo_number/.test(mig) && (mig.match(/m\.vessel_id/g) ?? []).length === 1 && /on v\.id = m\.vessel_id/.test(mig), "no candidate carries a vessel id, the matcher's vessel_ref (an IMO) or an IMO");
+  ok(/case when coalesce\(v\.is_tbn, false\)\s+and public\.fn_fixture_owns_listing\('vessel_availability', m\.availability_id\) is null\s+then 'TBN'/.test(mig), "a TBN hull the actor does not own is named TBN");
+  ok(/revoke all on function public\.list_fixture_match_candidates\(text, uuid\) from public, anon;/.test(mig), "anonymous callers cannot list candidates");
+  const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/ (?!──).*$/gm, "");
+  ok(!/getMatchesForCargo|getMatchesForAvailability|vessel_id|vesselId|imo/i.test(act.split("// ── match builder data")[1].split("// ── commands")[0]), "the match builder reads only the governed RPC and maps no vessel identifier");
+  ok(/out\.myCargo\.some\(\(c\) => c\.id === params\.cargo\)/.test(act) && /out\.myVessels\.some\(\(v\) => v\.availabilityId === params\.vessel\)/.test(act), "a preselected listing is honoured only when it is the member's own");
+  const mb = read("components/fixture-room/MatchBuilder.tsx");
+  const fitFn = mb.split("export function assessFit")[1].split("\n}")[0];
+  ok(/export function assessFit\(c: MatchCargoOption, v: MatchVesselOption, f: MatchFacts \| undefined\)/.test(mb) && !/kind: "no"|Under capacity|Opens after laycan|Gearless/.test(fitFn), "fit reasons state only the governed match facts, never a contradiction of a valid match");
+  ok(!/reasons\.slice\(/.test(mb), "every fit reason is shown (no truncation)");
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20260923206000_fixture_room_match_candidates\.sql/.test(h) && /\[candidates\]="FIXTURE CANDIDATES SMOKE"/.test(h) && /drop function if exists public\.list_fixture_match_candidates\(text, uuid\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the harness applies, tests and reverses the candidates read");
+}
+

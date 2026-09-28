@@ -9,9 +9,9 @@
 // for a refusal, so the room can show the reason and refetch on a conflict.
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import * as sdk from "@/sdk/app/fixtures";
-import { getMyCargoListings, getMatchesForCargo, type CargoMatchResult } from "@/sdk/app/cargos";
-import { getMyVesselAvailability, getMatchesForAvailability } from "@/sdk/app/vessels";
-import { stripVesselNamePrefix, type VesselMatchResult, type VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
+import { getMyCargoListings } from "@/sdk/app/cargos";
+import { getMyVesselAvailability } from "@/sdk/app/vessels";
+import { stripVesselNamePrefix, type VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
 import type { CargoListingRow } from "@/lib/schemas/cargo";
 import { buildTermCatalogue, type ListingFigures } from "@/lib/fixture-room/terms";
 import { findMaskingLeaks } from "@/lib/fixture-room/masking-view";
@@ -72,14 +72,24 @@ export async function loadFixtureRooms(input?: { statuses?: FixtureRoomStatus[] 
 }
 
 // ── match builder data ──────────────────────────────────────────────────────
+/**
+ * Why the governed matcher paired the two listings, as list_fixture_match_candidates
+ * reports it (C2O-012 item 4): the card explains these facts and nothing else, so an
+ * explanation can never contradict a valid match.
+ */
+export interface MatchFacts {
+  zone: "load" | "discharge"; laycan: "spot" | "window"; grain: boolean; dg: boolean;
+  gearRequired: boolean; partCargo: boolean; dwtDelta: number;
+}
 export interface MatchCargoOption {
   id: string; ref: string | null; commodity: string; type: string; qtyMin: number; qtyMax: number;
   loadPort: string | null; dischPort: string | null; laycanFrom: string | null; laycanTo: string | null; isSpot: boolean;
-  freightIdea: number | null; rateAligned: boolean | null; mine: boolean;
+  freightIdea: number | null; rateAligned: boolean | null; mine: boolean; fit?: MatchFacts;
 }
+/** No vessel id or IMO, ever (C2O-011): the builder needs only the availability id, and a TBN hull a member does not own is named "TBN". */
 export interface MatchVesselOption {
-  availabilityId: string; vesselId: string | null; name: string; type: string; dwt: number | null; openPort: string | null;
-  openZone: string | null; openDate: string | null; freightIdea: number | null; rateAligned: boolean | null; geared: boolean | null; mine: boolean;
+  availabilityId: string; name: string; isTbn?: boolean; type: string; dwt: number | null; openPort: string | null;
+  openZone: string | null; openDate: string | null; freightIdea: number | null; rateAligned: boolean | null; geared: boolean | null; mine: boolean; fit?: MatchFacts;
 }
 export interface MatchBuilderData {
   myCargo: MatchCargoOption[];
@@ -95,20 +105,36 @@ const cargoOpt = (r: CargoListingRow, mine: boolean): MatchCargoOption => ({
   loadPort: r.load_port_name ?? r.load_port_locode ?? null, dischPort: r.disch_port_name ?? r.disch_port_locode ?? null,
   laycanFrom: r.laycan_from ?? null, laycanTo: r.laycan_to ?? null, isSpot: !!r.is_spot, freightIdea: r.freight_idea_usd_mt ?? null, rateAligned: null, mine,
 });
-const cargoFromMatch = (m: VesselMatchResult): MatchCargoOption => ({
-  id: m.cargo_id, ref: m.ref ?? null, commodity: m.commodity_name, type: m.cargo_type, qtyMin: m.qty_min_mt, qtyMax: m.qty_max_mt,
-  loadPort: m.load_port_name, dischPort: m.disch_port_name, laycanFrom: m.laycan_from, laycanTo: m.laycan_to, isSpot: m.is_spot,
-  freightIdea: m.freight_idea_usd_mt, rateAligned: m.is_rate_aligned, mine: false,
-});
 const vesselOpt = (r: VesselAvailabilityWithVessel, mine: boolean): MatchVesselOption => ({
-  availabilityId: r.id, vesselId: r.vessel_id, name: stripVesselNamePrefix(r.vessel?.vessel_name ?? "Vessel"), type: r.vessel?.vessel_type ?? "—",
+  availabilityId: r.id, name: stripVesselNamePrefix(r.vessel?.vessel_name ?? "Vessel"), type: r.vessel?.vessel_type ?? "—",
   dwt: r.vessel?.dwt_grain ?? null, openPort: r.open_port_name ?? r.open_port_locode ?? null, openZone: r.open_zone ?? null, openDate: r.open_date ?? null,
   freightIdea: r.freight_idea_usd_mt ?? null, rateAligned: null, geared: r.vessel?.is_geared ?? null, mine,
 });
-const vesselFromMatch = (m: CargoMatchResult): MatchVesselOption => ({
-  availabilityId: m.availability_id, vesselId: m.vessel_id, name: stripVesselNamePrefix(m.vessel_name), type: m.vessel_type, dwt: m.dwt_grain,
-  openPort: m.open_port_name, openZone: m.open_zone, openDate: m.open_date, freightIdea: m.freight_idea_usd_mt, rateAligned: m.is_rate_aligned, geared: m.is_geared, mine: false,
+// rows of list_fixture_match_candidates, already masked by the database; mapped field by
+// field so nothing the RPC might add later reaches the browser unreviewed
+type Row = Record<string, unknown>;
+const str = (v: unknown) => (v == null ? null : String(v));
+const num = (v: unknown) => (v == null ? null : Number(v));
+const facts = (f: unknown): MatchFacts | undefined => {
+  if (!f || typeof f !== "object") return undefined;
+  const r = f as Row;
+  return { zone: r.zone === "discharge" ? "discharge" : "load", laycan: r.laycan === "spot" ? "spot" : "window", grain: r.grain === true, dg: r.dg === true,
+    gearRequired: r.gearRequired === true, partCargo: r.partCargo === true, dwtDelta: Number(r.dwtDelta ?? 0) };
+};
+const vesselCandidate = (r: Row): MatchVesselOption => ({
+  availabilityId: String(r.availabilityId), name: r.isTbn === true && r.name === "TBN" ? "TBN" : stripVesselNamePrefix(String(r.name ?? "Vessel")), isTbn: r.isTbn === true,
+  type: String(r.type ?? "—"), dwt: num(r.dwt), openPort: str(r.openPort), openZone: str(r.openZone), openDate: str(r.openDate),
+  freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, geared: r.geared == null ? null : r.geared === true, mine: r.mine === true, fit: facts(r.fit),
 });
+const cargoCandidate = (r: Row): MatchCargoOption => ({
+  id: String(r.id), ref: str(r.ref), commodity: String(r.commodity ?? "Cargo"), type: String(r.type ?? "—"), qtyMin: Number(r.qtyMin ?? 0), qtyMax: Number(r.qtyMax ?? 0),
+  loadPort: str(r.loadPort), dischPort: str(r.dischPort), laycanFrom: str(r.laycanFrom), laycanTo: str(r.laycanTo), isSpot: r.isSpot === true,
+  freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, mine: r.mine === true, fit: facts(r.fit),
+});
+async function candidatesFor(supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>, kind: "cargo" | "vessel", id: string) {
+  const rows = await sdk.listFixtureMatchCandidates(supabase, kind, id);
+  return kind === "cargo" ? { cargo: [], vessels: rows.map(vesselCandidate) } : { cargo: rows.map(cargoCandidate), vessels: [] };
+}
 
 /** Own listings, ranked counterparts from the existing match RPCs, and the pairs that already have a room. */
 export async function loadMatchBuilder(params: { cargo?: string | null; vessel?: string | null }): Promise<MatchBuilderData> {
@@ -126,14 +152,15 @@ export async function loadMatchBuilder(params: { cargo?: string | null; vessel?:
     out.existingPairs = rooms.map((r) => ({ cargoListingId: "", vesselAvailabilityId: "", roomId: r.id, ref: r.ref, status: r.status }));
     // list_fixture_rooms does not carry listing ids for members; resolve pairs through the room reads the viewer may open
     out.existingPairs = [];
-    if (isUuid(params.cargo)) {
+    // a preselection is honoured only for the member's own listing; the RPC checks ownership again (C2O-011)
+    if (isUuid(params.cargo) && out.myCargo.some((c) => c.id === params.cargo)) {
       out.preselected = { kind: "cargo", id: params.cargo! };
-      const rows = await getMatchesForCargo(supabase, params.cargo!).catch(() => [] as CargoMatchResult[]);
-      out.candidates.vessels = rows.map(vesselFromMatch);
-    } else if (isUuid(params.vessel)) {
+      out.candidates = await candidatesFor(supabase, "cargo", params.cargo!).catch(() => ({ cargo: [], vessels: [] }));
+    } else if (isUuid(params.vessel) && out.myVessels.some((v) => v.availabilityId === params.vessel)) {
       out.preselected = { kind: "vessel", id: params.vessel! };
-      const rows = await getMatchesForAvailability(supabase, params.vessel!).catch(() => [] as VesselMatchResult[]);
-      out.candidates.cargo = rows.map(cargoFromMatch);
+      out.candidates = await candidatesFor(supabase, "vessel", params.vessel!).catch(() => ({ cargo: [], vessels: [] }));
+    } else if (isUuid(params.cargo) || isUuid(params.vessel)) {
+      out.error = "That listing is not one of yours. Pick one of your own listings to start a fixture.";
     }
   } catch (e) {
     out.error = e instanceof Error ? e.message : "Could not load the match builder.";
@@ -141,15 +168,17 @@ export async function loadMatchBuilder(params: { cargo?: string | null; vessel?:
   return out;
 }
 
-/** Ranked counterparts for a chosen side (called when the user changes the first pick). */
-export async function loadMatchCandidates(kind: "cargo" | "vessel", id: string): Promise<{ cargo: MatchCargoOption[]; vessels: MatchVesselOption[] }> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return { cargo: [], vessels: [] };
+/**
+ * Ranked counterparts for a chosen side (called when the user changes the first pick).
+ * Governed by list_fixture_match_candidates: a listing the member does not own is refused.
+ */
+export async function loadMatchCandidates(kind: "cargo" | "vessel", id: string): Promise<{ cargo: MatchCargoOption[]; vessels: MatchVesselOption[]; error?: string }> {
+  if ((kind !== "cargo" && kind !== "vessel") || !/^[0-9a-f-]{36}$/i.test(id)) return { cargo: [], vessels: [], error: "Pick one of your own listings." };
   try {
-    const supabase = await getSupabaseServerClient();
-    if (kind === "cargo") return { cargo: [], vessels: (await getMatchesForCargo(supabase, id)).map(vesselFromMatch) };
-    return { cargo: (await getMatchesForAvailability(supabase, id)).map(cargoFromMatch), vessels: [] };
-  } catch {
-    return { cargo: [], vessels: [] };
+    return await candidatesFor(await getSupabaseServerClient(), kind, id);
+  } catch (e) {
+    const message = e instanceof sdk.FixtureRequestError ? e.fx.message : "Could not load the ranked counterparts.";
+    return { cargo: [], vessels: [], error: message };
   }
 }
 
