@@ -268,6 +268,12 @@ export async function liftFixtureSubjectAction(input: unknown) {
   return sdk.liftFixtureSubject(await getSupabaseServerClient(), p.value);
 }
 
+export async function liftAllFixtureSubjectsAction(input: unknown) {
+  const p = parse(commandBaseSchema, input);
+  if (!p.ok) return p.error;
+  return sdk.liftAllFixtureSubjects(await getSupabaseServerClient(), p.value);
+}
+
 export async function failFixtureSubjectAction(input: unknown) {
   const p = parse(failSubjectSchema, input);
   if (!p.ok) return p.error;

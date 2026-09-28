@@ -150,6 +150,11 @@ export function liftFixtureSubject(supabase: SupabaseClient, input: CommandBase 
   return command<{ subjectId: string; subjectStatus: string; roomStatus: FixtureRoomStatus; openSubjects: number }>(supabase, "lift_fixture_subject", { ...behalf(input), p_subject_id: input.subjectId });
 }
 
+/** Lifts every open subject the representing party may lift, in one governed command (C2O-012 item 5). */
+export function liftAllFixtureSubjects(supabase: SupabaseClient, input: CommandBase) {
+  return command<{ lifted: number; openSubjects: number; roomStatus: FixtureRoomStatus }>(supabase, "lift_all_fixture_subjects", behalf(input));
+}
+
 export function failFixtureSubject(supabase: SupabaseClient, input: CommandBase & { subjectId: string; reason?: string | null }) {
   return command<{ subjectId: string; subjectStatus: string; roomStatus: FixtureRoomStatus }>(supabase, "fail_fixture_subject", { ...behalf(input), p_subject_id: input.subjectId, p_reason: input.reason ?? null });
 }

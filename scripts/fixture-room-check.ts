@@ -306,7 +306,7 @@ ok(/grant execute on function public\.submit_fixture_proposal\([^)]*\) to authen
 ok(/UPGRADE REGRESSION \(C2O-003\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite names X2 as the upgrade regression (original 203000, then 204000 alone)");
 ok(/drop function if exists public\.sweep_fixture_proposal_lapses\(integer\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops the sweep");
 const harnessSh = read("scripts/fixture-room-harness.sh");
-ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry( notify)?( candidates)?; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
+ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry( notify)?( candidates)?( liftall)?; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
 ok(!/40001/.test(sweepCode) && !/(pda_|tariff)/.test(sweepCode) && !/update public\.fixture_(proposals|terms)/.test(sweepFnCode), "the sweep raises no 40001, touches no PDA object and rewrites no proposal or term");
 ok(/X1 ok|X5 ok/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")) && /has_function_privilege\('authenticated', 'public\.sweep_fixture_proposal_lapses\(integer\)', 'execute'\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite covers the sweep and proves the member cannot execute it");
 
@@ -424,5 +424,24 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(!/reasons\.slice\(/.test(mb), "every fit reason is shown (no truncation)");
   const h = read("scripts/fixture-room-harness.sh");
   ok(/20260923206000_fixture_room_match_candidates\.sql/.test(h) && /\[candidates\]="FIXTURE CANDIDATES SMOKE"/.test(h) && /drop function if exists public\.list_fixture_match_candidates\(text, uuid\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the harness applies, tests and reverses the candidates read");
+}
+
+// -- C2O-012 . UI and privacy corrections after checkpoint 4 --
+{
+  const composer = read("components/fixture-room/RecapComposer.tsx");
+  const client = read("components/fixture-room/FixtureRoomClient.tsx");
+  ok(/const closeRef = React\.useRef\(onClose\)/.test(composer) && /\}, \[\]\);/.test(composer.split("const closeRef")[1]) && !/\}, \[onClose\]\);/.test(composer), "1 · the recap dialog's focus effect runs once per opening, never per render");
+  ok(/e\.key !== "Tab"/.test(composer) && /last\.focus\(\)/.test(composer) && /first\.focus\(\)/.test(composer) && /opener\.focus\(\)/.test(composer), "1 · the dialog traps Tab and hands focus back to its opener");
+  ok(/const closeRecap = React\.useCallback\(\(\) => setRecapOpen\(false\), \[\]\)/.test(client) && /onClose=\{closeRecap\}/.test(client), "1 · the room passes a stable close callback");
+  const rails = read("components/fixture-room/RoomRails.tsx");
+  ok(/useState<"cargo" \| "vessel" \| null>\(null\)/.test(rails) && /const inviteSide = ownSide \?\? \(view\.viewer\.isMediator \? mediatorSide : null\)/.test(rails) && /side: inviteSide/.test(rails) && !/side: mySide === "vessel" \? "vessel" : "cargo"/.test(rails), "2 · a mediator's invitation side is chosen explicitly, never defaulted");
+  const css = read("components/fixture-room/fixture-room.css");
+  ok(/prefers-reduced-motion: reduce\)\s*\{\s*\.nr \.rc-item\.is-just-filled/.test(css), "3 · reduced motion disables the real recap-slot pulse (.rc-item.is-just-filled)");
+  ok(/React\.useState\(false\);\s*const audioRef/.test(client), "6 · sound starts off; only an explicit toggle turns it on");
+  const lift = read("supabase/migrations/20260923207000_fixture_room_lift_all.sql").replace(/--.*$/gm, "");
+  ok(/create or replace function public\.lift_all_fixture_subjects\(/.test(lift) && /fn_fixture_check_version/.test(lift) && /fn_fixture_replay/.test(lift) && /x\.responsible_side is null or x\.responsible_side = rep\.side/.test(lift), "5 · lift all is one governed command: one lock, version check and key; only the side's own subjects");
+  ok(/run\("liftAll"/.test(client) && /createFixtureRoomAction\(\{ cargoListingId, vesselAvailabilityId, idempotencyKey \}\)/.test(client) && !/for \(const s of view\.subjects\)[\s\S]{0,200}liftSubject/.test(client), "5 · the footer calls governed commands only (no client-side loop of lifts)");
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20260923207000_fixture_room_lift_all\.sql/.test(h) && /\[liftall\]="FIXTURE LIFT ALL SMOKE"/.test(h) && /drop function if exists public\.lift_all_fixture_subjects\(uuid, integer, text, uuid, uuid\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "5 · the harness applies, tests and reverses lift all");
 }
 

@@ -88,6 +88,25 @@ test("the admin mediates in the room: the broker console presses a side through 
   await context.close();
 });
 
+// C2O-012 item 2: a mediator has no side of its own, so the side is chosen, never assumed
+test("the mediator must name the side before inviting a viewer", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, admin.email);
+  await page.goto(`/dashboard/fixture-room/${roomId}`);
+  await dismissOverlays(page);
+  const panel = page.getByTestId("invite-panel");
+  await panel.locator("summary").click();
+  await expect(page.getByTestId("invite-side-cargo")).not.toBeChecked();
+  await expect(page.getByTestId("invite-side-vessel")).not.toBeChecked();
+  await page.locator("#fx-invite-id").fill("00000000-0000-4000-8000-000000000999");
+  const submit = page.getByTestId("invite-submit");
+  await expect(submit).toBeDisabled();                       // a valid id alone grants nothing
+  await expect(submit).toHaveText(/choose a side first/i);
+  await page.getByTestId("invite-side-vessel").check();
+  await expect(submit).toBeEnabled();
+  await expect(submit).toHaveText(/invite as vessel viewer/i);
+  await context.close();
+});
+
 test("the admin redacts a message and closes the room through the forms", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, admin.email);
   await page.goto(`/admin/fixtures/${roomId}`);

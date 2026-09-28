@@ -1013,3 +1013,16 @@
 .nr .nr-log__item.is-new .nr-log__txt { font-weight: 600; }
 .nr .nr-log__since { margin: 2px 0 12px; padding: 3px 0; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--asb-blue); border-top: 1px dashed var(--asb-blue); }
 
+/* -- F . reduced motion, every decorative animation (C2O-012 item 3) --
+   The recap-slot pulse lives on .rc-item.is-just-filled (the design's recap
+   rail); the older .nr-recap__slot selector above never matched it. The
+   spinner keeps turning: it is the only sign that work is in progress. */
+@media (prefers-reduced-motion: reduce) {
+  .nr .rc-item.is-just-filled, .nr .nr-hist__cell.is-last, .nr .nr-stat.s-pending .nr-stat__dot, .nr .nrb__pulse, .nr .nr-cp__rows,
+  .nr .fx-bubble, .nr .fx-dots span, .nr .fx-pchip.st-online .fx-pdot, .fx-toast {animation: none; transform: none;}
+}
+
+/* -- G . the mediator names the invited viewer's side (C2O-012 item 2) -- */
+.nr .fx-invite-side { margin: 6px 0 0; padding: 6px 8px; border: var(--bd); border-radius: var(--r-card); display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; }
+.nr .fx-invite-side legend { padding: 0 4px; font-size: 10.5px; color: var(--asb-gray-500); }
+.nr .fx-invite-side label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }

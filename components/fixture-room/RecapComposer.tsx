@@ -25,12 +25,36 @@ export function RecapComposer({ view, onClose }: { view: FixtureRoomView; onClos
   const [copied, setCopied] = React.useState(false);
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
 
+  // The room re-renders every second (its clocks), and a parent may pass a fresh
+  // onClose each time. The dialog's focus handling therefore runs once per
+  // opening, never per render (C2O-012 item 1): it reads the latest onClose
+  // through a ref, focuses the first control once, keeps Tab inside the dialog,
+  // and hands focus back to the control that opened it.
+  const closeRef = React.useRef(onClose);
+  React.useEffect(() => { closeRef.current = onClose; });
   React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const dialog = dialogRef.current;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusables = () => Array.from(dialog?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])") ?? [])
+      .filter((el) => el.offsetParent !== null || el === document.activeElement);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); closeRef.current(); return; }
+      if (e.key !== "Tab" || !dialog) return;
+      const els = focusables();
+      if (els.length === 0) { e.preventDefault(); return; }
+      const first = els[0], last = els[els.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !dialog.contains(active)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener("keydown", onKey);
-    dialogRef.current?.querySelector<HTMLElement>("button, input, textarea")?.focus();
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    focusables()[0]?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (opener && opener.isConnected) opener.focus();
+    };
+  }, []);
 
   const text = channel === "email" ? `To: ${to}\n${cc ? `Cc: ${cc}\n` : ""}Subject: ${subject}\n\n${body}` : body;
   const copy = async () => {
@@ -38,7 +62,7 @@ export function RecapComposer({ view, onClose }: { view: FixtureRoomView; onClos
   };
 
   return (
-    <div className="nrx-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="nrx-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} data-testid="recap-scrim">
       <div className="nrx" role="dialog" aria-modal="true" aria-label="Send recap" ref={dialogRef} data-testid="recap-composer">
         <div className="nrx__hd">
           <div>

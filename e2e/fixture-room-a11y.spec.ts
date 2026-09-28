@@ -66,3 +66,62 @@ test("tabbing reaches the term strips and the footer action without a mouse", as
   expect(reached, "a term strip was reached by Tab").toBe(true);
   await context.close();
 });
+
+// C2O-012 item 1: the room ticks every second; typing in the recap dialog must survive the ticks
+test("the recap dialog keeps focus and caret across clock ticks, traps Tab and returns focus", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
+  await page.goto(roomUrl);
+  const opener = page.getByTestId("open-recap-composer");
+  await opener.focus();
+  await page.keyboard.press("Enter");
+  const dialog = page.getByTestId("recap-composer");
+  await expect(dialog).toBeVisible();
+  const cc = page.locator("#nrx-cc");
+  await cc.click();
+  await page.keyboard.type("desk@", { delay: 60 });
+  await page.waitForTimeout(2_500);                 // at least two one-second ticks of the room clock
+  await page.keyboard.type("ab.test", { delay: 60 });
+  await expect(cc).toBeFocused();
+  await expect(cc).toHaveValue("desk@ab.test");
+  expect(await cc.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe("desk@ab.test".length);
+  // Tab and Shift+Tab never leave the dialog
+  for (let i = 0; i < 14; i += 1) {
+    await page.keyboard.press(i % 3 === 2 ? "Shift+Tab" : "Tab");
+    expect(await page.evaluate(() => !!document.activeElement?.closest('[data-testid="recap-composer"]')), `focus left the dialog after ${i + 1} presses`).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  await context.close();
+});
+
+// C2O-012 item 3: the recap-slot pulse is off under reduced motion
+test("reduced motion disables the recap-slot pulse", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(roomUrl);
+  await expect(page.getByTestId("recap-rail")).toBeVisible();
+  const anim = await page.evaluate(() => {
+    const host = document.querySelector(".nr") ?? document.body;
+    const el = document.createElement("div");
+    el.className = "rc-item is-just-filled";
+    host.appendChild(el);
+    const name = getComputedStyle(el).animationName;
+    el.remove();
+    return name;
+  });
+  expect(anim).toBe("none");
+  await context.close();
+});
+
+// C2O-012 item 6: a new member starts with sound off
+test("sound starts off until the member turns it on", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
+  await page.goto(roomUrl);
+  const toggle = page.getByRole("button", { name: "Toggle sound" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await context.close();
+});
+

@@ -29,6 +29,12 @@ export function CounterpartyCard({ view, run, busy, actForPartyId }: { view: Fix
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteId, setInviteId] = React.useState("");
   const [inviteKind, setInviteKind] = React.useState<"org" | "user">("org");
+  // A principal invites onto its own side only. A mediator has no side of its own, so it
+  // must name one explicitly each time: nothing is inferred, and nothing is preselected,
+  // so a viewer can never be granted a side's private visibility by default (C2O-012 item 2).
+  const ownSide: "cargo" | "vessel" | null = mySide === "cargo" || mySide === "vessel" ? mySide : null;
+  const [mediatorSide, setMediatorSide] = React.useState<"cargo" | "vessel" | null>(null);
+  const inviteSide = ownSide ?? (view.viewer.isMediator ? mediatorSide : null);
   const canAgree = caps.canAgreeDisclosure && ((myPrincipal && !myPrincipal.disclosureAgreed) || (actingRelayed && actingRelayed.capacity === "principal" && !actingRelayed.disclosureAgreed));
   return (
     <div className="nr-rail__sec" data-testid="counterparty-card">
@@ -72,9 +78,16 @@ export function CounterpartyCard({ view, run, busy, actForPartyId }: { view: Fix
           ))}
         </div>
       )}
-      {caps.canInvite && (mySide === "cargo" || mySide === "vessel" || view.viewer.isMediator) && (
-        <details open={inviteOpen} onToggle={(e) => setInviteOpen((e.target as HTMLDetailsElement).open)} style={{ marginTop: 8 }}>
-          <summary className="fx-link" style={{ cursor: "pointer" }}>Invite a viewer or broker onto your side</summary>
+      {caps.canInvite && (ownSide || view.viewer.isMediator) && (
+        <details open={inviteOpen} onToggle={(e) => setInviteOpen((e.target as HTMLDetailsElement).open)} style={{ marginTop: 8 }} data-testid="invite-panel">
+          <summary className="fx-link" style={{ cursor: "pointer" }}>{ownSide ? "Invite a viewer or broker onto your side" : "Invite a viewer onto one side"}</summary>
+          {!ownSide && (
+            <fieldset className="fx-invite-side" data-testid="invite-side">
+              <legend>Which side does the viewer join? They will see that side&apos;s private notes.</legend>
+              <label><input type="radio" name="fx-invite-side" value="cargo" checked={mediatorSide === "cargo"} onChange={() => setMediatorSide("cargo")} data-testid="invite-side-cargo" /> Cargo side</label>
+              <label><input type="radio" name="fx-invite-side" value="vessel" checked={mediatorSide === "vessel"} onChange={() => setMediatorSide("vessel")} data-testid="invite-side-vessel" /> Vessel side</label>
+            </fieldset>
+          )}
           <div className="fx-fields" style={{ marginTop: 6 }}>
             <div className="fx-field" style={{ flex: "0 0 120px" }}>
               <label htmlFor="fx-invite-kind">Invite by</label>
@@ -83,10 +96,13 @@ export function CounterpartyCard({ view, run, busy, actForPartyId }: { view: Fix
             <div className="fx-field"><label htmlFor="fx-invite-id">Id</label><input id="fx-invite-id" value={inviteId} onChange={(e) => setInviteId(e.target.value)} placeholder="uuid" /></div>
           </div>
           <div className="fx-acts2" style={{ marginTop: 6 }}>
-            <button type="button" className="asb-btn" disabled={busy || !/^[0-9a-f-]{36}$/i.test(inviteId)} onClick={() => run("invite", (b) => ({
-              ...b, side: mySide === "vessel" ? "vessel" : "cargo", capacity: "viewer", orgId: inviteKind === "org" ? inviteId : null, userId: inviteKind === "user" ? inviteId : null,
-            })).then((ok) => { if (ok) setInviteId(""); })}>Invite as viewer</button>
-            <span className="nr-muted">Colleagues of your organisation already have access; use this for another firm.</span>
+            <button type="button" className="asb-btn" data-testid="invite-submit" disabled={busy || !inviteSide || !/^[0-9a-f-]{36}$/i.test(inviteId)} onClick={() => {
+              if (!inviteSide) return;
+              void run("invite", (b) => ({
+                ...b, side: inviteSide, capacity: "viewer", orgId: inviteKind === "org" ? inviteId : null, userId: inviteKind === "user" ? inviteId : null,
+              })).then((ok) => { if (ok) { setInviteId(""); setMediatorSide(null); } });
+            }}>{inviteSide ? `Invite as ${inviteSide} viewer` : "Choose a side first"}</button>
+            <span className="nr-muted">{ownSide ? "Colleagues of your organisation already have access; use this for another firm." : "The side is required every time; nothing is assumed."}</span>
           </div>
         </details>
       )}

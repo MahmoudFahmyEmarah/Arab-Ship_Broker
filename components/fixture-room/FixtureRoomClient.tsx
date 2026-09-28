@@ -12,6 +12,7 @@
 // the ledger shows (decision D-3).
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { FixtureRoomView } from "@/lib/fixture-room/types";
 import type { FixtureError } from "@/lib/fixture-room/errors";
@@ -25,7 +26,8 @@ import { newSince, readLastSeen, termsTouched, writeLastSeen } from "@/lib/fixtu
 import { BunkerTicker } from "@/components/portal/BunkerTicker";
 import {
   acceptFixtureProposalAction, acknowledgeFixtureRecapAction, addFixtureSubjectAction, agreeFixtureDisclosureAction, closeFixtureRoomAction,
-  extendFixtureSubjectAction, failFixtureSubjectAction, fixFixtureOnSubjectsAction, inviteFixturePartyAction, liftFixtureSubjectAction, loadFixtureRoom,
+  extendFixtureSubjectAction, failFixtureSubjectAction, fixFixtureOnSubjectsAction, inviteFixturePartyAction, liftAllFixtureSubjectsAction, liftFixtureSubjectAction, loadFixtureRoom,
+  createFixtureRoomAction,
   pollFixtureRoomVersion, postFixtureMessageAction, publishFixtureRecapAction, reopenFixtureTermAction, respondFixtureInvitationAction,
   setFixtureTermFlagAction, submitFixtureProposalAction, withdrawFixtureProposalAction,
 } from "@/app/(dashboard)/dashboard/fixture-room/actions";
@@ -43,6 +45,7 @@ const ACTIONS = {
   flag: setFixtureTermFlagAction,
   addSubject: addFixtureSubjectAction,
   liftSubject: liftFixtureSubjectAction,
+  liftAll: liftAllFixtureSubjectsAction,
   failSubject: failFixtureSubjectAction,
   extendSubject: extendFixtureSubjectAction,
   fix: fixFixtureOnSubjectsAction,
@@ -98,9 +101,12 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   const [toasts, setToasts] = React.useState<Toast[]>([]);
   const [bunker, setBunker] = React.useState(false);
   const [recapOpen, setRecapOpen] = React.useState(false);
+  // stable across the per-second clock re-renders, so the open dialog never re-runs its focus effect (C2O-012 item 1)
+  const closeRecap = React.useCallback(() => setRecapOpen(false), []);
   const [justAgreed, setJustAgreed] = React.useState<Set<string>>(() => new Set());
   const prevStatus = React.useRef<Record<string, string>>(Object.fromEntries(initial.terms.map((t) => [t.id, t.status])));
-  const [soundOn, setSoundOn] = React.useState(true);
+  // sound starts off for everyone; only an explicit click turns it on (C2O-012 item 6)
+  const [soundOn, setSoundOn] = React.useState(false);
   const audioRef = React.useRef<AudioContext | null>(null);
   const lastSeqRef = React.useRef<number>(Math.max(0, ...initial.events.map((e) => e.seq)));
   // "new since your last visit": the sequence remembered from the previous visit (read once, after mount)
@@ -214,6 +220,30 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
     }
   }, [busy, keys, roomId, view.room.version, refetch]);
 
+  // "Start a new fixture on this pairing" (C2O-012 item 5): the governed create_fixture_room on
+  // the same two listings. The server decides everything: it refuses a member who does not own
+  // either listing and a pairing that still has a live room (then that room is opened instead).
+  const router = useRouter();
+  const [restarting, setRestarting] = React.useState(false);
+  const restartPairing = async () => {
+    if (restarting) return;
+    setRestarting(true);
+    try {
+      const { cargoListingId, vesselAvailabilityId } = view.room;
+      const outcome = await runGesture(keys, `restart:${cargoListingId}:${vesselAvailabilityId}`, (idempotencyKey) =>
+        createFixtureRoomAction({ cargoListingId, vesselAvailabilityId, idempotencyKey }));
+      if (outcome.kind === "ok") { toast.success(`Room ${outcome.result.data.ref} opened`); router.push(`/dashboard/fixture-room/${outcome.result.data.roomId}`); return; }
+      if (outcome.kind === "refused") {
+        if (outcome.error.code === "CONFLICT" && outcome.error.roomId) { router.push(`/dashboard/fixture-room/${outcome.error.roomId}`); return; }
+        toast.error(`${FIXTURE_ERROR_TITLE[outcome.error.code]}: ${outcome.error.message}`);
+        return;
+      }
+      toast.error(UNCERTAIN_MESSAGE);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
   const { room, viewer, snapshot } = view;
   const caps = viewer.capabilities;
   const cargo = snapshot.cargo;
@@ -224,6 +254,11 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   const requiredOpen = view.terms.filter((t) => t.required && t.status !== "agreed").map((t) => t.label);
   const liftedCount = view.subjects.filter((s) => s.status === "lifted").length;
   const openSubjects = view.subjects.filter((s) => s.status === "open").length;
+  // what "Lift all" would lift: open subjects with no responsible side or the representing side's own
+  // (the server decides again; this only sizes and shows the control)
+  const liftSide = (actFor ? view.parties.find((p) => p.id === actFor)?.side : viewer.side) ?? null;
+  const liftable = view.subjects.filter((s) => s.status === "open" && (s.responsibleSide == null || s.responsibleSide === liftSide)).length;
+  const isPrincipal = view.parties.some((p) => p.isViewer && p.capacity === "principal" && (p.side === "cargo" || p.side === "vessel"));
   const sync = listingSyncNotice(room, viewer.side);
   const myInvites = view.parties.filter((p) => p.isViewer && p.status === "invited");
   const invitePartyId = myInvites.length > 1 ? (myInvites.some((p) => p.id === inviteParty) ? inviteParty : myInvites[0].id) : null;
@@ -417,7 +452,7 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
         </div>
       </div>
 
-      {recapOpen && <RecapComposer view={view} onClose={() => setRecapOpen(false)} />}
+      {recapOpen && <RecapComposer view={view} onClose={closeRecap} />}
 
       {/* ── footer state machine ───────────────────────────────────── */}
       <div className={`nr-foot${room.status === "fixed" ? " is-fixed" : terminal ? " is-void" : requiredOpen.length === 0 && room.status === "negotiating" ? " is-ready" : ""}`} data-testid="room-footer">
@@ -451,7 +486,19 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
                   {openSubjects > 0 ? "Fix on subs →" : "Fix clean (no subjects) →"}
                 </button>
               )}
-              {room.status === "on_subjects" && <span className="nr-muted">{openSubjects} subject{openSubjects === 1 ? "" : "s"} left · lift them in the rail</span>}
+              {room.status === "on_subjects" && caps.canLiftSubject && liftable > 0 && (
+                <button type="button" className="asb-btn primary" disabled={busy} data-testid="lift-all"
+                  title={liftable < openSubjects ? `${openSubjects - liftable} subject${openSubjects - liftable === 1 ? " is" : "s are"} the other side's to lift` : "Lift every open subject"}
+                  onClick={() => run("liftAll", (b) => ({ ...b, onBehalfOfPartyId: actFor }))}>
+                  Lift all subjects ({liftable}) →
+                </button>
+              )}
+              {room.status === "on_subjects" && !(caps.canLiftSubject && liftable > 0) && <span className="nr-muted">{openSubjects} subject{openSubjects === 1 ? "" : "s"} left · lift them in the rail</span>}
+              {terminal && isPrincipal && (
+                <button type="button" className="asb-btn primary" disabled={busy || restarting} data-testid="restart-pairing" onClick={restartPairing}>
+                  {restarting ? "Opening…" : "Start a new fixture on this pairing →"}
+                </button>
+              )}
               {room.status === "fixed" && <Link href={`/dashboard/fixture-room/${room.id}/recap`} className="asb-btn green">View recap →</Link>}
             </>
           )}
