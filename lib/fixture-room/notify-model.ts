@@ -59,6 +59,7 @@ export interface NotifyRule {
 const str = (v: unknown) => (v == null ? "" : String(v));
 const termOf = (p: Record<string, unknown>) => str(p.termLabel || p.termCode).toLowerCase() || "a term";
 // a close reason is one of the governed values; anything else is shown as "closed"
+const subjectRef = (p: Record<string, unknown>) => (Number.isInteger(Number(p.seq)) && Number(p.seq) > 0 ? `subject ${Number(p.seq)}` : "a subject");
 const closeReason = (v: unknown) => (v === "withdrawn" || v === "failed" || v === "expired" ? v : "closed");
 
 /** One rule per event type that deserves a notification; null for the rest. */
@@ -93,9 +94,11 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
     case "room.fixed_on_subjects":
       return { audience: "all", importance: "urgent", title: `${room}: fixed on subjects`, body: `Every required term is agreed. The fixture is recorded on subjects.`, href: base, deadlineAt: null };
     case "subject.lifted":
-      return { audience: "both_sides", importance: "normal", title: `${room}: subject lifted`, body: `${who} lifted “${str(p.title)}”.`, href: base, deadlineAt: null };
+      // a subject's title is free text a member typed: it stays in the room, never in a
+      // notification (C2O-012 item 2); the governed subject number identifies it
+      return { audience: "both_sides", importance: "normal", title: `${room}: subject lifted`, body: `${who} lifted ${subjectRef(p)}.`, href: base, deadlineAt: null };
     case "subject.failed":
-      return { audience: "all", importance: "urgent", title: `${room}: subject failed`, body: `“${str(p.title)}” failed. The fixture fails with it.`, href: base, deadlineAt: null };
+      return { audience: "all", importance: "urgent", title: `${room}: subject failed`, body: `${subjectRef(p)[0].toUpperCase()}${subjectRef(p).slice(1)} failed. The fixture fails with it.`, href: base, deadlineAt: null };
     case "room.fixed":
       return { audience: "all", importance: "urgent", title: `${room}: clean fixed`, body: `All subjects lifted. The fixture is clean.`, href: `${base}/recap`, deadlineAt: null };
     case "recap.published":

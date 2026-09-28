@@ -117,11 +117,12 @@ begin
       when 'subject.lifted' then
         v_sides := array['cargo', 'vessel']; v_importance := 'normal';
         v_title := r.ref || ': subject lifted';
-        v_body := v_actor_label || ' lifted a subject: ' || left(coalesce(p->>'title', ''), 200) || '.';
+        -- the title is member free text: never in a notification (C2O-012 item 2); the number identifies it
+        v_body := v_actor_label || ' lifted ' || case when (p->>'seq') ~ '^[0-9]+$' then 'subject ' || (p->>'seq') else 'a subject' end || '.';
       when 'subject.failed' then
         v_sides := array['cargo', 'vessel']; v_admins := true; v_importance := 'urgent';
         v_title := r.ref || ': subject failed';
-        v_body := 'A subject failed (' || left(coalesce(p->>'title', ''), 200) || '). The fixture fails with it.';
+        v_body := case when (p->>'seq') ~ '^[0-9]+$' then 'Subject ' || (p->>'seq') else 'A subject' end || ' failed. The fixture fails with it.';
       when 'room.fixed' then
         v_sides := array['cargo', 'vessel']; v_admins := true; v_importance := 'urgent';
         v_title := r.ref || ': clean fixed';

@@ -9,9 +9,7 @@
 // for a refusal, so the room can show the reason and refetch on a conflict.
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import * as sdk from "@/sdk/app/fixtures";
-import { getMyCargoListings } from "@/sdk/app/cargos";
-import { getMyVesselAvailability } from "@/sdk/app/vessels";
-import { stripVesselNamePrefix, type VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
+import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 import type { CargoListingRow } from "@/lib/schemas/cargo";
 import { buildTermCatalogue, type ListingFigures } from "@/lib/fixture-room/terms";
 import { findMaskingLeaks } from "@/lib/fixture-room/masking-view";
@@ -100,16 +98,6 @@ export interface MatchBuilderData {
   error: string | null;
 }
 
-const cargoOpt = (r: CargoListingRow, mine: boolean): MatchCargoOption => ({
-  id: r.id, ref: r.ref ?? null, commodity: r.commodity_name, type: r.cargo_type, qtyMin: r.qty_min_mt, qtyMax: r.qty_max_mt,
-  loadPort: r.load_port_name ?? r.load_port_locode ?? null, dischPort: r.disch_port_name ?? r.disch_port_locode ?? null,
-  laycanFrom: r.laycan_from ?? null, laycanTo: r.laycan_to ?? null, isSpot: !!r.is_spot, freightIdea: r.freight_idea_usd_mt ?? null, rateAligned: null, mine,
-});
-const vesselOpt = (r: VesselAvailabilityWithVessel, mine: boolean): MatchVesselOption => ({
-  availabilityId: r.id, name: stripVesselNamePrefix(r.vessel?.vessel_name ?? "Vessel"), type: r.vessel?.vessel_type ?? "—",
-  dwt: r.vessel?.dwt_grain ?? null, openPort: r.open_port_name ?? r.open_port_locode ?? null, openZone: r.open_zone ?? null, openDate: r.open_date ?? null,
-  freightIdea: r.freight_idea_usd_mt ?? null, rateAligned: null, geared: r.vessel?.is_geared ?? null, mine,
-});
 // rows of list_fixture_match_candidates, already masked by the database; mapped field by
 // field so nothing the RPC might add later reaches the browser unreviewed
 type Row = Record<string, unknown>;
@@ -125,6 +113,13 @@ const vesselCandidate = (r: Row): MatchVesselOption => ({
   availabilityId: String(r.availabilityId), name: r.isTbn === true && r.name === "TBN" ? "TBN" : stripVesselNamePrefix(String(r.name ?? "Vessel")), isTbn: r.isTbn === true,
   type: String(r.type ?? "—"), dwt: num(r.dwt), openPort: str(r.openPort), openZone: str(r.openZone), openDate: str(r.openDate),
   freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, geared: r.geared == null ? null : r.geared === true, mine: r.mine === true, fit: facts(r.fit),
+});
+// the member's own live listings (list_fixture_my_listings: the create rule, organisation seats included)
+const ownCargo = (r: Row): MatchCargoOption => ({ ...cargoCandidate(r), rateAligned: null, mine: true, fit: undefined });
+const ownVessel = (r: Row): MatchVesselOption => ({
+  availabilityId: String(r.availabilityId), name: stripVesselNamePrefix(String(r.name ?? "Vessel")), type: String(r.type ?? "—"), dwt: num(r.dwt),
+  openPort: str(r.openPort), openZone: str(r.openZone), openDate: str(r.openDate), freightIdea: num(r.freightIdea), rateAligned: null,
+  geared: r.geared == null ? null : r.geared === true, mine: true,
 });
 const cargoCandidate = (r: Row): MatchCargoOption => ({
   id: String(r.id), ref: str(r.ref), commodity: String(r.commodity ?? "Cargo"), type: String(r.type ?? "—"), qtyMin: Number(r.qtyMin ?? 0), qtyMax: Number(r.qtyMax ?? 0),
@@ -142,13 +137,12 @@ export async function loadMatchBuilder(params: { cargo?: string | null; vessel?:
   const isUuid = (s: string | null | undefined) => !!s && /^[0-9a-f-]{36}$/i.test(s);
   try {
     const supabase = await getSupabaseServerClient();
-    const [mine, myAvail, rooms] = await Promise.all([
-      getMyCargoListings(supabase).catch(() => [] as CargoListingRow[]),
-      getMyVesselAvailability(supabase).catch(() => [] as VesselAvailabilityWithVessel[]),
+    const [mine, rooms] = await Promise.all([
+      sdk.listFixtureMyListings(supabase).catch(() => ({ cargo: [], vessels: [] })),
       sdk.listFixtureRooms(supabase, ["draft", "invited", "negotiating", "on_subjects", "fixed"], 200).catch(() => [] as FixtureRoomListItem[]),
     ]);
-    out.myCargo = mine.map((r) => cargoOpt(r, true));
-    out.myVessels = myAvail.map((r) => vesselOpt(r, true));
+    out.myCargo = mine.cargo.map(ownCargo);
+    out.myVessels = mine.vessels.map(ownVessel);
     out.existingPairs = rooms.map((r) => ({ cargoListingId: "", vesselAvailabilityId: "", roomId: r.id, ref: r.ref, status: r.status }));
     // list_fixture_rooms does not carry listing ids for members; resolve pairs through the room reads the viewer may open
     out.existingPairs = [];

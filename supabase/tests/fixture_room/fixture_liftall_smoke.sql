@@ -255,7 +255,7 @@ set local session_replication_role = origin;
 -- 20260923207000. Runs after the shared seed inside the caller's transaction.
 
 do $$
-declare v jsonb; v_room uuid; v_tid uuid; v_pid uuid; v_code text; e text; n bigint; v_key_events int;
+declare v jsonb; v_fresh jsonb; v_room uuid; v_tid uuid; v_pid uuid; v_code text; e text; n bigint; v_key_events int; t text;
 begin
   perform pg_temp.fx_as('u_ch1');
   v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'lift-create', '{}'::jsonb);
@@ -271,7 +271,8 @@ begin
     v := public.accept_fixture_proposal(v_room, v_pid, pg_temp.fx_ver(v_room), 'lift-acc-' || v_code);
   end loop;
   v := public.add_fixture_subject(v_room, 'Sub stem', null, 'cargo', null, pg_temp.fx_ver(v_room), 'lift-sub-1');
-  v := public.add_fixture_subject(v_room, 'Sub details', null, null, null, pg_temp.fx_ver(v_room), 'lift-sub-2');
+  -- a hostile title: a member typed a name, a phone and an email into it (C2O-012 item 2)
+  v := public.add_fixture_subject(v_room, 'Sub details - call Tasos +30 690 000 0000 tasos@seed-owners.test', null, null, null, pg_temp.fx_ver(v_room), 'lift-sub-2');
   perform pg_temp.fx_as('u_ow1');
   v := public.add_fixture_subject(v_room, 'Sub owners'' approval', null, 'vessel', null, pg_temp.fx_ver(v_room), 'lift-sub-3');
 
@@ -286,6 +287,7 @@ begin
   perform pg_temp.fx_as('u_ch1');
   n := pg_temp.fx_events(v_room);
   v := public.lift_all_fixture_subjects(v_room, pg_temp.fx_ver(v_room), 'lift-all-ch');
+  v_fresh := v;
   if (v->'data'->>'lifted')::int <> 2 or (v->'data'->>'openSubjects')::int <> 1 or v->'data'->>'roomStatus' <> 'on_subjects' then
     raise exception 'L1: two lifted, one left, still on subjects expected: %', v; end if;
   perform pg_temp.fx_owner();   -- the ledger and subjects are read as the database owner (members have no table access)
@@ -300,11 +302,13 @@ begin
   n := pg_temp.fx_events(v_room);
   v := public.lift_all_fixture_subjects(v_room, pg_temp.fx_ver(v_room) - 5, 'lift-all-ch');
   if (v->>'replayed')::boolean is not true or pg_temp.fx_events(v_room) <> n then raise exception 'L2: the retry must replay without new events: %', v; end if;
+  -- C2O-012 item 1: the replay is the first response, field for field (only "replayed" differs)
+  if (v - 'replayed') <> (v_fresh - 'replayed') then raise exception 'L2: replay must equal the first response: first % / replay %', v_fresh, v; end if;
   e := pg_temp.fx_err(format('select public.lift_all_fixture_subjects(%L, %s, %L)', v_room, pg_temp.fx_ver(v_room) - 1, 'lift-all-stale'));
   if e = 'OK' then raise exception 'L2: a stale version must be refused'; end if;
   e := pg_temp.fx_err(format('select public.lift_all_fixture_subjects(%L, %s, %L)', v_room, pg_temp.fx_ver(v_room), 'lift-all-ch-2'));
   if e <> 'FX_STATE' then raise exception 'L2: nothing left for the charterer must be FX_STATE, got %', e; end if;
-  raise notice 'L2 ok: retries replay; stale versions and empty lifts are refused';
+  raise notice 'L2 ok: a retry replays the first response exactly; stale versions and empty lifts are refused';
 
   -- L3 · an outsider cannot lift
   perform pg_temp.fx_as('u_out');
@@ -320,6 +324,16 @@ begin
   if pg_temp.fx_event_types(v_room) not like '%subject.lifted,room.fixed,listing_sync.required%' then raise exception 'L4: ledger %', pg_temp.fx_event_types(v_room); end if;
   perform pg_temp.fx_owner();
   raise notice 'L4 ok: lifting the last subjects clean-fixes the room with the listing sync, as a single lift does';
+
+  -- L5 · with the shared notification core present: no subject title in any notification
+  if to_regclass('public.notifications') is not null and to_regprocedure('public.fn_fixture_notify_project()') is not null then
+    select string_agg(x.title || ' ' || x.body || ' ' || x.payload::text, E'\n') into t from public.notifications x where x.payload->>'roomId' = v_room::text;
+    if t is null then raise exception 'L5: the lifts must notify the other side'; end if;
+    if t ~* '(Tasos|\+30 690|seed-owners\.test|Sub details|Sub stem)' then raise exception 'L5: a subject title reached a notification: %', t; end if;
+    raise notice 'L5 ok: subject titles (member free text) never reach a notification';
+  else
+    raise notice 'L5 skipped: the shared notification core or the projector is absent';
+  end if;
 end $$;
 
 do $$ begin raise notice 'FIXTURE LIFT ALL SMOKE: ALL ASSERTIONS PASSED'; end $$;

@@ -90,4 +90,32 @@ begin
   end;
   perform pg_temp.fx_owner();
   raise notice 'K5 ok: unknown kinds and anonymous callers are refused';
+
+  -- K6 · a null kind is refused, not routed to the vessel branch (re-audit item 4)
+  perform pg_temp.fx_as('u_ow1');
+  begin
+    v := public.list_fixture_match_candidates(null, pg_temp.fx_id('a3'));
+    raise exception 'K6: a null kind was accepted';
+  exception when invalid_parameter_value then null;
+  end;
+  perform pg_temp.fx_owner();
+  raise notice 'K6 ok: a null kind is refused';
+
+  -- K7 · the builder's own listings follow the create rule: an active second seat of the
+  -- owning organisation sees the organisation's listing; an outsider sees none of it
+  perform pg_temp.fx_as('u_ch2');
+  v := public.list_fixture_my_listings();
+  if not exists (select 1 from jsonb_array_elements(v->'cargo') x where x->>'id' = pg_temp.fx_id('c6')::text)
+     or not exists (select 1 from jsonb_array_elements(v->'cargo') x where x->>'id' = pg_temp.fx_id('c1')::text) then
+    raise exception 'K7: the second seat of the charterer organisation must see its cargo: %', v; end if;
+  if v::text like '%' || pg_temp.fx_id('v1')::text || '%' or v::text like '%9000001%' then raise exception 'K7: an own-listing read carries a vessel id or IMO'; end if;
+  perform pg_temp.fx_as('u_out');
+  v := public.list_fixture_my_listings();
+  if v::text like '%' || pg_temp.fx_id('c1')::text || '%' or v::text like '%' || pg_temp.fx_id('c6')::text || '%' then raise exception 'K7: an outsider sees another organisation''s listing: %', v; end if;
+  perform pg_temp.fx_as('u_ow1');
+  v := public.list_fixture_my_listings();
+  if not exists (select 1 from jsonb_array_elements(v->'vessels') x where x->>'availabilityId' = pg_temp.fx_id('a3')::text and x->>'name' = 'SEED TBN HULL') then
+    raise exception 'K7: the owner sees its own TBN position by name: %', v; end if;
+  perform pg_temp.fx_owner();
+  raise notice 'K7 ok: own listings follow the create rule (organisation seats included), with no vessel id or IMO';
 end $$;

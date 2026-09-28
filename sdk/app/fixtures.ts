@@ -75,6 +75,14 @@ export async function listFixtureMatchCandidates(supabase: SupabaseClient, kind:
   return (data ?? []) as Record<string, unknown>[];
 }
 
+/** The live listings the actor owns or represents, by the create_fixture_room rule (organisation seats included). */
+export async function listFixtureMyListings(supabase: SupabaseClient): Promise<{ cargo: Record<string, unknown>[]; vessels: Record<string, unknown>[] }> {
+  const { data, error } = await supabase.rpc("list_fixture_my_listings");
+  if (error) throw new FixtureRequestError(toError(error));
+  const d = (data ?? {}) as { cargo?: Record<string, unknown>[]; vessels?: Record<string, unknown>[] };
+  return { cargo: d.cargo ?? [], vessels: d.vessels ?? [] };
+}
+
 /** One durable access-log row of a room (admin console only; the RPC refuses members). */
 export interface FixtureAccessLogEntry {
   id: number;
@@ -152,7 +160,7 @@ export function liftFixtureSubject(supabase: SupabaseClient, input: CommandBase 
 
 /** Lifts every open subject the representing party may lift, in one governed command (C2O-012 item 5). */
 export function liftAllFixtureSubjects(supabase: SupabaseClient, input: CommandBase) {
-  return command<{ lifted: number; openSubjects: number; roomStatus: FixtureRoomStatus }>(supabase, "lift_all_fixture_subjects", behalf(input));
+  return command<{ lifted: number; openSubjects: number; roomStatus: FixtureRoomStatus; subjectIds: string[] }>(supabase, "lift_all_fixture_subjects", behalf(input));
 }
 
 export function failFixtureSubject(supabase: SupabaseClient, input: CommandBase & { subjectId: string; reason?: string | null }) {

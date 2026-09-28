@@ -11,15 +11,16 @@
  * Runs against the local stack only (see fixture-room.helpers.ts).
  */
 import { test, expect as baseExpect } from "@playwright/test";
-import { apiClientAs, cleanupFixture, dismissOverlays, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { apiClientAs, cleanupFixture, cleanupSeat, dismissOverlays, seedFixture, seedOrgSeat, signInAs, type FixtureSeed } from "./fixture-room.helpers";
 
 const expect = baseExpect.configure({ timeout: 180_000 });
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "serial", timeout: 600_000 });
 
 let seed: FixtureSeed;
-test.beforeAll(async () => { seed = await seedFixture(); });
-test.afterAll(async () => { if (seed) cleanupFixture(seed); });
+let seat: { email: string; userId: string } | null = null;
+test.beforeAll(async () => { seed = await seedFixture(); seat = await seedOrgSeat(seed); });
+test.afterAll(async () => { if (seat) cleanupSeat(seat); if (seed) cleanupFixture(seed); });
 
 const secrets = () => [seed.tbn.name, seed.tbn.vesselId, seed.vesselId, seed.vesselImo];
 
@@ -80,3 +81,28 @@ test("a member cannot list the matches of someone else's cargo", async ({ browse
   await expect(page.getByTestId(/^cand-vessel-/)).toHaveCount(0);
   await context.close();
 });
+
+// re-audit C2O-011 item 3: a second active seat of the owning organisation can pick the
+// organisation's cargo (it did not post it) and gets the same masked candidates
+test("a second seat of the charterer organisation picks the organisation's cargo", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, seat!.email);
+  await page.goto("/dashboard/fixture-room/new");
+  await dismissOverlays(page);
+  const pick = page.getByTestId(`pick-cargo-${seed.cargoId}`);
+  await expect(pick).toBeVisible();
+  await pick.getByRole("button").click();
+  const tbn = page.getByTestId(`cand-vessel-${seed.tbn.availabilityId}`);
+  await expect(tbn).toBeVisible();
+  await expect(tbn.locator(".fxm-card__name")).toContainText("TBN");
+  const html = await page.content();
+  for (const s of secrets()) expect(html, `the page carries ${s}`).not.toContain(s);
+  // and through the API: the governed own-listing read includes it, the candidates stay masked
+  const api = await apiClientAs(seat!.email);
+  const mine = await api.rpc("list_fixture_my_listings");
+  expect(mine.error, mine.error?.message).toBeNull();
+  expect(JSON.stringify(mine.data)).toContain(seed.cargoId);
+  const nul = await api.rpc("list_fixture_match_candidates", { p_kind: null, p_listing_id: seed.cargoId });
+  expect(nul.error?.message ?? "").toMatch(/FX_VALIDATION/);   // re-audit item 4: a null kind is refused
+  await context.close();
+});
+

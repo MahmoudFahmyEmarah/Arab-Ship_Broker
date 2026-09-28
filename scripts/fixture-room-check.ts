@@ -20,7 +20,7 @@
  *      excluded PDA objects appear nowhere in the Fixture migrations
  */
 import { notificationFor, lapseWarning, notificationKey, maskedActorLabel, notificationPayload, NOTIFICATION_EXPIRES_AT } from "../lib/fixture-room/notify-model";
-import { newSince, termsTouched } from "../lib/fixture-room/last-seen";
+import { newSince, termsTouched, lastSeenKey, nextLastSeen } from "../lib/fixture-room/last-seen";
 import fs from "node:fs";
 import path from "node:path";
 import { FIXTURE_TERM_CATALOGUE, FIXTURE_TERM_CATALOGUE_VERSION, buildTermCatalogue, openingValueFromListing, termHintsFromListing, validateTermCatalogue } from "@/lib/fixture-room/terms";
@@ -381,6 +381,11 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   // C2O-010 item 2: one logical notification per event and recipient
   ok(notificationKey(42) === "fixture:42" && notificationKey(42, "lapse-warning") === "fixture:42:lapse-warning" && !/in_app|email|channel/.test(read("lib/fixture-room/notify-model.ts").split("export function notificationKey")[1].split("\n}")[0]), "one logical notification per event (the dedupe key names no channel)");
   const proj = read("supabase/migrations/20260923205000_fixture_room_notifications.sql");
+  // C2O-012 item 2: a subject's title is member free text and never enters a notification
+  const hostile = { ...ctx, payload: { seq: 2, title: "Sub details - call Tasos +30 690 000 0000 tasos@seed-owners.test" } };
+  const subjTexts = ["subject.lifted", "subject.failed"].map((t) => notificationFor(t as "subject.lifted", hostile)).map((r) => `${r!.title} ${r!.body}`).join(" ");
+  ok(!/Tasos|\+30 690|seed-owners|Sub details/.test(subjTexts) && /subject 2/i.test(subjTexts), "a subject is named by its number, never by the title a member typed");
+  ok(!/p->>'title'/.test(proj.replace(/--.*$/gm, "")), "the SQL projector never interpolates a subject title");
   ok(/when ap\.side = 'cargo' then 'Charterer side'/.test(proj) && /when ap\.side = 'vessel' then 'Owner side'/.test(proj) && !/ap\.display_label/.test(proj), "the SQL projector derives the same three labels from the side, never a stored display label");
 }
 
@@ -422,6 +427,13 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(JSON.stringify([...termsTouched(newSince(events, 1, ["me"]), terms)].sort()) === '["t1","t3"]', "the new chip lands on the terms the other side touched");
   const ls = read("lib/fixture-room/last-seen.ts");
   ok(/try \{[\s\S]*localStorage\.getItem[\s\S]*\} catch \{ return null; \}/.test(ls) && /catch \{ \/\* convenience only \*\/ \}/.test(ls) && !/fetch\(|supabase|rpc\(/.test(ls), "the marker is browser-only and survives blocked storage");
+  // C2O-012 item 4: one mark per viewer and room, and it only moves forward
+  ok(lastSeenKey("u1", "r1") !== lastSeenKey("u2", "r1") && lastSeenKey("u1", "r1") !== lastSeenKey("u1", "r2"), "the mark is keyed by viewer and room (a second account never inherits it)");
+  ok(nextLastSeen(null, 4) === 4 && nextLastSeen(9, 4) === 9 && nextLastSeen(4, 9) === 9, "a write never moves the mark backwards (a stale tab cannot resurface old updates)");
+  ok(/viewerId=\{user\.id\}/.test(read("app/(dashboard)/dashboard/fixture-room/[id]/page.tsx")) && !/readLastSeen\(initial\.room\.id\)|writeLastSeen\(room\.id/.test(read("components/fixture-room/FixtureRoomClient.tsx")), "the room reads and writes the mark for the signed-in member");
+  // C2O-012 item 3: the feed marks exactly the events the banner counts
+  const rails = read("components/fixture-room/RoomRails.tsx");
+  ok(/newSeqs\?\.has\(e\.seq\) \? " is-new"/.test(rails) && !/e\.seq > lastVisitSeq \? " is-new"/.test(rails) && /newSeqs=\{freshSeqs\}/.test(read("components/fixture-room/FixtureRoomClient.tsx")), "the activity feed marks only other parties' new events, the same list as the banner");
 }
 
 // -- C2O-011 . governed match candidates: own listings only, no vessel identity --
@@ -459,5 +471,22 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/run\("liftAll"/.test(client) && /createFixtureRoomAction\(\{ cargoListingId, vesselAvailabilityId, idempotencyKey \}\)/.test(client) && !/for \(const s of view\.subjects\)[\s\S]{0,200}liftSubject/.test(client), "5 · the footer calls governed commands only (no client-side loop of lifts)");
   const h = read("scripts/fixture-room-harness.sh");
   ok(/20260923207000_fixture_room_lift_all\.sql/.test(h) && /\[liftall\]="FIXTURE LIFT ALL SMOKE"/.test(h) && /drop function if exists public\.lift_all_fixture_subjects\(uuid, integer, text, uuid, uuid\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "5 · the harness applies, tests and reverses lift all");
+}
+
+// -- C2O-012 re-audit . lift-all replays its first response exactly --
+{
+  const lift = read("supabase/migrations/20260923207000_fixture_room_lift_all.sql").replace(/--.*$/gm, "");
+  ok(/case when v_first is null then v_result end/.test(lift) && /'data', v_result\)/.test(lift) && /'subjectIds', to_jsonb\(v_ids\)/.test(lift), "one typed aggregate is stored on the first event and returned, so a replay equals the first response");
+  ok(/\(v - 'replayed'\) <> \(v_fresh - 'replayed'\)/.test(read("supabase/tests/fixture_room/bodies/liftall.sql")), "the suite asserts full response equality on replay");
+}
+
+// -- C2O-011 re-audit . null kind refused; own listings by the create rule --
+{
+  const mig = read("supabase/migrations/20260923206000_fixture_room_match_candidates.sql").replace(/--.*$/gm, "");
+  ok(/if p_kind is null or p_kind not in \('cargo', 'vessel'\)/.test(mig), "a null kind is refused, never routed to the vessel branch");
+  ok(/create or replace function public\.list_fixture_my_listings\(\)/.test(mig) && (mig.split("list_fixture_my_listings()")[1].match(/fn_fixture_owns_listing\(/g) ?? []).length >= 2 && /fn_fixture_listing_live\('cargo', c\.id\)/.test(mig), "own listings use the create rule (organisation seats included) and only live listings");
+  const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
+  ok(/sdk\.listFixtureMyListings\(supabase\)/.test(act) && !/getMyCargoListings|getMyVesselAvailability/.test(act), "the builder's own-listing lists come from the governed read, not per-account owner queries");
+  ok(/drop function if exists public\.list_fixture_my_listings\(\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops the own-listing read");
 }
 

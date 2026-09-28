@@ -29,5 +29,5 @@ export default async function FixtureRoomPage({ params }: { params: Promise<{ id
       </div>
     );
   }
-  return <FixtureRoomClient initial={view} />;
+  return <FixtureRoomClient initial={view} viewerId={user.id} />;
 }

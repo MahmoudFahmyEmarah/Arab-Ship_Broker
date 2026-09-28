@@ -88,7 +88,7 @@ function playPing(ctxRef: React.MutableRefObject<AudioContext | null>) {
   } catch { /* audio is a nicety */ }
 }
 
-export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
+export function FixtureRoomClient({ initial, viewerId }: { initial: FixtureRoomView; viewerId: string }) {
   const [view, setView] = React.useState<FixtureRoomView>(initial);
   const [busy, setBusy] = React.useState(false);
   const [conflict, setConflict] = React.useState<string | null>(null);
@@ -112,14 +112,14 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   // "new since your last visit": the sequence remembered from the previous visit (read once, after mount)
   const [lastVisitSeq, setLastVisitSeq] = React.useState<number | null>(null);
   const latestSeq = Math.max(0, ...view.events.map((e) => e.seq));
-  React.useEffect(() => { setLastVisitSeq(readLastSeen(initial.room.id)); }, [initial.room.id]);
+  React.useEffect(() => { setLastVisitSeq(readLastSeen(viewerId, initial.room.id)); }, [viewerId, initial.room.id]);
   React.useEffect(() => {
-    const remember = () => writeLastSeen(initial.room.id, latestSeqRef.current);
+    const remember = () => writeLastSeen(viewerId, initial.room.id, latestSeqRef.current);
     const onHide = () => { if (document.visibilityState === "hidden") remember(); };
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("pagehide", remember);
     return () => { remember(); document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", remember); };
-  }, [initial.room.id]);
+  }, [viewerId, initial.room.id]);
   const latestSeqRef = React.useRef(latestSeq);
   React.useEffect(() => { latestSeqRef.current = latestSeq; }, [latestSeq]);
   const now = useNow();
@@ -272,6 +272,7 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   }), [view.events, view.parties, now]);
   const freshEvents = newSince(view.events, lastVisitSeq, viewer.partyIds);
   const freshTerms = termsTouched(freshEvents, view.terms);
+  const freshSeqs = new Set(freshEvents.map((e) => e.seq));
   const windowLeft = room.negotiationWindowEndsAt && now > 0 ? Date.parse(room.negotiationWindowEndsAt) - now : null;
   // the estimator's frozen hand-off contract (C2O-007): ids, ports and quantity; the vessel
   // name only once the owner has disclosed it; the estimator re-resolves every value
@@ -424,7 +425,7 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
           {freshEvents.length > 0 && (
             <div className="nr-banner is-info" role="status" data-testid="new-since-banner">
               <div className="nr-banner__body"><div className="nr-banner__title">{freshEvents.length} update{freshEvents.length === 1 ? "" : "s"} since your last visit</div>Marked <span className="fx-new">new</span> on the terms and in the activity log.</div>
-              <div className="nr-banner__cta"><button type="button" className="asb-btn" onClick={() => { writeLastSeen(room.id, latestSeq); setLastVisitSeq(latestSeq); }}>Mark as seen</button></div>
+              <div className="nr-banner__cta"><button type="button" className="asb-btn" onClick={() => { writeLastSeen(viewerId, room.id, latestSeq); setLastVisitSeq(latestSeq); }}>Mark as seen</button></div>
             </div>
           )}
           <div className="nr-list__hd">
@@ -448,7 +449,7 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
           <RecapRail view={view} run={run} busy={busy} actForPartyId={actFor} hoverSlot={hoverSlot} onHover={setHoverSlot} justAgreed={justAgreed} />
           <SubjectsRail view={view} run={run} busy={busy} actForPartyId={actFor} now={now} />
           <MessagesPanel view={view} run={run} busy={busy} now={now} />
-          <ActivityFeed view={view} now={now} lastVisitSeq={freshEvents.length ? lastVisitSeq : null} />
+          <ActivityFeed view={view} now={now} lastVisitSeq={freshEvents.length ? lastVisitSeq : null} newSeqs={freshSeqs} />
         </div>
       </div>
 

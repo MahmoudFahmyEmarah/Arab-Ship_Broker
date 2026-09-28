@@ -31,7 +31,8 @@ declare
   v_actor uuid := public.fn_fixture_actor();
   v_out jsonb;
 begin
-  if p_kind not in ('cargo', 'vessel') or p_listing_id is null then
+  -- a null kind is refused too (NULL NOT IN (...) is not true; re-audit C2O-011 item 4)
+  if p_kind is null or p_kind not in ('cargo', 'vessel') or p_listing_id is null then
     raise exception 'FX_VALIDATION: kind must be cargo or vessel and a listing is required' using errcode = '22023';
   end if;
   if public.fn_fixture_owns_listing(case p_kind when 'cargo' then 'cargo' else 'vessel_availability' end, p_listing_id) is null then
@@ -89,3 +90,50 @@ grant execute on function public.list_fixture_match_candidates(text, uuid) to au
 
 comment on function public.list_fixture_match_candidates(text, uuid) is
   'Fixture Room (C2O-011): ranked counterparts for a listing the actor owns or represents. Never returns a vessels.id or IMO; a TBN vessel the actor does not own is named TBN. Each candidate carries the governed match facts (zone, laycan rule, grain/DG, gear, capacity).';
+
+-- The match builder's first step: the live listings the actor owns or represents
+-- (re-audit C2O-011 item 3). The portal's "my listings" queries match the
+-- listing's owner_user_id to the signed-in account only, so a second active
+-- seat of the owning organisation could not pick an organisation listing the
+-- database would let it open. This read uses exactly the rule create_fixture_room
+-- applies (fn_fixture_owns_listing) and only listings a room can open on
+-- (fn_fixture_listing_live). They are the actor's own listings, so its own
+-- vessel is named; still no vessels.id or IMO is returned.
+create or replace function public.list_fixture_my_listings()
+ returns jsonb language plpgsql stable security definer set search_path to 'public'
+as $$
+declare v_actor uuid := public.fn_fixture_actor(); v_cargo jsonb; v_vessels jsonb;
+begin
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', c.id, 'ref', c.ref, 'commodity', c.commodity_name, 'type', c.cargo_type::text,
+           'qtyMin', c.qty_min_mt, 'qtyMax', c.qty_max_mt,
+           'loadPort', coalesce(c.load_port_name, c.load_port_locode), 'dischPort', coalesce(c.disch_port_name, c.disch_port_locode),
+           'laycanFrom', c.laycan_from, 'laycanTo', c.laycan_to, 'isSpot', coalesce(c.is_spot, false),
+           'freightIdea', c.freight_idea_usd_mt) order by c.created_at desc), '[]'::jsonb)
+    into v_cargo
+    from public.cargo_listings c
+   where exists (select 1 from public.listing_ownership lo
+                  where lo.listing_type = 'cargo' and lo.listing_id = c.id and lo.is_current and lo.role = 'primary')
+     and public.fn_fixture_listing_live('cargo', c.id)
+     and public.fn_fixture_owns_listing('cargo', c.id) is not null;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'availabilityId', va.id, 'name', v.vessel_name, 'type', v.vessel_type::text, 'dwt', v.dwt_grain,
+           'openPort', coalesce(va.open_port_name, va.open_port_locode), 'openZone', va.open_zone::text, 'openDate', va.open_date,
+           'freightIdea', va.freight_idea_usd_mt, 'geared', v.is_geared) order by va.created_at desc), '[]'::jsonb)
+    into v_vessels
+    from public.vessel_availability va
+    join public.vessels v on v.id = va.vessel_id
+   where exists (select 1 from public.listing_ownership lo
+                  where lo.listing_type = 'vessel_availability' and lo.listing_id = va.id and lo.is_current and lo.role = 'primary')
+     and public.fn_fixture_listing_live('vessel_availability', va.id)
+     and public.fn_fixture_owns_listing('vessel_availability', va.id) is not null;
+
+  return jsonb_build_object('cargo', v_cargo, 'vessels', v_vessels);
+end $$;
+revoke all on function public.list_fixture_my_listings() from public, anon;
+grant execute on function public.list_fixture_my_listings() to authenticated, service_role;
+
+comment on function public.list_fixture_my_listings() is
+  'Fixture Room (re-audit C2O-011 item 3): the live cargo and positions the actor owns or represents, by the create_fixture_room ownership rule; no vessels.id or IMO.';
+

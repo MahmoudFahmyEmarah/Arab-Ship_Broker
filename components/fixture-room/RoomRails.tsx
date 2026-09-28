@@ -291,7 +291,9 @@ export function eventText(e: FixtureEventView): string {
   return (EVENT_TEXT[e.type] ?? (() => e.type))(e.payload);
 }
 
-export function ActivityFeed({ view, now, lastVisitSeq = null }: { view: FixtureRoomView; now: number; lastVisitSeq?: number | null }) {
+// newSeqs: the events the room counts as new (other parties' events after the last visit,
+// the same list as the banner); lastVisitSeq only places the divider
+export function ActivityFeed({ view, now, lastVisitSeq = null, newSeqs }: { view: FixtureRoomView; now: number; lastVisitSeq?: number | null; newSeqs?: Set<number> }) {
   const items = [...view.events].reverse().slice(0, 60);
   const me = new Set(view.viewer.partyIds);
   const lane = (e: FixtureEventView) => (e.actorPartyId && me.has(e.actorPartyId) ? "you" : !e.actorPartyId || e.actorLabel === "System" || e.actorLabel === "Arab ShipBroker" ? "system" : "owner");
@@ -304,7 +306,7 @@ export function ActivityFeed({ view, now, lastVisitSeq = null }: { view: Fixture
           return (
             <React.Fragment key={e.id}>
             {lastVisitSeq != null && e.seq === lastVisitSeq && <div className="nr-log__since" data-testid="new-since-divider">Since your last visit ↑</div>}
-            <div className={`nr-log__item by-${l}${lastVisitSeq != null && e.seq > lastVisitSeq ? " is-new" : ""}`} data-testid={`event-${e.seq}`}>
+            <div className={`nr-log__item by-${l}${newSeqs?.has(e.seq) ? " is-new" : ""}`} data-testid={`event-${e.seq}`}>
               <div className={`nr-log__who ${l === "you" ? "you" : ""}`}>{l === "you" ? "You" : e.actorLabel}{e.onBehalfOfLabel ? ` (for ${e.onBehalfOfLabel})` : ""}</div>
               <div className="nr-log__txt">{eventText(e)}</div>
               <div className="nr-log__time">#{e.seq} · {relativeTime(e.at, now)}</div>

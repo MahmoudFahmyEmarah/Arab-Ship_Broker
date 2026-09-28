@@ -89,6 +89,40 @@ export async function seedFixture(): Promise<FixtureSeed> {
   return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, vesselImo: testImo, availabilityId: a.id, tbn: { vesselId: tv.id, name: tbnName, availabilityId: ta.id } };
 }
 
+/**
+ * A second active seat in the charterer's organisation (re-audit C2O-011 item 3):
+ * it did not post the cargo, but represents it through the organisation, so the
+ * match builder must offer it. Local stack only; removed by cleanupSeat.
+ */
+export async function seedOrgSeat(seed: FixtureSeed): Promise<{ email: string; userId: string }> {
+  const { url, service } = localKeys();
+  const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
+  const email = `e2e-fx-seat-${seed.stamp}@arabshipbroker.test`;
+  const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
+  if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
+  const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: "E2E second seat", company: `E2E Charterers ${seed.stamp}`, role: "cargo_owner", subscription_tier: "T3", is_active: true });
+  if (e2) throw new Error(`users (seat): ${e2.message}`);
+  const { error: e3 } = await admin.from("organization_members").insert({ org_id: seed.charterer.orgId, user_id: data.user.id, member_role: "broker", is_current: true, status: "active" });
+  if (e3) throw new Error(`seat membership: ${e3.message}`);
+  await admin.from("profiles").insert({ account_id: data.user.id, profile_type: "cargo", display_name: "E2E second seat", is_active: true });
+  return { email, userId: data.user.id as string };
+}
+
+export function cleanupSeat(seat: { userId: string }) {
+  const sql = `
+set session_replication_role = replica;
+delete from public.profiles where account_id = '${seat.userId}';
+delete from public.organization_members where user_id = '${seat.userId}';
+delete from public.users where id = '${seat.userId}';
+delete from auth.users where id = '${seat.userId}';
+`;
+  try {
+    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: sql, stdio: ["pipe", "ignore", "ignore"] });
+  } catch {
+    // leaving rows behind on a disposable database is not a test failure
+  }
+}
+
 export interface AdminSeed { email: string; userId: string }
 
 /**
