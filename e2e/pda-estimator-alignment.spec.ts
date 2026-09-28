@@ -234,8 +234,13 @@ async function signIn(browser: Browser, baseURL: string, seed: PdaSeed, width: n
   const context = await browser.newContext({ baseURL, viewport: { width, height }, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
   await page.goto("/auth/login");
-  await expect(page.locator(".asb-loading-overlay")).not.toHaveClass(/is-visible/, { timeout: 30_000 });
-  await page.locator('input[name="email"]').fill(seed.email);
+  const emailInput = page.locator('input[name="email"]');
+  await expect(emailInput).toBeVisible({ timeout: 90_000 });
+  const overlay = page.locator(".asb-loading-overlay");
+  if (await overlay.count()) {
+    await expect(overlay).not.toHaveClass(/is-visible/, { timeout: 30_000 });
+  }
+  await emailInput.fill(seed.email);
   await page.locator('input[name="password"]').fill(PASSWORD);
   await page.getByRole("button", { name: /sign in|log in/i }).first().click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 90_000 });

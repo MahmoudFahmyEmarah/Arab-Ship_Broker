@@ -15,25 +15,31 @@ import { getPdaCalculationContext, savePdaEstimate } from "@/sdk/app/pda";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-function actionErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === "object" && "issues" in error) {
-    const issues = (error as { issues?: unknown }).issues;
-    if (Array.isArray(issues)) {
-      const messages = issues.flatMap((issue) => {
-        if (!issue || typeof issue !== "object" || !("message" in issue)) return [];
-        const message = (issue as { message?: unknown }).message;
-        return typeof message === "string" && message.trim() ? [message.trim()] : [];
-      });
-      if (messages.length) return messages.join("; ");
-    }
+class UserFacingActionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UserFacingActionError";
   }
-  return error instanceof Error ? error.message : fallback;
+}
+
+function validationErrorMessage(
+  issues: readonly { message: string }[],
+  fallback: string,
+): string {
+  const messages = [...new Set(issues.map((issue) => issue.message.trim()).filter(Boolean))];
+  return messages.length ? messages.join("; ") : fallback;
+}
+
+function actionErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof UserFacingActionError) return error.message;
+  console.error(`[pda] ${fallback}`, error);
+  return fallback;
 }
 
 async function viewer() {
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Sign in required");
+  if (!user) throw new UserFacingActionError("Sign in required");
   const appUser = await getAppUserRow<{
     id: string;
     full_name: string | null;
@@ -42,11 +48,11 @@ async function viewer() {
     is_market_partner: boolean | null;
     is_active: boolean;
   }>(supabase, user.id, "id, full_name, role, subscription_tier, is_market_partner, is_active");
-  if (!appUser?.is_active) throw new Error("Active account required");
+  if (!appUser?.is_active) throw new UserFacingActionError("Active account required");
   const entitled = appUser.role?.toLowerCase() === "admin"
     || appUser.is_market_partner === true
     || ["T3", "T4"].includes(appUser.subscription_tier ?? "T1");
-  if (!entitled) throw new Error("PDA Estimator requires Subscriber tier (T3+)");
+  if (!entitled) throw new UserFacingActionError("PDA Estimator requires Subscriber tier (T3+)");
   const { data: membership } = await supabase.rpc("fn_my_membership");
   const member = (Array.isArray(membership) ? membership[0] : membership) as { org_id?: string; status?: string } | null;
   return {
@@ -136,12 +142,12 @@ async function requireRouteSelections(
     loadCargoViews({ mine: true }),
   ]);
   if (vessels.source !== "live" || cargos.source !== "live") {
-    throw new Error("Live vessel or cargo records could not be loaded");
+    throw new UserFacingActionError("Live vessel or cargo records could not be loaded");
   }
   const vessel = vessels.views.find((item) => item.id === selection.vesselAvailabilityId);
-  if (!vessel) throw new Error("The selected vessel is not available to this account");
+  if (!vessel) throw new UserFacingActionError("The selected vessel is not available to this account");
   const cargo = cargos.views.find((item) => item.id === selection.cargoId);
-  if (!cargo) throw new Error("The selected cargo is not available to this account");
+  if (!cargo) throw new UserFacingActionError("The selected cargo is not available to this account");
   return { vessel, cargo };
 }
 
@@ -159,14 +165,17 @@ async function requireVerifiedPorts(
   if (error) throw new Error(error.message);
   const found = new Set((data ?? []).map((row) => row.locode));
   const missing = unique.filter((code) => !found.has(code));
-  if (missing.length) throw new Error(`Verified port not found: ${missing.join(", ")}`);
+  if (missing.length) throw new UserFacingActionError(`Verified port not found: ${missing.join(", ")}`);
 }
 
 export async function previewPda(raw: PdaRequest): Promise<ActionResult<PdaCalculationResult>> {
   try {
-    const parsed = pdaRequestSchema.parse(raw) as PdaRequest;
+    const parsed = pdaRequestSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { ok: false, error: validationErrorMessage(parsed.error.issues, "Invalid PDA request") };
+    }
     const { supabase, manualActorLabel } = await viewer();
-    const request = attributeManualLines(parsed, manualActorLabel);
+    const request = attributeManualLines(parsed.data as PdaRequest, manualActorLabel);
     const context = await getPdaCalculationContext(supabase, request);
     return { ok: true, data: calculatePda(request, context.tariffVersion ?? null) };
   } catch (error) {
@@ -176,9 +185,12 @@ export async function previewPda(raw: PdaRequest): Promise<ActionResult<PdaCalcu
 
 export async function persistPda(raw: PdaRequest): Promise<ActionResult<{ estimateId: string; result: PdaCalculationResult }>> {
   try {
-    const parsed = pdaRequestSchema.parse(raw) as PdaRequest;
+    const parsed = pdaRequestSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { ok: false, error: validationErrorMessage(parsed.error.issues, "Invalid PDA request") };
+    }
     const { supabase, appUser, manualActorLabel, ownerOrgId } = await viewer();
-    const request = attributeManualLines(parsed, manualActorLabel);
+    const request = attributeManualLines(parsed.data as PdaRequest, manualActorLabel);
     const context = await getPdaCalculationContext(supabase, request);
     const result = calculatePda(request, context.tariffVersion ?? null);
     const estimateId = await savePdaEstimate(getSupabaseAdminClient(), {
@@ -195,7 +207,11 @@ export async function persistPda(raw: PdaRequest): Promise<ActionResult<{ estima
 
 export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<ActionResult<PdaRoutePreviewResult>> {
   try {
-    const input = pdaRoutePreviewSchema.parse(raw) as PdaRoutePreviewInput;
+    const parsed = pdaRoutePreviewSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { ok: false, error: validationErrorMessage(parsed.error.issues, "Invalid route PDA request") };
+    }
+    const input = parsed.data as PdaRoutePreviewInput;
     const { supabase, manualActorLabel } = await viewer();
     const [{ vessel, cargo }] = await Promise.all([
       requireRouteSelections(input.selection),
