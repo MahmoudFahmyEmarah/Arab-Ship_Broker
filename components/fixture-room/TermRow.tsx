@@ -118,6 +118,8 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
   // the countdown that matters on the strip: the figure awaiting an answer
   const ticking = !agreed ? (term.holder === "cargo" ? term.vesselPosition : term.holder === "vessel" ? term.cargoPosition : null) : null;
   const tickingLeft = ticking?.expiresAt && now > 0 ? Date.parse(ticking.expiresAt) - now : null;
+  // the figure currently on the table: the latest of the two sides' standing positions
+  const standing = [term.cargoPosition, term.vesselPosition].filter((p): p is FixtureProposalView => !!p).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const canWork = caps.canPropose && !!mySide && !agreed && term.status !== "withdrawn";
   const commonBase = { asPartyId: null as string | null, onBehalfOfPartyId: actForPartyId };
 
@@ -306,6 +308,35 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
                 <span className={`fx-flag${term.cargoPosition?.isFinal ? " is-on" : ""}`} title={term.cargoPosition?.isFinal ? "The cargo side marked its figure final" : "Cargo side has not marked a final figure"}>{term.cargoPosition?.isFinal ? "✓ Cargo final" : "Cargo open"}</span>
                 <span className={`fx-flag${term.vesselPosition?.isFinal ? " is-on" : ""}`} title={term.vesselPosition?.isFinal ? "The vessel side marked its figure final" : "Vessel side has not marked a final figure"}>{term.vesselPosition?.isFinal ? "✓ Vessel final" : "Vessel open"}</span>
               </div>
+            </div>
+          ) : view.viewer.isMediator && !mySide && (view.room.status === "invited" || view.room.status === "negotiating") ? (
+            // the mediator's console (design: broker seat): press either side, acknowledge the
+            // standing figure, hold or refer; relaying a figure for a relayed party goes through
+            // "Acting for" in the header, which turns this into that party's composer
+            <div className="fx-composer" data-testid={`mediator-${term.code}`}>
+              <div className="fx-lead2">
+                <IcLock /> {term.holder ? `With the ${term.holder} side · ${presence[term.holder].label}` : "No figure on the table yet"}
+                {standing && <> · standing <b><Gloss text={standing.displayValue} /></b></>}
+              </div>
+              <div className="fx-acts2">
+                {caps.canMessage && (["cargo", "vessel"] as const).map((s) => (
+                  <button key={s} type="button" className="fx-chip2" disabled={busy} data-testid={`press-${s}-${term.code}`} title={`Ask the ${s} side to improve or answer`}
+                    onClick={() => run("message", (b) => ({ ...b, body: `Arab ShipBroker asks the ${s} side to improve or answer on ${term.label.toLowerCase()}.`, kind: "nudge", visibility: "room", termId: term.id }))}>↑ Press {sideNoun(s)}</button>
+                ))}
+                {caps.canMessage && standing && (
+                  <button type="button" className="fx-chip2" disabled={busy} data-testid={`ack-${term.code}`} title="Acknowledge the standing figure to the side that sent it"
+                    onClick={() => run("message", (b) => ({ ...b, body: `Received ${standing.displayValue} on ${term.label.toLowerCase()}.`, kind: "ack", visibility: "room", termId: term.id }))}>Acknowledge {standing.displayValue}</button>
+                )}
+                {caps.canFlagTerm && (
+                  <>
+                    <span className="fx-acts2__sep" />
+                    <button type="button" className="fx-link" disabled={busy} onClick={() => run("flag", (base) => ({ ...base, ...commonBase, termId: term.id, flag: term.heldByLabel ? "resume" : "hold" }))}>{term.heldByLabel ? "Resume" : "Hold"}</button>
+                    <button type="button" className="fx-link" disabled={busy} onClick={() => run("flag", (base) => ({ ...base, ...commonBase, termId: term.id, flag: term.referredAt ? "clear_referral" : "refer" }))}>{term.referredAt ? "Clear referral" : "Refer"}</button>
+                  </>
+                )}
+              </div>
+              {caps.actForPartyIds.length > 0 && <div className="fx-offnote">To relay a figure for a party that is off-platform, choose it under “Acting for” in the header.</div>}
+              {term.referredAt && <div className="fx-offnote refer">Referred to principal{term.referredByLabel ? ` by ${term.referredByLabel}` : ""} · awaiting a decision before this item moves.</div>}
             </div>
           ) : (
             <div className="fx-hint2">{view.room.status === "invited" || view.room.status === "negotiating" ? "Waiting for the other side." : "This term is closed for negotiation."}</div>

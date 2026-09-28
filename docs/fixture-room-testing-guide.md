@@ -601,3 +601,20 @@ aware). Separate icons now open the composer and the printable recap.
 | production build, local keys | exit 0, 176 s |
 | `fixture-room-a11y.spec.ts` + `fixture-room-responsive.spec.ts` | 8 passed (3.4 min) |
 | `fixture-room.spec.ts` (two-browser) | not re-run; still needs a runner with memory headroom (section 12) |
+
+## 14 · Phase 1.1 · commit 3: the mediator's console (28 Sep 2026)
+
+When the viewer mediates (Arab ShipBroker, an admin session) and is not
+acting for a relayed party, each open term shows the design's broker console
+instead of "Waiting for the other side": where the ball is and the standing
+figure, "Press Cargo" / "Press Vessel" (governed `nudge` messages pinned to
+the term), "Acknowledge <figure>" (an `ack` message), Hold / Refer, and a
+pointer to "Acting for" for relaying a figure on behalf of an off-platform
+party. The mediator never proposes a figure of its own.
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 235 passed, 0 failed (2 new) |
+| `tsc --noEmit` / `eslint` | 0 errors / clean |
+| production build | exit 0, 118 s (a first attempt failed downloading the Inter font from Google Fonts; network, retried) |
+| `fixture-room-admin.spec.ts` incl. the new mediator test | 4 passed (2.3 min) |

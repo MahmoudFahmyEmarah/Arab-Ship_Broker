@@ -346,3 +346,6 @@ const fxComposer = read("components/fixture-room/RecapComposer.tsx");
 ok(/role="dialog" aria-modal="true" aria-label="Send recap"/.test(fxComposer) && /e\.key === "Escape"/.test(fxComposer) && !/fetch\(|rpc\(|sendMail|smtp|whatsapp_outbox/i.test(fxComposer.replace(/IcWhatsapp|WhatsApp/g, "")), "the recap composer is an accessible dialog that sends nothing itself (delivery waits for the notification module, D-2)");
 ok(/latest\?\.contentText \?\? buildDealSummary\(view\)/.test(fxComposer), "the composer body is the published recap or the masked deal summary");
 ok(/kind: "nudge", visibility: "room", termId: term\.id/.test(read("components/fixture-room/TermRow.tsx")), "the nudge button posts a governed nudge message pinned to the term");
+const fxTerm = read("components/fixture-room/TermRow.tsx");
+ok(/data-testid=\{`mediator-\$\{term\.code\}`\}/.test(fxTerm) && /view\.viewer\.isMediator && !mySide/.test(fxTerm), "the mediator sees the broker console on each term (press, acknowledge, hold, refer)");
+ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.match(/kind: "nudge"/g) ?? []).length >= 2, "press and acknowledge are governed nudge / ack messages pinned to the term, never a figure");

@@ -10,7 +10,7 @@
  */
 import { test, expect as baseExpect } from "@playwright/test";
 import { buildTermCatalogue, FIXTURE_TERM_CATALOGUE_VERSION } from "../lib/fixture-room/terms";
-import { apiClientAs, cleanupAdmin, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed } from "./fixture-room.helpers";
+import { apiClientAs, cleanupAdmin, dismissOverlays, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed } from "./fixture-room.helpers";
 
 const expect = baseExpect.configure({ timeout: 60_000 });
 
@@ -70,6 +70,21 @@ test("the admin sees the room unmasked and the access log records the read", asy
   // this open was logged: reload and the log lists an admin read of this room
   await page.reload();
   await expect(page.getByTestId("fixtures-access-log")).toContainText("admin");
+  await context.close();
+});
+
+test("the admin mediates in the room: the broker console presses a side through the ledger", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, admin.email);
+  await page.goto(`/dashboard/fixture-room/${roomId}`);
+  await dismissOverlays(page);
+  const strip = page.getByTestId("term-strip-freight");
+  if ((await strip.getAttribute("aria-expanded")) !== "true") await strip.click();
+  const consoleBox = page.getByTestId("mediator-freight");
+  await expect(consoleBox).toBeVisible();
+  await expect(page.getByTestId("composer-freight")).toHaveCount(0);   // the mediator proposes nothing of its own
+  await consoleBox.getByTestId("press-cargo-freight").click();
+  await expect(page.getByTestId("term-thread-freight")).toContainText(/asks the cargo side/i);
+  await expect(page.getByTestId("activity-feed")).toContainText(/message/i);
   await context.close();
 });
 
