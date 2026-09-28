@@ -301,11 +301,12 @@ async function assertDuplicateManualRuleError(page: Page) {
     await editor.getByLabel("Amount").nth(index).fill(amount);
     await editor.getByLabel("Quote reason / reference").nth(index).fill(`Agent email DUP-${index + 1}`);
   }
-  await expect(page.getByRole("alert")).toContainText("Duplicate manual quotation rule code: towage", { timeout: 90_000 });
+  const estimatorError = page.locator(".pda-summary__error");
+  await expect(estimatorError).toHaveText("Duplicate manual quotation rule code: towage", { timeout: 90_000 });
   const removeButtons = editor.getByRole("button", { name: /Remove load port quote/ });
   await removeButtons.last().click();
   await removeButtons.first().click();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(estimatorError).toHaveCount(0);
   await expect(page.locator(".pda-port-card").first().locator("footer")).toContainText("No tariff version", { timeout: 90_000 });
 }
 

@@ -15,6 +15,21 @@ import { getPdaCalculationContext, savePdaEstimate } from "@/sdk/app/pda";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+function actionErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "issues" in error) {
+    const issues = (error as { issues?: unknown }).issues;
+    if (Array.isArray(issues)) {
+      const messages = issues.flatMap((issue) => {
+        if (!issue || typeof issue !== "object" || !("message" in issue)) return [];
+        const message = (issue as { message?: unknown }).message;
+        return typeof message === "string" && message.trim() ? [message.trim()] : [];
+      });
+      if (messages.length) return messages.join("; ");
+    }
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 async function viewer() {
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -155,7 +170,7 @@ export async function previewPda(raw: PdaRequest): Promise<ActionResult<PdaCalcu
     const context = await getPdaCalculationContext(supabase, request);
     return { ok: true, data: calculatePda(request, context.tariffVersion ?? null) };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to calculate PDA" };
+    return { ok: false, error: actionErrorMessage(error, "Unable to calculate PDA") };
   }
 }
 
@@ -174,7 +189,7 @@ export async function persistPda(raw: PdaRequest): Promise<ActionResult<{ estima
     });
     return { ok: true, data: { estimateId, result } };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to save PDA" };
+    return { ok: false, error: actionErrorMessage(error, "Unable to save PDA") };
   }
 }
 
@@ -239,6 +254,6 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
       }),
     };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to calculate route PDA" };
+    return { ok: false, error: actionErrorMessage(error, "Unable to calculate route PDA") };
   }
 }

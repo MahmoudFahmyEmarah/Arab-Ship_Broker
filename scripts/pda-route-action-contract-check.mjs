@@ -23,6 +23,9 @@ for (const source of [actions, bootstrap]) {
   assert.match(source, /loadCargoViews\(\{ mine: true \}\)/);
 }
 assert.match(actions, /export async function previewPdaRoute/);
+assert.match(actions, /"issues" in error/);
+assert.match(actions, /messages\.join\("; "\)/);
+assert.match(actions, /actionErrorMessage\(error, "Unable to calculate route PDA"\)/);
 assert.match(actions, /requireRouteSelections\(input\.selection\)/);
 assert.match(actions, /requireVerifiedPorts\(supabase/);
 assert.match(actions, /authoritativeVesselFacts/);
