@@ -47,6 +47,9 @@ drop function if exists public.fn_fixture_terminal(text);
 
 -- ── reads (20260923202000) ──────────────────────────────────────────────────
 drop function if exists public.sweep_fixture_proposal_lapses(integer);
+drop trigger if exists trg_fixture_events_notify on public.fixture_events;
+drop function if exists public.fn_fixture_notify_project();
+drop function if exists public.fn_fixture_notify_recipients(uuid, text[], boolean, uuid);
 drop function if exists public.admin_fixture_access_log(uuid, integer);
 drop function if exists public.list_fixture_rooms(text[], integer);
 drop function if exists public.get_fixture_room(uuid, integer);

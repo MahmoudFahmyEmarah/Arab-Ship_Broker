@@ -643,3 +643,27 @@ projector will call once the shared notification core exists (O2C-009).
 | `scripts/fixture-room-check.ts` | 242 passed, 0 failed (7 new: notification rules, including no organisation name, vessel name or IMO in any title, body or link) |
 | production build | exit 0 |
 | `fixture-room.spec.ts` (two-browser) + `fixture-room-responsive.spec.ts` | **9 passed** (9.5 min) |
+
+## 16 · Notification projector, built in parallel with the shared core (28 Sep 2026)
+
+`20260923205000_fixture_room_notifications.sql` adds an AFTER INSERT trigger
+on `fixture_events` that turns each notifiable event into one notification
+per recipient through the shared core's `fn_notification_enqueue` (Codex,
+`feature/shared-fixture-services`, not yet composed). The core owns storage,
+preferences, digest vs instant email, retries and the bell; the projector
+owns who hears, how urgently and in what words, mirroring
+`lib/fixture-room/notify-model.ts`. It is a no-op while the core is absent,
+never fails a negotiation command (own sub-transaction, warning only), never
+notifies the actor, skips side- and mediator-private messages, and reads no
+name, email, phone, vessel name or identifier.
+
+Test setup: the core's migration was applied to the private `asb_fixture`
+database only (Codex's file, read-only; the shared `postgres` database has
+no core).
+
+| Gate | Result |
+|---|---|
+| harness on `asb_fixture` with the core installed | OK: 6 migrations, 8 suites, DOWN, identical fingerprint, residue 0, re-applied (30 s) |
+| `fixture_notify_smoke` with the core | N1 invited owner notified, actor not; N2 acceptance reaches the other side; N3 an offer with validity is urgent, deadlined, deep-linked; N4 side-private messages notify no one; N5 no organisation, vessel, IMO, email or private text in any notification |
+| same suite with the core dropped (rolled back) | N0 no-op, the room still opens |
+| `scripts/fixture-room-check.ts` | 251 passed, 0 failed (9 new: event parity SQL ↔ TS, no-op guard, failure isolation, no self-notification, private messages, no identity columns, dedupe key, DOWN, harness) |

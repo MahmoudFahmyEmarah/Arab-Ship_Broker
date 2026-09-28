@@ -305,7 +305,7 @@ ok(/grant execute on function public\.submit_fixture_proposal\([^)]*\) to authen
 ok(/UPGRADE REGRESSION \(C2O-003\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite names X2 as the upgrade regression (original 203000, then 204000 alone)");
 ok(/drop function if exists public\.sweep_fixture_proposal_lapses\(integer\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops the sweep");
 const harnessSh = read("scripts/fixture-room-harness.sh");
-ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
+ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry( notify)?; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
 ok(!/40001/.test(sweepCode) && !/(pda_|tariff)/.test(sweepCode) && !/update public\.fixture_(proposals|terms)/.test(sweepFnCode), "the sweep raises no 40001, touches no PDA object and rewrites no proposal or term");
 ok(/X1 ok|X5 ok/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")) && /has_function_privilege\('authenticated', 'public\.sweep_fixture_proposal_lapses\(integer\)', 'execute'\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite covers the sweep and proves the member cannot execute it");
 
@@ -365,4 +365,22 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(notificationFor("term.referred", ctx)!.audience === "mediator" && notificationFor("room.fixed", ctx)!.audience === "all", "referrals reach the mediator; outcomes reach everyone");
   ok(notificationFor("term.held", ctx) === null && notificationFor("recap.acknowledged", ctx) === null, "routine bookkeeping events notify no one");
   ok(notificationKey(42, "u1", "email") === "fixture:42:u1:email" && notificationKey(42, "u1", "email") !== notificationKey(42, "u1", "in_app"), "one delivery per event, recipient and channel");
+}
+
+// ── Phase 1.1 · notification projector (20260923205000) ─────────────────────────
+{
+  const proj = read("supabase/migrations/20260923205000_fixture_room_notifications.sql");
+  const projCode = proj.split(/\r?\n/).filter((l) => !/^\s*--/.test(l)).join("\n");
+  const sqlTypes = [...projCode.matchAll(/when '([a-z_.]+)' then/g)].map((m) => m[1]).filter((t) => t.includes(".")).sort();
+  const tsTypes = [...read("lib/fixture-room/notify-model.ts").matchAll(/case "([a-z_.]+)":/g)].map((m) => m[1]).sort();
+  ok(sqlTypes.length >= 15 && JSON.stringify(sqlTypes) === JSON.stringify(tsTypes), `the projector and notify-model.ts cover the same events (${sqlTypes.length})`);
+  ok(/to_regprocedure\('public\.fn_notification_enqueue\(/.test(projCode) && /if v_enqueue is null then return new; end if;/.test(projCode), "the projector is a no-op while the shared core is absent");
+  ok(/exception when others then\s*raise warning/.test(projCode), "a notification failure can never roll back a negotiation command");
+  ok(/continue when v_recipient = v_actor_user;/.test(projCode), "nobody is notified of their own move");
+  ok(/if coalesce\(p->>'visibility', 'room'\) <> 'room' then return new; end if;/.test(projCode), "side- and mediator-private messages notify no one");
+  ok(!/organizations\.name|o\.name|full_name|\.email|phone|vessel_name|imo_number|contact_id/.test(projCode.replace(/'[^']*'/g, "''")), "the projector reads no organisation name, person, email, phone, vessel name or identifier");
+  ok(/'fixture:' \|\| new\.id::text/.test(projCode), "one notification per event and recipient (dedupe key fixture:<event id>)");
+  const down = read("supabase/rollback/20260923_fixture_room_down.sql");
+  ok(/drop trigger if exists trg_fixture_events_notify/.test(down) && /drop function if exists public\.fn_fixture_notify_project\(\)/.test(down) && /drop function if exists public\.fn_fixture_notify_recipients\(uuid, text\[\], boolean, uuid\)/.test(down), "the DOWN drops the projector");
+  ok(/20260923205000_fixture_room_notifications\.sql/.test(read("scripts/fixture-room-harness.sh")) && /\[notify\]="FIXTURE NOTIFY SMOKE"/.test(read("scripts/fixture-room-harness.sh")), "the harness applies the projector and runs the notify suite");
 }
