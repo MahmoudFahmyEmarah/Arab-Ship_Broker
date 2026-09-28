@@ -14,6 +14,9 @@ async function run(req: NextRequest) {
   }
 
   const client = getSupabaseAdminClient();
+  // Leave 15 seconds for the claim settlement and job-run finalisation inside
+  // the platform's 60-second function limit.
+  const deadlineAt = Date.now() + 45_000;
   try {
     const { result, finalization } = await withJobRunStrict(
       client,
@@ -21,12 +24,13 @@ async function run(req: NextRequest) {
       { trigger: cronTrigger(req.headers), retries: 2 },
       async () => {
         const dispatch = await dispatchNotificationDeliveries(client, {
-          // Two sequential SMTP attempts remain inside the 60-second route
-          // budget even when the transport reaches its socket timeout.
-          limit: 2,
+          // One bounded SMTP attempt per invocation. Claiming more would lease
+          // work that cannot safely finish before the route deadline.
+          limit: 1,
           leaseSeconds: 180,
           maxAttempts: 8,
           siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? null,
+          deadlineAt,
         });
         return { result: dispatch, rows: dispatch.sent, meta: { ...dispatch } };
       },

@@ -26,7 +26,15 @@ create table public.notifications (
                     check (importance in ('urgent', 'normal', 'info')),
   title             text not null check (char_length(title) between 1 and 160),
   body              text not null check (char_length(body) between 1 and 1200),
-  href              text check (href is null or (left(href, 1) = '/' and left(href, 2) <> '//' and char_length(href) <= 500)),
+  href              text check (
+                      href is null or (
+                        left(href, 1) = '/'
+                        and left(href, 2) <> '//'
+                        and position(chr(92) in href) = 0
+                        and href !~ '[[:cntrl:]]'
+                        and char_length(href) <= 500
+                      )
+                    ),
   payload           jsonb not null default '{}'::jsonb
                     check (jsonb_typeof(payload) = 'object' and octet_length(payload::text) <= 16384),
   in_app_visible    boolean not null default true,
@@ -72,14 +80,39 @@ alter table public.notification_deliveries enable row level security;
 revoke all on table public.notification_preferences from public, anon, authenticated;
 revoke all on table public.notifications from public, anon, authenticated;
 revoke all on table public.notification_deliveries from public, anon, authenticated;
-grant select, insert, update, delete on table public.notification_preferences to service_role;
-grant select, insert, update, delete on table public.notifications to service_role;
-grant select, insert, update, delete on table public.notification_deliveries to service_role;
+revoke all on table public.notification_preferences from service_role;
+revoke all on table public.notifications from service_role;
+revoke all on table public.notification_deliveries from service_role;
+-- The dispatcher resolves immutable render snapshots after it claims a lease.
+-- All writes, including service/projector writes, stay behind the RPCs below.
+grant select on table public.notifications to service_role;
 
 comment on table public.notifications is
   'Durable member notifications. Payloads are render-ready masking-safe snapshots; direct member table access is forbidden.';
 comment on table public.notification_deliveries is
   'Leased at-least-once external deliveries. Recipient addresses are resolved at send time and are not persisted here.';
+
+create or replace function public.fn_notification_snapshot_guard()
+returns trigger
+language plpgsql
+set search_path to ''
+as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception using errcode = '42501', message = 'NTF_IMMUTABLE: notification snapshots cannot be deleted';
+  end if;
+  if (to_jsonb(new) - 'read_at') is distinct from (to_jsonb(old) - 'read_at')
+     or old.read_at is not null
+     or new.read_at is null then
+    raise exception using errcode = '42501', message = 'NTF_IMMUTABLE: only the first read timestamp may change';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger notifications_snapshot_guard
+before update or delete on public.notifications
+for each row execute function public.fn_notification_snapshot_guard();
 
 create or replace function public.fn_notification_actor()
 returns uuid
@@ -111,7 +144,6 @@ returns table (
   title text,
   body text,
   href text,
-  payload jsonb,
   read_at timestamptz,
   expires_at timestamptz,
   created_at timestamptz
@@ -126,7 +158,7 @@ declare
   v_limit integer := greatest(1, least(coalesce(p_limit, 30), 100));
 begin
   return query
-  select n.id, n.kind, n.importance, n.title, n.body, n.href, n.payload,
+  select n.id, n.kind, n.importance, n.title, n.body, n.href,
          n.read_at, n.expires_at, n.created_at
     from public.notifications n
    where n.recipient_user_id = v_actor
@@ -135,6 +167,26 @@ begin
      and (p_before is null or n.created_at < p_before)
    order by n.created_at desc, n.id desc
    limit v_limit;
+end;
+$$;
+
+create or replace function public.mark_all_my_notifications_read()
+returns integer
+language plpgsql
+security definer
+set search_path to ''
+as $$
+declare
+  v_actor uuid := public.fn_notification_actor();
+  v_count integer;
+begin
+  update public.notifications n
+     set read_at = now()
+   where n.recipient_user_id = v_actor
+     and n.in_app_visible
+     and n.read_at is null;
+  get diagnostics v_count = row_count;
+  return v_count;
 end;
 $$;
 
@@ -409,6 +461,7 @@ $$;
 revoke all on function public.fn_notification_actor() from public, anon, authenticated;
 revoke all on function public.list_my_notifications(integer, timestamptz) from public, anon, authenticated;
 revoke all on function public.mark_notifications_read(uuid[]) from public, anon, authenticated;
+revoke all on function public.mark_all_my_notifications_read() from public, anon, authenticated;
 revoke all on function public.notification_badge() from public, anon, authenticated;
 revoke all on function public.set_notification_preferences(boolean, text, integer) from public, anon, authenticated;
 revoke all on function public.fn_notification_enqueue(uuid, text, text, text, text, text, text, jsonb, boolean, timestamptz, timestamptz) from public, anon, authenticated;
@@ -417,6 +470,7 @@ revoke all on function public.fn_notification_delivery_settle(uuid, uuid, boolea
 
 grant execute on function public.list_my_notifications(integer, timestamptz) to authenticated;
 grant execute on function public.mark_notifications_read(uuid[]) to authenticated;
+grant execute on function public.mark_all_my_notifications_read() to authenticated;
 grant execute on function public.notification_badge() to authenticated;
 grant execute on function public.set_notification_preferences(boolean, text, integer) to authenticated;
 grant execute on function public.fn_notification_enqueue(uuid, text, text, text, text, text, text, jsonb, boolean, timestamptz, timestamptz) to service_role;

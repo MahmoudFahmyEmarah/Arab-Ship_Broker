@@ -46,6 +46,7 @@ declare
   n2 uuid;
   n3 uuid;
   n4 uuid;
+  n5 uuid;
   d public.notification_deliveries%rowtype;
   first_token uuid;
   n integer;
@@ -67,10 +68,39 @@ begin
   if (select title from public.notifications where id = n1) <> 'New fixture proposal' then
     raise exception 'N1: replay mutated the original snapshot';
   end if;
+  begin
+    update public.notifications set title = 'Mutated outside the read-state RPC' where id = n1;
+    raise exception 'N1: immutable snapshot accepted a title mutation';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.notifications where id = n1;
+    raise exception 'N1: immutable snapshot accepted a delete';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.fn_notification_enqueue(
+      u1, 'fixture.link', 'fixture/room-1/unsafe-link', 'Unsafe link',
+      'This href must be rejected.', '/\evil.example'
+    );
+    raise exception 'N1: backslash href escaped the internal-link boundary';
+  exception when check_violation then null;
+  end;
+
+  execute 'set local role service_role';
+  refused := false;
+  begin
+    update public.notifications set read_at = now() where id = n1;
+  exception when insufficient_privilege then
+    refused := true;
+  end;
+  if not refused then raise exception 'N1: service role bypassed the read-state RPC'; end if;
+  execute 'reset role';
 
   perform pg_temp.ntf_as(u1);
   if public.notification_badge() <> 1 then raise exception 'N2: recipient badge'; end if;
   if (select count(*) from public.list_my_notifications(30, null)) <> 1 then raise exception 'N2: recipient feed'; end if;
+  refused := false;
   begin
     perform 1 from public.notifications limit 1;
   exception when insufficient_privilege then
@@ -83,6 +113,16 @@ begin
   if public.notification_badge() <> 0 then
     raise exception 'N2: badge did not observe read state';
   end if;
+  perform pg_temp.ntf_owner();
+  n5 := public.fn_notification_enqueue(
+    u1, 'fixture.read-all', 'fixture/room-1/read-all', 'Read all notice',
+    'This item exercises the complete-feed read command.', null, 'info', '{}'::jsonb, false
+  );
+  perform pg_temp.ntf_as(u1);
+  if public.notification_badge() <> 1 or public.mark_all_my_notifications_read() <> 1 then
+    raise exception 'N2: mark-all did not update the complete unread feed';
+  end if;
+  if public.notification_badge() <> 0 then raise exception 'N2: mark-all badge remained unread'; end if;
 
   perform pg_temp.ntf_as(u2);
   if public.notification_badge() <> 0 then raise exception 'N3: cross-member badge leak'; end if;

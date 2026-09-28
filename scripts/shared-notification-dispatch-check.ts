@@ -1,12 +1,38 @@
 import assert from "node:assert/strict";
 import {
   buildNotificationMail,
+  dispatchNotificationDeliveries,
   processNotificationClaims,
   type DeliveryTransport,
   type NotificationClaim,
   type NotificationRecipient,
   type NotificationSnapshot,
 } from "../lib/notifications/dispatch";
+
+type SmtpConfigResult = {
+  data: { smtp_host: string | null; smtp_port: number | null; smtp_user: string | null; from_name: string | null } | null;
+  error: { message: string } | null;
+};
+
+function smtpBoundaryClient(
+  config: SmtpConfigResult,
+  secret: { data: string | null; error: { message: string } | null },
+): Parameters<typeof dispatchNotificationDeliveries>[0] {
+  type Builder = {
+    select: (columns: string) => Builder;
+    eq: (column: string, value: number) => Builder;
+    maybeSingle: () => Promise<SmtpConfigResult>;
+  };
+  const builder: Builder = {
+    select: () => builder,
+    eq: () => builder,
+    maybeSingle: async () => config,
+  };
+  return {
+    from: () => builder,
+    rpc: async () => secret,
+  } as unknown as Parameters<typeof dispatchNotificationDeliveries>[0];
+}
 
 async function main() {
 const claims: NotificationClaim[] = [
@@ -69,6 +95,59 @@ assert.match(mail.html, /A &lt;Broker&gt;/);
 assert.match(mail.html, /https:\/\/portal\.example\.test\/dashboard\/fixture-room\/r1/);
 assert.doesNotMatch(mail.html, /<Broker>/);
 assert.equal(mail.messageId, "<asb-notification-c1@baddomainscript>");
+
+const unsafe = buildNotificationMail(
+  claims[0],
+  { ...notifications.get("n1")!, href: "/\\evil.example" },
+  recipients.get("u1")!,
+  { siteUrl: "https://portal.example.test", senderDomain: "arabshipbroker.com" },
+);
+assert.doesNotMatch(unsafe.html, /evil\.example/);
+
+let slowClosed = false;
+const slowTransport: DeliveryTransport = {
+  async send() { await new Promise((resolve) => setTimeout(resolve, 100)); },
+  close() { slowClosed = true; },
+};
+const timeoutSettles: Array<{ ok: boolean; error: string | null }> = [];
+const timed = await processNotificationClaims(
+  [claims[0]], notifications, recipients, slowTransport,
+  async (_claim, ok, error) => { timeoutSettles.push({ ok, error }); return true; },
+  { siteUrl: null, senderDomain: "arabshipbroker.com", maxAttempts: 8, deadlineAt: Date.now() + 10 },
+);
+slowTransport.close();
+assert.equal(slowClosed, true);
+assert.deepEqual(timed, { claimed: 1, sent: 0, retried: 1, failed: 0, lost: 0 });
+assert.equal(timeoutSettles[0]?.ok, false);
+assert.match(timeoutSettles[0]?.error ?? "", /invocation budget/);
+
+await assert.rejects(
+  dispatchNotificationDeliveries(
+    smtpBoundaryClient(
+      { data: null, error: { message: "missing config table" } },
+      { data: "unused", error: null },
+    ),
+  ),
+  /SMTP configuration unavailable/,
+);
+await assert.rejects(
+  dispatchNotificationDeliveries(
+    smtpBoundaryClient(
+      { data: { smtp_host: "smtp.example.test", smtp_port: 465, smtp_user: "alerts@example.test", from_name: "ASB" }, error: null },
+      { data: null, error: null },
+    ),
+  ),
+  /SMTP password unavailable/,
+);
+await assert.rejects(
+  dispatchNotificationDeliveries(
+    smtpBoundaryClient(
+      { data: { smtp_host: null, smtp_port: 465, smtp_user: null, from_name: "ASB" }, error: null },
+      { data: "secret", error: null },
+    ),
+  ),
+  /SMTP is not configured/,
+);
 
 console.log("SHARED NOTIFICATION DISPATCH: ALL ASSERTIONS PASSED");
 }

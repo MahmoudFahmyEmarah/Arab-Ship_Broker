@@ -18,7 +18,7 @@
    Dashboard header's upper-right chrome slot without changing page geometry. */
 .portal-notification { position: relative; z-index: 70; flex: none; }
 .portal-notification__trigger {
-  position: relative; width: 34px; height: 34px; display: inline-flex;
+  position: relative; width: 44px; height: 44px; display: inline-flex;
   align-items: center; justify-content: center; border: 1px solid #d8e2eb;
   border-radius: 8px; background: rgba(255,255,255,.96); color: var(--asb-navy);
   box-shadow: 0 3px 14px rgba(13,47,80,.12); cursor: pointer;
@@ -31,7 +31,7 @@
   color: #fff; font-size: 8px; font-weight: 700; line-height: 13px; text-align: center;
 }
 .portal-notification__panel {
-  position: absolute; top: 42px; right: 0; width: min(380px, calc(100vw - 24px));
+  position: absolute; top: 50px; right: 0; width: min(380px, calc(100vw - 24px));
   overflow: hidden; border: 1px solid #d8e2eb; border-radius: 10px; background: #fff;
   box-shadow: 0 18px 50px rgba(13,47,80,.2);
 }
@@ -39,28 +39,28 @@
 .portal-notification__head > div { display: flex; flex-direction: column; min-width: 0; }
 .portal-notification__head strong { color: var(--asb-navy); font-size: 13px; }
 .portal-notification__head span { color: var(--asb-gray-500); font-size: 10px; }
-.portal-notification__head button { border: 0; background: transparent; color: var(--asb-blue); font-size: 10px; font-weight: 600; cursor: pointer; }
+.portal-notification__head button { min-height: 44px; padding: 0 8px; border: 0; background: transparent; color: var(--asb-blue); font-size: 12px; font-weight: 600; cursor: pointer; }
 .portal-notification__head button:disabled { color: var(--asb-gray-400); cursor: default; }
 .portal-notification__list { max-height: min(430px, calc(100vh - 150px)); overflow-y: auto; }
 .portal-notification__item {
-  width: 100%; display: grid; grid-template-columns: 8px minmax(0,1fr) auto; gap: 9px;
+  width: 100%; min-height: 44px; display: grid; grid-template-columns: 8px minmax(0,1fr) auto; gap: 9px;
   align-items: start; padding: 11px 13px; border: 0; border-bottom: 1px solid #edf2f6;
   background: #fff; color: inherit; text-align: left; text-decoration: none; cursor: pointer;
 }
 .portal-notification__item.is-unread { background: #f4f9fd; }
-.portal-notification__item:hover,
-.portal-notification__item:focus-visible { background: #eaf4fb; outline: none; }
+.portal-notification__item:hover { background: #eaf4fb; }
+.portal-notification__item:focus-visible {
+  position: relative; z-index: 1; background: #eaf4fb;
+  outline: 2px solid var(--asb-blue); outline-offset: -2px;
+}
 .portal-notification__dot { width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: #7d8fa1; }
 .portal-notification__dot.is-urgent { background: #b42318; }
 .portal-notification__dot.is-normal { background: var(--asb-blue); }
 .portal-notification__copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.portal-notification__copy strong { color: var(--asb-navy); font-size: 11px; line-height: 1.35; }
-.portal-notification__copy > span { display: -webkit-box; overflow: hidden; color: var(--asb-gray-700); font-size: 10.5px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.portal-notification__item time { color: var(--asb-gray-500); font-size: 9px; white-space: nowrap; }
+.portal-notification__copy strong { color: var(--asb-navy); font-size: 12px; line-height: 1.35; }
+.portal-notification__copy > span { display: -webkit-box; overflow: hidden; color: var(--asb-gray-700); font-size: 11px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.portal-notification__item time { color: var(--asb-gray-500); font-size: 10px; white-space: nowrap; }
 .portal-notification__state { margin: 0; padding: 28px 16px; color: var(--asb-gray-500); font-size: 11px; text-align: center; }
-.portal-notification__footer { display: block; padding: 10px 14px; color: var(--asb-blue); font-size: 10.5px; font-weight: 600; text-align: center; text-decoration: none; background: #fafcfe; }
-.portal-notification__footer:hover,
-.portal-notification__footer:focus-visible { background: #f0f6fb; outline: none; }
 
 /* asb/tokens.css — Arab ShipBroker design tokens
  * Brand: Bloomberg terminal × Lloyd's register. Sharp, dense, professional.

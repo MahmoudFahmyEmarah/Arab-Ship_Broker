@@ -64,7 +64,7 @@ function escapeHtml(value: string): string {
 }
 
 function safeAbsoluteHref(siteUrl: string | null, href: string | null): string | null {
-  if (!siteUrl || !href || !href.startsWith("/") || href.startsWith("//")) return null;
+  if (!siteUrl || !href || !href.startsWith("/") || href.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(href)) return null;
   try {
     const base = new URL(siteUrl);
     const target = new URL(href, base);
@@ -111,7 +111,7 @@ export async function processNotificationClaims(
   recipients: Map<string, NotificationRecipient>,
   transport: DeliveryTransport,
   settle: SettleDelivery,
-  options: { siteUrl: string | null; senderDomain: string; maxAttempts: number },
+  options: { siteUrl: string | null; senderDomain: string; maxAttempts: number; deadlineAt?: number },
 ): Promise<NotificationDispatchResult> {
   const result: NotificationDispatchResult = {
     claimed: claims.length,
@@ -131,7 +131,24 @@ export async function processNotificationClaims(
 
     if (!failure && notification && recipient) {
       try {
-        await transport.send(buildNotificationMail(claim, notification, recipient, options));
+        const mail = buildNotificationMail(claim, notification, recipient, options);
+        if (options.deadlineAt == null) {
+          await transport.send(mail);
+        } else {
+          const remaining = options.deadlineAt - Date.now();
+          if (remaining <= 0) throw new Error("notification dispatch deadline reached before SMTP send");
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              transport.send(mail),
+              new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error("notification SMTP attempt exceeded the invocation budget")), remaining);
+              }),
+            ]);
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
+        }
         if (await settle(claim, true, null)) result.sent += 1;
         else result.lost += 1;
         continue;
@@ -153,7 +170,11 @@ export async function processNotificationClaims(
 }
 
 function defaultTransport(auth: SmtpAuth): DeliveryTransport {
-  const transport = makeTransport(auth);
+  const transport = makeTransport(auth, {
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 15_000,
+  });
   return {
     async send(mail) {
       await transport.sendMail({
@@ -189,6 +210,7 @@ export async function dispatchNotificationDeliveries(
     leaseSeconds?: number;
     maxAttempts?: number;
     siteUrl?: string | null;
+    deadlineAt?: number;
     transportFactory?: (auth: SmtpAuth) => DeliveryTransport;
   } = {},
 ): Promise<NotificationDispatchResult> {
@@ -258,6 +280,7 @@ export async function dispatchNotificationDeliveries(
         siteUrl: options.siteUrl ?? null,
         senderDomain: smtp.user.split("@")[1] ?? "arabshipbroker.com",
         maxAttempts,
+        deadlineAt: options.deadlineAt,
       },
     );
   } finally {
