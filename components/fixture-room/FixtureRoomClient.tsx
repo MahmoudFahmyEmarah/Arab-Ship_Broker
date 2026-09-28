@@ -21,7 +21,6 @@ import { listingSyncNotice } from "@/lib/fixture-room/listing-sync";
 import { GestureKeys, UNCERTAIN_MESSAGE, runGesture, useNow, useRoomVersionPoll } from "@/lib/fixture-room/client";
 import { countdown, relativeTime } from "@/lib/fixture-room/format";
 import { sidePresence } from "@/lib/fixture-room/presence";
-import { buildDealSummary, downloadText } from "@/lib/fixture-room/summary";
 import { BunkerTicker } from "@/components/portal/BunkerTicker";
 import {
   acceptFixtureProposalAction, acknowledgeFixtureRecapAction, addFixtureSubjectAction, agreeFixtureDisclosureAction, closeFixtureRoomAction,
@@ -233,10 +232,6 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   if (cargo.qty_max_mt != null) pdaParams.set("mt", String(cargo.qty_max_mt));
   const pdaHref = `/dashboard/ports-da?${pdaParams.toString()}`;
 
-  const exportSummary = () => {
-    downloadText(`Fixture-${room.ref}-summary.txt`, buildDealSummary(view));
-    setAnnounce("Deal summary exported.");
-  };
 
   return (
     <div className="nr">
@@ -279,7 +274,7 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
             )}
             <button type="button" className={`nr-newfix is-icon${bunker ? " is-on" : ""}`} onClick={() => setBunker((b) => !b)} title="Bunker prices" aria-label="Bunker prices" aria-pressed={bunker}><IcBarrel /></button>
             <button type="button" className={`nr-newfix is-icon${soundOn ? " is-on" : ""}`} onClick={toggleSound} title={soundOn ? "Sound on for incoming moves" : "Sound muted"} aria-label="Toggle sound" aria-pressed={soundOn}>{soundOn ? <IcVolume /> : <IcVolumeOff />}</button>
-            <button type="button" className="nr-newfix is-icon" onClick={exportSummary} title="Export deal summary" aria-label="Export deal summary" data-testid="export-summary"><IcDownload /></button>
+            <Link href={`/dashboard/fixture-room/${room.id}/summary`} className="nr-newfix is-icon" title="Negotiation summary (print or save as PDF)" aria-label="Negotiation summary" data-testid="export-summary"><IcDownload /></Link>
             <Link href={pdaHref} className="nr-newfix is-icon" title="Open both port calls in the Ports Cost Estimator" aria-label="Ports Cost Estimator"><IcAnchor /></Link>
             <button type="button" className="nr-newfix is-icon" onClick={() => setRecapOpen(true)} title="Send recap to both principals" aria-label="Send recap" data-testid="open-recap-composer"><IcMail /></button>
             <Link href={`/dashboard/fixture-room/${room.id}/recap`} className="nr-newfix is-icon" title="Printable recap" aria-label="Printable recap" data-testid="open-recap">▤</Link>

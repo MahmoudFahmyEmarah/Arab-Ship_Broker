@@ -155,8 +155,14 @@ test("the printable recap renders the published version", async ({ browser, base
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
   await page.goto(`${roomUrl}/recap`);
   await dismissOverlays(page);
-  await expect(page.getByTestId("recap-print")).toContainText("Fixture recap");
+  await expect(page.getByTestId("recap-print")).toContainText(/fixture recap/i);
   await expect(page.getByTestId("recap-print")).toContainText("$26.25/MT");
   await expect(page.getByTestId("recap-print")).toContainText(/withheld/);
+  // the negotiation summary: every round, masked, from the same read model
+  await page.goto(`${roomUrl}/summary`);
+  await expect(page.getByTestId("summary-print")).toContainText(/negotiation summary/i);
+  await expect(page.getByTestId("summary-print")).toContainText("$24.50/MT");
+  await expect(page.getByTestId("summary-print")).toContainText("$26.25/MT");
+  await expect(page.getByTestId("summary-print")).not.toContainText(/E2E Owners/);
   await context.close();
 });

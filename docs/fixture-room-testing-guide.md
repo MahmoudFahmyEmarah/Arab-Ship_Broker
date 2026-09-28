@@ -667,3 +667,21 @@ no core).
 | `fixture_notify_smoke` with the core | N1 invited owner notified, actor not; N2 acceptance reaches the other side; N3 an offer with validity is urgent, deadlined, deep-linked; N4 side-private messages notify no one; N5 no organisation, vessel, IMO, email or private text in any notification |
 | same suite with the core dropped (rolled back) | N0 no-op, the room still opens |
 | `scripts/fixture-room-check.ts` | 251 passed, 0 failed (9 new: event parity SQL ↔ TS, no-op guard, failure isolation, no self-notification, private messages, no identity columns, dedupe key, DOWN, harness) |
+
+## 17 · Printable documents: Fixture Recap and Negotiation Summary (28 Sep 2026)
+
+`lib/fixture-room/documents.ts` builds both documents as one structured model
+(title, meta block, tables, footer, file name) from the requester's masked
+read model; `FixtureDocumentView` renders it with a letterhead and A4 print
+styles, and "Save as PDF" uses the browser's print dialog. The recap page
+(`/[id]/recap`) now renders a published version this way; the new summary page
+(`/[id]/summary`, the header's download icon) lists every term's rounds with
+time, side, move, figure and note. The server PDF (`@react-pdf/renderer`, on
+Codex's shared branch) will render the same model; nothing else changes.
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 256 passed, 0 failed (5 new: one model, no identity fields, masking kept, recap hash, tokens only) |
+| `tsc` / `eslint` | 0 / clean |
+| production build | exit 0 |
+| `fixture-room.spec.ts` (incl. summary shows $24.50 and $26.25, no counterparty name) + `fixture-room-a11y.spec.ts` | 7 passed (6.9 min) |

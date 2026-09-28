@@ -384,3 +384,13 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/drop trigger if exists trg_fixture_events_notify/.test(down) && /drop function if exists public\.fn_fixture_notify_project\(\)/.test(down) && /drop function if exists public\.fn_fixture_notify_recipients\(uuid, text\[\], boolean, uuid\)/.test(down), "the DOWN drops the projector");
   ok(/20260923205000_fixture_room_notifications\.sql/.test(read("scripts/fixture-room-harness.sh")) && /\[notify\]="FIXTURE NOTIFY SMOKE"/.test(read("scripts/fixture-room-harness.sh")), "the harness applies the projector and runs the notify suite");
 }
+
+// -- Phase 1.1 . printable documents (one model; the server PDF reuses it) --
+{
+  const docs = read("lib/fixture-room/documents.ts").replace(/\/\/.*$/gm, "");
+  ok(/export function recapDocument\(/.test(docs) && /export function summaryDocument\(/.test(docs), "the Fixture Recap and Negotiation Summary share one document model");
+  ok(!/email|phone|userId|orgId|contactId|imo_number|supabase|fetch\(/.test(docs), "documents read only the masked view: no email, phone, ids, IMO or data access of their own");
+  ok(/p\.name \?\? "withheld · via Arab ShipBroker"/.test(docs) && /vesselIdentityMasked \? `withheld/.test(docs), "documents keep counterparty and vessel masking");
+  ok(/contentHash/.test(docs) && /only a published recap version records the fixture/.test(docs), "the recap carries its content hash; the summary says it is not a recap");
+  ok(!/#[0-9a-fA-F]{3,8}\b/.test(read("components/fixture-room/fixture-room.css").replace(/\/\*[\s\S]*?\*\//g, "")), "the document styles use tokens only");
+}
