@@ -53,6 +53,23 @@ begin
   if n <> 0 then raise exception 'N4: a side-private message must notify no one, got %', n; end if;
   raise notice 'N4 ok: side-private messages stay private';
 
+  -- N6 · a hostile stored label: even if a party's display label named the organisation,
+  -- the notification says "Owner side" (the label is derived from the side, C2O-010)
+  set local session_replication_role = replica;
+  update public.fixture_parties set display_label = 'Seed Owners SA <desk@seed-owners.test>'
+   where room_id = v_room and side = 'vessel' and capacity = 'principal';
+  set local session_replication_role = origin;
+  perform pg_temp.fx_as('u_ow1');
+  v := public.post_fixture_message(v_room, 'ready when you are', 'note', 'room', null, pg_temp.fx_ver(v_room), 'ntf-hostile');
+  perform pg_temp.fx_owner();
+  select x.body into t from public.notifications x
+   where x.recipient_user_id = pg_temp.fx_id('u_ch1') and x.kind = 'fixture.message.posted' and x.payload->>'roomId' = v_room::text;
+  if t is null or t not like 'Owner side %' or t ~* 'seed owners|seed-owners' then
+    raise exception 'N6: the actor must be named "Owner side", got %', t; end if;
+  if (select importance from public.notifications x where x.recipient_user_id = pg_temp.fx_id('u_ch1') and x.kind = 'fixture.message.posted' and x.payload->>'roomId' = v_room::text) <> 'info' then
+    raise exception 'N6: an ordinary room message is info'; end if;
+  raise notice 'N6 ok: a hostile stored label never reaches a notification; the actor is named by its side';
+
   -- N5 · masking: no organisation name, vessel name, IMO or email in any title, body or link
   select string_agg(x.title || ' ' || x.body || ' ' || coalesce(x.href, '') || ' ' || x.payload::text, E'\n') into t
     from public.notifications x where x.payload->>'roomId' = v_room::text;

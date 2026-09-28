@@ -19,7 +19,7 @@
  *      idempotency_key and an explicit grant; no internal helper is granted; the
  *      excluded PDA objects appear nowhere in the Fixture migrations
  */
-import { notificationFor, lapseWarning, notificationKey } from "../lib/fixture-room/notify-model";
+import { notificationFor, lapseWarning, notificationKey, maskedActorLabel, notificationPayload, NOTIFICATION_EXPIRES_AT } from "../lib/fixture-room/notify-model";
 import { newSince, termsTouched } from "../lib/fixture-room/last-seen";
 import fs from "node:fs";
 import path from "node:path";
@@ -354,18 +354,34 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
 
 // ── Phase 1.1 · notification rules (pure; the shared core stores and delivers) ─
 {
-  const ctx = { roomId: "00000000-0000-4000-8000-000000000001", roomRef: "FX-2026-00001", actorLabel: "Owner side", actorSide: "vessel" as const,
-    payload: { kind: "offer", displayValue: "$26.25/MT", termLabel: "Freight & terms", termCode: "freight", expiresAt: "2026-09-28T12:00:00Z", orgName: "Secret Owners SA", vesselName: "MV HIDDEN", imo: "9876543" } };
+  const ctx = { roomId: "00000000-0000-4000-8000-000000000001", roomRef: "FX-2026-00001", actor: { side: "vessel" as const, isPlatform: false },
+    payload: { kind: "offer", displayValue: "$26.25/MT", termLabel: "Freight & terms", termCode: "freight", expiresAt: "2026-09-28T12:00:00Z", orgName: "Secret Owners SA", vesselName: "MV HIDDEN", imo: "9876543", reason: "call Tasos on +30 690", actorLabel: "Secret Owners SA" } };
   const offer = notificationFor("proposal.submitted", ctx);
   ok(!!offer && offer.importance === "urgent" && offer.audience === "other_side" && offer.deadlineAt === "2026-09-28T12:00:00Z", "an offer with a validity window is urgent, for the other side, with its deadline");
   const all = ["party.invited", "party.accepted", "proposal.submitted", "proposal.lapsed", "term.agreed", "term.reopened", "term.referred", "room.fixed_on_subjects", "subject.lifted", "subject.failed", "room.fixed", "recap.published", "room.counterparty_disclosed", "message.posted", "room.closed"] as const;
-  const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n") + lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }).body;
-  ok(!/Secret Owners|MV HIDDEN|9876543/.test(texts), "no notification text or link carries an organisation name, vessel name or IMO, even when the payload holds them");
+  const early = new Date("2026-09-28T11:57:00Z");
+  const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n") + (lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, early)?.body ?? "");
+  ok(!/Secret Owners|MV HIDDEN|9876543|Tasos|\+30 690/.test(texts), "no notification text or link carries an organisation, vessel, IMO or a member's free text, even when the payload holds them (hostile actorLabel ignored)");
+  // C2O-010 item 3: the actor label is derived from the governed side, never taken from the caller
+  ok(maskedActorLabel({ side: "cargo", isPlatform: false }) === "Charterer side" && maskedActorLabel({ side: "vessel", isPlatform: false }) === "Owner side"
+     && maskedActorLabel({ side: "mediator", isPlatform: false }) === "Arab ShipBroker" && maskedActorLabel({ side: "cargo", isPlatform: true }) === "Arab ShipBroker" && maskedActorLabel(null) === "Arab ShipBroker",
+     "the actor is named by one of three labels derived from its side");
+  ok(!/actorLabel/.test(read("lib/fixture-room/notify-model.ts").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")), "the model accepts no caller-supplied actor label");
+  const pl = notificationPayload(ctx, 7, "proposal.submitted", offer!);
+  ok(JSON.stringify(Object.keys(pl).sort()) === JSON.stringify(["deadlineAt", "eventSeq", "eventType", "roomId", "roomRef", "termCode"]) && !/Secret|HIDDEN|9876543|Tasos/.test(JSON.stringify(pl)), "the payload sent to the core is a whitelist, never the source event payload");
+  ok(NOTIFICATION_EXPIRES_AT === null && lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, new Date("2026-09-28T12:00:01Z")) === null, "no expiry is sent, and a delayed run never warns about a window already closed");
+  // C2O-010 item 1: importance is urgent | normal | info; the email preference decides digest
+  const kinds = new Set(all.map((t) => notificationFor(t, ctx)?.importance).filter(Boolean));
+  ok([...kinds].every((k) => k === "urgent" || k === "normal" || k === "info"), "importance is only urgent, normal or info (the shared table's check)");
   ok(notificationFor("proposal.submitted", { ...ctx, payload: { ...ctx.payload, expiresAt: null } })!.importance === "normal", "an open-ended offer is normal, not urgent");
-  ok(notificationFor("message.posted", { ...ctx, payload: { kind: "nudge" } })!.importance === "urgent" && notificationFor("message.posted", { ...ctx, payload: { kind: "note" } })!.importance === "digest", "a nudge is urgent; an ordinary note goes to the digest");
+  ok(notificationFor("message.posted", { ...ctx, payload: { kind: "nudge" } })!.importance === "urgent" && notificationFor("message.posted", { ...ctx, payload: { kind: "note" } })!.importance === "info"
+     && notificationFor("message.posted", { ...ctx, payload: { kind: "note", visibility: "side" } }) === null, "a nudge is urgent, an ordinary note is info, a private note notifies no one");
   ok(notificationFor("term.referred", ctx)!.audience === "mediator" && notificationFor("room.fixed", ctx)!.audience === "all", "referrals reach the mediator; outcomes reach everyone");
   ok(notificationFor("term.held", ctx) === null && notificationFor("recap.acknowledged", ctx) === null, "routine bookkeeping events notify no one");
-  ok(notificationKey(42, "u1", "email") === "fixture:42:u1:email" && notificationKey(42, "u1", "email") !== notificationKey(42, "u1", "in_app"), "one delivery per event, recipient and channel");
+  // C2O-010 item 2: one logical notification per event and recipient
+  ok(notificationKey(42) === "fixture:42" && notificationKey(42, "lapse-warning") === "fixture:42:lapse-warning" && !/in_app|email|channel/.test(read("lib/fixture-room/notify-model.ts").split("export function notificationKey")[1].split("\n}")[0]), "one logical notification per event (the dedupe key names no channel)");
+  const proj = read("supabase/migrations/20260923205000_fixture_room_notifications.sql");
+  ok(/when ap\.side = 'cargo' then 'Charterer side'/.test(proj) && /when ap\.side = 'vessel' then 'Owner side'/.test(proj) && !/ap\.display_label/.test(proj), "the SQL projector derives the same three labels from the side, never a stored display label");
 }
 
 // ── Phase 1.1 · notification projector (20260923205000) ─────────────────────────

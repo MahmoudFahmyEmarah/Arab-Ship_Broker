@@ -63,10 +63,15 @@ begin
   if v_enqueue is null then return new; end if;   -- shared core not installed: nothing to do
   begin
     select * into r from public.fixture_rooms where id = new.room_id;
-    select ap.side, case when ap.is_platform then 'Arab ShipBroker' else ap.display_label end
+    -- the actor is named by one of three labels derived from its governed side, never by a
+    -- stored display label (C2O-010): Charterer side, Owner side, Arab ShipBroker
+    select ap.side, case when ap.is_platform then 'Arab ShipBroker'
+                         when ap.side = 'cargo' then 'Charterer side'
+                         when ap.side = 'vessel' then 'Owner side'
+                         else 'Arab ShipBroker' end
       into v_actor_side, v_actor_label
       from public.fixture_parties ap where ap.id = coalesce(new.on_behalf_of_party_id, new.actor_party_id);
-    v_actor_label := coalesce(v_actor_label, case when new.actor_user_id is null then 'System' else 'Arab ShipBroker' end);
+    v_actor_label := coalesce(v_actor_label, 'Arab ShipBroker');
     v_href := '/dashboard/fixture-room/' || r.id::text;
     -- "the other side": the principal sides the actor is not on (both when the actor is the platform)
     v_sides := case v_actor_side when 'cargo' then array['vessel'] when 'vessel' then array['cargo'] else array['cargo', 'vessel'] end;
@@ -145,8 +150,8 @@ begin
         end if;
       when 'room.closed' then
         v_sides := array['cargo', 'vessel']; v_admins := true; v_importance := 'urgent';
-        v_title := r.ref || ': negotiation ' || coalesce(p->>'reason', 'closed');
-        v_body := v_actor_label || ' closed the room (' || coalesce(p->>'reason', 'closed') || ').';
+        v_title := r.ref || ': negotiation ' || case when p->>'reason' in ('withdrawn', 'failed', 'expired') then p->>'reason' else 'closed' end;
+        v_body := v_actor_label || ' closed the room (' || case when p->>'reason' in ('withdrawn', 'failed', 'expired') then p->>'reason' else 'closed' end || ').';
       else
         return new;
     end case;

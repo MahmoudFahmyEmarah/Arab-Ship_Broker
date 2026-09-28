@@ -5,22 +5,43 @@
 // Fixture projector calls this and writes what it returns.
 //
 // Masking is enforced here, by construction: the only identities a message
-// may carry are the masked party labels the room itself shows ("Owner side",
-// "Charterer side", "Arab ShipBroker"), the room reference, term labels and
-// display values. No person, email, phone, organisation name, vessel name
-// or identifier enters a title, body or link.
+// may carry are the three masked labels derived below from the acting
+// party's governed side ("Owner side", "Charterer side", "Arab ShipBroker"),
+// the room reference, term labels and display values. No caller-supplied
+// label is accepted (C2O-010): no person, email, phone, organisation name,
+// vessel name or identifier can enter a title, body or link.
+//
+// The shared core's contract (C2O-009/C2O-010): importance is urgent, normal
+// or info (the recipient's instant / digest / off preference schedules the
+// email, never the importance); one enqueue per event and recipient, whose
+// dedupe key carries no channel; a whitelisted payload; and no expiry, because
+// the core hides an expired notification from the bell and rejects a past one.
 import type { FixtureEventType, FixtureSide } from "./types";
 
-export type NotifyImportance = "urgent" | "normal" | "digest";
+export type NotifyImportance = "urgent" | "normal" | "info";
 export type NotifyAudience = "other_side" | "both_sides" | "mediator" | "all";
+
+/** The acting party as the ledger records it: its governed side and whether it is the platform. */
+export interface NotifyActor {
+  side: FixtureSide | "mediator" | null;
+  isPlatform: boolean;
+}
+
+/** The only three labels an outbound message may name an actor by. */
+export type MaskedActorLabel = "Charterer side" | "Owner side" | "Arab ShipBroker";
+
+export function maskedActorLabel(actor: NotifyActor | null): MaskedActorLabel {
+  if (!actor || actor.isPlatform) return "Arab ShipBroker";
+  if (actor.side === "cargo") return "Charterer side";
+  if (actor.side === "vessel") return "Owner side";
+  return "Arab ShipBroker";   // the mediator desk, or an actorless (system) event
+}
 
 export interface NotifyContext {
   roomId: string;
   roomRef: string;
-  /** The masked label of the acting party as the room renders it. */
-  actorLabel: string;
-  /** The side that acted, or null for the platform / system. */
-  actorSide: FixtureSide | null;
+  /** The acting party (null for an actorless system event); its label is derived, never passed in. */
+  actor: NotifyActor | null;
   payload: Record<string, unknown>;
 }
 
@@ -37,13 +58,15 @@ export interface NotifyRule {
 
 const str = (v: unknown) => (v == null ? "" : String(v));
 const termOf = (p: Record<string, unknown>) => str(p.termLabel || p.termCode).toLowerCase() || "a term";
+// a close reason is one of the governed values; anything else is shown as "closed"
+const closeReason = (v: unknown) => (v === "withdrawn" || v === "failed" || v === "expired" ? v : "closed");
 
 /** One rule per event type that deserves a notification; null for the rest. */
 export function notificationFor(type: FixtureEventType, ctx: NotifyContext): NotifyRule | null {
   const p = ctx.payload;
   const room = ctx.roomRef;
   const base = `/dashboard/fixture-room/${ctx.roomId}`;
-  const who = ctx.actorLabel || "The other side";
+  const who = maskedActorLabel(ctx.actor);
   switch (type) {
     case "party.invited":
       return { audience: "other_side", importance: "urgent", title: `Invitation to fixture ${room}`, body: `${who} opened a fixture room on your listing. Accept to negotiate.`, href: base, deadlineAt: null };
@@ -63,7 +86,8 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
     case "term.agreed":
       return { audience: "both_sides", importance: "normal", title: `${room}: ${termOf(p)} agreed`, body: `${termOf(p)} agreed at ${str(p.displayValue)}.`, href: base, deadlineAt: null };
     case "term.reopened":
-      return { audience: "both_sides", importance: "normal", title: `${room}: ${termOf(p)} reopened`, body: `${who} reopened ${termOf(p)}${p.reason ? ` · ${str(p.reason)}` : ""}.`, href: base, deadlineAt: null };
+      // the reason is free text a member typed: it stays in the room, never in a notification
+      return { audience: "both_sides", importance: "normal", title: `${room}: ${termOf(p)} reopened`, body: `${who} reopened ${termOf(p)}.`, href: base, deadlineAt: null };
     case "term.referred":
       return { audience: "mediator", importance: "urgent", title: `${room}: ${termOf(p)} referred to principal`, body: `${who} referred ${termOf(p)}. The item waits for a decision.`, href: base, deadlineAt: null };
     case "room.fixed_on_subjects":
@@ -79,29 +103,53 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
     case "room.counterparty_disclosed":
       return { audience: "both_sides", importance: "normal", title: `${room}: identities released`, body: `Both principals agreed to disclose. Organisation names are now shown in the room.`, href: base, deadlineAt: null };
     case "message.posted":
-      // nudges are what a principal must act on; ordinary notes go to the daily digest
+      // nudges are what a principal must act on; an ordinary note is information (the
+      // recipient's email preference decides instant, digest or none); private notes notify no one
+      if (str(p.visibility || "room") !== "room") return null;
       return p.kind === "nudge"
-        ? { audience: "other_side", importance: "urgent", title: `${room}: your answer is awaited`, body: `${who} is waiting for your answer${p.termLabel ? ` on ${termOf(p)}` : ""}.`, href: base, deadlineAt: null }
-        : { audience: "other_side", importance: "digest", title: `${room}: new message`, body: `${who} posted a message in the room.`, href: base, deadlineAt: null };
+        ? { audience: "other_side", importance: "urgent", title: `${room}: your answer is awaited`, body: `${who} is waiting for your answer.`, href: base, deadlineAt: null }
+        : { audience: "other_side", importance: "info", title: `${room}: new message`, body: `${who} posted a message in the room.`, href: base, deadlineAt: null };
     case "room.closed":
-      return { audience: "all", importance: "urgent", title: `${room}: negotiation ${str(p.reason)}`, body: `${who} closed the room (${str(p.reason)}).`, href: base, deadlineAt: null };
+      return { audience: "all", importance: "urgent", title: `${room}: negotiation ${closeReason(p.reason)}`, body: `${who} closed the room (${closeReason(p.reason)}).`, href: base, deadlineAt: null };
     default:
       return null;
   }
 }
 
-/** A lapse warning, emitted by the dispatcher two minutes before a validity window ends. */
-export function lapseWarning(ctx: NotifyContext & { expiresAt: string }): NotifyRule {
+/**
+ * A lapse warning, emitted two minutes before a validity window ends. A delayed
+ * run never warns about a window that has already closed: null once expiresAt is past.
+ */
+export function lapseWarning(ctx: NotifyContext & { expiresAt: string }, now: Date = new Date()): NotifyRule | null {
+  const ends = Date.parse(ctx.expiresAt);
+  if (Number.isNaN(ends) || ends <= now.getTime()) return null;
   const p = ctx.payload;
   return {
     audience: "other_side", importance: "urgent",
     title: `${ctx.roomRef}: ${termOf(p)} lapses in 2 minutes`,
-    body: `${ctx.actorLabel || "The other side"}'s ${str(p.displayValue)} on ${termOf(p)} lapses soon. Accept or counter before it does.`,
+    body: `${maskedActorLabel(ctx.actor)}'s ${str(p.displayValue)} on ${termOf(p)} lapses soon. Accept or counter before it does.`,
     href: `/dashboard/fixture-room/${ctx.roomId}#term-${str(p.termCode)}`, deadlineAt: ctx.expiresAt,
   };
 }
 
-/** Idempotency key for a delivery: one notification per event and recipient, whatever retries happen. */
-export function notificationKey(eventId: number, recipientUserId: string, channel: "in_app" | "email"): string {
-  return `fixture:${eventId}:${recipientUserId}:${channel}`;
+/**
+ * The dedupe key of one logical notification. The core's unique key is
+ * (recipient, dedupe key), and the core creates the email delivery itself, so
+ * the key names the event (and a variant such as the lapse warning) only:
+ * never a channel.
+ */
+export function notificationKey(eventId: number, variant?: "lapse-warning"): string {
+  return variant ? `fixture:${eventId}:${variant}` : `fixture:${eventId}`;
 }
+
+/** The only fields sent to the shared core with a notification (never the source event payload). */
+export interface NotifyPayload {
+  roomId: string; roomRef: string; eventSeq: number; eventType: string; termCode: string | null; deadlineAt: string | null;
+}
+export function notificationPayload(ctx: NotifyContext, eventSeq: number, eventType: string, rule: NotifyRule): NotifyPayload {
+  const termCode = ctx.payload.termCode == null ? null : String(ctx.payload.termCode);
+  return { roomId: ctx.roomId, roomRef: ctx.roomRef, eventSeq, eventType, termCode, deadlineAt: rule.deadlineAt };
+}
+
+/** p_expires_at for the core: always none. The deadline travels in the payload; an expired row would vanish from the bell. */
+export const NOTIFICATION_EXPIRES_AT: null = null;
