@@ -23,6 +23,24 @@ No file in `feature/fixture-room` or `feature/pda-design-alignment` is edited in
 this worktree. Composition happens only after read-only cross-audit and owner
 approval.
 
+## Implemented checkpoints
+
+The first isolated checkpoint (`014bc3a`) provides the renderer dependency,
+private bucket migration, notification/preference/delivery schema, member and
+service RPCs, rollback, and transactional behavior coverage.
+
+The second isolated checkpoint adds the authenticated manual/scheduler route,
+bounded service dispatcher, stable delivery Message-ID, masking-safe branded
+email rendering, fake-transport behavior tests, and the real member
+notification bell in the Dashboard header. The old admin-only placeholder has
+been removed. No Vercel or database schedule is added: the owner must approve
+the release trigger and frequency separately.
+
+Fixture still owns its event projector and PDF route/document. Until those are
+composed, this shared core has no source of Fixture notifications and no recap
+PDF endpoint; the UI and dispatcher therefore must not be described as a
+complete Fixture notification/PDF workflow.
+
 ## Security boundaries
 
 1. `public.notifications`, `public.notification_preferences`, and

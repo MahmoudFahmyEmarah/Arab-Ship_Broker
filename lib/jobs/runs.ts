@@ -30,6 +30,7 @@ export type JobName =
   | "refresh-matches"
   | "market-insights"
   | "groupmail-dispatch"
+  | "fixture-notifications"
   | "email-sync"
   | "whatsapp-webhook"
   | "whatsapp-sweep"

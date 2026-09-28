@@ -21,6 +21,10 @@ const smoke = readFileSync(
   new URL("../supabase/tests/shared_fixture_services_smoke.sql", import.meta.url),
   "utf8",
 );
+const dispatcher = readFileSync(new URL("../lib/notifications/dispatch.ts", import.meta.url), "utf8");
+const route = readFileSync(new URL("../app/api/cron/fixture-notifications/route.ts", import.meta.url), "utf8");
+const bell = readFileSync(new URL("../components/portal/NotificationBell.tsx", import.meta.url), "utf8");
+const dashboard = readFileSync(new URL("../components/portal/boards.tsx", import.meta.url), "utf8");
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   dependencies?: Record<string, string>;
   scripts?: Record<string, string>;
@@ -76,7 +80,7 @@ for (const object of [
 }
 
 assert.equal(pkg.dependencies?.["@react-pdf/renderer"], "^4.9.0");
-assert.equal(pkg.scripts?.["test:shared-fixture-services"], "node --import tsx scripts/shared-fixture-services-check.ts");
+assert.equal(pkg.scripts?.["test:shared-fixture-services"], "node --import tsx scripts/shared-fixture-services-check.ts && node --import tsx scripts/shared-notification-dispatch-check.ts");
 assert.match(architecture, /WhatsApp escalation is explicitly deferred/i);
 assert.match(architecture, /masking-safe snapshot/i);
 assert.match(architecture, /No environment-specific URL or secret is embedded in a migration/i);
@@ -87,5 +91,23 @@ assert.match(smoke, /expired lease was not reclaimed safely/i);
 assert.match(smoke, /retry ceiling did not fail delivery/i);
 assert.match(smoke, /inactive recipient delivery was not suppressed/i);
 assert.match(smoke, /inactive member was not refused/i);
+assert.match(dispatcher, /messageId: `<asb-notification-\$\{claim\.id\}@\$\{domain\}>`/);
+assert.match(dispatcher, /processNotificationClaims/);
+assert.match(dispatcher, /finally \{[\s\S]*transport\.close\(\)/);
+assert.match(dispatcher, /fn_notification_delivery_claim/);
+assert.match(dispatcher, /fn_notification_delivery_settle/);
+assert.doesNotMatch(dispatcher, /whatsapp_outbox/i);
+assert.match(route, /cronAuthorized/);
+assert.match(route, /withJobRunStrict/);
+assert.match(route, /NEXT_PUBLIC_SITE_URL/);
+assert.match(route, /export async function GET/);
+assert.match(route, /export async function POST/);
+assert.match(bell, /aria-haspopup="dialog"/);
+assert.match(bell, /aria-live="polite"/);
+assert.match(bell, /mark_notifications_read/);
+assert.match(bell, /list_my_notifications/);
+assert.match(bell, /notification_badge/);
+assert.match(dashboard, /<NotificationBell \/>/);
+assert.doesNotMatch(dashboard, /Live notifications are an admin preview/);
 
 console.log("SHARED FIXTURE SERVICES CONTRACT: ALL ASSERTIONS PASSED");

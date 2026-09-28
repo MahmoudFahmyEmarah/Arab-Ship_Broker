@@ -29,7 +29,8 @@ import {
   type SizeRange,
 } from "./filters";
 import { useMarketVisibility, withinPostedWindow } from "@/lib/portal/useMarketVisibility";
-import { IconPlus, IconBell, IconMap } from "./icons";
+import { IconPlus, IconMap } from "./icons";
+import { NotificationBell } from "./NotificationBell";
 import { operatingZoneCode, zoneMatchesSelection } from "@/lib/zones";
 
 // Top matches: ONE matching module (lib/portal/matching) — same gates as the map pairing.
@@ -567,14 +568,7 @@ export function DashboardBoard({
               )}
               <span>{wideMap ? "Split view" : "Wide chart"}</span>
             </button>
-            {/* Live notifications are an admin preview for now — hidden for members
-                until the alerting pipeline goes live. */}
-            {marketVis.isAdmin && (
-            <Link className="asb-btn ghost" href="/dashboard/alerts" title="Alerts" aria-label="Alerts" style={{ padding: "5px 8px", position: "relative", textDecoration: "none" }}>
-              <IconBell size={15} />
-              <span style={{ position: "absolute", top: 3, right: 5, width: 6, height: 6, borderRadius: 99, background: "var(--asb-red)" }} />
-            </Link>
-            )}
+            <NotificationBell />
           </div>
         </div>
       </div>
