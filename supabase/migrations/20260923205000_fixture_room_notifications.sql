@@ -156,8 +156,10 @@ begin
       execute 'select public.fn_notification_enqueue($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)'
         using v_recipient, 'fixture.' || new.type, 'fixture:' || new.id::text,
               left(v_title, 160), left(v_body, 1200), v_href, v_importance,
-              jsonb_build_object('roomId', r.id, 'roomRef', r.ref, 'eventSeq', new.seq, 'eventType', new.type, 'termCode', p->>'termCode'),
-              true, null::timestamptz, case when v_deadline > now() then v_deadline else null end;
+              jsonb_build_object('roomId', r.id, 'roomRef', r.ref, 'eventSeq', new.seq, 'eventType', new.type, 'termCode', p->>'termCode', 'deadlineAt', v_deadline),
+              -- no expiry: the core hides expired notifications from the bell, and a member who
+              -- missed an offer must still see that it came (the deadline travels in the payload)
+              true, null::timestamptz, null::timestamptz;
     end loop;
   exception when others then
     raise warning 'fixture notification projection skipped for event %: % (%)', new.id, sqlerrm, sqlstate;

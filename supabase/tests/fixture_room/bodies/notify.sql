@@ -41,9 +41,9 @@ begin
   v_tid := pg_temp.fx_term(v_room, 'freight');
   v := public.submit_fixture_proposal(v_room, v_tid, '{"num": 26.5}'::jsonb, null, false, 30, pg_temp.fx_ver(v_room), 'ntf-offer');
   perform pg_temp.fx_owner();
-  select count(*) into n from public.notifications x where x.recipient_user_id = pg_temp.fx_id('u_ch1') and x.kind = 'fixture.proposal.submitted' and x.importance = 'urgent' and x.expires_at is not null and x.href like '%#term-freight';
+  select count(*) into n from public.notifications x where x.recipient_user_id = pg_temp.fx_id('u_ch1') and x.kind = 'fixture.proposal.submitted' and x.importance = 'urgent' and x.expires_at is null and x.payload->>'deadlineAt' is not null and x.href like '%#term-freight';
   if n <> 1 then raise exception 'N3: the charterer must get one urgent offer with a deadline and a term link, got %', n; end if;
-  raise notice 'N3 ok: an offer with validity is urgent, deadlined and deep-linked';
+  raise notice 'N3 ok: an offer with validity is urgent, carries its deadline, stays in the bell, and is deep-linked';
 
   -- N4 · a side-private message notifies no one
   perform pg_temp.fx_as('u_ow1');
