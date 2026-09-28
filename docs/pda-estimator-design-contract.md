@@ -74,18 +74,57 @@ or functions that calculate money. It may collect inputs and render results.
 
 - Each port call uses the existing governed `PdaRequest` and calculation
   engine through authenticated server actions.
+- Load and discharge have separate `requestedServices` sets. The UI, route
+  contract, canonical requests, calculation result, and not-sourced evidence
+  must preserve the exact set chosen for each leg; there is no shared route
+  service selection.
+- Each leg supplies an explicit port-local tariff calendar date as
+  `YYYY-MM-DD`. That date is validated and copied to the canonical
+  `PdaRequest.callDate`. Voyage ETA/ETD values are UTC timeline instants for
+  operational presentation only. The `ETA (UTC)` control is parsed from its
+  strict `YYYY-MM-DDTHH:mm` value as UTC without consulting the browser time
+  zone, and milestones are rendered in UTC. Timeline instants must never be
+  sliced, converted, or otherwise used to select a tariff's effective date.
 - `previewPdaRoute` validates the selected vessel availability and cargo
   against the viewer's own live catalogs, refuses sample fallback records,
   verifies both ports are active database ports, calculates the two legs
   independently and computes all monetary aggregates server-side.
 - Server-authoritative vessel identity/registered facts, cargo type, quantity,
-  port-stay days and derived dates replace their client copies before pricing.
+  and calculated port-stay days replace their client copies before pricing.
   Missing technical particulars that are not held on the selected record may
   still be supplied explicitly.
-- A client input change invalidates the full paired result and save token.
+- Each leg exposes reachable attributed-manual-quotation controls. A quote
+  requires label, non-negative amount, and reason/reference; its tariff rule
+  code is optional. The route schema does not accept `enteredBy` from the
+  browser. The authenticated server actor is the sole authority for that
+  attribution, and a manual line proves a governed service only when it is
+  attached to the corresponding applicable published rule. Duplicate
+  rule-code quotations are rejected rather than resolved last-wins, and any
+  unknown or non-applicable rule code is returned as an explicit not-applied
+  warning. Free quotations without a rule code remain allowed only inside an
+  effective published tariff and its currency; without that context they are
+  explicitly refused and contribute no amount. Standalone agent quote and
+  currency governance remains deferred Agents-workspace scope.
+- A client input change invalidates the full paired result. It must also
+  invalidate any future save token; this increment exposes no save token.
 - Unsupported values are `{ amount: null, reasonCode }`, never zero.
 - Verification comes only from published tariff maker/checker state. Disputes
   come only from flagged, attributed quote lines.
+
+### Complete totals and known subtotals
+
+`totals.loadPort` and `totals.dischargePort` are complete leg totals. They stay
+`null` whenever any requested service is unproved, whenever a tariff warning
+requires input or a quotation, or whenever cargo handling or agency is not
+proved by an applicable published line or attributed rule quotation. The port
+card headline follows these complete fields and therefore says
+`NOT SOURCED`; it must not display a numeric partial as a complete total.
+
+Numeric partials are retained only in `loadPortKnown`,
+`dischargePortKnown`, `bothPortsKnown`, and `allInKnown`, and are labelled as
+known subtotals. `handlingAndAgencyComplete` is numeric only when both services
+are proved on both legs and both leg totals are otherwise complete. Transit
+and `allInComplete` remain null until their own governed sources exist.
 
 ## Persistence boundary
 
@@ -106,14 +145,25 @@ incomplete all-in values stay `NOT SOURCED`.
 
 Desktop (1440x900), tablet (1024x768), and mobile (390x844) browser contracts
 cover the empty and selected states, keyboard-accessible selectors, responsive
-collapse, and page-level overflow. The Ports, Agents, and Setup tabs are
-present as explicitly deferred governed workspaces; they contain no mock
-records or simulated workflows.
+collapse, and page-level overflow. The governed-preview scenario must fill the
+two explicit tariff dates, all operational facts, and separate per-leg service
+sets; exercise add/remove for each manual-quote editor; wait for a real server
+preview; and assert complete-versus-known presentation, `NOT SOURCED` reason
+codes, and tariff/source provenance. It also verifies that a service requested
+on only one leg stays on that leg and that an empty picker never emits an
+`aria-activedescendant` ending in `undefined`. This destructive scenario is
+loopback-only and requires explicit coordination with the local test database;
+test discovery alone is not represented as a browser execution.
+
+The Ports, Agents, and Setup tabs are present as explicitly deferred governed
+workspaces; they contain no mock records or simulated workflows.
 
 This increment does **not** claim the immutable paired save/export history,
-per-leg retry state, governed Agents workflow, Ports workspace, or Setup
-preferences. Those remain later phases and are release blockers for any claim
-that the complete four-tab reference has shipped.
+any save/export action, per-leg retry state, governed Agents workflow, Ports
+workspace, or Setup preferences. The `Saved` delivery state above is a frozen
+future acceptance state, not current functionality. These remain later phases
+and are release blockers for any claim that the complete four-tab reference
+has shipped.
 
 ## File ownership
 

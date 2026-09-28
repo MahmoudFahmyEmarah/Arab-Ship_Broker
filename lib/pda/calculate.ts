@@ -188,8 +188,53 @@ function warning(code: PdaWarning["code"], message: string, ruleCode?: string): 
   return { code, message, ...(ruleCode ? { ruleCode } : {}) };
 }
 
+type ManualLine = NonNullable<PdaRequest["manualLines"]>[number];
+
+function indexManualRuleQuotes(lines: ManualLine[]): {
+  byRule: Map<string, ManualLine>;
+  suppliedRuleCodes: Set<string>;
+  duplicateRuleCodes: Set<string>;
+} {
+  const grouped = new Map<string, ManualLine[]>();
+  for (const line of lines) {
+    if (!line.ruleCode) continue;
+    const group = grouped.get(line.ruleCode) ?? [];
+    group.push(line);
+    grouped.set(line.ruleCode, group);
+  }
+  const duplicateRuleCodes = new Set(
+    [...grouped.entries()].filter(([, group]) => group.length > 1).map(([code]) => code),
+  );
+  return {
+    byRule: new Map(
+      [...grouped.entries()]
+        .filter(([code]) => !duplicateRuleCodes.has(code))
+        .map(([code, group]) => [code, group[0]!] as const),
+    ),
+    suppliedRuleCodes: new Set(grouped.keys()),
+    duplicateRuleCodes,
+  };
+}
+
+function manualQuotesNotApplied(lines: ManualLine[], context: string): PdaWarning[] {
+  return lines.map((line) => warning(
+    "MANUAL_QUOTE_NOT_APPLIED",
+    `${line.label} was not applied because ${context}; no manual amount was priced.`,
+    line.ruleCode ?? undefined,
+  ));
+}
+
+function governedServiceCodes(rule: PdaTariffRule): string[] {
+  const applicability = rule.applicability?.requestedServices ?? [];
+  // A rule code is stable provenance. A single service applicability is also
+  // unambiguous; a multi-value list is only an OR-condition and must not be
+  // misrepresented as proving that every listed service was priced.
+  return [...new Set([rule.code, ...(applicability.length === 1 ? applicability : [])])];
+}
+
 export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersion | null): PdaCalculationResult {
   const request = pdaRequestSchema.parse(rawRequest) as PdaRequest;
+  const manualLines = request.manualLines ?? [];
   const generatedAt = new Date().toISOString();
   const emptyCurrency = rawVersion?.currency ?? request.convertedCurrency ?? "USD";
 
@@ -200,7 +245,10 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
       nativeCurrency: emptyCurrency,
       lines: [],
       totals: { native: 0 },
-      warnings: [warning("NO_PUBLISHED_TARIFF", `No published tariff exists for ${request.portLocode}.`)],
+      warnings: [
+        warning("NO_PUBLISHED_TARIFF", `No published tariff exists for ${request.portLocode}.`),
+        ...manualQuotesNotApplied(manualLines, "no effective published tariff and currency govern this call"),
+      ],
       generatedAt,
     };
   }
@@ -214,7 +262,10 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
       nativeCurrency: version.currency,
       lines: [],
       totals: { native: 0 },
-      warnings: [warning("PORT_MISMATCH", "The selected tariff belongs to a different port.")],
+      warnings: [
+        warning("PORT_MISMATCH", "The selected tariff belongs to a different port."),
+        ...manualQuotesNotApplied(manualLines, "the selected tariff belongs to a different port"),
+      ],
       generatedAt,
     };
   }
@@ -228,7 +279,10 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
       nativeCurrency: version.currency,
       lines: [],
       totals: { native: 0 },
-      warnings: [warning("TERMINAL_MISMATCH", "The selected tariff does not match the exact terminal scope.")],
+      warnings: [
+        warning("TERMINAL_MISMATCH", "The selected tariff does not match the exact terminal scope."),
+        ...manualQuotesNotApplied(manualLines, "the selected tariff does not govern this terminal"),
+      ],
       generatedAt,
     };
   }
@@ -239,19 +293,32 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
       nativeCurrency: version.currency,
       lines: [],
       totals: { native: 0 },
-      warnings: [warning("VERSION_NOT_EFFECTIVE", `Tariff version is not effective on ${request.callDate}.`)],
+      warnings: [
+        warning("VERSION_NOT_EFFECTIVE", `Tariff version is not effective on ${request.callDate}.`),
+        ...manualQuotesNotApplied(manualLines, `the tariff is not effective on ${request.callDate}`),
+      ],
       generatedAt,
     };
   }
 
   const lines: PdaExplainedLine[] = [];
   const byCode = new Map<string, number>();
-  const manualByRule = new Map((request.manualLines ?? []).filter((line) => line.ruleCode).map((line) => [line.ruleCode!, line]));
+  const manualQuotes = indexManualRuleQuotes(manualLines);
+  const manualByRule = manualQuotes.byRule;
+  const applicableManualRuleCodes = new Set<string>();
+  for (const code of manualQuotes.duplicateRuleCodes) {
+    warnings.push(warning(
+      "MANUAL_QUOTE_DUPLICATE",
+      `Multiple manual quotations target rule ${code}; none of those quotations was applied.`,
+      code,
+    ));
+  }
 
   for (const rule of [...version.rules].sort((a, b) => a.priority - b.priority || a.code.localeCompare(b.code))) {
     if (!applies(rule, request)) continue;
     const manual = manualByRule.get(rule.code);
     if (rule.basis === "manual_quote") {
+      applicableManualRuleCodes.add(rule.code);
       if (!manual) {
         warnings.push(
           warning(
@@ -274,7 +341,8 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
         amount,
         ...(request.fxRate ? { convertedAmount: round(amount * request.fxRate, version.decimalPlaces, version.roundingMode) } : {}),
         explanation: `Authorized manual quotation: ${manual.reason}`,
-        inputs: {},
+        inputs: { serviceCodes: governedServiceCodes(rule) },
+        serviceCodes: governedServiceCodes(rule),
         manual: true,
         manualReason: manual.reason,
         enteredBy: manual.enteredBy,
@@ -302,7 +370,12 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
         amount,
         ...(request.fxRate ? { convertedAmount: round(amount * request.fxRate, version.decimalPlaces, version.roundingMode) } : {}),
         explanation: makeExplanation(rule, calculated.quantity, calculated.rate, beforeTax, amount),
-        inputs: { quantity: calculated.quantity, rate: calculated.rate },
+        inputs: {
+          quantity: calculated.quantity,
+          rate: calculated.rate,
+          serviceCodes: governedServiceCodes(rule),
+        },
+        serviceCodes: governedServiceCodes(rule),
         manual: false,
         evidence: rule.source,
       });
@@ -316,7 +389,17 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
     }
   }
 
-  for (const manual of request.manualLines ?? []) {
+  for (const code of manualQuotes.suppliedRuleCodes) {
+    if (!applicableManualRuleCodes.has(code)) {
+      warnings.push(warning(
+        "MANUAL_QUOTE_UNMATCHED",
+        `Manual quotation rule ${code} is unknown, not applicable to this call, or not a manual-quote rule; it was not applied.`,
+        code,
+      ));
+    }
+  }
+
+  for (const manual of manualLines) {
     if (manual.ruleCode) continue;
     const amount = round(manual.amount, version.decimalPlaces, version.roundingMode);
     lines.push({
@@ -329,7 +412,8 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
       amount,
       ...(request.fxRate ? { convertedAmount: round(amount * request.fxRate, version.decimalPlaces, version.roundingMode) } : {}),
       explanation: `Authorized manual line: ${manual.reason}`,
-      inputs: {},
+      inputs: { serviceCodes: [] },
+      serviceCodes: [],
       manual: true,
       manualReason: manual.reason,
       enteredBy: manual.enteredBy,
@@ -343,7 +427,13 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
   const converted = request.fxRate
     ? round(lines.reduce((sum, line) => sum + (line.convertedAmount ?? 0), 0), version.decimalPlaces, version.roundingMode)
     : undefined;
-  const incomplete = warnings.some((item) => item.code === "MISSING_INPUT" || item.code === "MANUAL_QUOTE_REQUIRED");
+  const incomplete = warnings.some((item) => (
+    item.code === "MISSING_INPUT"
+    || item.code === "MANUAL_QUOTE_REQUIRED"
+    || item.code === "MANUAL_QUOTE_DUPLICATE"
+    || item.code === "MANUAL_QUOTE_UNMATCHED"
+    || item.code === "MANUAL_QUOTE_NOT_APPLIED"
+  ));
   const anyManual = lines.some((line) => line.manual);
 
   return {

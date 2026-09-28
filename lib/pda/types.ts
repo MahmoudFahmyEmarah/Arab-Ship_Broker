@@ -147,6 +147,8 @@ export interface PdaExplainedLine {
   convertedAmount?: number;
   explanation: string;
   inputs: Record<string, unknown>;
+  /** Governed service identifiers derived from the rule code and unambiguous applicability. */
+  serviceCodes: string[];
   manual: boolean;
   manualReason?: string;
   enteredBy?: string;
@@ -167,6 +169,9 @@ export interface PdaWarning {
     | "VERSION_NOT_EFFECTIVE"
     | "MISSING_INPUT"
     | "MANUAL_QUOTE_REQUIRED"
+    | "MANUAL_QUOTE_DUPLICATE"
+    | "MANUAL_QUOTE_UNMATCHED"
+    | "MANUAL_QUOTE_NOT_APPLIED"
     | "MANUAL_LINE"
     | "NO_APPLICABLE_RULES";
   message: string;

@@ -75,6 +75,23 @@ const noTariff = calculatePda(request, null);
 assert.equal(noTariff.coverage, "manual_required");
 assert.equal(noTariff.tariffVersionId, null);
 
+const freeQuoteWithoutTariff = calculatePda({
+  ...request,
+  manualLines: [{
+    label: "Agent attendance",
+    amount: 75,
+    reason: "Agent email A-75",
+    enteredBy: "Test broker",
+  }],
+}, null);
+assert.equal(freeQuoteWithoutTariff.lines.length, 0);
+assert.equal(freeQuoteWithoutTariff.totals.native, 0);
+assert.equal(freeQuoteWithoutTariff.warnings.some((item) => item.code === "MANUAL_QUOTE_NOT_APPLIED"), true);
+assert.match(
+  freeQuoteWithoutTariff.warnings.find((item) => item.code === "MANUAL_QUOTE_NOT_APPLIED")?.message ?? "",
+  /no effective published tariff and currency.*no manual amount was priced/i,
+);
+
 const noApplicable = calculatePda(
   { ...request, call: { ...request.call, requestedServices: ["towage"] } },
   { ...version, rules: [{ ...version.rules[0]!, applicability: { requestedServices: ["pilotage"] } }] },
@@ -140,6 +157,12 @@ assert.deepEqual(
 );
 assert.equal(partial.totals.native, 2632);
 assert.equal(partial.warnings[0]?.code, "MANUAL_QUOTE_REQUIRED");
+assert.deepEqual(partial.lines.map((line) => line.serviceCodes), [
+  ["port_dues"],
+  ["berth"],
+  ["cargo"],
+  ["vat"],
+]);
 
 const complete = calculatePda(
   {
@@ -156,6 +179,69 @@ assert.equal(complete.totals.converted, 2728.8);
 assert.equal(complete.lines.at(-1)?.manual, true);
 assert.ok(complete.lines.every((line) => line.explanation.length > 0));
 assert.ok(complete.lines.every((line) => line.evidence.title));
+
+const duplicateRuleQuotes = calculatePda({
+  ...request,
+  manualLines: [
+    { ruleCode: "towage", label: "Towage Q1", amount: 400, reason: "Agent quotation Q-1", enteredBy: "Test broker" },
+    { ruleCode: "towage", label: "Towage Q2", amount: 900, reason: "Agent quotation Q-2", enteredBy: "Test broker" },
+  ],
+}, version);
+assert.equal(duplicateRuleQuotes.lines.some((line) => line.ruleCode === "towage"), false);
+assert.equal(duplicateRuleQuotes.totals.native, 2632);
+assert.equal(duplicateRuleQuotes.warnings.some((item) => item.code === "MANUAL_QUOTE_DUPLICATE"), true);
+assert.equal(duplicateRuleQuotes.warnings.some((item) => item.code === "MANUAL_QUOTE_REQUIRED"), true);
+
+const unknownRuleQuote = calculatePda({
+  ...request,
+  manualLines: [{
+    ruleCode: "unknown_tug_rule",
+    label: "Unknown tug quote",
+    amount: 800,
+    reason: "Agent quotation Q-X",
+    enteredBy: "Test broker",
+  }],
+}, version);
+assert.equal(unknownRuleQuote.lines.some((line) => line.label === "Unknown tug quote"), false);
+assert.equal(unknownRuleQuote.warnings.some((item) => (
+  item.code === "MANUAL_QUOTE_UNMATCHED" && item.ruleCode === "unknown_tug_rule"
+)), true);
+
+const nonApplicableRuleQuote = calculatePda({
+  ...request,
+  call: { ...request.call, cargoStatus: "laden" },
+  manualLines: [{
+    ruleCode: "towage",
+    label: "Ballast-only towage",
+    amount: 500,
+    reason: "Agent quotation Q-B",
+    enteredBy: "Test broker",
+  }],
+}, {
+  ...version,
+  rules: version.rules.map((rule) => (
+    rule.code === "towage" ? { ...rule, applicability: { cargoStatuses: ["ballast" as const] } } : rule
+  )),
+});
+assert.equal(nonApplicableRuleQuote.lines.some((line) => line.label === "Ballast-only towage"), false);
+assert.equal(nonApplicableRuleQuote.warnings.some((item) => (
+  item.code === "MANUAL_QUOTE_UNMATCHED" && item.ruleCode === "towage"
+)), true);
+
+const freeQuoteWithTariff = calculatePda({
+  ...request,
+  manualLines: [{
+    label: "Agent attendance",
+    amount: 75,
+    reason: "Agent email A-75",
+    enteredBy: "Test broker",
+  }],
+}, version);
+const appliedFreeQuote = freeQuoteWithTariff.lines.find((line) => line.label === "Agent attendance");
+assert.equal(appliedFreeQuote?.amount, 75);
+assert.equal(appliedFreeQuote?.ruleCode, null);
+assert.equal(appliedFreeQuote?.enteredBy, "Test broker");
+assert.equal(appliedFreeQuote?.manualReason, "Agent email A-75");
 
 const deterministicA = calculatePda(request, version);
 const deterministicB = calculatePda(request, version);

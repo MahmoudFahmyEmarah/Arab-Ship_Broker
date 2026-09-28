@@ -200,6 +200,9 @@
   font-size: 11px;
 }
 
+.pda-workspace > .pda-route__notice { margin: 0; }
+.pda-route__notice--blocking { border-color: #dfa84a; font-weight: 600; line-height: 1.5; }
+
 .pda-empty-state {
   min-height: 138px;
   display: grid;
@@ -238,6 +241,27 @@
 .pda-port-choice h2 { margin: 0; font-size: 14px; }
 .pda-port-choice p { margin: 3px 0 0; color: var(--ds-muted); font-size: 11px; }
 .pda-port-choice label { display: grid; gap: 4px; color: #6d7d91; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+
+.pda-call-facts {
+  display: grid;
+  grid-template-columns: minmax(190px, .7fr) minmax(0, 1.8fr);
+  gap: 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 3px 13px rgb(13 37 69 / 7%);
+  padding: 10px 16px;
+}
+
+.pda-call-facts__head h2 { margin: 0; font-size: 12px; }
+.pda-call-facts__head p { margin: 3px 0 0; color: var(--ds-muted); font-size: 10px; line-height: 1.45; }
+.pda-call-facts__selects { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.pda-call-facts__selects label { display: grid; gap: 3px; color: #718298; font-size: 9px; font-weight: 700; }
+.pda-call-facts__selects select,
+.pda-call-facts__selects input { width: 100%; min-width: 0; height: 31px; min-height: 31px !important; padding: 4px 6px !important; font-size: 10px !important; }
+.pda-call-facts__services { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 15px; border: 0; margin: 0; padding: 0; }
+.pda-call-facts__services legend { margin-bottom: 5px; color: #718298; font-size: 9px; font-weight: 700; }
+.pda-call-facts__services label { display: inline-flex; align-items: center; gap: 5px; color: #405774; font-size: 10px; }
+.pda-call-facts__services input { width: auto; margin: 0; }
 
 .pda-summary {
   border: 0;
@@ -456,6 +480,19 @@
 .pda-port-card__facts strong { align-self: center; text-align: center; }
 .pda-port-card__facts select { width: 100%; height: 29px; min-height: 29px !important; padding: 4px 6px !important; font-size: 10px !important; }
 
+.pda-manual-quotes { border-top: 1px solid var(--ds-line); padding: 7px 12px; }
+.pda-manual-quotes > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pda-manual-quotes > header > div { min-width: 0; display: grid; gap: 1px; }
+.pda-manual-quotes > header strong { color: #405774; font-size: 10px; }
+.pda-manual-quotes > header span { color: #7b8da4; font-size: 9px; }
+.pda-manual-quotes > header .asb-button { min-height: 27px !important; display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 4px 8px !important; font-size: 9px !important; }
+.pda-manual-quotes__line { min-width: 0; display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 5px 7px; margin: 7px 0 0; border: 1px solid #dce5ef; border-radius: 7px; padding: 7px; }
+.pda-manual-quotes__line legend { color: var(--ds-navy); padding: 0 4px; font-size: 9px; font-weight: 700; }
+.pda-manual-quotes__line label { color: #64778e; font-size: 9px; font-weight: 700; }
+.pda-manual-quotes__line label span { color: #8b99aa; font-weight: 400; }
+.pda-manual-quotes__line input { width: 100%; min-width: 0; height: 28px; min-height: 28px !important; padding: 4px 6px !important; font-size: 10px !important; }
+.pda-manual-quotes__line > button { grid-column: 2; justify-self: end; border: 0; background: transparent; color: #7b8da4; padding: 4px; cursor: pointer; }
+
 .pda-port-card details { border-top: 1px solid var(--ds-line); font-size: 11px; }
 .pda-port-card summary { min-height: 34px; display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 7px 14px; font-weight: 700; list-style: none; }
 .pda-port-card summary::-webkit-details-marker { display: none; }
@@ -463,9 +500,23 @@
 .pda-port-card summary span { margin-left: auto; color: #7f91a6; font-weight: 400; }
 .pda-port-card__handling summary { background: #f5f7fa; }
 .pda-port-card__handling > p { margin: 0; padding: 8px 14px; color: #63758b; font-size: 10px; line-height: 1.5; }
+.pda-port-card__handling > aside { display: grid; gap: 2px; margin: 0 14px 8px; border-left: 2px solid #dca73d; background: #fff8e9; color: #76531b; padding: 7px 8px; font-size: 9px; line-height: 1.45; }
+.pda-port-card__handling > aside strong { font-size: 9px; }
+.pda-port-card__handling > aside span,
+.pda-port-card__handling > aside small { display: block; }
 .pda-port-card__breakdown > div { border-top: 1px dashed var(--ds-line); padding: 5px 14px 9px; }
 .pda-port-card__breakdown p { display: flex; justify-content: space-between; gap: 10px; margin: 0; padding: 5px 0; color: #455b74; font-size: 10px; }
+.pda-breakdown-line { border-bottom: 1px dashed var(--ds-line); padding: 3px 0 5px; }
+.pda-breakdown-line:last-of-type { border-bottom: 0; }
+.pda-breakdown-line p:first-child span { display: inline-flex; align-items: center; gap: 5px; }
+.pda-breakdown-line em { border-radius: 4px; background: #fff0d0; color: #7b5208; padding: 2px 5px; font-size: 8px; font-style: normal; text-transform: uppercase; }
+.pda-port-card__breakdown .pda-breakdown-line__explanation,
+.pda-port-card__breakdown .pda-breakdown-line__provenance { display: block; padding: 2px 0; color: #687b92; line-height: 1.45; }
+.pda-port-card__breakdown .pda-breakdown-line__provenance { color: #526a84; font-size: 9px; overflow-wrap: anywhere; }
 .pda-port-card__breakdown aside { margin-top: 5px; border-left: 2px solid #dca73d; background: #fff8e9; color: #76531b; padding: 6px 8px; font-size: 9px; line-height: 1.45; }
+.pda-port-card__breakdown .pda-not-sourced-line { display: grid; gap: 2px; }
+.pda-not-sourced-line span,
+.pda-not-sourced-line small { display: block; }
 .pda-port-card > footer { min-height: 34px; display: flex; align-items: center; gap: 18px; border-top: 1px solid var(--ds-line); padding: 7px 14px; }
 .pda-port-card footer a { color: var(--ds-blue); font-size: 11px; font-weight: 700; text-decoration: none; }
 .pda-port-card footer span { margin-left: auto; color: #8494a8; font-size: 9px; text-align: right; }
@@ -490,6 +541,8 @@
   .pda-summary__bar > a { margin-left: 0; }
   .pda-segment { margin-left: auto; }
   .pda-timeline__inputs { grid-template-columns: 1fr; }
+  .pda-call-facts { grid-template-columns: 1fr; }
+  .pda-call-facts__selects { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pda-timeline__inputs fieldset { min-height: 52px; }
   .pda-port-grid { grid-template-columns: 1fr; }
 }
@@ -512,6 +565,12 @@
   .pda-selection__new { width: 100%; min-height: 40px !important; }
   .pda-empty-state { min-height: 180px; padding: 24px 18px; }
   .pda-port-choice { grid-template-columns: 1fr; }
+  .pda-call-facts { padding: 10px; }
+  .pda-call-facts__selects { grid-template-columns: 1fr; }
+  .pda-call-facts__selects select,
+  .pda-call-facts__selects input { min-height: 40px !important; font-size: 12px !important; }
+  .pda-call-facts__services { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pda-call-facts__services label { min-height: 30px; font-size: 11px; }
   .pda-summary { padding: 10px; }
   .pda-summary__bar { align-items: flex-start; }
   .pda-summary__bar > span { display: none; }
@@ -535,6 +594,11 @@
   .pda-port-card h2 { max-width: 170px; }
   .pda-port-card__total { min-width: 105px; }
   .pda-port-card__facts { grid-template-columns: 1fr; }
+  .pda-manual-quotes > header { align-items: flex-start; }
+  .pda-manual-quotes > header .asb-button { min-height: 36px !important; }
+  .pda-manual-quotes__line { grid-template-columns: 1fr; }
+  .pda-manual-quotes__line input { min-height: 40px !important; }
+  .pda-manual-quotes__line > button { grid-column: 1; min-height: 36px; }
   .pda-port-card summary { min-height: 44px; align-items: flex-start; }
   .pda-port-card summary span { max-width: 48%; text-align: right; }
   .pda-port-card > footer { align-items: flex-start; flex-wrap: wrap; gap: 10px 16px; }

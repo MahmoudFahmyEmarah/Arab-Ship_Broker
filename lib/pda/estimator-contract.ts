@@ -192,18 +192,20 @@ export function parsePdaEstimatorHandoff(
   params: PdaEstimatorSearchParams,
 ): PdaEstimatorHandoff {
   const rawFrom = first(params.from)?.toLowerCase() ?? null;
+  const from = rawFrom === "fixture" ? "fixture" : null;
   const rawQuantity = first(params.mt);
+  const supplied = ["from", "ref", "cargoId", "vesselId", "vessel", "load", "disch", "mt"]
+    .some((key) => first(params[key]) != null);
   return {
-    from: rawFrom === "fixture" ? "fixture" : null,
-    ref: bounded(first(params.ref), MAX_REFERENCE_LENGTH),
-    cargoId: bounded(first(params.cargoId), MAX_REFERENCE_LENGTH),
-    vesselId: bounded(first(params.vesselId), MAX_REFERENCE_LENGTH),
-    vesselName: bounded(first(params.vessel), MAX_NAME_LENGTH),
-    loadPortLocode: locode(first(params.load)),
-    dischargePortLocode: locode(first(params.disch)),
-    quantityMt: positiveNumber(rawQuantity),
-    supplied: ["from", "ref", "cargoId", "vesselId", "vessel", "load", "disch", "mt"]
-      .some((key) => first(params[key]) != null),
+    from,
+    ref: from ? bounded(first(params.ref), MAX_REFERENCE_LENGTH) : null,
+    cargoId: from ? bounded(first(params.cargoId), MAX_REFERENCE_LENGTH) : null,
+    vesselId: from ? bounded(first(params.vesselId), MAX_REFERENCE_LENGTH) : null,
+    vesselName: from ? bounded(first(params.vessel), MAX_NAME_LENGTH) : null,
+    loadPortLocode: from ? locode(first(params.load)) : null,
+    dischargePortLocode: from ? locode(first(params.disch)) : null,
+    quantityMt: from ? positiveNumber(rawQuantity) : null,
+    supplied,
   };
 }
 
@@ -213,13 +215,31 @@ export function resolvePdaEstimatorBootstrap(
 ): PdaEstimatorBootstrap {
   const handoff = parsePdaEstimatorHandoff(params);
   const notices: PdaEstimatorNotice[] = [];
-  const rawFrom = first(params.from);
 
-  if (rawFrom && !handoff.from) {
+  if (handoff.supplied && !handoff.from) {
     notices.push({
       code: "HANDOFF_SOURCE_IGNORED",
-      message: "The hand-off source is not supported, so no external context was applied.",
+      message: "The hand-off source is missing or unsupported, so no external context was applied.",
     });
+  }
+
+  if (!handoff.from) {
+    return {
+      catalogState: "ready",
+      catalog,
+      initial: {
+        vesselId: null,
+        cargoId: null,
+        loadPortLocode: null,
+        dischargePortLocode: null,
+        quantityMt: null,
+        allocation: "vessel",
+        density: "compact",
+        from: null,
+        ref: null,
+      },
+      notices,
+    };
   }
 
   const cargo = handoff.cargoId
@@ -292,10 +312,14 @@ export function resolvePdaEstimatorBootstrap(
     });
   }
 
-  const cargoLoad = cargo?.loadPort.locode && knownPorts.has(cargo.loadPort.locode)
+  const cargoLoad = cargo?.loadPort.scope === "port"
+    && cargo.loadPort.locode
+    && knownPorts.has(cargo.loadPort.locode)
     ? cargo.loadPort.locode
     : null;
-  const cargoDischarge = cargo?.dischargePort.locode && knownPorts.has(cargo.dischargePort.locode)
+  const cargoDischarge = cargo?.dischargePort.scope === "port"
+    && cargo.dischargePort.locode
+    && knownPorts.has(cargo.dischargePort.locode)
     ? cargo.dischargePort.locode
     : null;
 

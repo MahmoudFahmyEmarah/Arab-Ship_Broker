@@ -8,6 +8,7 @@ import {
   resolvePdaEstimatorBootstrap,
   type PdaEstimatorPortOption,
 } from "../lib/pda/estimator-contract";
+import { isExactLoopbackUrl } from "../lib/pda/local-test-url";
 import type { CargoView, VesselView } from "../lib/portal/types";
 
 const ports: PdaEstimatorPortOption[] = [
@@ -147,8 +148,39 @@ assert.deepEqual(
   ],
 );
 
-const byName = resolvePdaEstimatorBootstrap(catalog, { vessel: "mv baltic star" });
+const byName = resolvePdaEstimatorBootstrap(catalog, { from: "fixture", vessel: "mv baltic star" });
 assert.equal(byName.initial.vesselId, "availability-1");
+
+const missingSource = resolvePdaEstimatorBootstrap(catalog, {
+  cargoId: "cargo-1",
+  vesselId: "vessel-1",
+  load: "EGALY",
+  disch: "SAJED",
+  mt: "27,500",
+});
+assert.deepEqual(missingSource.initial, {
+  vesselId: null,
+  cargoId: null,
+  loadPortLocode: null,
+  dischargePortLocode: null,
+  quantityMt: null,
+  allocation: "vessel",
+  density: "compact",
+  from: null,
+  ref: null,
+});
+assert.deepEqual(missingSource.notices.map((notice) => notice.code), ["HANDOFF_SOURCE_IGNORED"]);
+
+const unsupportedSource = resolvePdaEstimatorBootstrap(catalog, {
+  from: "email",
+  ref: "must-not-apply",
+  cargoId: "cargo-1",
+  vesselId: "vessel-1",
+});
+assert.equal(unsupportedSource.initial.cargoId, null);
+assert.equal(unsupportedSource.initial.vesselId, null);
+assert.equal(unsupportedSource.initial.ref, null);
+assert.deepEqual(unsupportedSource.notices.map((notice) => notice.code), ["HANDOFF_SOURCE_IGNORED"]);
 
 const rangedCatalog = buildPdaEstimatorCatalog({
   vessels: [vessel],
@@ -158,11 +190,23 @@ const rangedCatalog = buildPdaEstimatorCatalog({
   }],
   ports,
 });
-const ranged = resolvePdaEstimatorBootstrap(rangedCatalog, { cargoId: "cargo-1" });
+const ranged = resolvePdaEstimatorBootstrap(rangedCatalog, { from: "fixture", cargoId: "cargo-1" });
 assert.deepEqual(
   ranged.notices.map((notice) => notice.code),
   ["CARGO_LOAD_PORT_NEEDS_CHOICE", "CARGO_DISCHARGE_PORT_NEEDS_CHOICE"],
 );
+assert.equal(ranged.initial.loadPortLocode, null);
+assert.equal(ranged.initial.dischargePortLocode, null);
+
+const rangedWithExplicitPorts = resolvePdaEstimatorBootstrap(rangedCatalog, {
+  from: "fixture",
+  cargoId: "cargo-1",
+  load: "EGALY",
+  disch: "SAJED",
+});
+assert.equal(rangedWithExplicitPorts.initial.loadPortLocode, "EGALY");
+assert.equal(rangedWithExplicitPorts.initial.dischargePortLocode, "SAJED");
+assert.equal(rangedWithExplicitPorts.notices.length, 0);
 
 const unavailable = markPdaEstimatorCatalogUnavailable(resolved);
 assert.equal(unavailable.catalogState, "unavailable");
@@ -176,5 +220,13 @@ const vesselSdk = readFileSync(new URL("../sdk/app/vessels.ts", import.meta.url)
 assert.match(vesselSdk, /gross_tonnage, scnrt, max_loa_m/);
 const portalAdapters = readFileSync(new URL("../lib/portal/adapters.ts", import.meta.url), "utf8");
 assert.match(portalAdapters, /gt:\s*vv\.gross_tonnage\s*\?\?\s*null/);
+
+assert.equal(isExactLoopbackUrl("http://localhost:54321"), true);
+assert.equal(isExactLoopbackUrl("https://127.0.0.1/path"), true);
+assert.equal(isExactLoopbackUrl("http://[::1]:54321"), true);
+assert.equal(isExactLoopbackUrl("https://localhost.attacker.example"), false);
+assert.equal(isExactLoopbackUrl("https://127.0.0.1.attacker.example"), false);
+assert.equal(isExactLoopbackUrl("https://attacker.example/?next=http://localhost"), false);
+assert.equal(isExactLoopbackUrl("not a URL mentioning localhost"), false);
 
 console.log("PDA ESTIMATOR CONTRACT CHECK: ALL ASSERTIONS PASSED");

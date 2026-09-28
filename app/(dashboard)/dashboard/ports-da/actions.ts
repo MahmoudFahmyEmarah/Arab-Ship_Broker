@@ -4,7 +4,7 @@ import { getAppUserRow } from "@/lib/app-user";
 import { calculatePda } from "@/lib/pda/calculate";
 import { aggregatePdaRoutePreview, derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
 import { pdaRoutePreviewSchema } from "@/lib/pda/route-schema";
-import type { PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
+import type { PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
 import { pdaRequestSchema } from "@/lib/pda/schemas";
 import type { PdaCalculationResult, PdaRequest } from "@/lib/pda/types";
 import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
@@ -56,40 +56,50 @@ function numberFromDisplay(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function authoritativeVesselFacts(request: PdaRequest, vessel: VesselView): PdaRequest["vessel"] {
+function authoritativeVesselFacts(vessel: VesselView): PdaRequest["vessel"] {
   return {
-    ...request.vessel,
     vesselId: vessel.vesselId && UUID.test(vessel.vesselId) ? vessel.vesselId : null,
     vesselName: vessel.name,
     imo: vessel.imo,
     vesselType: vessel.type,
-    gt: vessel.gt ?? request.vessel.gt ?? null,
-    scnrt: vessel.scnrt ?? request.vessel.scnrt ?? null,
-    dwt: numberFromDisplay(vessel.dwt) ?? request.vessel.dwt ?? null,
-    loaM: vessel.loaM ?? request.vessel.loaM ?? null,
+    gt: vessel.gt ?? null,
+    scnrt: vessel.scnrt ?? null,
+    dwt: numberFromDisplay(vessel.dwt),
+    loaM: vessel.loaM ?? null,
   };
 }
 
 function canonicalRouteLeg(input: {
-  request: PdaRequest;
+  leg: PdaRouteLegInput;
   vessel: VesselView;
   cargo: CargoView;
   quantityMt: number;
   days: number;
-  derivedDate: string | null;
   manualActorLabel: string;
 }): PdaRequest {
-  return attributeManualLines({
-    ...input.request,
-    callDate: input.derivedDate?.slice(0, 10) ?? input.request.callDate,
-    vessel: authoritativeVesselFacts(input.request, input.vessel),
+  return {
+    portLocode: input.leg.portLocode,
+    terminalId: input.leg.terminalId ?? null,
+    // Tariff effectiveness is governed by the explicit calendar date at this
+    // port. Voyage timeline instants are presentation/operations data only.
+    callDate: input.leg.callDate,
+    vessel: authoritativeVesselFacts(input.vessel),
     call: {
-      ...input.request.call,
       days: input.days,
+      hours: input.leg.call.hours ?? null,
+      units: input.leg.call.units ?? null,
       cargoQuantityMt: input.quantityMt,
       cargoType: input.cargo.type,
+      cargoStatus: input.leg.call.cargoStatus,
+      voyageScope: input.leg.call.voyageScope,
+      location: input.leg.call.location,
+      requestedServices: input.leg.call.requestedServices,
     },
-  }, input.manualActorLabel);
+    manualLines: input.leg.manualLines?.map((line) => ({
+      ...line,
+      enteredBy: input.manualActorLabel,
+    })),
+  };
 }
 
 function forDisplayCurrency(
@@ -178,21 +188,19 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
     ]);
     const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
     let loadRequest = canonicalRouteLeg({
-      request: input.load,
+      leg: input.load,
       vessel,
       cargo,
       quantityMt: input.selection.quantityMt,
       days: timeline.loadPortDays,
-      derivedDate: timeline.etaLoad,
       manualActorLabel,
     });
     let dischargeRequest = canonicalRouteLeg({
-      request: input.discharge,
+      leg: input.discharge,
       vessel,
       cargo,
       quantityMt: input.selection.quantityMt,
       days: timeline.dischargePortDays,
-      derivedDate: timeline.etaDischarge,
       manualActorLabel,
     });
     const [loadContext, dischargeContext] = await Promise.all([

@@ -1,6 +1,8 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { isExactLoopbackUrl } from "../lib/pda/local-test-url";
+
 const PASSWORD = "e2e-PDA-Passw0rd!";
 
 interface PdaSeed {
@@ -12,12 +14,16 @@ interface PdaSeed {
   availabilityId: string;
   vesselName: string;
   cargoName: string;
+  loadLocode: string;
+  dischargeLocode: string;
+  loadPortName: string;
+  dischargePortName: string;
 }
 
 function localAdmin(): SupabaseClient {
   const url = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
   const key = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
-  if (!/127\.0\.0\.1|localhost/.test(url)) throw new Error(`PDA browser test refuses to seed ${url}`);
+  if (!isExactLoopbackUrl(url)) throw new Error(`PDA browser test refuses to seed ${url}`);
   if (!key) throw new Error("E2E_SUPABASE_SERVICE_ROLE_KEY is required");
   return createClient(url, key, { auth: { persistSession: false } });
 }
@@ -28,6 +34,11 @@ async function seedPda(): Promise<PdaSeed> {
   const email = `e2e-pda-${stamp}@arabshipbroker.test`;
   const vesselName = `E2E PDA VESSEL ${stamp.toUpperCase()}`;
   const cargoName = `E2E PDA WHEAT ${stamp.toUpperCase()}`;
+  const locodeSuffix = stamp.slice(-3).toUpperCase().padStart(3, "0");
+  const loadLocode = `ZX${locodeSuffix}`;
+  const dischargeLocode = `ZY${locodeSuffix}`;
+  const loadPortName = `E2E PDA PORT LOAD ${stamp.toUpperCase()}`;
+  const dischargePortName = `E2E PDA PORT DISCHARGE ${stamp.toUpperCase()}`;
   const imo = String(1_000_000 + (Number.parseInt(stamp, 36) % 9_000_000));
   const { data: auth, error: authError } = await admin.auth.admin.createUser({
     email,
@@ -70,8 +81,8 @@ async function seedPda(): Promise<PdaSeed> {
   });
 
   const { error: portsError } = await admin.from("ports").upsert([
-    { locode: "ZZP1A", trade_name: "Alexandria Test", country: "Egypt", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
-    { locode: "ZZP1B", trade_name: "Jeddah Test", country: "Saudi Arabia", zone: "R.SEA", port_type: "Sea Port", is_active: true, is_verified: true },
+    { locode: loadLocode, trade_name: loadPortName, country: "Egypt", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
+    { locode: dischargeLocode, trade_name: dischargePortName, country: "Saudi Arabia", zone: "R.SEA", port_type: "Sea Port", is_active: true, is_verified: true },
   ], { onConflict: "locode" });
   if (portsError) throw new Error(`PDA ports: ${portsError.message}`);
 
@@ -86,11 +97,11 @@ async function seedPda(): Promise<PdaSeed> {
     is_grain_cargo: true,
     qty_min_mt: 25_000,
     qty_max_mt: 27_500,
-    load_port_locode: "ZZP1A",
-    load_port_name: "Alexandria Test",
+    load_port_locode: loadLocode,
+    load_port_name: loadPortName,
     load_zone: "E.MED",
-    disch_port_locode: "ZZP1B",
-    disch_port_name: "Jeddah Test",
+    disch_port_locode: dischargeLocode,
+    disch_port_name: dischargePortName,
     disch_zone: "R.SEA",
     laycan_from: d(10),
     laycan_to: d(20),
@@ -120,8 +131,8 @@ async function seedPda(): Promise<PdaSeed> {
 
   const { data: availability, error: availabilityError } = await admin.from("vessel_availability").insert({
     vessel_id: vessel.id,
-    open_port_locode: "ZZP1A",
-    open_port_name: "Alexandria Test",
+    open_port_locode: loadLocode,
+    open_port_name: loadPortName,
     open_zone: "E.MED",
     open_date: d(5),
     status: "OPEN",
@@ -146,6 +157,10 @@ async function seedPda(): Promise<PdaSeed> {
     availabilityId: availability.id,
     vesselName,
     cargoName,
+    loadLocode,
+    dischargeLocode,
+    loadPortName,
+    dischargePortName,
   };
 }
 
@@ -157,6 +172,7 @@ async function cleanupPda(seed: PdaSeed | null) {
   await admin.from("vessel_availability").delete().eq("id", seed.availabilityId);
   await admin.from("vessels").delete().eq("id", seed.vesselId);
   await admin.from("cargo_listings").delete().eq("id", seed.cargoId);
+  await admin.from("ports").delete().in("locode", [seed.loadLocode, seed.dischargeLocode]);
   await admin.from("profiles").delete().eq("account_id", seed.userId);
   await admin.from("organization_members").delete().eq("user_id", seed.userId);
   await admin.from("organizations").delete().eq("id", seed.orgId);
@@ -183,6 +199,13 @@ async function cleanupDanglingPdaFixtures() {
   }
   if (vesselIds.length) await admin.from("vessels").delete().in("id", vesselIds);
   if (cargoIds.length) await admin.from("cargo_listings").delete().in("id", cargoIds);
+  const { data: ports } = await admin
+    .from("ports")
+    .select("locode")
+    .like("trade_name", "E2E PDA PORT %")
+    .or("locode.like.ZX%,locode.like.ZY%");
+  const portLocodes = (ports ?? []).map((row) => row.locode as string);
+  if (portLocodes.length) await admin.from("ports").delete().in("locode", portLocodes);
 
   const { data: users } = await admin.auth.admin.listUsers({ page: 1, perPage: 1_000 });
   const testUsers = users?.users.filter((user) => user.email?.startsWith("e2e-pda-")) ?? [];
@@ -226,6 +249,88 @@ async function assertNoPageOverflow(page: Page) {
   expect(overflow).toBeLessThanOrEqual(1);
 }
 
+async function exerciseManualQuoteEditors(page: Page) {
+  for (const side of ["Load port", "Discharge port"] as const) {
+    const editor = page.locator(`section[aria-label="${side} attributed manual quotations"]`);
+    await expect(editor.getByRole("button", { name: "Add quote" })).toBeVisible();
+    await editor.getByRole("button", { name: "Add quote" }).click();
+    await editor.getByLabel("Rule code optional").fill("towage");
+    await editor.getByLabel("Quote label").fill(`${side} agent quote`);
+    await editor.getByLabel("Amount").fill("425");
+    await editor.getByLabel("Quote reason / reference").fill("Agent email Q-425");
+    await expect(editor.getByRole("button", { name: new RegExp(`Remove ${side.toLowerCase()} quote 1`) })).toBeVisible();
+    await editor.getByRole("button", { name: new RegExp(`Remove ${side.toLowerCase()} quote 1`) }).click();
+    await expect(editor.getByLabel("Quote label")).toHaveCount(0);
+  }
+}
+
+async function completeGovernedRouteFacts(page: Page) {
+  await page.getByLabel("Load-port local call date").fill("2026-10-01");
+  await page.getByLabel("Discharge-port local call date").fill("2026-10-08");
+  await page.getByLabel("Cargo status").selectOption("laden");
+  await page.getByLabel("Voyage scope").selectOption("international");
+  await page.getByLabel("Load-port location").selectOption("alongside");
+  await page.getByLabel("Discharge-port location").selectOption("anchorage");
+
+  const loadServices = page.getByRole("group", { name: "Load-port requested services" });
+  const dischargeServices = page.getByRole("group", { name: "Discharge-port requested services" });
+  for (const service of ["Port dues", "Cargo handling", "Agency", "Pilotage"]) {
+    await loadServices.getByRole("checkbox", { name: service }).check();
+  }
+  for (const service of ["Port dues", "Cargo handling", "Agency"]) {
+    await dischargeServices.getByRole("checkbox", { name: service }).check();
+  }
+  await expect(dischargeServices.getByRole("checkbox", { name: "Pilotage" })).not.toBeChecked();
+
+  const timelineGroups = page.locator(".pda-timeline__inputs fieldset");
+  await page.getByLabel("ETA (UTC)").fill("2026-10-01T00:00");
+  await timelineGroups.nth(0).locator('input[inputmode="decimal"]').nth(0).fill("1200");
+  await timelineGroups.nth(0).locator('input[inputmode="decimal"]').nth(1).fill("1");
+  await timelineGroups.nth(1).locator('input[inputmode="decimal"]').nth(0).fill("1100");
+  await timelineGroups.nth(1).locator('input[inputmode="decimal"]').nth(1).fill("11");
+  await timelineGroups.nth(2).locator('input[inputmode="decimal"]').nth(0).fill("1200");
+  await timelineGroups.nth(2).locator('input[inputmode="decimal"]').nth(1).fill("1");
+}
+
+async function assertDuplicateManualRuleError(page: Page) {
+  const editor = page.locator('section[aria-label="Load port attributed manual quotations"]');
+  for (const [index, amount] of ["425", "475"].entries()) {
+    await editor.getByRole("button", { name: "Add quote" }).click();
+    await editor.getByLabel("Rule code optional").nth(index).fill("towage");
+    await editor.getByLabel("Quote label").nth(index).fill(`Duplicate towage ${index + 1}`);
+    await editor.getByLabel("Amount").nth(index).fill(amount);
+    await editor.getByLabel("Quote reason / reference").nth(index).fill(`Agent email DUP-${index + 1}`);
+  }
+  await expect(page.getByRole("alert")).toContainText("Duplicate manual quotation rule code: towage", { timeout: 90_000 });
+  const removeButtons = editor.getByRole("button", { name: /Remove load port quote/ });
+  await removeButtons.last().click();
+  await removeButtons.first().click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator(".pda-port-card").first().locator("footer")).toContainText("No tariff version", { timeout: 90_000 });
+}
+
+async function assertUnsourcedGovernedPreview(page: Page) {
+  const portCards = page.locator(".pda-port-card");
+  await expect(portCards).toHaveCount(2);
+  await expect(portCards.nth(0).locator(".pda-port-card__total strong")).toHaveText("NOT SOURCED", { timeout: 90_000 });
+  await expect(portCards.nth(1).locator(".pda-port-card__total strong")).toHaveText("NOT SOURCED");
+  await expect(portCards.nth(0).locator("footer")).toContainText("No tariff version");
+  await expect(portCards.nth(1).locator("footer")).toContainText("No tariff version");
+
+  const inclusive = page.locator(".pda-summary-tile").filter({ hasText: "incl. handling & agency" });
+  await expect(inclusive.locator("strong")).toHaveText("NOT SOURCED");
+  await expect(inclusive).toContainText("NOT SOURCED until both components are evidenced");
+
+  await portCards.nth(0).locator(".pda-port-card__handling summary").click();
+  await portCards.nth(0).locator(".pda-port-card__breakdown summary").click();
+  await portCards.nth(1).locator(".pda-port-card__breakdown summary").click();
+  await expect(portCards.nth(0)).toContainText("Load port Pilotage");
+  await expect(portCards.nth(1)).not.toContainText("Discharge port Pilotage");
+  await expect(portCards.nth(0)).toContainText("No published tariff provenance");
+  await expect(portCards.nth(0)).toContainText("NO_PUBLISHED_TARIFF");
+  await expect(portCards.nth(0)).toContainText("No priced tariff lines");
+}
+
 let seed: PdaSeed | null = null;
 
 test.beforeAll(async () => {
@@ -261,18 +366,24 @@ test("desktop, tablet and mobile: exact empty and selected Estimate structure", 
         await page.screenshot({ path: `test-results/pda-alignment/empty-${viewport.name}.png`, fullPage: true });
 
         const vesselSearch = page.getByRole("combobox", { name: "Vessel" });
+        await vesselSearch.fill("NO MATCH FOR EMPTY PICKER");
+        await vesselSearch.press("ArrowUp");
+        await expect(vesselSearch).not.toHaveAttribute("aria-activedescendant", /.+/);
         await vesselSearch.fill(activeSeed.vesselName);
         await page.getByRole("option", { name: new RegExp(activeSeed.vesselName) }).click();
         const cargoSearch = page.getByRole("combobox", { name: "Cargo" });
         await cargoSearch.fill(activeSeed.cargoName);
         await page.getByRole("option", { name: new RegExp(activeSeed.cargoName) }).click();
 
-        await expect(page.getByText("POL Alexandria Test \u2192 POD Jeddah Test", { exact: true })).toBeVisible();
+        await expect(page.getByText(`POL ${activeSeed.loadPortName} \u2192 POD ${activeSeed.dischargePortName}`, { exact: true })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Voyage timeline" })).toBeVisible();
-        await expect(page.getByRole("heading", { name: "Alexandria Test" })).toBeVisible();
-        await expect(page.getByRole("heading", { name: "Jeddah Test" })).toBeVisible();
-        await expect(page.locator(".pda-summary__tiles")).toHaveAttribute("aria-busy", "false", { timeout: 90_000 });
-        await expect(page.getByText("NOT SOURCED", { exact: true }).first()).toBeVisible();
+        await expect(page.getByRole("heading", { name: activeSeed.loadPortName })).toBeVisible();
+        await expect(page.getByRole("heading", { name: activeSeed.dischargePortName })).toBeVisible();
+        await exerciseManualQuoteEditors(page);
+        await completeGovernedRouteFacts(page);
+        await assertUnsourcedGovernedPreview(page);
+        if (viewport.name === "desktop") await assertDuplicateManualRuleError(page);
+        await expect(page.locator(".pda-summary__tiles")).toHaveAttribute("aria-busy", "false");
         await assertNoPageOverflow(page);
         await page.screenshot({ path: `test-results/pda-alignment/selected-${viewport.name}.png`, fullPage: true });
       });

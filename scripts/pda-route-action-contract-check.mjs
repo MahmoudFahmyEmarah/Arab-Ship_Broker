@@ -9,6 +9,14 @@ const bootstrap = readFileSync(
   new URL("../app/(dashboard)/dashboard/ports-da/bootstrap.server.ts", import.meta.url),
   "utf8",
 );
+const routeUi = readFileSync(
+  new URL("../components/pda/PdaRouteEstimator.tsx", import.meta.url),
+  "utf8",
+);
+const routeSchema = readFileSync(
+  new URL("../lib/pda/route-schema.ts", import.meta.url),
+  "utf8",
+);
 
 for (const source of [actions, bootstrap]) {
   assert.match(source, /loadVesselViews\(\{ mine: true \}\)/);
@@ -20,6 +28,48 @@ assert.match(actions, /requireVerifiedPorts\(supabase/);
 assert.match(actions, /authoritativeVesselFacts/);
 assert.match(actions, /derivePdaRouteTimeline/);
 assert.match(actions, /aggregatePdaRoutePreview/);
+assert.match(actions, /callDate:\s*input\.leg\.callDate/);
+assert.doesNotMatch(actions, /derivedDate|timeline\.(?:etaLoad|etaDischarge)\.slice/);
+assert.match(actions, /vessel:\s*authoritativeVesselFacts\(input\.vessel\)/);
+assert.match(actions, /enteredBy:\s*input\.manualActorLabel/);
+assert.doesNotMatch(actions, /input\.request\.callDate/);
 assert.doesNotMatch(actions, /service_role/i);
+
+assert.doesNotMatch(routeUi, /const today\s*=/);
+assert.doesNotMatch(routeUi, /positiveOr/);
+assert.doesNotMatch(routeUi, /\?\?\s*1200|\?\?\s*1_200/);
+assert.doesNotMatch(routeUi, /days:\s*1[,\n]/);
+assert.doesNotMatch(routeUi, /REQUESTED_SERVICES/);
+assert.match(routeUi, /Tariff-driving values are never defaulted/);
+assert.match(routeUi, /loadRequestedServices/);
+assert.match(routeUi, /dischargeRequestedServices/);
+assert.doesNotMatch(routeUi, /const \[requestedServices,/);
+assert.match(routeUi, /loadCallDate/);
+assert.match(routeUi, /dischargeCallDate/);
+assert.match(routeUi, /Load-port local call date/);
+assert.match(routeUi, /Discharge-port local call date/);
+assert.match(routeUi, /dateTimeLocalUtcIso\(etaLoad\)/);
+assert.match(routeUi, /ETA \(UTC\)/);
+assert.match(routeUi, /formatUtcTimelineInstant/);
+assert.doesNotMatch(routeUi, /new Date\(value\)/);
+assert.match(routeUi, /ManualQuotesEditor/);
+assert.match(routeUi, /Rule code <span>optional<\/span>/);
+assert.match(routeUi, /Quote label/);
+assert.match(routeUi, /Quote reason \/ reference/);
+assert.match(routeUi, /Add quote/);
+assert.match(routeUi, /Remove \$\{legLabel\.toLowerCase\(\)\} quote/);
+assert.match(routeUi, /role="alert"/);
+assert.match(routeUi, /applied only within an effective published tariff and currency/);
+assert.match(routeUi, /aria-activedescendant=\{activeItem \?/);
+assert.doesNotMatch(routeUi, /filtered\[activeIndex\]\?\.id/);
+assert.match(routeUi, /line\.explanation/);
+assert.match(routeUi, /line\.enteredBy/);
+assert.match(routeUi, /line\.manualReason/);
+assert.match(routeUi, /line\.evidence\.sourceId/);
+assert.match(routeUi, /try\s*\{[\s\S]*await previewPdaRoute\(input\)/);
+assert.match(routeUi, /catch \(cause\)[\s\S]*requestSequence\.current === sequence/);
+assert.match(routeUi, /finally\s*\{[\s\S]*requestSequence\.current === sequence[\s\S]*setBusy\(false\)/);
+assert.match(routeSchema, /Duplicate manual quotation rule code/);
+assert.match(routeSchema, /seen\.has\(line\.ruleCode\)/);
 
 console.log("PDA ROUTE ACTION CONTRACT: ALL ASSERTIONS PASSED");
