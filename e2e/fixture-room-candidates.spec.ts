@@ -25,9 +25,14 @@ const secrets = () => [seed.tbn.name, seed.tbn.vesselId, seed.vesselId, seed.ves
 
 test("the charterer sees the TBN hull as TBN, with no identity anywhere in the page", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
+  // every server-action response is captured by fetching it through the route (the browser may
+  // discard a streamed body before a response listener can read it)
   const bodies: string[] = [];
-  page.on("response", async (r) => {
-    if (r.request().method() === "POST" && r.url().includes("/dashboard/fixture-room")) bodies.push(await r.text().catch(() => ""));
+  await page.route("**/dashboard/fixture-room/**", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    bodies.push(await response.text());
+    await route.fulfill({ response });
   });
   await page.goto(`/dashboard/fixture-room/new?cargo=${seed.cargoId}`);
   await dismissOverlays(page);
@@ -41,14 +46,15 @@ test("the charterer sees the TBN hull as TBN, with no identity anywhere in the p
   await expect(tbn).not.toContainText(/under capacity|opens after laycan|gearless/i);
   // pick again: the candidates now come from the server action, scanned too
   await page.getByRole("button", { name: /^change$/i }).click();
+  const before = bodies.length;
   await page.getByTestId(`pick-cargo-${seed.cargoId}`).getByRole("button").click();
   await expect(page.getByTestId(`cand-vessel-${seed.tbn.availabilityId}`)).toBeVisible();
+  await expect.poll(() => bodies.length, { message: "the re-pick went through the server action" }).toBeGreaterThan(before);
   const html = await page.content();
   for (const s of secrets()) {
     expect(html, `the page carries ${s}`).not.toContain(s);
     for (const b of bodies) expect(b, `a server-action response carries ${s}`).not.toContain(s);
   }
-  expect(bodies.length, "the re-pick went through the server action").toBeGreaterThan(0);
   await context.close();
 });
 
