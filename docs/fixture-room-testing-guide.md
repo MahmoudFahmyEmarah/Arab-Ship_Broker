@@ -618,3 +618,28 @@ party. The mediator never proposes a figure of its own.
 | `tsc --noEmit` / `eslint` | 0 errors / clean |
 | production build | exit 0, 118 s (a first attempt failed downloading the Inter font from Google Fonts; network, retried) |
 | `fixture-room-admin.spec.ts` incl. the new mediator test | 4 passed (2.3 min) |
+
+## 15 · The negotiation suite is green: the layout bug behind it (28 Sep 2026)
+
+The two-browser test kept failing after the negotiation itself had succeeded
+(freight agreed at $26.25/MT on both sides, stale tab refused). The next click,
+"Publish recap", was covered: the sticky footer sat in the middle of the page
+with the right-hand rail continuing underneath it. Cause: the design's
+`.nr-body { min-height: 0 }`, written for the prototype's fixed-height frame,
+let the room body shrink to the viewport inside the portal, so the rail spilled
+past the body and the footer (placed after the body) landed mid-rail. Fix in
+the portal-fit block: the body grows with its content (`flex: 1 0 auto;
+min-height: auto`) and the rail scrolls with the page instead of being sticky.
+Earlier failures blamed on memory were partly this bug; the machine was also
+slow, but a covered button never becomes clickable.
+
+Also in this commit: `lib/fixture-room/notify-model.ts`, the Fixture-owned
+notification rules (who hears about each ledger event, how urgently, in what
+masked words, with one delivery key per event, recipient and channel) that the
+projector will call once the shared notification core exists (O2C-009).
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 242 passed, 0 failed (7 new: notification rules, including no organisation name, vessel name or IMO in any title, body or link) |
+| production build | exit 0 |
+| `fixture-room.spec.ts` (two-browser) + `fixture-room-responsive.spec.ts` | **9 passed** (9.5 min) |

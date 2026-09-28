@@ -19,6 +19,7 @@
  *      idempotency_key and an explicit grant; no internal helper is granted; the
  *      excluded PDA objects appear nowhere in the Fixture migrations
  */
+import { notificationFor, lapseWarning, notificationKey } from "../lib/fixture-room/notify-model";
 import fs from "node:fs";
 import path from "node:path";
 import { FIXTURE_TERM_CATALOGUE, FIXTURE_TERM_CATALOGUE_VERSION, buildTermCatalogue, openingValueFromListing, termHintsFromListing, validateTermCatalogue } from "@/lib/fixture-room/terms";
@@ -349,3 +350,19 @@ ok(/kind: "nudge", visibility: "room", termId: term\.id/.test(read("components/f
 const fxTerm = read("components/fixture-room/TermRow.tsx");
 ok(/data-testid=\{`mediator-\$\{term\.code\}`\}/.test(fxTerm) && /view\.viewer\.isMediator && !mySide/.test(fxTerm), "the mediator sees the broker console on each term (press, acknowledge, hold, refer)");
 ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.match(/kind: "nudge"/g) ?? []).length >= 2, "press and acknowledge are governed nudge / ack messages pinned to the term, never a figure");
+
+// ── Phase 1.1 · notification rules (pure; the shared core stores and delivers) ─
+{
+  const ctx = { roomId: "00000000-0000-4000-8000-000000000001", roomRef: "FX-2026-00001", actorLabel: "Owner side", actorSide: "vessel" as const,
+    payload: { kind: "offer", displayValue: "$26.25/MT", termLabel: "Freight & terms", termCode: "freight", expiresAt: "2026-09-28T12:00:00Z", orgName: "Secret Owners SA", vesselName: "MV HIDDEN", imo: "9876543" } };
+  const offer = notificationFor("proposal.submitted", ctx);
+  ok(!!offer && offer.importance === "urgent" && offer.audience === "other_side" && offer.deadlineAt === "2026-09-28T12:00:00Z", "an offer with a validity window is urgent, for the other side, with its deadline");
+  const all = ["party.invited", "party.accepted", "proposal.submitted", "proposal.lapsed", "term.agreed", "term.reopened", "term.referred", "room.fixed_on_subjects", "subject.lifted", "subject.failed", "room.fixed", "recap.published", "room.counterparty_disclosed", "message.posted", "room.closed"] as const;
+  const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n") + lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }).body;
+  ok(!/Secret Owners|MV HIDDEN|9876543/.test(texts), "no notification text or link carries an organisation name, vessel name or IMO, even when the payload holds them");
+  ok(notificationFor("proposal.submitted", { ...ctx, payload: { ...ctx.payload, expiresAt: null } })!.importance === "normal", "an open-ended offer is normal, not urgent");
+  ok(notificationFor("message.posted", { ...ctx, payload: { kind: "nudge" } })!.importance === "urgent" && notificationFor("message.posted", { ...ctx, payload: { kind: "note" } })!.importance === "digest", "a nudge is urgent; an ordinary note goes to the digest");
+  ok(notificationFor("term.referred", ctx)!.audience === "mediator" && notificationFor("room.fixed", ctx)!.audience === "all", "referrals reach the mediator; outcomes reach everyone");
+  ok(notificationFor("term.held", ctx) === null && notificationFor("recap.acknowledged", ctx) === null, "routine bookkeeping events notify no one");
+  ok(notificationKey(42, "u1", "email") === "fixture:42:u1:email" && notificationKey(42, "u1", "email") !== notificationKey(42, "u1", "in_app"), "one delivery per event, recipient and channel");
+}

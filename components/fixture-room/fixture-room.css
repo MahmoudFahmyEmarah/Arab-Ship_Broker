@@ -972,10 +972,9 @@
 .nr { height: auto; min-height: 100%; }
 .nr .nr-body, .nr .nr-main, .nr .nr-items { overflow: visible; }
 .nr .nr-main { padding-bottom: 24px; }
-.nr .nr-rail { overflow: visible; padding-bottom: 24px; align-self: flex-start; position: sticky; top: 0; max-height: none; }
+.nr .nr-rail { overflow: visible; padding-bottom: 24px; align-self: stretch; position: static; max-height: none; height: auto; }
+/* the rail is taller than the viewport, so it scrolls with the page (a sticky rail slid under the sticky footer, 28 Sep 2026) */
+.nr .nr-body { align-items: stretch; flex: 1 0 auto; min-height: auto; }   /* the design's min-height: 0 let the body shrink to the viewport and the rail spill past the footer */
 .nr .nr-foot { position: sticky; bottom: 0; z-index: 5; }
 .nr .fxm-wrap { height: auto; }
 .nr .fxm { overflow: visible; }
-@media (max-width: 1120px) {
-  .nr .nr-rail { position: static; }
-}
