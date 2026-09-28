@@ -11,6 +11,7 @@
     "test:user-privileges": "node scripts/user-privilege-boundary-check.mjs",
     "test:port-tariff-inventory": "node scripts/port-tariff-inventory-check.mjs",
     "test:pda": "node --import tsx scripts/pda-check.ts && node --import tsx scripts/pda-estimator-contract-check.ts && node --import tsx scripts/pda-route-check.ts && node scripts/pda-route-action-contract-check.mjs && node scripts/pda-sql-contract-check.mjs",
+    "test:pda-ui": "playwright test --config=playwright.pda.config.ts",
     "test:fixture-room": "node --import tsx scripts/fixture-room-check.ts",
     "test:fixture-room:e2e": "playwright test --config=playwright.fixture-room.config.ts",
     "test:module-integration": "node scripts/module-integration-contract-check.mjs",

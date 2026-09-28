@@ -205,6 +205,7 @@ export async function getMyVesselAvailability(
          vessel_name, imo_number, vessel_type, dwt_grain,
          grain_cbm, bale_cbm,
          build_year, flag, risk_level, is_sanctioned,
+         gross_tonnage, scnrt, max_loa_m,
          is_geared, grain_certified, dg_certified, max_draft_m,
          preferred_zones
        )`,

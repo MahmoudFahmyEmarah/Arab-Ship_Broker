@@ -1,6 +1,6 @@
 # Ports Cost Estimator active-design contract
 
-Status: Phase 0 frozen for implementation
+Status: Phase 0 frozen; Phase 1 presentation and governed route preview implemented
 
 Reference: `tmp/Fixture Room + Ports Cost Estimator - Standalone (2).html`
 
@@ -57,7 +57,7 @@ must choose an authorised record before calculation.
 ## Frozen component input
 
 `PdaEstimatorBootstrap` in `lib/pda/estimator-contract.ts` is the page-to-UI
-boundary. Opus-owned components receive only:
+boundary. The estimator component receives only:
 
 - an authorised, serialisable vessel catalog;
 - an authorised, serialisable cargo catalog;
@@ -95,18 +95,38 @@ passage, OPEX, allocation, per-leg coverage and not-sourced reasons. It carries
 a content hash and supersedes by creating a new set. Fixture linkage targets
 the set or links the two legs atomically.
 
+## Implemented increment
+
+The current isolated branch implements the exact active Estimate hierarchy:
+title and subtitle, four-tab strip, authorised vessel/cargo selectors,
+selected summaries and reset, explicit port choice, route summary, timeline,
+and paired load/discharge cards. It uses the real portal shell and the
+authenticated `previewPdaRoute` server action. Unsupported transit and
+incomplete all-in values stay `NOT SOURCED`.
+
+Desktop (1440x900), tablet (1024x768), and mobile (390x844) browser contracts
+cover the empty and selected states, keyboard-accessible selectors, responsive
+collapse, and page-level overflow. The Ports, Agents, and Setup tabs are
+present as explicitly deferred governed workspaces; they contain no mock
+records or simulated workflows.
+
+This increment does **not** claim the immutable paired save/export history,
+per-leg retry state, governed Agents workflow, Ports workspace, or Setup
+preferences. Those remain later phases and are release blockers for any claim
+that the complete four-tab reference has shipped.
+
 ## File ownership
 
-Codex owns `lib/pda/**`, `app/(dashboard)/dashboard/ports-da/**`, SDK, database
+Codex owns `lib/pda/**`, `app/(dashboard)/dashboard/ports-da/**`,
+`components/pda/PdaRouteEstimator.tsx`,
+`components/pda/pda-route-estimator.css`, the PDA SDK, database
 migrations/DOWNs, the shared scoped design base, page composition and release
 verification.
 
 The shared base is `components/design-system/asb-ds.css`. Module pages opt in
 with an `.asb-ds` root. It provides only tokens and primitive controls; exact
-PDA layout remains in Opus's scoped estimator stylesheet.
+PDA layout remains in the scoped route-estimator stylesheet.
 
-Opus owns `components/pda/estimator/**`, `components/pda/estimator.css`, and
-estimator accessibility/responsive/visual browser suites. Opus must not edit
-the legacy `components/pda/PdaEstimator.tsx`, `components/pda/pda.css`, server
-actions, SDK, migrations, shared styles or `package.json` without a mailbox
-request.
+By the owner's 2026-09-27 scope decision, Opus remains on Fixture Room only.
+Opus's PDA role is read-only architecture/audit input through the mailbox; no
+PDA presentation file is assigned to Opus.

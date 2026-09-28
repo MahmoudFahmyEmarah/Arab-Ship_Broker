@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   buildPdaEstimatorCatalog,
@@ -170,5 +171,10 @@ assert.equal(unavailable.catalog.cargos.length, 0);
 assert.equal(unavailable.initial.vesselId, null);
 assert.equal(unavailable.initial.cargoId, null);
 assert.deepEqual(unavailable.notices.map((notice) => notice.code), ["LIVE_CATALOG_UNAVAILABLE"]);
+
+const vesselSdk = readFileSync(new URL("../sdk/app/vessels.ts", import.meta.url), "utf8");
+assert.match(vesselSdk, /gross_tonnage, scnrt, max_loa_m/);
+const portalAdapters = readFileSync(new URL("../lib/portal/adapters.ts", import.meta.url), "utf8");
+assert.match(portalAdapters, /gt:\s*vv\.gross_tonnage\s*\?\?\s*null/);
 
 console.log("PDA ESTIMATOR CONTRACT CHECK: ALL ASSERTIONS PASSED");

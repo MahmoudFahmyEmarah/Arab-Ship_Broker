@@ -143,11 +143,11 @@ export function vesselFromAvailability(
     lsmgo_sea_mt_day?: number | null;
     lsmgo_port_mt_day?: number | null;
   };
-  const vv = v as unknown as { gt?: number | null; scnrt?: number | null; max_loa_m?: number | null };
+  const vv = v as unknown as { gross_tonnage?: number | null; scnrt?: number | null; max_loa_m?: number | null };
   return {
     id: row.id,
     vesselId: row.vessel_id,
-    gt: vv.gt ?? null,
+    gt: vv.gross_tonnage ?? null,
     scnrt: vv.scnrt ?? null,
     loaM: vv.max_loa_m ?? null,
     name: stripVesselNamePrefix(v.vessel_name),
