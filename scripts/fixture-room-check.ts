@@ -20,6 +20,7 @@
  *      excluded PDA objects appear nowhere in the Fixture migrations
  */
 import { notificationFor, lapseWarning, notificationKey } from "../lib/fixture-room/notify-model";
+import { newSince, termsTouched } from "../lib/fixture-room/last-seen";
 import fs from "node:fs";
 import path from "node:path";
 import { FIXTURE_TERM_CATALOGUE, FIXTURE_TERM_CATALOGUE_VERSION, buildTermCatalogue, openingValueFromListing, termHintsFromListing, validateTermCatalogue } from "@/lib/fixture-room/terms";
@@ -393,4 +394,16 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/p\.name \?\? "withheld · via Arab ShipBroker"/.test(docs) && /vesselIdentityMasked \? `withheld/.test(docs), "documents keep counterparty and vessel masking");
   ok(/contentHash/.test(docs) && /only a published recap version records the fixture/.test(docs), "the recap carries its content hash; the summary says it is not a recap");
   ok(!/#[0-9a-fA-F]{3,8}\b/.test(read("components/fixture-room/fixture-room.css").replace(/\/\*[\s\S]*?\*\//g, "")), "the document styles use tokens only");
+}
+
+// -- Phase 1.1 . new since your last visit --
+{
+  const ev = (seq: number, actor: string | null, termId?: string) => ({ id: seq, seq, type: "proposal.submitted", at: "2026-09-28T10:00:00Z", command: null, relayed: false, actorPartyId: actor, onBehalfOfPartyId: null, actorLabel: "x", onBehalfOfLabel: null, payload: termId ? { termId } : {} }) as unknown as Parameters<typeof newSince>[0][number];
+  const events = [ev(1, "me"), ev(2, "them", "t1"), ev(3, "me", "t2"), ev(4, "them", "t3"), ev(5, null)];
+  ok(newSince(events, null, ["me"]).length === 0, "a first visit marks nothing new");
+  ok(JSON.stringify(newSince(events, 1, ["me"]).map((e) => e.seq)) === "[2,4,5]", "after the last visit, only other parties' and system events are new, never the viewer's own");
+  const terms = [{ id: "t1" }, { id: "t2" }, { id: "t3" }] as unknown as Parameters<typeof termsTouched>[1];
+  ok(JSON.stringify([...termsTouched(newSince(events, 1, ["me"]), terms)].sort()) === '["t1","t3"]', "the new chip lands on the terms the other side touched");
+  const ls = read("lib/fixture-room/last-seen.ts");
+  ok(/try \{[\s\S]*localStorage\.getItem[\s\S]*\} catch \{ return null; \}/.test(ls) && /catch \{ \/\* convenience only \*\/ \}/.test(ls) && !/fetch\(|supabase|rpc\(/.test(ls), "the marker is browser-only and survives blocked storage");
 }

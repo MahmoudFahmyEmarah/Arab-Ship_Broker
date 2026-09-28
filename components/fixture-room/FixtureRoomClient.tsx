@@ -21,6 +21,7 @@ import { listingSyncNotice } from "@/lib/fixture-room/listing-sync";
 import { GestureKeys, UNCERTAIN_MESSAGE, runGesture, useNow, useRoomVersionPoll } from "@/lib/fixture-room/client";
 import { countdown, relativeTime } from "@/lib/fixture-room/format";
 import { sidePresence } from "@/lib/fixture-room/presence";
+import { newSince, readLastSeen, termsTouched, writeLastSeen } from "@/lib/fixture-room/last-seen";
 import { BunkerTicker } from "@/components/portal/BunkerTicker";
 import {
   acceptFixtureProposalAction, acknowledgeFixtureRecapAction, addFixtureSubjectAction, agreeFixtureDisclosureAction, closeFixtureRoomAction,
@@ -102,6 +103,19 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
   const [soundOn, setSoundOn] = React.useState(true);
   const audioRef = React.useRef<AudioContext | null>(null);
   const lastSeqRef = React.useRef<number>(Math.max(0, ...initial.events.map((e) => e.seq)));
+  // "new since your last visit": the sequence remembered from the previous visit (read once, after mount)
+  const [lastVisitSeq, setLastVisitSeq] = React.useState<number | null>(null);
+  const latestSeq = Math.max(0, ...view.events.map((e) => e.seq));
+  React.useEffect(() => { setLastVisitSeq(readLastSeen(initial.room.id)); }, [initial.room.id]);
+  React.useEffect(() => {
+    const remember = () => writeLastSeen(initial.room.id, latestSeqRef.current);
+    const onHide = () => { if (document.visibilityState === "hidden") remember(); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", remember);
+    return () => { remember(); document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", remember); };
+  }, [initial.room.id]);
+  const latestSeqRef = React.useRef(latestSeq);
+  React.useEffect(() => { latestSeqRef.current = latestSeq; }, [latestSeq]);
   const now = useNow();
   const roomId = view.room.id;
   // one idempotency key per gesture, kept until the server has answered (audit FR-M5)
@@ -221,6 +235,8 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
     cargo: sidePresence(view.events, view.parties, "cargo", now),
     vessel: sidePresence(view.events, view.parties, "vessel", now),
   }), [view.events, view.parties, now]);
+  const freshEvents = newSince(view.events, lastVisitSeq, viewer.partyIds);
+  const freshTerms = termsTouched(freshEvents, view.terms);
   const windowLeft = room.negotiationWindowEndsAt && now > 0 ? Date.parse(room.negotiationWindowEndsAt) - now : null;
   // the estimator's frozen hand-off contract (C2O-007): ids, ports and quantity; the vessel
   // name only once the owner has disclosed it; the estimator re-resolves every value
@@ -370,6 +386,12 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
             </div>
           )}
 
+          {freshEvents.length > 0 && (
+            <div className="nr-banner is-info" role="status" data-testid="new-since-banner">
+              <div className="nr-banner__body"><div className="nr-banner__title">{freshEvents.length} update{freshEvents.length === 1 ? "" : "s"} since your last visit</div>Marked <span className="fx-new">new</span> on the terms and in the activity log.</div>
+              <div className="nr-banner__cta"><button type="button" className="asb-btn" onClick={() => { writeLastSeen(room.id, latestSeq); setLastVisitSeq(latestSeq); }}>Mark as seen</button></div>
+            </div>
+          )}
           <div className="nr-list__hd">
             <span>The main terms · {agreedCount}/{view.terms.length} agreed</span>
             <span className="fx-glance">
@@ -379,7 +401,7 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
           </div>
           <div className="nr-items">
             {view.terms.map((t) => (
-              <TermRow key={t.id} view={view} term={t} active={activeTermId === t.id} onActivate={() => setActiveTermId((id) => (id === t.id ? null : t.id))}
+              <TermRow key={t.id} view={view} term={t} isNew={freshTerms.has(t.id)} active={activeTermId === t.id} onActivate={() => setActiveTermId((id) => (id === t.id ? null : t.id))}
                 run={run} busy={busy} now={now} actForPartyId={actFor} presence={presence} hovered={hoverSlot === t.id} onHover={setHoverSlot} />
             ))}
           </div>
@@ -391,7 +413,7 @@ export function FixtureRoomClient({ initial }: { initial: FixtureRoomView }) {
           <RecapRail view={view} run={run} busy={busy} actForPartyId={actFor} hoverSlot={hoverSlot} onHover={setHoverSlot} justAgreed={justAgreed} />
           <SubjectsRail view={view} run={run} busy={busy} actForPartyId={actFor} now={now} />
           <MessagesPanel view={view} run={run} busy={busy} now={now} />
-          <ActivityFeed view={view} now={now} />
+          <ActivityFeed view={view} now={now} lastVisitSeq={freshEvents.length ? lastVisitSeq : null} />
         </div>
       </div>
 

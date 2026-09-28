@@ -19,7 +19,7 @@ import { test, expect as baseExpect, type Page } from "@playwright/test";
 // Every assertion is about persisted state, so a wide budget hides nothing: a wrong state
 // stays wrong however long the wait.
 const expect = baseExpect.configure({ timeout: 180_000 });   // 27–28 Sep 2026: <600 MB free on the runner, one accept took >90 s
-import { cleanupFixture, dismissOverlays, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { apiClientAs, cleanupFixture, dismissOverlays, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 // Two browsers, about fifteen governed round trips and two sign-ins: on the loaded local machine
@@ -164,5 +164,29 @@ test("the printable recap renders the published version", async ({ browser, base
   await expect(page.getByTestId("summary-print")).toContainText("$24.50/MT");
   await expect(page.getByTestId("summary-print")).toContainText("$26.25/MT");
   await expect(page.getByTestId("summary-print")).not.toContainText(/E2E Owners/);
+  await context.close();
+});
+
+test("a returning member sees what changed since their last visit", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
+  await page.goto(roomUrl);
+  await dismissOverlays(page);
+  await expect(page.getByTestId("room-header")).toBeVisible();
+  await expect(page.getByTestId("new-since-banner")).toHaveCount(0);   // nothing is new on a visit with no earlier one
+  await page.goto("/dashboard/fixture-room");                           // leaving the room remembers what was seen
+  await expect(page.getByTestId("inbox-list")).toBeVisible();
+  // meanwhile the owner writes to the room through the governed API
+  const ow = await apiClientAs(seed.owner.email);
+  const roomId = roomUrl.split("/").pop()!;
+  const { data: version } = await ow.rpc("get_fixture_room_version", { p_room_id: roomId });
+  const posted = await ow.rpc("post_fixture_message", { p_room_id: roomId, p_body: "Owners ready to lift subjects today.", p_kind: "note", p_visibility: "room", p_term_id: null, p_expected_version: version as number, p_idempotency_key: `e2e-since-${seed.stamp}`, p_as_party_id: null });
+  expect(posted.error, posted.error?.message).toBeNull();
+  // back in the room: the banner and the divider mark it; "Mark as seen" clears it
+  await page.goto(roomUrl);
+  await dismissOverlays(page);
+  await expect(page.getByTestId("new-since-banner")).toContainText(/1 update since your last visit/);
+  await expect(page.getByTestId("new-since-divider")).toBeVisible();
+  await page.getByTestId("new-since-banner").getByRole("button", { name: /mark as seen/i }).click();
+  await expect(page.getByTestId("new-since-banner")).toHaveCount(0);
   await context.close();
 });

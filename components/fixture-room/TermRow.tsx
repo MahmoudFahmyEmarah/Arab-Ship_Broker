@@ -88,9 +88,9 @@ function gapPercent(term: FixtureTermView, proposals: FixtureProposalView[]): nu
   return Math.max(6, Math.min(100, Math.round((spread / spread0) * 100)));
 }
 
-export function TermRow({ view, term, active, onActivate, run, busy, now, actForPartyId, presence, hovered, onHover }: {
+export function TermRow({ view, term, active, onActivate, run, busy, now, actForPartyId, presence, hovered, onHover, isNew = false }: {
   view: FixtureRoomView; term: FixtureTermView; active: boolean; onActivate: () => void; run: RunCommand; busy: boolean; now: number; actForPartyId: string | null;
-  presence: { cargo: SidePresence; vessel: SidePresence }; hovered: boolean; onHover: (id: string | null) => void;
+  presence: { cargo: SidePresence; vessel: SidePresence }; hovered: boolean; onHover: (id: string | null) => void; isNew?: boolean;
 }) {
   const caps = view.viewer.capabilities;
   const side = view.viewer.side;
@@ -177,6 +177,7 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
         <span className={`fx-strip__dot s-${term.status}`} aria-hidden="true" />
         <span className="fx-strip__n">{term.sortOrder}</span>
         <span className="fx-strip__name">{term.label}</span>
+        {isNew && <span className="fx-new" data-testid={`term-new-${term.code}`} title="Changed since your last visit">new</span>}
         {holderLabel && (
           <span className={`fx-hold ${holderCls}`} data-testid={`term-holder-${term.code}`} title={term.holder && term.holder !== mySide ? `With the ${term.holder} side · ${presence[term.holder].label}` : holderLabel}>
             {(holderCls === "cargo" || holderCls === "vessel") && <span className={`fx-hdot st-${presence[holderCls].state}`} aria-hidden="true" />}{holderLabel}
