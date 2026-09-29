@@ -98,14 +98,14 @@ organisation seat and a personal one) names the party it answers for
 invitations is `FX_VALIDATION`, a party that is not one's own is `FX_AUTH`
 (audit FR-M3).
 
-Listing status (decision D4): no command writes `cargo_listings` or
-`vessel_availability`. Entering `on_subjects` records target statuses
+Listing status (decision D4): room-state transitions never write
+`cargo_listings` or `vessel_availability`. Entering `on_subjects` records target statuses
 (cargo `OUT`, vessel `ON SUBS`), `fixed` records (cargo `OUT`, vessel
 `FIXED`), leaving them records (cargo `IN`, vessel `OPEN`), each as a
 `listing_sync.required` event; the read model reports the live statuses and
 whether synchronisation is outstanding, and the room links to the existing
-  listing edit pages. The released integration adds a governed one-click sync
-  action scoped to the listing the current side owns.
+listing edit pages. A separate governed one-click sync command may apply the
+recorded target only to the listing the current side owns.
 
 The composed release also supplies `fixture_pda_links`,
 `link_fixture_pda_estimate` and `fn_can_read_pda_estimate` through the shared

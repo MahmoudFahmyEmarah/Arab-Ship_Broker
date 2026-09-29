@@ -52,7 +52,6 @@ test("composer fields are labelled and focus is visible", async ({ browser, base
   await expect(page.locator('[role="status"][aria-live="polite"]').first()).toBeAttached();
   await context.close();
 });
-
 test("tabbing reaches the term strips and the footer action without a mouse", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
   await page.goto(roomUrl);
@@ -65,7 +64,6 @@ test("tabbing reaches the term strips and the footer action without a mouse", as
   expect(reached, "a term strip was reached by Tab").toBe(true);
   await context.close();
 });
-
 // C2O-012 item 1: the room ticks every second; typing in the recap dialog must survive the ticks
 test("the recap dialog keeps focus and caret across clock ticks, traps Tab and returns focus", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
@@ -97,7 +95,6 @@ test("the recap dialog keeps focus and caret across clock ticks, traps Tab and r
   await expect(opener).toBeFocused();
   await context.close();
 });
-
 // C2O-012 item 3: the recap-slot pulse is off under reduced motion
 test("reduced motion disables the recap-slot pulse", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
@@ -116,7 +113,6 @@ test("reduced motion disables the recap-slot pulse", async ({ browser, baseURL }
   expect(anim).toBe("none");
   await context.close();
 });
-
 // C2O-012 item 6: a new member starts with sound off
 test("sound starts off until the member turns it on", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);

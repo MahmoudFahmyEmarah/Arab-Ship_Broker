@@ -1,91 +1,81 @@
 # PDA Estimator and Fixture Room: release readiness
 
-Candidate: `feature/modules-integration` at `09bb102` (local validation
-complete, 26 September 2026). The application and migration candidate audited
-by Opus is `fe0a1f0`; the later commit changes only the local browser harness.
-Merge, push, deployment and hosted migration are paused for owner feedback.
+Candidate branch: `feature/modules-release-final`. The immutable validation
+SHA is recorded in the live coordination mailbox and final release handoff so
+this document does not become stale after an evidence-only correction.
 
-This candidate is ready for owner-approved merge to `dev`. It has not been
-merged, pushed, deployed, or applied to a hosted database.
+The owner has authorised the final merge to `dev` and the release, subject to
+the repository's exact-SHA gates: combined isolated database lifecycle,
+production build, browser suites, Codex GO, Opus cross-audit GO, a fresh
+production backup/PITR confirmation, and production deployment coordination.
 
 ## Included
 
-- Governed PDA Estimator, tariff versioning/publication, estimate reads, and
-  controlled admin ingestion.
-- Fixture Room negotiation, recap, masking, RLS-only access through RPCs,
-  admin console, account-anonymisation compatibility, and guarded PDA links.
-- Account privilege boundary: members can change only profile fields; admin
-  authority requires both the Auth claim and an active admin record.
-- Market-partner entitlement is service-managed and is enforced consistently
-  by the portal, the PDA server action, and both PDA and Fixture database
-  gates. No member-facing action can grant the flag.
-- The review-queue counter fix: administrator decisions use the service-owned
-  mutation path only after server-side section and edit permission checks.
-- Port-tariff evidence inventory. It inventories the supplied source material;
-  it does not publish imported tariff values automatically.
+- The exact-design PDA Estimator, governed tariff publication, estimate reads,
+  and controlled admin ingestion.
+- Fixture Room negotiation, recap and summary documents, masking, private
+  candidate handles, RLS/RPC-only access, admin console, and guarded PDA links.
+- Account anonymisation, the user privilege boundary, and the service-managed
+  market-partner entitlement.
+- The global market privacy firewall: actor-bound market handles, TBN identity
+  masking, exact owner/admin management paths, and legacy raw-feed closure.
+- Eighteen ordered `20260923*` migrations in
+  `supabase/releases/modules-20260923.txt`.
+
+## Release order
+
+1. Validate and apply Data Sync round 2 (`supabase/releases/sync-20260920.txt`).
+2. Validate the 18-migration module manifest in isolation.
+3. Deploy the matching application during the same controlled release window.
+4. Apply and verify the market closure stages, then run production privacy and
+   module smoke checks.
+
+Use `scripts/release-check.sh` and `scripts/release-apply.sh`; never use an
+unscoped `supabase db push` for this release.
 
 ## Deliberately deferred
 
-`feature/fixture-room`'s proposal-lapse sweep (`98bda61`) is not included.
-It has no approved scheduler, and its additive migration needs an upgrade-path
-regression before it is reconsidered. Existing Fixture proposal expiry remains
-the release behaviour.
+- `20260923204000` proposal-lapse sweep: lazy lapse remains the released
+  behaviour; no scheduler has been selected.
+- `20260923205000` Fixture notification projector and the separate shared
+  notification checkpoint. The current `notify-model.ts` is an inert,
+  channel-free policy contract and no event-to-notification trigger ships.
+- Email/WhatsApp recap delivery and Realtime presence.
 
-## Readiness assessment
+## Exact-tree gates already passed
 
-- PDA Estimator: **95%** production-ready.
-- Fixture Room: **96%** production-ready.
-- Combined release/deployment: **94%** ready.
+- PDA, Fixture Room (310/310), module-integration, and market-privacy
+  (230/230) source/contract suites.
+- Full TypeScript no-emit compilation and targeted ESLint.
+- Manifest/on-disk/harness parity: 18 release migrations; Fixture migrations
+  200-203 and 206-208; deferred 204/205 files physically absent.
+- Independent read-only conflict audit: opaque candidate/restart paths remain,
+  member-facing raw Fixture creation remains revoked, and no masked TBN raw ID
+  was reintroduced.
 
-These are confidence assessments, not percentages of tests passed. The
-remaining risk is concentrated in owner acceptance, the reviewed hosted
-migration run, administrator token refresh, production configuration and
-post-deployment smoke checks. Those operations are intentionally not counted
-as complete while the owner pause is active.
+The database lifecycle, production build, browser suites, and independent
+exact-SHA cross-audit must be recorded before the final GO. A passing source
+gate is not a substitute for those release gates.
 
-## Verified locally
+## Deployment checklist
 
-- Full `npm run build`, including all project prebuild contracts and all PDA,
-  Fixture, admin queue, and portal routes.
-- Fixture pure checks: 197 passing on the included candidate.
-- Every one of the 27 Fixture browser cases passed against the production
-  build: negotiation 4/4, member accessibility 3/3, member responsive 5/5,
-  administrator workflow 3/3, administrator accessibility 4/4 and
-  administrator responsive 8/8. The files were run independently after the
-  local Docker Auth/API services were restarted; the earlier combined run was
-  affected by a recorded Docker DNS timeout, not an application assertion.
-- PDA browser acceptance passed with a published local-only QA tariff:
-  USD 175 calculation with evidence lines, input-change preview invalidation,
-  immutable snapshot save and a 390 px overflow check. The same flow passed
-  as T3 and as a T1 account carrying the service-owned market-partner flag.
-- Combined PDA/Fixture migration harness passed all twelve ordered release
-  migrations, eleven transactional suites, all six DOWN files, an identical
-  5,961-line rollback fingerprint, and full reapplication.
-- Fixture RLS, masking, idempotency, immutability, snapshot, shared PDA link,
-  account-anonymisation, and user-privilege transaction smoke suites passed.
-- U7 verifies a service-owned review approval increments the submitter's
-  counter while a provisioned admin still cannot alter that counter directly.
-- Opus independently re-audited exact application/migration commit `fe0a1f0`,
-  confirmed findings F1-F6 and the rollback constraint-name correction are
-  closed, and issued final GO.
+1. Re-fetch `origin/dev` and prove the frozen candidate is still a clean
+   fast-forward from it.
+2. Confirm a fresh Supabase backup/PITR point before any hosted write.
+3. Confirm which Vercel branch/build is production. Repository documentation
+   currently describes `main` as production and `dev` as Preview; a `dev` push
+   alone must not be treated as a production deployment.
+4. Apply only the reviewed manifests in the stated order and verify every
+   recorded migration version.
+5. Confirm `fixture_private` and `market_private` remain hidden, raw Fixture
+   creation is revoked from members, and legacy raw matchers are revoked.
+6. Have existing administrators sign out and back in after migration 330000.
+7. Smoke-test an admin review, PDA estimate/save, two-party Fixture flow,
+   masked TBN read, owner-only listing sync, and responsive layouts.
+8. Keep proposal-lapse scheduling and the Fixture notification projector off.
 
-## Owner approval and deployment checklist
-
-1. Review the final local validation report and approve merging the exact
-   reported `feature/modules-integration` commit to `dev`.
-2. Review the twelve ordered migrations before applying them to the target
-   Supabase database. Apply through the normal reviewed migration deployment
-   process; do not run rollback harnesses against a populated environment.
-3. Have every existing administrator sign out and sign in once after the user
-   privilege migration so the refreshed access token contains the admin claim.
-4. Run the production smoke suite for an admin review approval, a PDA estimate,
-   a Fixture Room member flow, and a masked TBN read.
-5. Load new port-tariff material through the staged admin ingestion/review
-   workflow, then publish a reviewed tariff version. Do not bulk-load the
-   `Port Tarifs` directory directly into live calculation tables.
-6. Keep proposal-lapse scheduling disabled. Reconsider it only when the owner
-   selects pg_cron or an external service-owned scheduler and approves the
-   corrected upgrade-safe migration.
-7. Keep `is_market_partner` false unless the owner deliberately grants it
-   through a service-owned administration operation. It is an entitlement,
-   not an editable profile field.
+Rollback scripts are emergency tools, not routine production commands. PDA
+rollback is data-destructive, account anonymisation is not reversible for
+already-erased accounts, and Fixture rollback preserves populated ledgers as
+backup tables. Stop on the first migration failure and reconcile the exact
+applied prefix before taking another action.

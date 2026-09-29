@@ -39,7 +39,6 @@ function findId(node: unknown, id: string, path: string, out: string[]) {
   if (node && typeof node === "object") { for (const [k, v] of Object.entries(node as Record<string, unknown>)) findId(v, id, `${path}.${k}`, out); return; }
   if (typeof node === "string" && node.toLowerCase() === id.toLowerCase()) out.push(`${path} carries the masked vessel id`);
 }
-
 /** Paths in a MEMBER view that should never be there. Empty means clean. Admin views are exempt. */
 export function findMaskingLeaks(view: FixtureRoomView): string[] {
   if (view.viewer.isAdmin) return [];
@@ -75,7 +74,6 @@ export function findMaskingLeaks(view: FixtureRoomView): string[] {
   }
   return out;
 }
-
 // a hyphenated uuid, or a hyphenless one with the v4 layout (version 4, variant 8-b); a
 // governed content or snapshot hash (32 hex, no layout) is not an identifier (C2O-015 item 6)
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}/gi;
@@ -108,4 +106,3 @@ export function embeddedIdentifiers(view: unknown): string[] {
   walk(view, "view", "");
   return out;
 }
-

@@ -549,4 +549,3 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const body = read("supabase/tests/fixture_room/bodies/handles.sql");
   ok(/'HELD'/.test(body) && /'AB'/.test(body) && /H18 ok/.test(body) && /H19 ok/.test(body) && /statement_timeout = '5s'/.test(body), "the suite proves bounded, masked member reads for hulls named HELD and AB");
 }
-

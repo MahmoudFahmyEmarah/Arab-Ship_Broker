@@ -46,9 +46,9 @@ Requested for `package.json` (shared, not made): `"test:fixture-room": "node --i
 scripts/fixture-room-harness.sh --reapply [--from-applied]
 ```
 
-Assembles the six self-contained smoke files from `seed_fixture_shape.sql` +
+Assembles the nine self-contained smoke files from `seed_fixture_shape.sql` +
 `bodies/*.sql`, then runs `scripts/migration-harness.sh`: baseline fingerprint
-→ the four migrations → six suites (each `BEGIN … ROLLBACK`, each must print
+→ the seven released migrations → nine suites (each `BEGIN … ROLLBACK`, each must print
 `ALL ASSERTIONS PASSED`) → the DOWN file → fingerprint comparison.
 `--reapply` puts the module back for the application afterwards. The baseline
 fingerprint must be taken without the module (otherwise the forward chain is
@@ -457,7 +457,7 @@ upgrade path itself: the original `20260923203000` first, then
 (sweep, then the owner's replacement, exactly one `proposal.lapsed`).
 Codex's release decision is to defer the sweep from the initial Fixture
 Room release (lazy lapse stays the release behaviour; nothing is
-scheduled); the branch carries the upgrade-safe form so that reopening it
+scheduled); the source Fixture feature branch carries the upgrade-safe form so that reopening it
 needs no further correction.
 
 Two corrections while writing the suite, both in the suite: a fresh room
@@ -639,9 +639,9 @@ Earlier failures blamed on memory were partly this bug; the machine was also
 slow, but a covered button never becomes clickable.
 
 Also in this commit: `lib/fixture-room/notify-model.ts`, the Fixture-owned
-notification rules (who hears about each ledger event, how urgently, in what
-masked words, with one delivery key per event, recipient and channel) that the
-projector will call once the shared notification core exists (O2C-009).
+notification rules (who hears about each ledger event, how urgently, and in
+what masked words). It produces one logical, channel-free delivery key per
+event and recipient for an approved future projector to consume.
 
 | Gate | Result |
 |---|---|

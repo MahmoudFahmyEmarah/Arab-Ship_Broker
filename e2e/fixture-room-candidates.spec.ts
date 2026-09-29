@@ -79,7 +79,6 @@ test("the governed read masks the TBN hull and carries no vessel identifier", as
   expect(rows.every((x) => typeof x.candidateKey === "string" && x.availabilityId === undefined), "every candidate is an opaque key, never a raw id").toBe(true);
   expect(rows.some((x) => x.name === "TBN")).toBe(true);
 });
-
 test("a member cannot list the matches of someone else's cargo", async ({ browser, baseURL }) => {
   const ow = await apiClientAs(seed.owner.email);
   const { data, error } = await ow.rpc("list_fixture_match_candidates", { p_kind: "cargo", p_listing_id: seed.cargoId });
@@ -92,7 +91,6 @@ test("a member cannot list the matches of someone else's cargo", async ({ browse
   await expect(page.getByTestId("cand-vessel")).toHaveCount(0);
   await context.close();
 });
-
 // re-audit C2O-011 item 3: a second active seat of the owning organisation can pick the
 // organisation's cargo (it did not post it) and gets the same masked candidates
 test("a second seat of the charterer organisation picks the organisation's cargo", async ({ browser, baseURL }) => {
@@ -116,7 +114,6 @@ test("a second seat of the charterer organisation picks the organisation's cargo
   expect(nul.error?.message ?? "").toMatch(/FX_VALIDATION/);   // re-audit item 4: a null kind is refused
   await context.close();
 });
-
 // C2O-013: the room opened on the TBN hull carries no hull or position id in its page or reads
 test("a room opened from the TBN key reveals no hull or position id", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
@@ -171,4 +168,3 @@ test("a room opened from the TBN key reveals no hull or position id", async ({ b
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await context.close();
 });
-
