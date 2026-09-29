@@ -2,22 +2,25 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { EMAIL_LOGO_B64, EMAIL_LOGO_CID } from "@/lib/groupmail/logo";
 import { makeTransport, type SmtpAuth } from "@/lib/groupmail/send";
 
+const NOTIFICATION_MESSAGE_ID_DOMAIN = "arabshipbroker.com";
+
 export interface NotificationClaim {
+  job_kind: "instant" | "digest";
   id: string;
-  notification_id: string;
   claim_token: string;
   attempts: number;
+  recipient_user_id: string;
 }
 
 export interface NotificationSnapshot {
   id: string;
   recipient_user_id: string;
-  dedupe_key: string;
-  kind: string;
   importance: "urgent" | "normal" | "info";
   title: string;
   body: string;
   href: string | null;
+  created_at: string;
+  total_count: number;
 }
 
 export interface NotificationRecipient {
@@ -40,6 +43,7 @@ export interface NotificationDispatchResult {
   sent: number;
   retried: number;
   failed: number;
+  suppressed: number;
   lost: number;
 }
 
@@ -50,7 +54,7 @@ export interface DeliveryTransport {
 
 export type SettleDelivery = (
   claim: NotificationClaim,
-  ok: boolean,
+  outcome: "sent" | "failed" | "suppressed",
   error: string | null,
 ) => Promise<boolean>;
 
@@ -61,6 +65,11 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function safeMailSubject(value: string): string {
+  const normalized = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  return normalized || "Arab ShipBroker notification";
 }
 
 function safeAbsoluteHref(siteUrl: string | null, href: string | null): string | null {
@@ -78,7 +87,7 @@ export function buildNotificationMail(
   claim: NotificationClaim,
   notification: NotificationSnapshot,
   recipient: NotificationRecipient,
-  options: { siteUrl: string | null; senderDomain: string },
+  options: { siteUrl: string | null },
 ): NotificationMail {
   const target = safeAbsoluteHref(options.siteUrl, notification.href);
   const name = recipient.full_name?.trim() || "Member";
@@ -95,43 +104,100 @@ export function buildNotificationMail(
     "",
     "Manage delivery preferences in the Arab ShipBroker portal.",
   ].join("\n");
-  const domain = options.senderDomain.replace(/[^a-z0-9.-]/gi, "") || "arabshipbroker.com";
   return {
     to: recipient.email,
-    subject: notification.title,
+    subject: safeMailSubject(notification.title),
     html,
     text,
-    messageId: `<asb-notification-${claim.id}@${domain}>`,
+    messageId: `<asb-notification-${claim.id}@${NOTIFICATION_MESSAGE_ID_DOMAIN}>`,
+  };
+}
+
+export function buildNotificationDigestMail(
+  claim: NotificationClaim,
+  notifications: NotificationSnapshot[],
+  recipient: NotificationRecipient,
+  options: { siteUrl: string | null },
+): NotificationMail {
+  if (!notifications.length) throw new Error("digest has no deliverable items");
+  const total = Math.max(notifications.length, ...notifications.map((item) => Number(item.total_count) || 0));
+  const omitted = Math.max(0, total - notifications.length);
+  const name = recipient.full_name?.trim() || "Member";
+  const itemHtml = notifications.map((notification) => {
+    const target = safeAbsoluteHref(options.siteUrl, notification.href);
+    const action = target
+      ? `<a href="${escapeHtml(target)}" style="display:inline-block;margin-top:8px;color:#1768a9;text-decoration:none;font-size:12px;font-weight:600">Open update</a>`
+      : "";
+    return `<li style="margin:0;padding:14px 0;border-bottom:1px solid #e6edf3;list-style:none"><h2 style="margin:0 0 6px;font-size:16px;line-height:1.35;color:#0d2f50">${escapeHtml(notification.title)}</h2><p style="margin:0;font-size:14px;line-height:1.55;color:#334e68">${escapeHtml(notification.body)}</p>${action}</li>`;
+  }).join("");
+  const omittedHtml = omitted
+    ? `<p style="margin:16px 0 0;color:#60758a;font-size:13px">${omitted} more ${omitted === 1 ? "update is" : "updates are"} waiting in the portal.</p>`
+    : "";
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f7fa;font-family:Arial,sans-serif;color:#18324f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:28px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #dbe4ec;border-radius:10px;overflow:hidden"><tr><td style="background:#0d2f50;padding:18px 22px"><img src="cid:${EMAIL_LOGO_CID}" width="32" height="32" alt="" style="vertical-align:middle"><span style="margin-left:10px;color:#ffffff;font-size:18px;font-weight:700;vertical-align:middle">Arab ShipBroker</span></td></tr><tr><td style="padding:24px 22px"><p style="margin:0 0 12px;color:#60758a;font-size:13px">Hello ${escapeHtml(name)},</p><h1 style="margin:0 0 8px;font-size:21px;line-height:1.3;color:#0d2f50">Your Arab ShipBroker digest</h1><p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#60758a">${total} ${total === 1 ? "update" : "updates"} since your last digest.</p><ul style="margin:0;padding:0">${itemHtml}</ul>${omittedHtml}<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e6edf3;color:#7a8da0;font-size:11px">This operational digest was generated by Arab ShipBroker. Manage delivery preferences in the portal.</p></td></tr></table></td></tr></table></body></html>`;
+  const textItems = notifications.flatMap((notification, index) => {
+    const target = safeAbsoluteHref(options.siteUrl, notification.href);
+    return [
+      `${index + 1}. ${notification.title}`,
+      notification.body,
+      ...(target ? [`Open update: ${target}`] : []),
+      "",
+    ];
+  });
+  return {
+    to: recipient.email,
+    subject: `Arab ShipBroker digest - ${total} ${total === 1 ? "update" : "updates"}`,
+    html,
+    text: [
+      `Hello ${name},`,
+      "",
+      `Your Arab ShipBroker digest contains ${total} ${total === 1 ? "update" : "updates"}.`,
+      "",
+      ...textItems,
+      ...(omitted ? [`${omitted} more ${omitted === 1 ? "update is" : "updates are"} waiting in the portal.`, ""] : []),
+      "Manage delivery preferences in the Arab ShipBroker portal.",
+    ].join("\n"),
+    messageId: `<asb-notification-${claim.id}@${NOTIFICATION_MESSAGE_ID_DOMAIN}>`,
   };
 }
 
 export async function processNotificationClaims(
   claims: NotificationClaim[],
-  notifications: Map<string, NotificationSnapshot>,
+  notifications: Map<string, NotificationSnapshot[]>,
   recipients: Map<string, NotificationRecipient>,
   transport: DeliveryTransport,
   settle: SettleDelivery,
-  options: { siteUrl: string | null; senderDomain: string; maxAttempts: number; deadlineAt?: number },
+  options: { siteUrl: string | null; maxAttempts: number; deadlineAt?: number },
 ): Promise<NotificationDispatchResult> {
   const result: NotificationDispatchResult = {
     claimed: claims.length,
     sent: 0,
     retried: 0,
     failed: 0,
+    suppressed: 0,
     lost: 0,
   };
 
   for (const claim of claims) {
-    const notification = notifications.get(claim.notification_id);
-    const recipient = notification ? recipients.get(notification.recipient_user_id) : null;
+    const jobItems = notifications.get(claim.id) ?? [];
+    const recipient = recipients.get(claim.recipient_user_id);
     let failure: string | null = null;
-    if (!notification) failure = "notification snapshot unavailable";
-    else if (!recipient?.is_active) failure = "recipient inactive or unavailable";
+    if (!jobItems.length) {
+      try {
+        if (await settle(claim, "suppressed", "no deliverable notification items remain")) result.suppressed += 1;
+        else result.lost += 1;
+      } catch {
+        result.lost += 1;
+      }
+      continue;
+    }
+    if (!recipient?.is_active) failure = "recipient inactive or unavailable";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email)) failure = "recipient email invalid";
 
-    if (!failure && notification && recipient) {
+    if (!failure && recipient) {
       try {
-        const mail = buildNotificationMail(claim, notification, recipient, options);
+        const mail = claim.job_kind === "digest"
+          ? buildNotificationDigestMail(claim, jobItems, recipient, options)
+          : buildNotificationMail(claim, jobItems[0]!, recipient, options);
         if (options.deadlineAt == null) {
           await transport.send(mail);
         } else {
@@ -149,7 +215,7 @@ export async function processNotificationClaims(
             if (timer) clearTimeout(timer);
           }
         }
-        if (await settle(claim, true, null)) result.sent += 1;
+        if (await settle(claim, "sent", null)) result.sent += 1;
         else result.lost += 1;
         continue;
       } catch (error) {
@@ -158,7 +224,7 @@ export async function processNotificationClaims(
     }
 
     try {
-      if (!(await settle(claim, false, failure))) result.lost += 1;
+      if (!(await settle(claim, "failed", failure))) result.lost += 1;
       else if (claim.attempts >= options.maxAttempts) result.failed += 1;
       else result.retried += 1;
     } catch {
@@ -228,23 +294,31 @@ export async function dispatchNotificationDeliveries(
   if (passwordError || typeof password !== "string" || !password) throw new Error("notification SMTP password unavailable");
   if (!config?.smtp_host || !config?.smtp_user) throw new Error("notification SMTP is not configured");
 
-  const { data: claimData, error: claimError } = await client.rpc("fn_notification_delivery_claim", {
-    p_limit: limit,
-    p_ttl_seconds: leaseSeconds,
-    p_max_attempts: maxAttempts,
-  });
-  if (claimError) throw new Error(`notification claim failed: ${claimError.message}`);
-  const claims = (claimData ?? []) as NotificationClaim[];
-  if (!claims.length) return { claimed: 0, sent: 0, retried: 0, failed: 0, lost: 0 };
+  const claims: NotificationClaim[] = [];
+  for (let index = 0; index < limit; index += 1) {
+    const { data: claimData, error: claimError } = await client.rpc("fn_notification_email_claim", {
+      p_ttl_seconds: leaseSeconds,
+      p_max_attempts: maxAttempts,
+    });
+    if (claimError) throw new Error(`notification claim failed: ${claimError.message}`);
+    const claim = ((claimData ?? []) as NotificationClaim[])[0];
+    if (!claim) break;
+    claims.push(claim);
+  }
+  if (!claims.length) return { claimed: 0, sent: 0, retried: 0, failed: 0, suppressed: 0, lost: 0 };
 
-  const notificationIds = [...new Set(claims.map((claim) => claim.notification_id))];
-  const { data: notificationData, error: notificationError } = await client
-    .from("notifications")
-    .select("id, recipient_user_id, dedupe_key, kind, importance, title, body, href")
-    .in("id", notificationIds);
-  if (notificationError) throw new Error("notification snapshots unavailable after claim");
-  const snapshots = (notificationData ?? []) as NotificationSnapshot[];
-  const recipientIds = [...new Set(snapshots.map((notification) => notification.recipient_user_id))];
+  const snapshots = new Map<string, NotificationSnapshot[]>();
+  for (const claim of claims) {
+    const { data, error } = await client.rpc("fn_notification_email_snapshot", {
+      p_job_kind: claim.job_kind,
+      p_id: claim.id,
+      p_token: claim.claim_token,
+      p_item_limit: 25,
+    });
+    if (error) throw new Error("notification snapshots unavailable after claim");
+    snapshots.set(claim.id, (data ?? []) as NotificationSnapshot[]);
+  }
+  const recipientIds = [...new Set(claims.map((claim) => claim.recipient_user_id))];
   const { data: recipientData, error: recipientError } = await client
     .from("users")
     .select("id, email, full_name, is_active")
@@ -262,14 +336,15 @@ export async function dispatchNotificationDeliveries(
   try {
     return await processNotificationClaims(
       claims,
-      new Map(snapshots.map((snapshot) => [snapshot.id, snapshot] as const)),
+      snapshots,
       new Map(((recipientData ?? []) as NotificationRecipient[]).map((recipient) => [recipient.id, recipient] as const)),
       transport,
-      async (claim, ok, error) => {
-        const settled = await client.rpc("fn_notification_delivery_settle", {
+      async (claim, outcome, error) => {
+        const settled = await client.rpc("fn_notification_email_settle", {
+          p_job_kind: claim.job_kind,
           p_id: claim.id,
           p_token: claim.claim_token,
-          p_ok: ok,
+          p_outcome: outcome,
           p_error: error?.slice(0, 500) ?? null,
           p_max_attempts: maxAttempts,
         });
@@ -278,7 +353,6 @@ export async function dispatchNotificationDeliveries(
       },
       {
         siteUrl: options.siteUrl ?? null,
-        senderDomain: smtp.user.split("@")[1] ?? "arabshipbroker.com",
         maxAttempts,
         deadlineAt: options.deadlineAt,
       },

@@ -49,6 +49,8 @@ test("bell is keyboard operable, announces unread state and fits a phone viewpor
           body: "Open the governed Fixture Room before the proposal lapses.",
           href: null,
           read_at: null,
+          expires_at: new Date(Date.now() - 60_000).toISOString(),
+          is_expired: true,
           created_at: new Date().toISOString(),
         },
       ]),
@@ -62,10 +64,11 @@ test("bell is keyboard operable, announces unread state and fits a phone viewpor
   await bell.focus();
   await page.keyboard.press("Enter");
 
-  const panel = page.getByRole("region", { name: "Notifications" });
+  const panel = page.getByRole("region", { name: "Notifications", exact: true });
   await expect(panel).toBeVisible();
-  const unread = page.getByRole("button", { name: /Unread urgent notification: Proposal expires soon/i });
+  const unread = page.getByRole("button", { name: /Unread expired urgent notification: Proposal expires soon/i });
   await expect(unread).toBeVisible();
+  await expect(unread.getByText("Expired", { exact: true })).toBeVisible();
   await unread.focus();
   const focusStyle = await unread.evaluate((element) => {
     const style = getComputedStyle(element);

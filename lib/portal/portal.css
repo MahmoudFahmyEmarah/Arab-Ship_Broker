@@ -48,6 +48,7 @@
   background: #fff; color: inherit; text-align: left; text-decoration: none; cursor: pointer;
 }
 .portal-notification__item.is-unread { background: #f4f9fd; }
+.portal-notification__item.is-expired { border-left: 2px solid #9aa9b7; }
 .portal-notification__item:hover { background: #eaf4fb; }
 .portal-notification__item:focus-visible {
   position: relative; z-index: 1; background: #eaf4fb;
@@ -60,7 +61,23 @@
 .portal-notification__copy strong { color: var(--asb-navy); font-size: 12px; line-height: 1.35; }
 .portal-notification__copy > span { display: -webkit-box; overflow: hidden; color: var(--asb-gray-700); font-size: 11px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .portal-notification__item time { color: var(--asb-gray-500); font-size: 10px; white-space: nowrap; }
+.portal-notification__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.portal-notification__expired { padding: 2px 5px; border-radius: 999px; background: #edf1f4; color: #536779; font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .portal-notification__state { margin: 0; padding: 28px 16px; color: var(--asb-gray-500); font-size: 11px; text-align: center; }
+
+@media (max-width: 640px) {
+  .portal-notification__panel {
+    position: fixed;
+    top: var(--portal-notification-mobile-top, 64px);
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100dvh - var(--portal-notification-mobile-top, 64px) - 12px);
+  }
+  .portal-notification__list {
+    max-height: calc(100dvh - var(--portal-notification-mobile-top, 64px) - 72px);
+  }
+}
 
 /* asb/tokens.css — Arab ShipBroker design tokens
  * Brand: Bloomberg terminal × Lloyd's register. Sharp, dense, professional.

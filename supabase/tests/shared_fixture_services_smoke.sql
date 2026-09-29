@@ -47,11 +47,27 @@ declare
   n3 uuid;
   n4 uuid;
   n5 uuid;
-  d public.notification_deliveries%rowtype;
+  n6 uuid;
+  n7 uuid;
+  n8 uuid;
+  n_retry_expiring uuid;
+  n_late uuid;
+  n_expired uuid;
+  digest_batch uuid;
+  late_batch uuid;
+  j record;
   first_token uuid;
+  first_snapshot jsonb;
+  retry_snapshot jsonb;
+  first_snapshot_at timestamptz;
   n integer;
   refused boolean := false;
 begin
+  if has_function_privilege('anon', 'public.list_my_notifications(integer,timestamptz)', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.list_my_notifications(integer,timestamptz)', 'EXECUTE') then
+    raise exception 'N0: notification feed RPC grants are not private-by-default';
+  end if;
+
   n1 := public.fn_notification_enqueue(
     u1, 'fixture.proposal', 'fixture/room-1/event-1', 'New fixture proposal',
     'A counterparty submitted a proposal.', '/dashboard/fixture-room/room-1',
@@ -149,51 +165,134 @@ begin
   exception when invalid_parameter_value then null;
   end;
   perform pg_temp.ntf_owner();
-  begin
-    perform public.fn_notification_enqueue(
-      u1, 'fixture.expired', 'fixture/room-1/expired', 'Expired notice',
-      'This notification must be refused.', null, 'normal', '{}'::jsonb,
-      false, null, now() - interval '1 second'
-    );
-    raise exception 'N4: past expiry accepted';
-  exception when invalid_parameter_value then null;
-  end;
+  perform pg_temp.ntf_as(u1);
+  perform public.set_notification_preferences(true, 'digest', 9);
+  perform pg_temp.ntf_owner();
 
-  update public.notification_deliveries
-     set next_attempt_at = now() - interval '1 minute'
-   where notification_id = n1;
-  select * into d from public.fn_notification_delivery_claim(10, 600, 8) limit 1;
-  if d.id is null or d.status <> 'sending' or d.claim_token is null then
-    raise exception 'N5: due delivery not claimed';
-  end if;
-  if public.fn_notification_delivery_settle(d.id, gen_random_uuid(), true, null, 8) then
-    raise exception 'N5: wrong claim token settled delivery';
-  end if;
-  first_token := d.claim_token;
-  update public.notification_deliveries
-     set lease_until = now() - interval '1 second'
-   where id = d.id;
-  select * into d from public.fn_notification_delivery_claim(10, 600, 8) limit 1;
-  if d.id is null or d.claim_token = first_token or d.attempts <> 2 then
-    raise exception 'N5: expired lease was not reclaimed safely';
-  end if;
-  if not public.fn_notification_delivery_settle(d.id, d.claim_token, true, null, 8) then
-    raise exception 'N5: valid claim did not settle';
-  end if;
-  if (select status from public.notification_deliveries where id = d.id) <> 'sent' then
-    raise exception 'N5: sent status missing';
-  end if;
-
-  n3 := public.fn_notification_enqueue(
-    u2, 'fixture.retry', 'fixture/room-2/retry', 'Retry notice',
-    'This delivery exercises the retry ceiling.', null, 'urgent'
+  n_expired := public.fn_notification_enqueue(
+    u1, 'fixture.expired', 'fixture/room-1/expired', 'Expired notice',
+    'This history remains visible although its email is obsolete.', null,
+    'normal', '{}'::jsonb, true, null, now() - interval '1 second'
   );
-  select * into d from public.fn_notification_delivery_claim(1, 600, 1) limit 1;
-  if d.notification_id <> n3 or not public.fn_notification_delivery_settle(d.id, d.claim_token, false, 'test failure', 1) then
-    raise exception 'N5: bounded failure did not settle';
+  if (select status from public.notification_deliveries where notification_id = n_expired) <> 'suppressed'
+     or (select last_error from public.notification_deliveries where notification_id = n_expired) !~ 'expired' then
+    raise exception 'N4: past expiry did not suppress email';
   end if;
-  if (select status from public.notification_deliveries where notification_id = n3) <> 'failed' then
-    raise exception 'N5: retry ceiling did not fail delivery';
+  perform pg_temp.ntf_as(u1);
+  if not coalesce((select is_expired from public.list_my_notifications(30, null) where id = n_expired), false) then
+    raise exception 'N4: expired notification disappeared from the feed';
+  end if;
+  if public.notification_badge() <> 1 then raise exception 'N4: expired unread item disappeared from badge'; end if;
+  if public.mark_notifications_read(array[n_expired]) <> 1 then
+    raise exception 'N4: expired item was not marked read';
+  end if;
+  if public.notification_badge() <> 0 then
+    raise exception 'N4: expired item did not participate in read state';
+  end if;
+  perform pg_temp.ntf_owner();
+
+  n6 := public.fn_notification_enqueue(
+    u1, 'fixture.digest', 'fixture/room-1/digest-1', 'Digest one',
+    'First item in one combined envelope.', '/dashboard/fixture-room/room-1', 'normal'
+  );
+  n7 := public.fn_notification_enqueue(
+    u1, 'fixture.digest', 'fixture/room-1/digest-2', 'Digest two',
+    'Second item in one combined envelope.', '/dashboard/fixture-room/room-1', 'info'
+  );
+  select digest_batch_id into digest_batch
+    from public.notification_deliveries where notification_id = n6;
+  if digest_batch is null
+     or (select digest_batch_id from public.notification_deliveries where notification_id = n7) is distinct from digest_batch
+     or (select count(*) from public.notification_deliveries where digest_batch_id = digest_batch) <> 2 then
+    raise exception 'N5: same recipient/window did not form one digest batch';
+  end if;
+
+  -- Model an item that was valid when the envelope was first rendered but
+  -- expires before an ambiguous SMTP attempt is reclaimed. The original
+  -- envelope must remain byte-stable under its stable Message-ID.
+  insert into public.notifications
+    (recipient_user_id, dedupe_key, kind, importance, title, body, in_app_visible, expires_at)
+  values
+    (u1, 'fixture/room-1/retry-expiry', 'fixture.digest', 'normal',
+     'Digest retry expiry', 'This item remains in the frozen retry envelope.', true,
+     clock_timestamp() + interval '5 seconds')
+  returning id into n_retry_expiring;
+  insert into public.notification_deliveries
+    (notification_id, channel, status, next_attempt_at, digest_batch_id)
+  values
+    (n_retry_expiring, 'email', 'queued', now() - interval '1 minute', digest_batch);
+
+  n8 := public.fn_notification_enqueue(
+    u1, 'fixture.urgent', 'fixture/room-1/urgent', 'Urgent notice',
+    'Urgent mail bypasses the digest.', null, 'urgent'
+  );
+  if (select digest_batch_id from public.notification_deliveries where notification_id = n8) is not null then
+    raise exception 'N5: urgent mail entered a digest';
+  end if;
+
+  update public.notification_digest_batches set next_attempt_at = now() - interval '2 minutes'
+   where id = digest_batch;
+  update public.notification_deliveries set next_attempt_at = now() - interval '1 minute'
+   where notification_id = n8;
+
+  select * into j from public.fn_notification_email_claim(600, 8);
+  if j.job_kind <> 'digest' or j.id <> digest_batch or j.claim_token is null or j.attempts <> 1 then
+    raise exception 'N5: due digest envelope not claimed first';
+  end if;
+  select jsonb_agg(to_jsonb(s) order by s.created_at, s.id)
+    into first_snapshot
+    from public.fn_notification_email_snapshot('digest', j.id, j.claim_token, 25) s;
+  select snapshot_at into first_snapshot_at
+    from public.notification_digest_batches where id = digest_batch;
+  if jsonb_array_length(first_snapshot) <> 3
+     or (select max(total_count) from public.fn_notification_email_snapshot('digest', j.id, j.claim_token, 25)) <> 3 then
+    raise exception 'N5: digest snapshot did not combine all items';
+  end if;
+  if public.fn_notification_email_settle('digest', j.id, gen_random_uuid(), 'sent', null, 8) then
+    raise exception 'N5: wrong digest token settled envelope';
+  end if;
+  first_token := j.claim_token;
+
+  -- Once claimed, the same recipient/window is closed. A late enqueue must be
+  -- placed in a later batch and must never be settled as part of this envelope.
+  n_late := public.fn_notification_enqueue(
+    u1, 'fixture.digest', 'fixture/room-1/digest-late', 'Late digest item',
+    'This item belongs to a later envelope.', null, 'normal'
+  );
+  select digest_batch_id into late_batch
+    from public.notification_deliveries where notification_id = n_late;
+  if late_batch is null or late_batch = digest_batch then
+    raise exception 'N5: enqueue attached to a claimed digest envelope';
+  end if;
+
+  perform pg_sleep(5.1);
+  update public.notification_digest_batches set lease_until = now() - interval '1 second' where id = j.id;
+  select * into j from public.fn_notification_email_claim(600, 8);
+  if j.job_kind <> 'digest' or j.claim_token = first_token or j.attempts <> 2 then
+    raise exception 'N5: expired digest lease was not reclaimed safely';
+  end if;
+  select jsonb_agg(to_jsonb(s) order by s.created_at, s.id)
+    into retry_snapshot
+    from public.fn_notification_email_snapshot('digest', j.id, j.claim_token, 25) s;
+  if retry_snapshot is distinct from first_snapshot
+     or (select snapshot_at from public.notification_digest_batches where id = digest_batch) is distinct from first_snapshot_at then
+    raise exception 'N5: digest retry changed the frozen envelope under one message id';
+  end if;
+  if not public.fn_notification_email_settle('digest', j.id, j.claim_token, 'sent', null, 8) then
+    raise exception 'N5: valid digest claim did not settle';
+  end if;
+  if (select count(*) from public.notification_deliveries where digest_batch_id = digest_batch and status = 'sent') <> 3
+     or (select status from public.notification_deliveries where notification_id = n_late) <> 'queued' then
+    raise exception 'N5: digest children did not settle together';
+  end if;
+
+  select * into j from public.fn_notification_email_claim(600, 1);
+  if j.job_kind <> 'instant'
+     or not public.fn_notification_email_settle('instant', j.id, j.claim_token, 'failed', 'test failure', 1) then
+    raise exception 'N5: bounded instant failure did not settle';
+  end if;
+  if (select status from public.notification_deliveries where notification_id = n8) <> 'failed' then
+    raise exception 'N5: retry ceiling did not fail instant delivery';
   end if;
 
   n4 := public.fn_notification_enqueue(
@@ -201,8 +300,8 @@ begin
     'This delivery must be suppressed before claim.', null, 'urgent'
   );
   update public.users set is_active = false where id = u2;
-  select * into d from public.fn_notification_delivery_claim(10, 600, 8) limit 1;
-  if d.id is not null then raise exception 'N5: inactive recipient delivery was claimed'; end if;
+  select * into j from public.fn_notification_email_claim(600, 8);
+  if j.id is not null then raise exception 'N5: inactive recipient delivery was claimed'; end if;
   if (select status from public.notification_deliveries where notification_id = n4) <> 'suppressed' then
     raise exception 'N5: inactive recipient delivery was not suppressed';
   end if;

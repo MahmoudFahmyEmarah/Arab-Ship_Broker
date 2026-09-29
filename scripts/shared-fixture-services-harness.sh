@@ -59,12 +59,14 @@ prove_preexisting_bucket_refused() {
 apply_forward() {
   psql_test -1 -f - < supabase/migrations/20260923350000_shared_notifications.sql
   psql_test -1 -f - < supabase/migrations/20260923351000_fixture_recap_storage.sql
+  psql_test -1 -f - < supabase/migrations/20260923352000_shared_notification_semantics.sql
 }
 run_smoke() {
   { printf 'begin;\n'; cat supabase/tests/shared_fixture_services_smoke.sql; printf '\nrollback;\n'; } \
     | psql_test -f -
 }
 run_down() {
+  psql_test -1 -f - < supabase/rollback/20260923352000_shared_notification_semantics_down.sql
   psql_test -1 -f - < supabase/rollback/20260923350000_shared_fixture_services_down.sql
   local after
   after="$(schema_fingerprint)"

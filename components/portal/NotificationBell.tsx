@@ -14,6 +14,8 @@ interface NotificationItem {
   body: string;
   href: string | null;
   read_at: string | null;
+  expires_at: string | null;
+  is_expired: boolean;
   created_at: string;
 }
 
@@ -104,6 +106,23 @@ export function NotificationBell() {
     };
   }, [open, refreshItems]);
 
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    const positionMobilePanel = () => {
+      const trigger = buttonRef.current?.getBoundingClientRect();
+      if (trigger) {
+        rootRef.current?.style.setProperty("--portal-notification-mobile-top", `${Math.ceil(trigger.bottom + 6)}px`);
+      }
+    };
+    positionMobilePanel();
+    window.addEventListener("resize", positionMobilePanel);
+    window.addEventListener("scroll", positionMobilePanel, true);
+    return () => {
+      window.removeEventListener("resize", positionMobilePanel);
+      window.removeEventListener("scroll", positionMobilePanel, true);
+    };
+  }, [open]);
+
   const markRead = React.useCallback(async (ids: string[]) => {
     if (!ids.length) return;
     const unique = [...new Set(ids)].slice(0, 100);
@@ -164,16 +183,20 @@ export function NotificationBell() {
                     <strong>
                       <span className="sr-only">
                         {item.read_at ? "Read " : "Unread "}
+                        {item.is_expired ? "expired " : ""}
                         {item.importance === "urgent" ? "urgent notification: " : "notification: "}
                       </span>
                       {item.title}
                     </strong>
                     <span>{item.body}</span>
                   </span>
-                  <time dateTime={item.created_at}>{ageLabel(item.created_at)}</time>
+                  <span className="portal-notification__meta">
+                    <time dateTime={item.created_at}>{ageLabel(item.created_at)}</time>
+                    {item.is_expired && <span className="portal-notification__expired">Expired</span>}
+                  </span>
                 </>
               );
-              const className = `portal-notification__item${item.read_at ? " is-read" : " is-unread"}`;
+              const className = `portal-notification__item${item.read_at ? " is-read" : " is-unread"}${item.is_expired ? " is-expired" : ""}`;
               return safeHref ? (
                 <Link key={item.id} href={safeHref} className={className} onClick={(event) => { event.preventDefault(); void openNotification(item.id, safeHref); }}>
                   {content}

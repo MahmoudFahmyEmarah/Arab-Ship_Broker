@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   buildNotificationMail,
+  buildNotificationDigestMail,
   dispatchNotificationDeliveries,
   processNotificationClaims,
   type DeliveryTransport,
@@ -36,15 +37,21 @@ function smtpBoundaryClient(
 
 async function main() {
 const claims: NotificationClaim[] = [
-  { id: "c1", notification_id: "n1", claim_token: "t1", attempts: 1 },
-  { id: "c2", notification_id: "n2", claim_token: "t2", attempts: 1 },
-  { id: "c3", notification_id: "missing", claim_token: "t3", attempts: 8 },
-  { id: "c4", notification_id: "n4", claim_token: "t4", attempts: 1 },
+  { job_kind: "instant", id: "c1", recipient_user_id: "u1", claim_token: "t1", attempts: 1 },
+  { job_kind: "instant", id: "c2", recipient_user_id: "u1", claim_token: "t2", attempts: 1 },
+  { job_kind: "instant", id: "c3", recipient_user_id: "u1", claim_token: "t3", attempts: 1 },
+  { job_kind: "instant", id: "c4", recipient_user_id: "u2", claim_token: "t4", attempts: 1 },
+  { job_kind: "digest", id: "c5", recipient_user_id: "u1", claim_token: "t5", attempts: 1 },
 ];
-const notifications = new Map<string, NotificationSnapshot>([
-  ["n1", { id: "n1", recipient_user_id: "u1", dedupe_key: "d1", kind: "fixture.proposal", importance: "normal", title: "New proposal", body: "Open the governed room.", href: "/dashboard/fixture-room/r1" }],
-  ["n2", { id: "n2", recipient_user_id: "u1", dedupe_key: "d2", kind: "fixture.message", importance: "urgent", title: "Transport failure", body: "Retry this email.", href: null }],
-  ["n4", { id: "n4", recipient_user_id: "u2", dedupe_key: "d4", kind: "fixture.message", importance: "info", title: "Bad recipient", body: "Do not send.", href: null }],
+const snapshots = new Map<string, NotificationSnapshot[]>([
+  ["c1", [{ id: "n1", recipient_user_id: "u1", importance: "normal", title: "New proposal", body: "Open the governed room.", href: "/dashboard/fixture-room/r1", created_at: "2026-09-28T00:00:00Z", total_count: 1 }]],
+  ["c2", [{ id: "n2", recipient_user_id: "u1", importance: "urgent", title: "Transport failure", body: "Retry this email.", href: null, created_at: "2026-09-28T00:01:00Z", total_count: 1 }]],
+  ["c3", []],
+  ["c4", [{ id: "n4", recipient_user_id: "u2", importance: "info", title: "Bad recipient", body: "Do not send.", href: null, created_at: "2026-09-28T00:02:00Z", total_count: 1 }]],
+  ["c5", [
+    { id: "n5", recipient_user_id: "u1", importance: "normal", title: "Digest <one>", body: "First & safe.", href: "/dashboard/fixture-room/r1", created_at: "2026-09-28T00:03:00Z", total_count: 3 },
+    { id: "n6", recipient_user_id: "u1", importance: "info", title: "Digest two", body: "Second update.", href: "/\\evil.example", created_at: "2026-09-28T00:04:00Z", total_count: 3 },
+  ]],
 ]);
 const recipients = new Map<string, NotificationRecipient>([
   ["u1", { id: "u1", email: "member@example.test", full_name: "A <Broker>", is_active: true }],
@@ -59,66 +66,86 @@ const transport: DeliveryTransport = {
   },
   close() {},
 };
-const settled: Array<{ id: string; ok: boolean; error: string | null }> = [];
+const settled: Array<{ id: string; outcome: "sent" | "failed" | "suppressed"; error: string | null }> = [];
 const result = await processNotificationClaims(
-  claims,
-  notifications,
+  claims, snapshots,
   recipients,
   transport,
-  async (claim, ok, error) => {
-    settled.push({ id: claim.id, ok, error });
+  async (claim, outcome, error) => {
+    settled.push({ id: claim.id, outcome, error });
     return claim.id !== "c4";
   },
-  { siteUrl: "https://portal.example.test", senderDomain: "arabshipbroker.com", maxAttempts: 8 },
+  { siteUrl: "https://portal.example.test", maxAttempts: 8 },
 );
 
-assert.deepEqual(result, { claimed: 4, sent: 1, retried: 1, failed: 1, lost: 1 });
+assert.deepEqual(result, { claimed: 5, sent: 2, retried: 1, failed: 0, suppressed: 1, lost: 1 });
 assert.deepEqual(sent, [
   "<asb-notification-c1@arabshipbroker.com>",
   "<asb-notification-c2@arabshipbroker.com>",
+  "<asb-notification-c5@arabshipbroker.com>",
 ]);
-assert.deepEqual(settled.map(({ id, ok }) => ({ id, ok })), [
-  { id: "c1", ok: true },
-  { id: "c2", ok: false },
-  { id: "c3", ok: false },
-  { id: "c4", ok: false },
+assert.deepEqual(settled.map(({ id, outcome }) => ({ id, outcome })), [
+  { id: "c1", outcome: "sent" },
+  { id: "c2", outcome: "failed" },
+  { id: "c3", outcome: "suppressed" },
+  { id: "c4", outcome: "failed" },
+  { id: "c5", outcome: "sent" },
 ]);
 assert.match(settled[1]?.error ?? "", /fake SMTP refusal/);
-assert.match(settled[2]?.error ?? "", /snapshot unavailable/);
+assert.match(settled[2]?.error ?? "", /no deliverable notification items/);
 assert.match(settled[3]?.error ?? "", /email invalid/);
 
-const mail = buildNotificationMail(claims[0], notifications.get("n1")!, recipients.get("u1")!, {
+const mail = buildNotificationMail(claims[0], snapshots.get("c1")![0]!, recipients.get("u1")!, {
   siteUrl: "https://portal.example.test/base",
-  senderDomain: "bad domain<script>",
 });
 assert.match(mail.html, /A &lt;Broker&gt;/);
 assert.match(mail.html, /https:\/\/portal\.example\.test\/dashboard\/fixture-room\/r1/);
 assert.doesNotMatch(mail.html, /<Broker>/);
-assert.equal(mail.messageId, "<asb-notification-c1@baddomainscript>");
+assert.equal(mail.messageId, "<asb-notification-c1@arabshipbroker.com>");
+
+const headerSafe = buildNotificationMail(
+  claims[0],
+  { ...snapshots.get("c1")![0]!, title: "Proposal\r\nBcc: attacker@example.test" },
+  recipients.get("u1")!,
+  { siteUrl: "https://portal.example.test" },
+);
+assert.equal(headerSafe.subject, "Proposal Bcc: attacker@example.test");
+assert.doesNotMatch(headerSafe.subject, /[\r\n]/);
 
 const unsafe = buildNotificationMail(
   claims[0],
-  { ...notifications.get("n1")!, href: "/\\evil.example" },
+  { ...snapshots.get("c1")![0]!, href: "/\\evil.example" },
   recipients.get("u1")!,
-  { siteUrl: "https://portal.example.test", senderDomain: "arabshipbroker.com" },
+  { siteUrl: "https://portal.example.test" },
 );
 assert.doesNotMatch(unsafe.html, /evil\.example/);
+
+const digest = buildNotificationDigestMail(
+  claims[4], snapshots.get("c5")!, recipients.get("u1")!,
+  { siteUrl: "https://portal.example.test" },
+);
+assert.equal(digest.messageId, "<asb-notification-c5@arabshipbroker.com>");
+assert.match(digest.subject, /3 updates/);
+assert.match(digest.html, /Digest &lt;one&gt;/);
+assert.match(digest.html, /First &amp; safe/);
+assert.match(digest.html, /1 more update is waiting/);
+assert.doesNotMatch(digest.html, /evil\.example/);
 
 let slowClosed = false;
 const slowTransport: DeliveryTransport = {
   async send() { await new Promise((resolve) => setTimeout(resolve, 100)); },
   close() { slowClosed = true; },
 };
-const timeoutSettles: Array<{ ok: boolean; error: string | null }> = [];
+const timeoutSettles: Array<{ outcome: "sent" | "failed" | "suppressed"; error: string | null }> = [];
 const timed = await processNotificationClaims(
-  [claims[0]], notifications, recipients, slowTransport,
-  async (_claim, ok, error) => { timeoutSettles.push({ ok, error }); return true; },
-  { siteUrl: null, senderDomain: "arabshipbroker.com", maxAttempts: 8, deadlineAt: Date.now() + 10 },
+  [claims[0]], snapshots, recipients, slowTransport,
+  async (_claim, outcome, error) => { timeoutSettles.push({ outcome, error }); return true; },
+  { siteUrl: null, maxAttempts: 8, deadlineAt: Date.now() + 10 },
 );
 slowTransport.close();
 assert.equal(slowClosed, true);
-assert.deepEqual(timed, { claimed: 1, sent: 0, retried: 1, failed: 0, lost: 0 });
-assert.equal(timeoutSettles[0]?.ok, false);
+assert.deepEqual(timed, { claimed: 1, sent: 0, retried: 1, failed: 0, suppressed: 0, lost: 0 });
+assert.equal(timeoutSettles[0]?.outcome, "failed");
 assert.match(timeoutSettles[0]?.error ?? "", /invocation budget/);
 
 await assert.rejects(

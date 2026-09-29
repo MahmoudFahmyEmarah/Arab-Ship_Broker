@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Two real PostgreSQL sessions prove that SKIP LOCKED never leases the same
-# notification delivery to concurrent workers. Run only on a disposable DB.
+# Two real PostgreSQL sessions prove that the unified scheduler gives instant
+# jobs distinct leases and never splits one digest across workers. Disposable DB only.
 set -euo pipefail
 PSQL="${1:?pass the disposable psql command}"
 cd "$(dirname "$0")/../.."
@@ -24,19 +24,19 @@ select public.fn_notification_enqueue('$u2', 'fixture.race', 'fixture:race:2', '
 update public.notification_deliveries set next_attempt_at = now() - interval '1 minute';
 SQL
 
-log_a="$(mktemp)"; log_b="$(mktemp)"
-trap 'rm -f "$log_a" "$log_b"' EXIT
+log_a="$(mktemp)"; log_b="$(mktemp)"; log_c="$(mktemp)"; log_d="$(mktemp)"; log_e="$(mktemp)"
+trap 'rm -f "$log_a" "$log_b" "$log_c" "$log_d" "$log_e"' EXIT
 
 $PSQL -At -q -v ON_ERROR_STOP=1 >"$log_a" 2>&1 <<'SQL' &
 begin;
-select id from public.fn_notification_delivery_claim(1, 180, 8);
+select id from public.fn_notification_email_claim(180, 8);
 select pg_sleep(4);
 commit;
 SQL
 pid_a=$!
 sleep 1
 $PSQL -At -q -v ON_ERROR_STOP=1 >"$log_b" 2>&1 <<'SQL' &
-select id from public.fn_notification_delivery_claim(1, 180, 8);
+select id from public.fn_notification_email_claim(180, 8);
 SQL
 pid_b=$!
 wait "$pid_a"
@@ -56,5 +56,66 @@ if [ "$claimed" != "2" ]; then
   echo "FAIL: expected two once-only leases, got $claimed" >&2
   exit 1
 fi
+
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL
+select public.fn_notification_enqueue('$u1', 'fixture.digest-race', 'fixture:digest-race:1', 'Digest race one', 'First digest item.', null, 'normal');
+select public.fn_notification_enqueue('$u1', 'fixture.digest-race', 'fixture:digest-race:2', 'Digest race two', 'Second digest item.', null, 'normal');
+update public.notification_digest_batches set next_attempt_at = now() - interval '1 minute';
+SQL
+
+$PSQL -At -q -v ON_ERROR_STOP=1 >"$log_c" 2>&1 <<'SQL' &
+begin;
+select id from public.fn_notification_email_claim(180, 8);
+select pg_sleep(4);
+commit;
+SQL
+pid_c=$!
+sleep 1
+$PSQL -At -q -v ON_ERROR_STOP=1 >"$log_d" 2>&1 <<'SQL' &
+select id from public.fn_notification_email_claim(180, 8);
+SQL
+pid_d=$!
+$PSQL -At -q -v ON_ERROR_STOP=1 >"$log_e" 2>&1 <<SQL &
+select public.fn_notification_enqueue(
+  '$u1', 'fixture.digest-race', 'fixture:digest-race:late',
+  'Digest race late', 'Must enter the next envelope.', null, 'normal'
+);
+SQL
+pid_e=$!
+wait "$pid_c"
+wait "$pid_d"
+wait "$pid_e"
+
+id_c="$(grep -E '^[0-9a-f-]{36}$' "$log_c" | head -1)"
+id_d="$(grep -E '^[0-9a-f-]{36}$' "$log_d" | head -1 || true)"
+if [ -z "$id_c" ] || [ -n "$id_d" ]; then
+  echo "FAIL: one digest window was leased as more than one envelope" >&2
+  echo "--- worker C" >&2; cat "$log_c" >&2
+  echo "--- worker D" >&2; cat "$log_d" >&2
+  exit 1
+fi
+
+digest_claimed="$($PSQL -At -q -v ON_ERROR_STOP=1 -c "select count(*) from public.notification_digest_batches where status = 'sending' and attempts = 1 and claim_token is not null")"
+digest_children="$($PSQL -At -q -v ON_ERROR_STOP=1 -c "select count(*) from public.notification_deliveries where digest_batch_id = '$id_c' and status = 'queued'")"
+late_notification="$(grep -E '^[0-9a-f-]{36}$' "$log_e" | head -1)"
+late_batch="$($PSQL -At -q -v ON_ERROR_STOP=1 -c "select digest_batch_id from public.notification_deliveries where notification_id = '$late_notification'")"
+if [ "$digest_claimed" != "1" ] || [ "$digest_children" != "2" ] || [ -z "$late_batch" ] || [ "$late_batch" = "$id_c" ]; then
+  echo "FAIL: digest lease or membership was split (batches=$digest_claimed children=$digest_children)" >&2
+  echo "late notification=$late_notification late batch=$late_batch claimed batch=$id_c" >&2
+  exit 1
+fi
+
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL
+set session_replication_role = replica;
+delete from public.notification_deliveries where notification_id in (
+  select id from public.notifications where recipient_user_id in ('$u1', '$u2')
+);
+delete from public.notification_digest_batches where recipient_user_id in ('$u1', '$u2');
+delete from public.notifications where recipient_user_id in ('$u1', '$u2');
+delete from public.notification_preferences where user_id in ('$u1', '$u2');
+delete from public.users where id in ('$u1', '$u2');
+delete from auth.users where id in ('$u1', '$u2');
+set session_replication_role = origin;
+SQL
 
 echo "SHARED FIXTURE SERVICES CLAIM RACE: ALL ASSERTIONS PASSED"
