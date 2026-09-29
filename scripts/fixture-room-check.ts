@@ -29,7 +29,7 @@ import { canUseFixtureRoom, computeCapabilities, roleLabel, type ViewerParty } f
 import { GestureKeys, runGesture } from "@/lib/fixture-room/client";
 import { parseFixtureError, type FixtureError } from "@/lib/fixture-room/errors";
 import { countdown, formatFixtureValue, parseFixtureInput, spreadLabel } from "@/lib/fixture-room/format";
-import { findMaskingLeaks } from "@/lib/fixture-room/masking-view";
+import { findMaskingLeaks, embeddedIdentifiers } from "@/lib/fixture-room/masking-view";
 import { recapSections, renderRecapText } from "@/lib/fixture-room/recap";
 import { listingSyncNotice } from "@/lib/fixture-room/listing-sync";
 import type { FixtureRecapContent, FixtureRoomView } from "@/lib/fixture-room/types";
@@ -498,14 +498,14 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const list = h.split("create or replace function public.list_fixture_match_candidates")[1].split("end $$;")[0];
   ok(/'candidateKey', h\.key/.test(list) && !/'availabilityId'|'vesselId'|'id', m\.cargo_id/.test(list), "candidates carry the opaque key and no raw cargo, availability or vessel id");
   const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
-  const order = ["x.create_idempotency_key = p_idempotency_key", "x.actor_user_id = v_actor", "h.expires_at <= now()", "fn_fixture_owns_listing", "get_matches_for_cargo", "public.create_fixture_room("].map((t) => fromCand.indexOf(t));
-  ok(order.every((i, n) => i > 0 && (n === 0 || i > order[n - 1])), "create-from-handle checks replay, then actor, expiry, live ownership, the match predicate, then the governed create");
+  const order = ["fn_fixture_create_replay(v_actor", "x.actor_user_id = v_actor", "h.expires_at <= now()", "for share", "fn_fixture_owns_listing", "get_matches_for_cargo", "public.create_fixture_room("].map((t) => fromCand.indexOf(t));
+  ok(order.every((i, n) => i > 0 && (n === 0 || i > order[n - 1])), "create-from-handle checks replay, then actor, expiry, locks the inputs, then live ownership, the match predicate and the governed create");
   ok(/revoke execute on function public\.create_fixture_room\(uuid, uuid, jsonb, text, jsonb\) from public, anon, authenticated;/.test(h), "members hold no EXECUTE on the raw-id create (no callable bypass)");
-  ok(/alter function public\.get_fixture_room\(uuid, integer\) rename to fn_fixture_room_read_unscrubbed/.test(h) && /replace\(t, '"' \|\| v_avail::text \|\| '"', 'null'\)/.test(h), "the room read removes every availability and vessel uuid for a masked viewer");
+  ok(/alter function public\.get_fixture_room\(uuid, integer\) rename to fn_fixture_room_read_unscrubbed/.test(h) && /v := public\.fn_fixture_scrub_ids\(v, array\[v_avail, v_vessel\]\)/.test(h), "the room read removes every availability and vessel uuid for a masked viewer");
   const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
   ok(!/createFixtureRoomAction|sdk\.createFixtureRoom\(|listingFigures\(/.test(act) && /sdk\.createFixtureRoomFromCandidate\(/.test(act) && /sdk\.recreateFixtureRoom\(/.test(act), "the app opens rooms only from a key, and restarts only by room id");
   const mb = read("components/fixture-room/MatchBuilder.tsx");
-  ok(/createFixtureRoomFromCandidateAction\(\{ candidateKey, idempotencyKey \}\)/.test(mb) && !/cand-vessel-\$\{/.test(mb) && !/cand-cargo-\$\{/.test(mb), "the builder sends only the candidate key and renders no id in a test id");
+  ok(/createFixtureRoomFromCandidateAction\(\{ candidateKey, hints: hints \?\? null, idempotencyKey \}\)/.test(mb) && !/cand-vessel-\$\{/.test(mb) && !/cand-cargo-\$\{/.test(mb), "the builder sends only the candidate key and renders no id in a test id");
   ok(/recreateFixtureRoomAction\(\{ roomId: view\.room\.id, idempotencyKey \}\)/.test(read("components/fixture-room/FixtureRoomClient.tsx")), "a terminal room restarts by its room id, never raw listing ids from the browser");
   const hs = read("scripts/fixture-room-harness.sh");
   ok(/20260923208000_fixture_room_candidate_handles\.sql/.test(hs) && /\[handles\]="FIXTURE HANDLES SMOKE"/.test(hs), "the harness applies and tests the handles");
@@ -516,5 +516,33 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   // the masking guard now flags a leaked position id too
   const guard = read("lib/fixture-room/masking-view.ts");
   ok(/view\.room\.vesselAvailabilityId != null/.test(guard), "the masking guard flags a position id on a masked view");
+}
+
+// -- C2O-014 . handle safety and replay --
+{
+  const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
+  // 1 · a JSON-safe recursive scrub, substring and case-insensitive, with and without hyphens
+  const scrub = h.split("create or replace function public.fn_fixture_scrub_ids")[1].split("end $$;")[0];
+  ok(/jsonb_each\(j\)/.test(scrub) && /jsonb_array_elements\(j\) with ordinality/.test(scrub) && /regexp_replace\(t, n, '\[withheld\]', 'gi'\)/.test(scrub) && /replace\(lower\(i::text\), '-', ''\)/.test(scrub) && !/::text::jsonb|t::jsonb/.test(scrub), "the scrub walks the JSON and replaces ids inside strings, any case, with or without hyphens (no serialized-text mutation)");
+  const guard = read("lib/fixture-room/masking-view.ts");
+  ok(embeddedIdentifiers({ room: { id: "11111111-1111-4111-8111-111111111111" }, messages: [{ id: "22222222-2222-4222-8222-222222222222", body: "ref A3B4C5D6-0000-4000-8000-0000000000B3 please" }] }).length === 1
+     && embeddedIdentifiers({ room: { id: "11111111-1111-4111-8111-111111111111" }, messages: [{ body: "room 11111111111141118111111111111111 is ours" }] }).length === 0
+     && /embeddedIdentifiers\(view\)/.test(guard), "the masking guard flags an identifier embedded in free text (and allows the view's own ids)");
+  // 2 · replay uses create_fixture_room's full request hash, before expiry
+  const replay = h.split("create or replace function public.fn_fixture_create_replay")[1].split("end $$;")[0];
+  ok(/'cmd', 'create_fixture_room', 'cargo', r\.cargo_listing_id, 'vessel', r\.vessel_availability_id,\s*'terms', p_terms, 'options', coalesce\(p_options, '\{\}'::jsonb\)/.test(replay) && /FX_IDEMPOTENCY_MISMATCH/.test(replay), "replay checks the full request hash (pair, terms incl. hints, options)");
+  // 3 · no hint read by key; one renewable handle per actor/source/pair; retention
+  ok(/drop function if exists public\.get_fixture_candidate_hints\(uuid\);/.test(h) && /'hints', public\.fn_fixture_hint_figures\(/.test(h), "hints travel with the candidate; the by-key hint read is gone");
+  ok(/create unique index if not exists match_handles_actor_pair_uq/.test(h) && /on conflict \(actor_user_id, own_kind, own_listing_id, cargo_listing_id, vessel_availability_id\)\s+do update set expires_at = excluded\.expires_at/.test(h) && /delete from fixture_private\.match_handles h where h\.expires_at < now\(\) - interval '1 day'/.test(h), "one renewable handle per actor/source/pair, and stale handles are purged");
+  // 4 · inputs locked to commit before validation
+  const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
+  ok((fromCand.match(/for share/g) ?? []).length >= 4, "the cargo, position, vessel and ownership rows are locked to commit (no update between validation and the snapshot)");
+  // 5 · a true unique race names the winner
+  ok(/exception when unique_violation then/.test(fromCand) && /raise exception 'FX_CONFLICT: room % \(%\) already covers this pairing', w\.id, w\.ref/.test(fromCand), "a lost unique race returns the governed conflict naming the winning room");
+  // 6 · the member-JWT integration gate uses the handle path and proves the raw create is denied
+  const integ = read("scripts/fixture-room-integration-check.ts");
+  ok((integ.match(/sdk\.createFixtureRoomFromCandidate\(ch, \{ candidateKey: key,/g) ?? []).length >= 5 && /the raw-id create is denied to a member/.test(integ) && (integ.match(/sdk\.createFixtureRoom\(/g) ?? []).length === 1, "the member-JWT integration flow opens rooms from a key and asserts the raw create is denied");
+  const race = read("supabase/tests/fixture_room/fixture_race_two_sessions.sh");
+  ok(/FX_CONFLICT: room \$WINNER/.test(race) && /no longer matches/.test(race) && /lock timeout/.test(race), "the two-session races prove the winner is named and the create/update window is closed both ways");
 }
 

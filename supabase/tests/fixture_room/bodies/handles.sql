@@ -96,8 +96,8 @@ begin
   perform pg_temp.fx_as('u_ch2');
   e := pg_temp.fx_err(format('select public.create_fixture_room_from_candidate(%L, %L::jsonb, %L)', k2, pg_temp.fx_terms(), 'h-colleague'));
   if e <> 'FX_NOT_FOUND' then raise exception 'H7: another actor''s key must be FX_NOT_FOUND, got %', e; end if;
-  e := pg_temp.fx_err(format('select public.get_fixture_candidate_hints(%L)', k2));
-  if e <> 'FX_NOT_FOUND' then raise exception 'H7: another actor''s hints must be FX_NOT_FOUND, got %', e; end if;
+  l := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
+  if pg_temp.fx_key(l, 'name', 'TBN') = k2 then raise exception 'H7: a colleague must get a key of their own'; end if;
   raise notice 'H7 ok: a key works only for the member it was issued to';
 
   -- H8 · ownership lost after the key was issued
@@ -137,12 +137,56 @@ begin
   if e <> 'FX_IDEMPOTENCY_MISMATCH' then raise exception 'H10: reusing a key for another pairing must be FX_IDEMPOTENCY_MISMATCH, got %', e; end if;
   raise notice 'H10 ok: an idempotency key cannot be reused for another pairing';
 
-  -- H11 · the hints for a key carry figures only
-  v := public.get_fixture_candidate_hints(k3);
-  if pg_temp.fx_leaks(v::text) is not null or v::text ~ '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' then
+  -- H11 · the hints travel with each candidate, figures only (no separate read by key)
+  select x->'hints' into v from jsonb_array_elements(l) x where x->>'candidateKey' = k3::text;
+  if v is null or pg_temp.fx_leaks(v::text) is not null or v::text ~* '[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}' then
     raise exception 'H11: the hints must carry no uuid: %', v; end if;
   if v->>'commodity' <> 'Soya beans' then raise exception 'H11: the hints carry the listing figures: %', v; end if;
-  raise notice 'H11 ok: hints carry listing figures and no identifier';
+  if to_regprocedure('public.get_fixture_candidate_hints(uuid)') is not null then raise exception 'H11: the by-key hint read must be gone'; end if;
+  raise notice 'H11 ok: hints travel with the candidate, figures only; no hint read by key';
+
+  -- H13 · identifiers embedded in free text are scrubbed for a masked viewer (C2O-014 item 1)
+  perform pg_temp.fx_as('u_ow1');
+  v := public.post_fixture_message(v_room, 'our ref ' || upper(pg_temp.fx_id('a3')::text) || '/x and hull ' || replace(pg_temp.fx_id('v3')::text, '-', '') || ' ok',
+                                   'note', 'room', null, pg_temp.fx_ver(v_room), 'h-hostile-msg');
+  v := public.get_fixture_room(v_room);
+  if v::text not ilike '%' || pg_temp.fx_id('a3')::text || '%' then raise exception 'H13: the vessel side keeps its own message text'; end if;
+  perform pg_temp.fx_as('u_ch1');
+  v := public.get_fixture_room(v_room);
+  t := lower(v::text);
+  if strpos(t, pg_temp.fx_id('a3')::text) > 0 or strpos(t, replace(pg_temp.fx_id('a3')::text, '-', '')) > 0
+     or strpos(t, pg_temp.fx_id('v3')::text) > 0 or strpos(t, replace(pg_temp.fx_id('v3')::text, '-', '')) > 0 then
+    raise exception 'H13: an embedded identifier survived the masked read'; end if;
+  if v::text not like '%our ref [withheld]/x and hull [withheld] ok%' then raise exception 'H13: the rest of the message stays readable: %', v->'messages'; end if;
+  raise notice 'H13 ok: ids embedded in free text (prefixed, suffixed, upper-case, hyphenless) are withheld; the rest stays';
+
+  -- H14 · the same key with any changed term, hint or option is a mismatch (C2O-014 item 2)
+  e := pg_temp.fx_err(format('select public.create_fixture_room_from_candidate(%L, %L::jsonb, %L)', k1,
+         (select jsonb_agg(case when x->>'code' = 'freight' then x || '{"hint":"Listing: changed"}'::jsonb else x end) from jsonb_array_elements(pg_temp.fx_terms()) x), 'h-create'));
+  if e <> 'FX_IDEMPOTENCY_MISMATCH' then raise exception 'H14: a changed hint under the same key must be a mismatch, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.create_fixture_room_from_candidate(%L, %L::jsonb, %L, %L::jsonb)', k1, pg_temp.fx_terms(), 'h-create', '{"catalogueVersion":"2026-09-23.v1","extra":1}'));
+  if e <> 'FX_IDEMPOTENCY_MISMATCH' then raise exception 'H14: a changed option under the same key must be a mismatch, got %', e; end if;
+  v := public.create_fixture_room_from_candidate(k1, pg_temp.fx_terms(), 'h-create', '{}'::jsonb);
+  if (v->>'replayed')::boolean is not true then raise exception 'H14: the identical request still replays: %', v; end if;
+  raise notice 'H14 ok: the full request hash decides replay; any changed term, hint or option is refused';
+
+  -- H15 · listing again renews the same key; rows do not pile up (C2O-014 item 3)
+  l := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
+  k2 := pg_temp.fx_key(l, 'name', 'SEED VESSEL ONE');
+  l := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
+  if pg_temp.fx_key(l, 'name', 'SEED VESSEL ONE') <> k2 then raise exception 'H15: listing again must reuse the key'; end if;
+  perform pg_temp.fx_owner();
+  select count(*) into n from fixture_private.match_handles where actor_user_id = pg_temp.fx_id('u_ch1');
+  if n > 2 then raise exception 'H15: one handle per actor/source/pair expected, got %', n; end if;
+  update fixture_private.match_handles set expires_at = now() - interval '2 days' where key in (k1, k2);
+  perform pg_temp.fx_as('u_ch2');
+  l := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));   -- any listing call purges stale rows
+  perform pg_temp.fx_owner();
+  if exists (select 1 from fixture_private.match_handles where key = k2) then raise exception 'H15: a handle a day past expiry must be purged'; end if;
+  perform pg_temp.fx_as('u_ch1');
+  v := public.create_fixture_room_from_candidate(k1, pg_temp.fx_terms(), 'h-create', '{}'::jsonb);
+  if (v->>'replayed')::boolean is not true then raise exception 'H15: replay needs no handle row (the room is the record): %', v; end if;
+  raise notice 'H15 ok: one renewable key per pair; stale rows purged; replay survives the purge';
 
   -- H12 · a terminal room restarts from the room row; a live one does not
   e := pg_temp.fx_err(format('select public.recreate_fixture_room(%L, %L::jsonb, %L)', v_room, pg_temp.fx_terms(), 'h-recreate-live'));

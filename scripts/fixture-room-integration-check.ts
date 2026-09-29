@@ -39,6 +39,8 @@ function localEnv() {
 }
 
 const stamp = Date.now().toString(36);
+// a disposable IMO per run (a fixed one collides with rows other runs left behind)
+const testImo = String(8_000_000 + (Number.parseInt(stamp, 36) % 999_999));
 const PASSWORD = "fx-Integration-Passw0rd!";
 const ids = { orgCh: "", orgOw: "", uCh: "", uOw: "", uOut: "", cargo: "", vessel: "", avail: "" };
 
@@ -78,7 +80,7 @@ async function seed(admin: SupabaseClient) {
   ids.cargo = c.id;
   // the submission router may park a new listing for review; the integration seed wants it live
   await admin.from("cargo_listings").update({ status: "IN", review_status: "APPROVED" }).eq("id", ids.cargo);
-  const { data: v, error: ve } = await admin.from("vessels").insert({ vessel_name: `INTEGRATION HULL ${stamp.toUpperCase()}`, imo_number: "9000003", vessel_type: "Bulk Carrier", dwt_grain: 30000, build_year: 2012, flag: "Malta", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false, owner_company: `Integration Owners ${stamp}`, pic_name: "Capt. Integration", phone: "+30 210 000 0000" }).select("id").single();
+  const { data: v, error: ve } = await admin.from("vessels").insert({ vessel_name: `INTEGRATION HULL ${stamp.toUpperCase()}`, imo_number: testImo, vessel_type: "Bulk Carrier", dwt_grain: 30000, build_year: 2012, flag: "Malta", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false, owner_company: `Integration Owners ${stamp}`, pic_name: "Capt. Integration", phone: "+30 210 000 0000" }).select("id").single();
   if (ve) throw new Error(`vessel: ${ve.message}`);
   ids.vessel = v.id;
   const { data: a, error: ae } = await admin.from("vessel_availability").insert({ vessel_id: ids.vessel, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(5), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 26, accepts_part_cargo: false }).select("id").single();
@@ -133,21 +135,29 @@ async function main() {
     const ow = await signIn(url, anon, `fx-ow-${stamp}@fixture.test`);
     const out = await signIn(url, anon, `fx-out-${stamp}@fixture.test`);
 
-    console.log("1 · create through the API");
+    console.log("1 · create through the API (C2O-013/014: members open rooms from an opaque candidate key)");
+    // the raw-id create is out of a member's reach: no callable bypass
+    const raw = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null), idempotencyKey: `int-raw-${stamp}` });
+    ok(raw.ok === false && /permission denied/i.test(raw.message), `the raw-id create is denied to a member (${raw.ok ? "accepted" : raw.message})`);
+    const candidates = await sdk.listFixtureMatchCandidates(ch, "cargo", ids.cargo);
+    const mine = candidates.find((x) => x.name === `INTEGRATION HULL ${stamp.toUpperCase()}`);
+    ok(!!mine && typeof mine.candidateKey === "string" && !("availabilityId" in mine) && !JSON.stringify(candidates).includes(ids.avail) && !JSON.stringify(candidates).includes(ids.vessel),
+       "the candidate list carries an opaque key and no availability or vessel id");
+    const key = String(mine?.candidateKey ?? "");
     // the catalogue is verified server-side against the versioned sheet (FR-H2): a forged one is refused over the API
-    const two = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null).slice(0, 2), idempotencyKey: `int-forged-two-${stamp}` });
+    const two = await sdk.createFixtureRoomFromCandidate(ch, { candidateKey: key, terms: buildTermCatalogue(null).slice(0, 2), idempotencyKey: `int-forged-two-${stamp}` });
     ok(two.ok === false && two.code === "VALIDATION", `a two-term catalogue is refused (${two.ok ? "accepted" : two.code})`);
-    const optional = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null).map((t) => ({ ...t, required: t.code === "laycan" ? false : t.required })), idempotencyKey: `int-forged-optional-${stamp}` });
+    const optional = await sdk.createFixtureRoomFromCandidate(ch, { candidateKey: key, terms: buildTermCatalogue(null).map((t) => ({ ...t, required: t.code === "laycan" ? false : t.required })), idempotencyKey: `int-forged-optional-${stamp}` });
     ok(optional.ok === false && optional.code === "VALIDATION", `an optionalised term is refused (${optional.ok ? "accepted" : optional.code})`);
-    const relabelled = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null).map((t) => ({ ...t, label: t.code === "freight" ? "Freight" : t.label })), idempotencyKey: `int-forged-label-${stamp}` });
+    const relabelled = await sdk.createFixtureRoomFromCandidate(ch, { candidateKey: key, terms: buildTermCatalogue(null).map((t) => ({ ...t, label: t.code === "freight" ? "Freight" : t.label })), idempotencyKey: `int-forged-label-${stamp}` });
     ok(relabelled.ok === false && relabelled.code === "VALIDATION", `a relabelled term is refused (${relabelled.ok ? "accepted" : relabelled.code})`);
-    const badVersion = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null), idempotencyKey: `int-forged-version-${stamp}`, catalogueVersion: "2026-01-01.v9" });
+    const badVersion = await sdk.createFixtureRoomFromCandidate(ch, { candidateKey: key, terms: buildTermCatalogue(null), idempotencyKey: `int-forged-version-${stamp}`, catalogueVersion: "2026-01-01.v9" });
     ok(badVersion.ok === false && badVersion.code === "VALIDATION", `an unknown catalogue version is refused (${badVersion.ok ? "accepted" : badVersion.code})`);
-    const created = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null), idempotencyKey: `int-create-${stamp}` });
+    const created = await sdk.createFixtureRoomFromCandidate(ch, { candidateKey: key, terms: buildTermCatalogue(null), idempotencyKey: `int-create-${stamp}` });
     ok(created.ok === true, `charterer creates a room (${created.ok ? created.data.ref : created.message})`);
     if (!created.ok) throw new Error("cannot continue");
     const roomId = created.data.roomId;
-    const replay = await sdk.createFixtureRoom(ch, { cargoListingId: ids.cargo, vesselAvailabilityId: ids.avail, terms: buildTermCatalogue(null), idempotencyKey: `int-create-${stamp}` });
+    const replay = await sdk.createFixtureRoomFromCandidate(ch, { candidateKey: key, terms: buildTermCatalogue(null), idempotencyKey: `int-create-${stamp}` });
     ok(replay.ok === true && replay.replayed, "the same key replays over the API");
 
     console.log("2 · access");

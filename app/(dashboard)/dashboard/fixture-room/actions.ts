@@ -83,6 +83,8 @@ export interface MatchCargoOption {
   id?: string;
   /** the opaque handle of a counterparty candidate (C2O-013); never a raw id */
   candidateKey?: string;
+  /** the listing figures for the term hints (no identifier) */
+  hints?: Record<string, unknown> | null;
   ref: string | null; commodity: string; type: string; qtyMin: number; qtyMax: number;
   loadPort: string | null; dischPort: string | null; laycanFrom: string | null; laycanTo: string | null; isSpot: boolean;
   freightIdea: number | null; rateAligned: boolean | null; mine: boolean; fit?: MatchFacts;
@@ -93,6 +95,8 @@ export interface MatchVesselOption {
   availabilityId?: string;
   /** the opaque handle of a counterparty candidate (C2O-013) */
   candidateKey?: string;
+  /** the listing figures for the term hints (no identifier) */
+  hints?: Record<string, unknown> | null;
   name: string; isTbn?: boolean; type: string; dwt: number | null; openPort: string | null;
   openZone: string | null; openDate: string | null; freightIdea: number | null; rateAligned: boolean | null; geared: boolean | null; mine: boolean; fit?: MatchFacts;
 }
@@ -116,20 +120,21 @@ const facts = (f: unknown): MatchFacts | undefined => {
   return { zone: r.zone === "discharge" ? "discharge" : "load", laycan: r.laycan === "spot" ? "spot" : "window", grain: r.grain === true, dg: r.dg === true,
     gearRequired: r.gearRequired === true, partCargo: r.partCargo === true, dwtDelta: Number(r.dwtDelta ?? 0) };
 };
+const hintsOf = (r: Row) => (r.hints && typeof r.hints === "object" ? (r.hints as Record<string, unknown>) : null);
 const vesselCandidate = (r: Row): MatchVesselOption => ({
-  candidateKey: String(r.candidateKey), name: r.isTbn === true && r.name === "TBN" ? "TBN" : stripVesselNamePrefix(String(r.name ?? "Vessel")), isTbn: r.isTbn === true,
+  candidateKey: String(r.candidateKey), hints: hintsOf(r), name: r.isTbn === true && r.name === "TBN" ? "TBN" : stripVesselNamePrefix(String(r.name ?? "Vessel")), isTbn: r.isTbn === true,
   type: String(r.type ?? "—"), dwt: num(r.dwt), openPort: str(r.openPort), openZone: str(r.openZone), openDate: str(r.openDate),
   freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, geared: r.geared == null ? null : r.geared === true, mine: r.mine === true, fit: facts(r.fit),
 });
 // the member's own live listings (list_fixture_my_listings: the create rule, organisation seats included)
-const ownCargo = (r: Row): MatchCargoOption => ({ ...cargoCandidate(r), id: String(r.id), candidateKey: undefined, rateAligned: null, mine: true, fit: undefined });
+const ownCargo = (r: Row): MatchCargoOption => ({ ...cargoCandidate(r), id: String(r.id), candidateKey: undefined, hints: null, rateAligned: null, mine: true, fit: undefined });
 const ownVessel = (r: Row): MatchVesselOption => ({
   availabilityId: String(r.availabilityId), name: stripVesselNamePrefix(String(r.name ?? "Vessel")), type: String(r.type ?? "—"), dwt: num(r.dwt),
   openPort: str(r.openPort), openZone: str(r.openZone), openDate: str(r.openDate), freightIdea: num(r.freightIdea), rateAligned: null,
   geared: r.geared == null ? null : r.geared === true, mine: true,
 });
 const cargoCandidate = (r: Row): MatchCargoOption => ({
-  candidateKey: r.candidateKey == null ? undefined : String(r.candidateKey), ref: str(r.ref), commodity: String(r.commodity ?? "Cargo"), type: String(r.type ?? "—"), qtyMin: Number(r.qtyMin ?? 0), qtyMax: Number(r.qtyMax ?? 0),
+  candidateKey: r.candidateKey == null ? undefined : String(r.candidateKey), hints: hintsOf(r), ref: str(r.ref), commodity: String(r.commodity ?? "Cargo"), type: String(r.type ?? "—"), qtyMin: Number(r.qtyMin ?? 0), qtyMax: Number(r.qtyMax ?? 0),
   loadPort: str(r.loadPort), dischPort: str(r.dischPort), laycanFrom: str(r.laycanFrom), laycanTo: str(r.laycanTo), isSpot: r.isSpot === true,
   freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, mine: r.mine === true, fit: facts(r.fit),
 });
@@ -199,11 +204,16 @@ const figuresFromHints = (h: Record<string, unknown>): ListingFigures => {
   } as ListingFigures;
 };
 
-export async function createFixtureRoomFromCandidateAction(input: { candidateKey: string; idempotencyKey: string }) {
+/**
+ * Open a room from a candidate key. The term hints are the listing figures that
+ * came with the candidate; the browser holds them for the gesture, so every retry
+ * builds the identical request and the server's idempotency hash replays it, even
+ * after the key has expired (C2O-014 item 2). A changed hint is a mismatch.
+ */
+export async function createFixtureRoomFromCandidateAction(input: { candidateKey: string; hints?: Record<string, unknown> | null; idempotencyKey: string }) {
   const supabase = await getSupabaseServerClient();
-  // hints are optional: without them the room opens with the plain catalogue
-  const hints = await sdk.getFixtureCandidateHints(supabase, input.candidateKey).then(figuresFromHints).catch(() => ({} as ListingFigures));
-  const p = parse(createFromCandidateSchema, { ...input, terms: buildTermCatalogue(hints) });
+  const figures = input.hints && typeof input.hints === "object" ? figuresFromHints(input.hints) : null;
+  const p = parse(createFromCandidateSchema, { candidateKey: input.candidateKey, idempotencyKey: input.idempotencyKey, terms: buildTermCatalogue(figures) });
   if (!p.ok) return p.error;
   return sdk.createFixtureRoomFromCandidate(supabase, p.value);
 }

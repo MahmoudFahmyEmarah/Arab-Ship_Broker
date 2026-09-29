@@ -37,22 +37,23 @@ TERMS='[{"code":"cargo_grade","label":"Cargo & grade","category":"cargo","sortOr
 cleanup() {
   $PSQL -q -v ON_ERROR_STOP=0 <<SQL >/dev/null 2>&1 || true
 set session_replication_role = replica;
-delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
+delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
 delete from public.fixture_access_log where user_id in (select id from public.users where email like '%@fixture.test');
-delete from public.fixture_events where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
-delete from public.fixture_recap_versions where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
-delete from public.fixture_messages where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
-delete from public.fixture_subjects where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
-update public.fixture_terms set cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, agreed_proposal_id = null, status = 'open' where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
-delete from public.fixture_proposals where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
-delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
-delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where cargo_listing_id in ('$C1'));
-delete from public.fixture_rooms where cargo_listing_id in ('$C1');
+delete from public.fixture_events where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
+delete from public.fixture_recap_versions where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
+delete from public.fixture_messages where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
+delete from public.fixture_subjects where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
+update public.fixture_terms set cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, agreed_proposal_id = null, status = 'open' where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
+delete from public.fixture_proposals where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
+delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
+delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
+delete from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4'));
 delete from public.listing_ownership where listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '00000000-0000-4000-8000-0000000000e3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5', '$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4');
 delete from public.vessel_availability where id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4');
 delete from public.vessels where id in ('00000000-0000-4000-8000-0000000000f1', '00000000-0000-4000-8000-0000000000f2', '00000000-0000-4000-8000-0000000000f3');
 delete from public.cargo_listings where id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '00000000-0000-4000-8000-0000000000e3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5');
 delete from public.contacts where id = '00000000-0000-4000-8000-0000000000d1';
+delete from fixture_private.match_handles where actor_user_id in (select id from public.users where email like '%@fixture.test');
 delete from public.organization_members where user_id in (select id from public.users where email like '%@fixture.test');
 delete from public.users where email like '%@fixture.test';
 delete from auth.users where email like '%@fixture.test';
@@ -120,6 +121,55 @@ PID_D=$!
 wait $PID_C; wait $PID_D
 ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C3' and vessel_availability_id = '$A1'")" "1" "exactly one room for the raced pairing (two handles)"
 ok "$(grep -c 'FX_CONFLICT' /tmp/fxrace_d.log)" "1" "the second handle was refused with FX_CONFLICT"
+WINNER=$(q "select id from public.fixture_rooms where cargo_listing_id = '$C3' and vessel_availability_id = '$A1'")
+ok "$(grep -c "FX_CONFLICT: room $WINNER" /tmp/fxrace_d.log)" "1" "the loser's conflict names the winning room (the builder opens it)"
+
+# ── race 3: listing update vs create (C2O-014 item 4, the TOCTOU window) ────
+# free the C1/A1 pairing: close race 1's room
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /dev/null
+$(claims $U_CH1)
+select public.close_fixture_room('$ROOM', 'withdrawn', null, (select version from public.fixture_rooms where id = '$ROOM'), 'race-close');
+SQL
+# 3a · the update is in flight first: the create waits on the locked position, then sees it
+#      no longer matches and refuses
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_e.log 2>&1 &
+begin;
+set local session_replication_role = replica;
+update public.vessel_availability set open_date = current_date + 60 where id = '$A1';
+select pg_sleep(4);
+commit;
+SQL
+PID_E=$!
+sleep 1
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_f.log 2>&1 &
+$(claims $U_CH1)
+select public.create_fixture_room_from_candidate((select (x->>'candidateKey')::uuid from jsonb_array_elements(public.list_fixture_match_candidates('cargo', '$C1')) x where x->>'name' = 'SEED VESSEL ONE'), '$TERMS'::jsonb, 'race-toctou-a', '{}'::jsonb);
+SQL
+PID_F=$!
+wait $PID_E; wait $PID_F
+ok "$(grep -c 'no longer matches' /tmp/fxrace_f.log)" "1" "a create racing an in-flight listing update waits, then refuses the invalid pair"
+ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C1' and vessel_availability_id = '$A1' and status not in ('withdrawn', 'failed', 'expired')")" "0" "no room was opened on the invalidated pair"
+q "set session_replication_role = replica; update public.vessel_availability set open_date = current_date + 5 where id = '$A1'" > /dev/null
+# 3b · the create is in flight first: the listing update waits until the room exists
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_g.log 2>&1 &
+$(claims $U_CH1)
+begin;
+select public.create_fixture_room_from_candidate((select (x->>'candidateKey')::uuid from jsonb_array_elements(public.list_fixture_match_candidates('cargo', '$C1')) x where x->>'name' = 'SEED VESSEL ONE'), '$TERMS'::jsonb, 'race-toctou-b', '{}'::jsonb);
+select pg_sleep(4);
+commit;
+SQL
+PID_G=$!
+sleep 2
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_h.log 2>&1 &
+set lock_timeout = '1s';
+set session_replication_role = replica;
+update public.vessel_availability set open_date = current_date + 60 where id = '$A1';
+SQL
+PID_H=$!
+wait $PID_G; wait $PID_H
+ok "$(grep -c 'lock timeout' /tmp/fxrace_h.log)" "1" "a listing update racing an in-flight create waits on the locked position (lock timeout after 1 s)"
+ok "$(grep -c 'ERROR' /tmp/fxrace_g.log)" "0" "the in-flight create completed"
+ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C1' and vessel_availability_id = '$A1' and status not in ('withdrawn', 'failed', 'expired')")" "1" "the room exists on the pair that was valid when it was validated"
 
 cleanup
 if [ $fail = 0 ]; then echo "FIXTURE RACE (two sessions): ALL ASSERTIONS PASSED"; else echo "FIXTURE RACE (two sessions): FAILED"; echo "--- A"; cat /tmp/fxrace_a.log; echo "--- B"; cat /tmp/fxrace_b.log; echo "--- D"; cat /tmp/fxrace_d.log; exit 1; fi

@@ -128,13 +128,6 @@ export function recreateFixtureRoom(supabase: SupabaseClient, input: { roomId: s
   });
 }
 
-/** The listing figures behind a handle, for the term hints only (no identifier comes back). */
-export async function getFixtureCandidateHints(supabase: SupabaseClient, candidateKey: string): Promise<Record<string, unknown>> {
-  const { data, error } = await supabase.rpc("get_fixture_candidate_hints", { p_key: candidateKey });
-  if (error) throw new FixtureRequestError(toError(error));
-  return (data ?? {}) as Record<string, unknown>;
-}
-
 export function inviteFixtureParty(supabase: SupabaseClient, input: CommandBase & { side: "cargo" | "vessel"; capacity: "principal" | "broker" | "viewer"; orgId?: string | null; userId?: string | null }) {
   return command<{ partyId: string; status: string }>(supabase, "invite_fixture_party", {
     ...base(input), p_side: input.side, p_capacity: input.capacity, p_org_id: input.orgId ?? null, p_user_id: input.userId ?? null,

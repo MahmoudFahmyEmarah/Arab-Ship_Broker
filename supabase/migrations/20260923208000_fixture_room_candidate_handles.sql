@@ -1,4 +1,4 @@
--- Fixture Room · private selection handles (C2O-013, 29 Sep 2026)
+-- Fixture Room · private selection handles (C2O-013, corrected for C2O-014, 29 Sep 2026)
 -- Migration 20260923208000, inside the reserved Fixture range 2026092320xxxx–2026092324xxxx.
 --
 -- Codex's re-audit (C2O-011 item 2) found that a raw availability id in the
@@ -7,22 +7,29 @@
 -- file makes the Fixture boundary safe on its own.
 --
 --   * list_fixture_match_candidates returns, per candidate, an opaque random
---     candidateKey, never a raw cargo, availability or vessel id. The key lives
---     in fixture_private.match_handles, which PostgREST cannot reach, bound to
---     the resolved public.users.id actor, the owned source listing and kind,
---     the exact resolved pair, its creation time and a 15-minute expiry.
+--     candidateKey and the listing figures for the term hints; never a raw
+--     cargo, availability or vessel id. Keys live in fixture_private.match_handles
+--     (no API or member access), bound to the resolved public.users.id actor, the
+--     owned source listing and kind, the exact pair, creation time and a
+--     15-minute expiry. One row per (actor, source, pair): listing again renews
+--     the same key instead of piling up rows; rows a day past expiry are purged.
 --   * create_fixture_room_from_candidate(key, …) is the member's only way to
---     open a room. It checks, in this order: replay by the existing
---     (creator, idempotency key) BEFORE expiry, so a retry after the key has
---     expired still replays; then actor binding; then expiry; then live
---     ownership of the source listing; then the current governed match
---     predicate; then the existing create_fixture_room rules (tier, sanctions,
---     live listings, the same-pair live-room rule: two handles for one pair
---     may race, one room wins, the other gets the governed FX_CONFLICT).
+--     open a room. Order: replay by the existing (creator, idempotency key)
+--     with create_fixture_room's full request hash (pair, terms incl. hints,
+--     options) BEFORE expiry, so an identical retry replays after the key has
+--     expired and any changed term, hint or option is FX_IDEMPOTENCY_MISMATCH;
+--     then actor binding; expiry; the cargo, availability, vessel and ownership
+--     rows are locked (FOR SHARE, held to commit) so no listing update can slip
+--     between validation and the snapshot; live ownership; the current governed
+--     match predicate; then the existing create_fixture_room rules. A true
+--     unique race returns the governed FX_CONFLICT naming the winning room.
 --   * recreate_fixture_room(room, …) starts a new room on a terminal room's
 --     pairing from the room row, so the browser never replays raw ids.
 --   * get_fixture_room returns, to every viewer the TBN hull is masked from,
---     no availability or vessel uuid anywhere in the payload.
+--     no availability or vessel uuid anywhere: a JSON-safe recursive scrub
+--     replaces the ids wherever they occur inside any string (exact value →
+--     null; embedded in free text, any case, with or without hyphens →
+--     "[withheld]").
 --   * authenticated loses EXECUTE on the raw-id create_fixture_room: no
 --     callable bypass remains (service_role and the commands above keep it).
 
@@ -39,11 +46,40 @@ create table if not exists fixture_private.match_handles (
   created_at             timestamptz not null default now(),
   expires_at             timestamptz not null
 );
-create index if not exists match_handles_actor_idx on fixture_private.match_handles (actor_user_id, expires_at);
+-- one handle per actor, source and pair (listing again renews it); expiry drives retention.
+-- Upgrade-safe: an earlier build of this file allowed several keys per pair; keep the newest.
+delete from fixture_private.match_handles a
+ using fixture_private.match_handles b
+ where a.actor_user_id = b.actor_user_id and a.own_kind = b.own_kind and a.own_listing_id = b.own_listing_id
+   and a.cargo_listing_id = b.cargo_listing_id and a.vessel_availability_id = b.vessel_availability_id
+   and (a.created_at, a.key) < (b.created_at, b.key);
+create unique index if not exists match_handles_actor_pair_uq
+  on fixture_private.match_handles (actor_user_id, own_kind, own_listing_id, cargo_listing_id, vessel_availability_id);
+create index if not exists match_handles_expiry_idx on fixture_private.match_handles (expires_at);
+drop index if exists fixture_private.match_handles_actor_idx;
 alter table fixture_private.match_handles enable row level security;
 revoke all on table fixture_private.match_handles from public, anon, authenticated;
 comment on table fixture_private.match_handles is
-  'Fixture Room (C2O-013): opaque match-candidate handles. Private: no API exposure, no member policy; read and written only by the Fixture SECURITY DEFINER functions. Rows are purged a day after expiry.';
+  'Fixture Room (C2O-013): opaque match-candidate handles, one per actor/source/pair. Private: no API exposure, no member policy; read and written only by the Fixture SECURITY DEFINER functions. Purged a day after expiry.';
+
+-- hints are now part of the candidate list (C2O-014 item 3): no separate read by key
+drop function if exists public.get_fixture_candidate_hints(uuid);
+
+-- the listing figures the term hints are built from (no identifier)
+create or replace function public.fn_fixture_hint_figures(p_cargo_id uuid, p_availability_id uuid)
+ returns jsonb language sql stable security definer set search_path to 'public'
+as $$
+  select jsonb_build_object(
+    'commodity', c.commodity_name, 'cargoType', c.cargo_type::text, 'qtyMin', c.qty_min_mt, 'qtyMax', c.qty_max_mt, 'stowageFactor', c.stowage_factor,
+    'loadPortCode', c.load_port_locode, 'loadPortName', c.load_port_name, 'dischPortCode', c.disch_port_locode, 'dischPortName', c.disch_port_name,
+    'laycanFrom', c.laycan_from, 'laycanTo', c.laycan_to, 'isSpot', c.is_spot,
+    'loadRate', case when c.load_rate ~ '^[0-9]+(\.[0-9]+)?$' then c.load_rate::numeric end,
+    'dischRate', case when c.disch_rate ~ '^[0-9]+(\.[0-9]+)?$' then c.disch_rate::numeric end,
+    'loadTerms', c.load_terms::text, 'freightIdea', c.freight_idea_usd_mt, 'commission', c.commission_pct, 'demurrage', c.demurrage_rate,
+    'vesselFreightIdea', (select va.freight_idea_usd_mt from public.vessel_availability va where va.id = p_availability_id))
+  from public.cargo_listings c where c.id = p_cargo_id;
+$$;
+revoke all on function public.fn_fixture_hint_figures(uuid, uuid) from public, anon, authenticated;
 
 -- ── candidates: an opaque key per candidate, never a raw id ─────────────────
 create or replace function public.list_fixture_match_candidates(p_kind text, p_listing_id uuid)
@@ -60,7 +96,8 @@ begin
   if public.fn_fixture_owns_listing(case p_kind when 'cargo' then 'cargo' else 'vessel_availability' end, p_listing_id) is null then
     raise exception 'FX_AUTH: you can only match your own listings' using errcode = '42501';
   end if;
-  delete from fixture_private.match_handles h where h.actor_user_id = v_actor and h.expires_at < now() - interval '1 day';
+  -- retention: every handle a day past its expiry goes (the create replay never needs it)
+  delete from fixture_private.match_handles h where h.expires_at < now() - interval '1 day';
 
   if p_kind = 'cargo' then
     with m as (
@@ -71,6 +108,8 @@ begin
     ), h as (
       insert into fixture_private.match_handles (actor_user_id, own_kind, own_listing_id, cargo_listing_id, vessel_availability_id, expires_at)
       select v_actor, 'cargo', p_listing_id, p_listing_id, m.availability_id, v_expires from m
+      on conflict (actor_user_id, own_kind, own_listing_id, cargo_listing_id, vessel_availability_id)
+        do update set expires_at = excluded.expires_at
       returning key, vessel_availability_id
     )
     select coalesce(jsonb_agg(jsonb_build_object(
@@ -81,6 +120,7 @@ begin
              'openPort', m.open_port_name, 'openZone', m.open_zone, 'openDate', m.open_date,
              'freightIdea', m.freight_idea_usd_mt, 'rateAligned', m.is_rate_aligned, 'geared', m.is_geared,
              'mine', m.mine, 'expiresAt', v_expires,
+             'hints', public.fn_fixture_hint_figures(p_listing_id, m.availability_id),
              'fit', jsonb_build_object(
                'zone', case when m.open_zone = cl.load_zone::text then 'load' else 'discharge' end,
                'laycan', case when cl.is_spot then 'spot' else 'window' end,
@@ -98,6 +138,8 @@ begin
     ), h as (
       insert into fixture_private.match_handles (actor_user_id, own_kind, own_listing_id, cargo_listing_id, vessel_availability_id, expires_at)
       select v_actor, 'vessel', p_listing_id, m.cargo_id, p_listing_id, v_expires from m
+      on conflict (actor_user_id, own_kind, own_listing_id, cargo_listing_id, vessel_availability_id)
+        do update set expires_at = excluded.expires_at
       returning key, cargo_listing_id
     )
     select coalesce(jsonb_agg(jsonb_build_object(
@@ -107,6 +149,7 @@ begin
              'laycanFrom', m.laycan_from, 'laycanTo', m.laycan_to, 'isSpot', m.is_spot,
              'freightIdea', m.freight_idea_usd_mt, 'rateAligned', m.is_rate_aligned,
              'mine', m.mine, 'expiresAt', v_expires,
+             'hints', public.fn_fixture_hint_figures(m.cargo_id, p_listing_id),
              'fit', jsonb_build_object(
                'zone', case when va.open_zone::text = m.load_zone then 'load' else 'discharge' end,
                'laycan', case when m.is_spot then 'spot' else 'window' end,
@@ -123,39 +166,32 @@ end $$;
 revoke all on function public.list_fixture_match_candidates(text, uuid) from public, anon;
 grant execute on function public.list_fixture_match_candidates(text, uuid) to authenticated, service_role;
 
--- ── the listing figures behind a handle, for the term hints only ────────────
--- No id comes back: commodity, quantities, port names, laycan, rates and the
--- two freight ideas. Bound to the actor; readable while the handle row exists
--- (a day past expiry), so a retried create rebuilds the same terms.
-create or replace function public.get_fixture_candidate_hints(p_key uuid)
+-- ── replay of a create by (creator, key), with create_fixture_room's full request hash ──
+-- Returns the replay envelope, raises FX_IDEMPOTENCY_MISMATCH, or returns null (no such room).
+create or replace function public.fn_fixture_create_replay(p_actor uuid, p_idempotency_key text, p_terms jsonb, p_options jsonb)
  returns jsonb language plpgsql stable security definer set search_path to 'public'
 as $$
-declare v_actor uuid := public.fn_fixture_actor(); h fixture_private.match_handles; c public.cargo_listings; v_idea numeric;
+declare r public.fixture_rooms; v_hash text;
 begin
-  select * into h from fixture_private.match_handles x where x.key = p_key and x.actor_user_id = v_actor;
-  if h.key is null then
-    raise exception 'FX_NOT_FOUND: this match is not available; reload the match list' using errcode = 'P0002';
+  select * into r from public.fixture_rooms x where x.created_by_user_id = p_actor and x.create_idempotency_key = p_idempotency_key;
+  if r.id is null then return null; end if;
+  -- exactly the hash create_fixture_room recorded: pair, terms (hints included), options
+  v_hash := md5(jsonb_build_object('cmd', 'create_fixture_room', 'cargo', r.cargo_listing_id, 'vessel', r.vessel_availability_id,
+                                   'terms', p_terms, 'options', coalesce(p_options, '{}'::jsonb))::text);
+  if exists (select 1 from public.fixture_events e where e.room_id = r.id and e.idempotency_key = p_idempotency_key and e.request_hash is distinct from v_hash) then
+    raise exception 'FX_IDEMPOTENCY_MISMATCH: idempotency key % was already used with different arguments', p_idempotency_key using errcode = 'P0001';
   end if;
-  select * into c from public.cargo_listings x where x.id = h.cargo_listing_id;
-  select va.freight_idea_usd_mt into v_idea from public.vessel_availability va where va.id = h.vessel_availability_id;
-  return jsonb_build_object(
-    'commodity', c.commodity_name, 'cargoType', c.cargo_type::text, 'qtyMin', c.qty_min_mt, 'qtyMax', c.qty_max_mt, 'stowageFactor', c.stowage_factor,
-    'loadPortCode', c.load_port_locode, 'loadPortName', c.load_port_name, 'dischPortCode', c.disch_port_locode, 'dischPortName', c.disch_port_name,
-    'laycanFrom', c.laycan_from, 'laycanTo', c.laycan_to, 'isSpot', c.is_spot,
-    'loadRate', case when c.load_rate ~ '^[0-9]+(\.[0-9]+)?$' then c.load_rate::numeric end,
-    'dischRate', case when c.disch_rate ~ '^[0-9]+(\.[0-9]+)?$' then c.disch_rate::numeric end,
-    'loadTerms', c.load_terms::text, 'freightIdea', c.freight_idea_usd_mt, 'commission', c.commission_pct, 'demurrage', c.demurrage_rate,
-    'vesselFreightIdea', v_idea);
+  return jsonb_build_object('ok', true, 'version', r.version, 'eventId', null, 'replayed', true,
+                            'data', jsonb_build_object('roomId', r.id, 'ref', r.ref, 'status', r.status));
 end $$;
-revoke all on function public.get_fixture_candidate_hints(uuid) from public, anon;
-grant execute on function public.get_fixture_candidate_hints(uuid) to authenticated, service_role;
+revoke all on function public.fn_fixture_create_replay(uuid, text, jsonb, jsonb) from public, anon, authenticated;
 
 -- ── open a room from a handle ───────────────────────────────────────────────
 create or replace function public.create_fixture_room_from_candidate(
   p_candidate_key uuid, p_terms jsonb, p_idempotency_key text, p_options jsonb default '{}'::jsonb)
  returns jsonb language plpgsql volatile security definer set search_path to 'public'
 as $$
-declare v_actor uuid := public.fn_fixture_actor(); h fixture_private.match_handles; r public.fixture_rooms; v jsonb; v_room public.fixture_rooms;
+declare v_actor uuid := public.fn_fixture_actor(); h fixture_private.match_handles; v jsonb; v_room public.fixture_rooms; v_vessel uuid; w public.fixture_rooms;
 begin
   if p_idempotency_key is null or btrim(p_idempotency_key) = '' or length(p_idempotency_key) > 200 then
     raise exception 'FX_VALIDATION: idempotency_key is required (1–200 characters)' using errcode = '22023';
@@ -164,15 +200,15 @@ begin
     raise exception 'FX_VALIDATION: a candidate key is required' using errcode = '22023';
   end if;
 
-  -- 1 · replay first, by the existing (creator, key) rule: a retry after the handle expired still replays
-  select * into r from public.fixture_rooms x where x.created_by_user_id = v_actor and x.create_idempotency_key = p_idempotency_key;
-  if r.id is not null then
+  -- 1 · replay first, with the full request hash: an identical retry replays even after the key expired
+  v := public.fn_fixture_create_replay(v_actor, p_idempotency_key, p_terms, p_options);
+  if v is not null then
     select * into h from fixture_private.match_handles x where x.key = p_candidate_key;
-    if h.key is not null and (h.actor_user_id <> v_actor or h.cargo_listing_id <> r.cargo_listing_id or h.vessel_availability_id <> r.vessel_availability_id) then
+    select * into w from public.fixture_rooms x where x.id = (v->'data'->>'roomId')::uuid;
+    if h.key is not null and (h.actor_user_id <> v_actor or h.cargo_listing_id <> w.cargo_listing_id or h.vessel_availability_id <> w.vessel_availability_id) then
       raise exception 'FX_IDEMPOTENCY_MISMATCH: idempotency key % was already used for a different pairing', p_idempotency_key using errcode = 'P0001';
     end if;
-    return jsonb_build_object('ok', true, 'version', r.version, 'eventId', null, 'replayed', true,
-                              'data', jsonb_build_object('roomId', r.id, 'ref', r.ref, 'status', r.status));
+    return v;
   end if;
 
   -- 2 · the handle is the actor's own (a foreign or unknown key is simply not found)
@@ -184,11 +220,18 @@ begin
   if h.expires_at <= now() then
     raise exception 'FX_STATE: this match has expired; reload the match list' using errcode = '55000';
   end if;
-  -- 4 · the actor still owns or represents the source listing
+  -- 4 · lock the governed inputs to commit: a listing, position, vessel or ownership update
+  --     either happened before (and is seen below) or waits until the room exists
+  perform 1 from public.cargo_listings x where x.id = h.cargo_listing_id for share;
+  select x.vessel_id into v_vessel from public.vessel_availability x where x.id = h.vessel_availability_id for share;
+  perform 1 from public.vessels x where x.id = v_vessel for share;
+  perform 1 from public.listing_ownership x
+   where x.listing_id in (h.cargo_listing_id, h.vessel_availability_id) and x.is_current for share;
+  -- 5 · the actor still owns or represents the source listing
   if public.fn_fixture_owns_listing(case h.own_kind when 'cargo' then 'cargo' else 'vessel_availability' end, h.own_listing_id) is null then
     raise exception 'FX_AUTH: you no longer own or represent this listing' using errcode = '42501';
   end if;
-  -- 5 · the pair still satisfies the governed match predicate
+  -- 6 · the pair still satisfies the governed match predicate
   if h.own_kind = 'cargo' then
     if not exists (select 1 from public.get_matches_for_cargo(h.own_listing_id) m where m.availability_id = h.vessel_availability_id) then
       raise exception 'FX_STATE: this pairing no longer matches; reload the match list' using errcode = '55000';
@@ -199,8 +242,22 @@ begin
     end if;
   end if;
 
-  -- 6 · the existing governed create (tier, sanctions, live listings, same-pair live-room rule)
-  v := public.create_fixture_room(h.cargo_listing_id, h.vessel_availability_id, p_terms, p_idempotency_key, p_options);
+  -- 7 · the existing governed create (tier, sanctions, live listings, same-pair live-room rule)
+  begin
+    v := public.create_fixture_room(h.cargo_listing_id, h.vessel_availability_id, p_terms, p_idempotency_key, p_options);
+  exception when unique_violation then
+    -- a true race: the same key committed first → replay; another room won the pair → name it
+    v := public.fn_fixture_create_replay(v_actor, p_idempotency_key, p_terms, p_options);
+    if v is not null then return v; end if;
+    select * into w from public.fixture_rooms x
+     where x.cargo_listing_id = h.cargo_listing_id and x.vessel_availability_id = h.vessel_availability_id
+       and not public.fn_fixture_terminal(x.status)
+     order by x.created_at limit 1;
+    if w.id is not null then
+      raise exception 'FX_CONFLICT: room % (%) already covers this pairing', w.id, w.ref using errcode = '23505';
+    end if;
+    raise;
+  end;
   select * into v_room from public.fixture_rooms x where x.id = (v->'data'->>'roomId')::uuid;
   -- the response carries the room only: no listing, availability or vessel id
   return jsonb_build_object('ok', true, 'version', v->'version', 'eventId', v->'eventId', 'replayed', coalesce((v->>'replayed')::boolean, false),
@@ -238,6 +295,43 @@ grant execute on function public.recreate_fixture_room(uuid, jsonb, text, jsonb)
 revoke execute on function public.create_fixture_room(uuid, uuid, jsonb, text, jsonb) from public, anon, authenticated;
 grant execute on function public.create_fixture_room(uuid, uuid, jsonb, text, jsonb) to service_role;
 
+-- ── a JSON-safe recursive scrub (C2O-014 item 1) ────────────────────────────
+-- Walks objects and arrays; in every string, each forbidden identifier is found
+-- case-insensitively, with or without hyphens. A string that IS the identifier
+-- becomes JSON null (an id field); an identifier inside free text is replaced
+-- with "[withheld]". Keys, numbers and structure are never touched.
+create or replace function public.fn_fixture_scrub_ids(j jsonb, p_ids uuid[])
+ returns jsonb language plpgsql immutable set search_path to 'public'
+as $$
+declare out jsonb; t text; n text; v_needles text[] := '{}';
+begin
+  if j is null or p_ids is null or cardinality(p_ids) = 0 then return j; end if;
+  select coalesce(array_agg(x), '{}') into v_needles
+    from (select lower(i::text) as x from unnest(p_ids) i where i is not null
+          union select replace(lower(i::text), '-', '') from unnest(p_ids) i where i is not null) s;
+  case jsonb_typeof(j)
+    when 'object' then
+      select coalesce(jsonb_object_agg(e.key, public.fn_fixture_scrub_ids(e.value, p_ids)), '{}'::jsonb) into out from jsonb_each(j) e;
+      return out;
+    when 'array' then
+      select coalesce(jsonb_agg(public.fn_fixture_scrub_ids(e.value, p_ids) order by e.ord), '[]'::jsonb) into out
+        from jsonb_array_elements(j) with ordinality e(value, ord);
+      return out;
+    when 'string' then
+      t := j #>> '{}';
+      foreach n in array v_needles loop
+        if strpos(lower(t), n) > 0 then
+          if lower(t) = n then return 'null'::jsonb; end if;
+          t := regexp_replace(t, n, '[withheld]', 'gi');   -- n is hex and hyphens only: a safe literal pattern
+        end if;
+      end loop;
+      return to_jsonb(t);
+    else
+      return j;
+  end case;
+end $$;
+revoke all on function public.fn_fixture_scrub_ids(jsonb, uuid[]) from public, anon, authenticated;
+
 -- ── the room read: no availability or vessel uuid for a masked viewer ───────
 -- The 202000 read is kept, renamed, as the inner builder; get_fixture_room
 -- wraps it. The rename runs only when get_fixture_room is still the original
@@ -255,16 +349,13 @@ revoke all on function public.fn_fixture_room_read_unscrubbed(uuid, integer) fro
 create or replace function public.get_fixture_room(p_room_id uuid, p_events_after integer default 0)
  returns jsonb language plpgsql volatile security definer set search_path to 'public'
 as $$
-declare v jsonb; t text; v_avail uuid; v_vessel uuid;
+declare v jsonb; v_avail uuid; v_vessel uuid;
 begin
   v := public.fn_fixture_room_read_unscrubbed(p_room_id, p_events_after);
   if coalesce((v->'snapshot'->>'vesselIdentityMasked')::boolean, false) then
     select x.vessel_availability_id, x.vessel_id into v_avail, v_vessel from public.fixture_rooms x where x.id = p_room_id;
-    -- every exact occurrence, wherever it sits (header, snapshot, listing sync, event payloads)
-    t := v::text;
-    if v_avail is not null then t := replace(t, '"' || v_avail::text || '"', 'null'); end if;
-    if v_vessel is not null then t := replace(t, '"' || v_vessel::text || '"', 'null'); end if;
-    v := t::jsonb;
+    -- every occurrence, in every string (ids, messages, comments, titles, notes, event payloads)
+    v := public.fn_fixture_scrub_ids(v, array[v_avail, v_vessel]);
   end if;
   return v;
 end $$;
@@ -272,8 +363,8 @@ revoke all on function public.get_fixture_room(uuid, integer) from public, anon;
 grant execute on function public.get_fixture_room(uuid, integer) to authenticated, service_role;
 
 comment on function public.get_fixture_room(uuid, integer) is
-  'Fixture Room read (C2O-013): the 202000 read model, with every availability and vessel uuid removed for a viewer the TBN hull is masked from.';
+  'Fixture Room read (C2O-013/014): the 202000 read model, with every availability and vessel uuid removed (JSON-safe, recursive, substring and case-insensitive) for a viewer the TBN hull is masked from.';
 comment on function public.create_fixture_room_from_candidate(uuid, jsonb, text, jsonb) is
-  'Fixture Room (C2O-013): opens a room from an opaque match handle; replay first, then actor, expiry, live ownership and the governed match predicate.';
+  'Fixture Room (C2O-013/014): opens a room from an opaque match handle; replay with the full request hash first, then actor, expiry, locked inputs, live ownership and the governed match predicate; a lost race names the winning room.';
 comment on function public.recreate_fixture_room(uuid, jsonb, text, jsonb) is
   'Fixture Room (C2O-013): a new room on a terminal room''s pairing, taken from the room row.';

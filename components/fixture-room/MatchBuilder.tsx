@@ -135,14 +135,14 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
   };
 
   // C2O-013: the counterparty is named by its opaque candidate key only
-  const open = async (candidateKey: string | undefined) => {
+  const open = async (candidateKey: string | undefined, hints: Record<string, unknown> | null | undefined) => {
     if (!candidateKey) return;
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
       const outcome = await runGesture(keys, `open:${candidateKey}`, (idempotencyKey) =>
-        createFixtureRoomFromCandidateAction({ candidateKey, idempotencyKey }));
+        createFixtureRoomFromCandidateAction({ candidateKey, hints: hints ?? null, idempotencyKey }));
       if (outcome.kind === "ok") {
         toast.success(outcome.result.replayed ? "Opening your existing room" : `Room ${outcome.result.data.ref} opened`);
         router.push(`/dashboard/fixture-room/${outcome.result.data.roomId}`);
@@ -228,8 +228,8 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
             )}
             <div className="fxm__grid">
               {first.kind === "cargo"
-                ? candidates.vessels.map((v) => <VesselPick key={v.candidateKey} v={v} fit={assessFit(first.cargo, v, v.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(v.candidateKey)} testId="cand-vessel" />)
-                : candidates.cargo.map((c) => <CargoPick key={c.candidateKey} c={c} fit={assessFit(c, first.vessel, c.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(c.candidateKey)} testId="cand-cargo" />)}
+                ? candidates.vessels.map((v) => <VesselPick key={v.candidateKey} v={v} fit={assessFit(first.cargo, v, v.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(v.candidateKey, v.hints)} testId="cand-vessel" />)
+                : candidates.cargo.map((c) => <CargoPick key={c.candidateKey} c={c} fit={assessFit(c, first.vessel, c.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(c.candidateKey, c.hints)} testId="cand-cargo" />)}
             </div>
           </>
         )}
