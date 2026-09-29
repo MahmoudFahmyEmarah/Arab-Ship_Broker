@@ -10,6 +10,10 @@ const marketPartnerMigration = readFileSync(
   resolve(process.cwd(), "supabase/migrations/20260923340000_user_market_partner_flag.sql"),
   "utf8",
 );
+const rollback = readFileSync(
+  resolve(process.cwd(), "supabase/rollback/20260923330000_user_privilege_boundary_down.sql"),
+  "utf8",
+);
 const gate = readFileSync(resolve(process.cwd(), "lib/admin/require-admin.ts"), "utf8");
 const reviewActions = readFileSync(resolve(process.cwd(), "app/(admin)/admin/queue/actions.ts"), "utf8");
 const smoke = readFileSync(
@@ -28,6 +32,8 @@ assert.match(smoke, /admin_perms/i);
 assert.match(smoke, /trust_tier/i);
 assert.match(migration, /raw_app_meta_data/i);
 assert.match(migration, /fn_is_admin/i);
+assert.match(rollback, /alter function public\.fn_is_admin\(\) security definer/i);
+assert.match(rollback, /alter function public\.fn_is_admin\(\) set search_path\s*=\s*''/i);
 assert.match(marketPartnerMigration, /add column if not exists is_market_partner boolean not null default false/i);
 assert.match(marketPartnerMigration, /service-managed entitlement/i);
 assert.match(gate, /user\.app_metadata\?\.role !== "admin"/);

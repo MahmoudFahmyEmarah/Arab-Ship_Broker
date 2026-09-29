@@ -20,6 +20,13 @@ as $function$
   );
 $function$;
 
+-- 20260910142000 hardened this predicate for policy evaluation by the
+-- dq_evaluator role. CREATE OR REPLACE preserves neither proconfig nor the
+-- SECURITY DEFINER flag, so restore both attributes from the pre-330000
+-- baseline explicitly.
+alter function public.fn_is_admin() security definer;
+alter function public.fn_is_admin() set search_path = '';
+
 drop policy if exists "users: own profile read" on public.users;
 drop policy if exists "users: own profile update" on public.users;
 drop policy if exists "users: admin all" on public.users;
