@@ -123,4 +123,3 @@ test("sound starts off until the member turns it on", async ({ browser, baseURL 
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await context.close();
 });
-
