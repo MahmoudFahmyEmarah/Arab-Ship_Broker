@@ -9,7 +9,7 @@ begin
   v_core := to_regprocedure('public.fn_notification_enqueue(uuid, text, text, text, text, text, text, jsonb, boolean, timestamptz, timestamptz)') is not null;
 
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'ntf-create', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'ntf-create', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   if v_room is null then raise exception 'N0: the room must open with or without the core'; end if;
 

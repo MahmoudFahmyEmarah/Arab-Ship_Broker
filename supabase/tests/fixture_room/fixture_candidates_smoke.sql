@@ -79,6 +79,24 @@ begin
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', '', true);
 end $f$;
+-- create a room as the member whose claims are set (C2O-013): members no longer hold
+-- EXECUTE on the raw-id create_fixture_room, so the suites call it as the database owner
+-- with the member's JWT claims left in place; the command reads its actor from the claims,
+-- so every ownership, tier and pairing rule is exercised exactly as before
+create or replace function pg_temp.fx_create(p_cargo uuid, p_avail uuid, p_terms jsonb, p_key text, p_options jsonb default '{}'::jsonb)
+ returns jsonb language plpgsql as $f$
+declare v jsonb; v_role text := current_user;
+begin
+  execute 'reset role';
+  begin
+    v := public.create_fixture_room(p_cargo, p_avail, p_terms, p_key, p_options);
+  exception when others then
+    execute format('set local role %I', v_role);
+    raise;
+  end;
+  execute format('set local role %I', v_role);
+  return v;
+end $f$;
 -- run a statement and report 'OK' or the FX_ prefix it raised
 create or replace function pg_temp.fx_err(p_sql text) returns text language plpgsql as $f$
 declare v jsonb;
@@ -277,17 +295,17 @@ begin
   perform pg_temp.fx_as('u_ch1');
   v := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
   s := v::text;
-  select count(*) into n from jsonb_array_elements(v) x where x->>'availabilityId' in (pg_temp.fx_id('a1')::text, pg_temp.fx_id('a3')::text);
+  select count(*) into n from jsonb_array_elements(v) x where x->>'name' in ('TBN', 'SEED VESSEL ONE') and x ? 'candidateKey';
   if n <> 2 then raise exception 'K1: both matching positions must be listed, got % in %', n, s; end if;
-  select x into c from jsonb_array_elements(v) x where x->>'availabilityId' = pg_temp.fx_id('a3')::text;
+  select x into c from jsonb_array_elements(v) x where x->>'name' = 'TBN';
   if c->>'name' <> 'TBN' or (c->>'isTbn')::boolean is not true then raise exception 'K1: the TBN hull must be named TBN: %', c; end if;
   if s like '%SEED TBN HULL%' then raise exception 'K1: the TBN hull name reached the candidate payload'; end if;
   if s like '%' || pg_temp.fx_id('v3')::text || '%' or s like '%' || pg_temp.fx_id('v1')::text || '%' then
     raise exception 'K1: a vessels.id reached the candidate payload'; end if;
   if s like '%9000001%' then raise exception 'K1: an IMO number reached the candidate payload'; end if;
-  if exists (select 1 from jsonb_array_elements(v) x where x ? 'vesselId' or x ? 'vesselRef' or x ? 'imo') then
+  if exists (select 1 from jsonb_array_elements(v) x where x ? 'vesselId' or x ? 'vesselRef' or x ? 'imo' or x ? 'availabilityId') then
     raise exception 'K1: a candidate carries a vessel identifier key'; end if;
-  select x into c from jsonb_array_elements(v) x where x->>'availabilityId' = pg_temp.fx_id('a1')::text;
+  select x into c from jsonb_array_elements(v) x where x->>'name' = 'SEED VESSEL ONE';
   if c->>'name' <> 'SEED VESSEL ONE' then raise exception 'K1: a named vessel keeps its name: %', c; end if;
   raise notice 'K1 ok: the TBN hull is listed as TBN; no vessel id, IMO or hidden name in the payload';
 
@@ -318,7 +336,7 @@ begin
   -- K4 · the vessel side follows the same ownership rule
   perform pg_temp.fx_as('u_ow1');
   v := public.list_fixture_match_candidates('vessel', pg_temp.fx_id('a3'));
-  if not exists (select 1 from jsonb_array_elements(v) x where x->>'id' = pg_temp.fx_id('c6')::text) then
+  if not exists (select 1 from jsonb_array_elements(v) x where x->>'ref' = 'FXC-006') then
     raise exception 'K4: the TBN position must see the matching cargo: %', v; end if;
   perform pg_temp.fx_as('u_ch1');
   begin

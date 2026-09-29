@@ -79,6 +79,24 @@ begin
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', '', true);
 end $f$;
+-- create a room as the member whose claims are set (C2O-013): members no longer hold
+-- EXECUTE on the raw-id create_fixture_room, so the suites call it as the database owner
+-- with the member's JWT claims left in place; the command reads its actor from the claims,
+-- so every ownership, tier and pairing rule is exercised exactly as before
+create or replace function pg_temp.fx_create(p_cargo uuid, p_avail uuid, p_terms jsonb, p_key text, p_options jsonb default '{}'::jsonb)
+ returns jsonb language plpgsql as $f$
+declare v jsonb; v_role text := current_user;
+begin
+  execute 'reset role';
+  begin
+    v := public.create_fixture_room(p_cargo, p_avail, p_terms, p_key, p_options);
+  exception when others then
+    execute format('set local role %I', v_role);
+    raise;
+  end;
+  execute format('set local role %I', v_role);
+  return v;
+end $f$;
 -- run a statement and report 'OK' or the FX_ prefix it raised
 create or replace function pg_temp.fx_err(p_sql text) returns text language plpgsql as $f$
 declare v jsonb;
@@ -257,7 +275,7 @@ declare v jsonb; v_room uuid; v_tid uuid; v_pid uuid; v_role text; v_ok boolean;
   procedure_sql text[];
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'immut-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'immut-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   v_tid := pg_temp.fx_term(v_room, 'freight');
   v := public.submit_fixture_proposal(v_room, v_tid, '{"num": 24}'::jsonb, null, false, null, pg_temp.fx_ver(v_room), 'immut-bid');
@@ -295,7 +313,7 @@ do $$
 declare v jsonb; v_room uuid; v_mid uuid; v_recap uuid; v_sub uuid; v_ok boolean;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'immut-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'immut-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   v := public.post_fixture_message(v_room, 'a note', 'note', 'room', null, pg_temp.fx_ver(v_room), 'immut-msg');
   v_mid := (v->'data'->>'messageId')::uuid;

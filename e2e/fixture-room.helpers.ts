@@ -20,6 +20,8 @@ export interface FixtureSeed {
   cargoId: string;
   vesselId: string;
   vesselImo: string;
+  /** the named (not TBN) hull's display name, how a test finds its candidate card (no id is in the page, C2O-013) */
+  vesselName: string;
   availabilityId: string;
   /** a TBN hull of the owner that also matches the cargo (C2O-011): its name and id must never reach the cargo side */
   tbn: { vesselId: string; name: string; availabilityId: string };
@@ -86,7 +88,7 @@ export async function seedFixture(): Promise<FixtureSeed> {
     { listing_type: "vessel_availability", listing_id: ta.id, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
   ]);
   if (oe) throw new Error(`ownership: ${oe.message}`);
-  return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, vesselImo: testImo, availabilityId: a.id, tbn: { vesselId: tv.id, name: tbnName, availabilityId: ta.id } };
+  return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, vesselImo: testImo, vesselName: `E2E HULL ${stamp.toUpperCase()}`, availabilityId: a.id, tbn: { vesselId: tv.id, name: tbnName, availabilityId: ta.id } };
 }
 
 /**
@@ -121,6 +123,23 @@ delete from auth.users where id = '${seat.userId}';
   } catch {
     // leaving rows behind on a disposable database is not a test failure
   }
+}
+
+/**
+ * The charterer opens a room on the named hull through the governed path a member has
+ * (C2O-013): list the candidates, take the named hull's opaque key, create from it.
+ * Members hold no EXECUTE on the raw-id create_fixture_room any more.
+ */
+export async function openRoomViaApi(seed: FixtureSeed, idempotencyKey: string, terms: unknown, options: Record<string, unknown>): Promise<{ roomId: string; version: number }> {
+  const ch = await apiClientAs(seed.charterer.email);
+  const list = await ch.rpc("list_fixture_match_candidates", { p_kind: "cargo", p_listing_id: seed.cargoId });
+  if (list.error) throw new Error(`list_fixture_match_candidates: ${list.error.message}`);
+  const key = (list.data as { candidateKey: string; name: string }[]).find((x) => x.name === seed.vesselName)?.candidateKey;
+  if (!key) throw new Error(`the named hull ${seed.vesselName} is not a candidate`);
+  const created = await ch.rpc("create_fixture_room_from_candidate", { p_candidate_key: key, p_terms: terms, p_idempotency_key: idempotencyKey, p_options: options });
+  if (created.error) throw new Error(`create_fixture_room_from_candidate: ${created.error.message}`);
+  const d = created.data as { data: { roomId: string }; version: number };
+  return { roomId: d.data.roomId, version: d.version };
 }
 
 export interface AdminSeed { email: string; userId: string }

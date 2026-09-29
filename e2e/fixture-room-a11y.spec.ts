@@ -20,7 +20,7 @@ test.afterAll(async () => { if (seed) cleanupFixture(seed); });
 test("a term strip is a button that opens with Enter and Space", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
   await page.goto(`/dashboard/fixture-room/new?cargo=${seed.cargoId}`);
-  await page.getByTestId(`cand-vessel-${seed.availabilityId}`).getByRole("button", { name: /open fixture/i }).click();
+  await page.getByTestId("cand-vessel").filter({ hasText: seed.vesselName }).getByRole("button", { name: /open fixture/i }).click();
   await page.waitForURL(/\/dashboard\/fixture-room\/[0-9a-f-]{36}$/);
   roomUrl = new URL(page.url()).pathname;
 

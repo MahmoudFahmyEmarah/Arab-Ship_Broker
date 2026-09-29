@@ -12,7 +12,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createFixtureRoomAction, loadMatchCandidates, type MatchBuilderData, type MatchCargoOption, type MatchFacts, type MatchVesselOption } from "@/app/(dashboard)/dashboard/fixture-room/actions";
+import { createFixtureRoomFromCandidateAction, loadMatchCandidates, type MatchBuilderData, type MatchCargoOption, type MatchFacts, type MatchVesselOption } from "@/app/(dashboard)/dashboard/fixture-room/actions";
 import { GestureKeys, UNCERTAIN_MESSAGE, runGesture } from "@/lib/fixture-room/client";
 import { FIXTURE_ERROR_TITLE } from "@/lib/fixture-room/errors";
 
@@ -123,7 +123,7 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
     setFirst(f);
     setLoadingCands(true);
     try {
-      const res = await loadMatchCandidates(f.kind, f.kind === "cargo" ? f.cargo.id : f.vessel.availabilityId);
+      const res = await loadMatchCandidates(f.kind, (f.kind === "cargo" ? f.cargo.id : f.vessel.availabilityId) ?? "");
       setCandidates({ cargo: res.cargo, vessels: res.vessels });
       setError(res.error ?? null);
     } catch {
@@ -134,13 +134,15 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
     }
   };
 
-  const open = async (cargoListingId: string, vesselAvailabilityId: string) => {
+  // C2O-013: the counterparty is named by its opaque candidate key only
+  const open = async (candidateKey: string | undefined) => {
+    if (!candidateKey) return;
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      const outcome = await runGesture(keys, `open:${cargoListingId}:${vesselAvailabilityId}`, (idempotencyKey) =>
-        createFixtureRoomAction({ cargoListingId, vesselAvailabilityId, idempotencyKey }));
+      const outcome = await runGesture(keys, `open:${candidateKey}`, (idempotencyKey) =>
+        createFixtureRoomFromCandidateAction({ candidateKey, idempotencyKey }));
       if (outcome.kind === "ok") {
         toast.success(outcome.result.replayed ? "Opening your existing room" : `Room ${outcome.result.data.ref} opened`);
         router.push(`/dashboard/fixture-room/${outcome.result.data.roomId}`);
@@ -226,8 +228,8 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
             )}
             <div className="fxm__grid">
               {first.kind === "cargo"
-                ? candidates.vessels.map((v) => <VesselPick key={v.availabilityId} v={v} fit={assessFit(first.cargo, v, v.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(first.cargo.id, v.availabilityId)} testId={`cand-vessel-${v.availabilityId}`} />)
-                : candidates.cargo.map((c) => <CargoPick key={c.id} c={c} fit={assessFit(c, first.vessel, c.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(c.id, first.vessel.availabilityId)} testId={`cand-cargo-${c.id}`} />)}
+                ? candidates.vessels.map((v) => <VesselPick key={v.candidateKey} v={v} fit={assessFit(first.cargo, v, v.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(v.candidateKey)} testId="cand-vessel" />)
+                : candidates.cargo.map((c) => <CargoPick key={c.candidateKey} c={c} fit={assessFit(c, first.vessel, c.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(c.candidateKey)} testId="cand-cargo" />)}
             </div>
           </>
         )}

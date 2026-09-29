@@ -10,12 +10,11 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import * as sdk from "@/sdk/app/fixtures";
 import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
-import type { CargoListingRow } from "@/lib/schemas/cargo";
 import { buildTermCatalogue, type ListingFigures } from "@/lib/fixture-room/terms";
 import { findMaskingLeaks } from "@/lib/fixture-room/masking-view";
 import type { FixtureError } from "@/lib/fixture-room/errors";
 import {
-  addSubjectSchema, closeRoomSchema, createRoomSchema, extendSubjectSchema, failSubjectSchema, invitePartySchema, postMessageSchema,
+  addSubjectSchema, closeRoomSchema, createFromCandidateSchema, recreateRoomSchema, extendSubjectSchema, failSubjectSchema, invitePartySchema, postMessageSchema,
   proposalRefSchema, reopenTermSchema, recapRefSchema, redactMessageSchema, respondInvitationSchema, submitProposalSchema, subjectRefSchema,
   termFlagSchema, commandBaseSchema, listRoomsSchema,
 } from "@/lib/fixture-room/schemas";
@@ -80,13 +79,21 @@ export interface MatchFacts {
   gearRequired: boolean; partCargo: boolean; dwtDelta: number;
 }
 export interface MatchCargoOption {
-  id: string; ref: string | null; commodity: string; type: string; qtyMin: number; qtyMax: number;
+  /** the member's own listing id (step 1); absent on a counterparty candidate */
+  id?: string;
+  /** the opaque handle of a counterparty candidate (C2O-013); never a raw id */
+  candidateKey?: string;
+  ref: string | null; commodity: string; type: string; qtyMin: number; qtyMax: number;
   loadPort: string | null; dischPort: string | null; laycanFrom: string | null; laycanTo: string | null; isSpot: boolean;
   freightIdea: number | null; rateAligned: boolean | null; mine: boolean; fit?: MatchFacts;
 }
-/** No vessel id or IMO, ever (C2O-011): the builder needs only the availability id, and a TBN hull a member does not own is named "TBN". */
+/** No vessel id, IMO or (for a counterparty) availability id, ever (C2O-011, C2O-013). A TBN hull a member does not own is named "TBN". */
 export interface MatchVesselOption {
-  availabilityId: string; name: string; isTbn?: boolean; type: string; dwt: number | null; openPort: string | null;
+  /** the member's own position id (step 1); absent on a counterparty candidate */
+  availabilityId?: string;
+  /** the opaque handle of a counterparty candidate (C2O-013) */
+  candidateKey?: string;
+  name: string; isTbn?: boolean; type: string; dwt: number | null; openPort: string | null;
   openZone: string | null; openDate: string | null; freightIdea: number | null; rateAligned: boolean | null; geared: boolean | null; mine: boolean; fit?: MatchFacts;
 }
 export interface MatchBuilderData {
@@ -110,19 +117,19 @@ const facts = (f: unknown): MatchFacts | undefined => {
     gearRequired: r.gearRequired === true, partCargo: r.partCargo === true, dwtDelta: Number(r.dwtDelta ?? 0) };
 };
 const vesselCandidate = (r: Row): MatchVesselOption => ({
-  availabilityId: String(r.availabilityId), name: r.isTbn === true && r.name === "TBN" ? "TBN" : stripVesselNamePrefix(String(r.name ?? "Vessel")), isTbn: r.isTbn === true,
+  candidateKey: String(r.candidateKey), name: r.isTbn === true && r.name === "TBN" ? "TBN" : stripVesselNamePrefix(String(r.name ?? "Vessel")), isTbn: r.isTbn === true,
   type: String(r.type ?? "—"), dwt: num(r.dwt), openPort: str(r.openPort), openZone: str(r.openZone), openDate: str(r.openDate),
   freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, geared: r.geared == null ? null : r.geared === true, mine: r.mine === true, fit: facts(r.fit),
 });
 // the member's own live listings (list_fixture_my_listings: the create rule, organisation seats included)
-const ownCargo = (r: Row): MatchCargoOption => ({ ...cargoCandidate(r), rateAligned: null, mine: true, fit: undefined });
+const ownCargo = (r: Row): MatchCargoOption => ({ ...cargoCandidate(r), id: String(r.id), candidateKey: undefined, rateAligned: null, mine: true, fit: undefined });
 const ownVessel = (r: Row): MatchVesselOption => ({
   availabilityId: String(r.availabilityId), name: stripVesselNamePrefix(String(r.name ?? "Vessel")), type: String(r.type ?? "—"), dwt: num(r.dwt),
   openPort: str(r.openPort), openZone: str(r.openZone), openDate: str(r.openDate), freightIdea: num(r.freightIdea), rateAligned: null,
   geared: r.geared == null ? null : r.geared === true, mine: true,
 });
 const cargoCandidate = (r: Row): MatchCargoOption => ({
-  id: String(r.id), ref: str(r.ref), commodity: String(r.commodity ?? "Cargo"), type: String(r.type ?? "—"), qtyMin: Number(r.qtyMin ?? 0), qtyMax: Number(r.qtyMax ?? 0),
+  candidateKey: r.candidateKey == null ? undefined : String(r.candidateKey), ref: str(r.ref), commodity: String(r.commodity ?? "Cargo"), type: String(r.type ?? "—"), qtyMin: Number(r.qtyMin ?? 0), qtyMax: Number(r.qtyMax ?? 0),
   loadPort: str(r.loadPort), dischPort: str(r.dischPort), laycanFrom: str(r.laycanFrom), laycanTo: str(r.laycanTo), isSpot: r.isSpot === true,
   freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, mine: r.mine === true, fit: facts(r.fit),
 });
@@ -177,35 +184,49 @@ export async function loadMatchCandidates(kind: "cargo" | "vessel", id: string):
 }
 
 // ── commands ────────────────────────────────────────────────────────────────
-async function listingFigures(cargoListingId: string, vesselAvailabilityId: string): Promise<ListingFigures> {
+// C2O-013: the browser never holds a raw listing, availability or vessel id for
+// a counterparty. A room opens from the opaque candidate key; a terminal room is
+// restarted by its room id. The term hints come from governed reads that return
+// listing figures only.
+const figuresFromHints = (h: Record<string, unknown>): ListingFigures => {
+  const n = (v: unknown) => (v == null ? null : Number(v));
+  const t = (v: unknown) => (v == null ? null : String(v));
+  return {
+    commodity: t(h.commodity), cargoType: t(h.cargoType), qtyMin: n(h.qtyMin), qtyMax: n(h.qtyMax), stowageFactor: n(h.stowageFactor),
+    loadPortCode: t(h.loadPortCode), loadPortName: t(h.loadPortName), dischPortCode: t(h.dischPortCode), dischPortName: t(h.dischPortName),
+    laycanFrom: t(h.laycanFrom), laycanTo: t(h.laycanTo), isSpot: h.isSpot === true, loadRate: n(h.loadRate), dischRate: n(h.dischRate),
+    loadTerms: t(h.loadTerms), freightIdea: n(h.freightIdea), commission: n(h.commission), demurrage: n(h.demurrage), vesselFreightIdea: n(h.vesselFreightIdea),
+  } as ListingFigures;
+};
+
+export async function createFixtureRoomFromCandidateAction(input: { candidateKey: string; idempotencyKey: string }) {
   const supabase = await getSupabaseServerClient();
-  const f: ListingFigures = {};
-  try {
-    const { data: c } = await supabase.from("cargo_listings").select("*").eq("id", cargoListingId).maybeSingle();
-    const row = c as CargoListingRow | null;
-    if (row) {
-      Object.assign(f, {
-        commodity: row.commodity_name, cargoType: row.cargo_type, qtyMin: row.qty_min_mt, qtyMax: row.qty_max_mt, stowageFactor: row.stowage_factor,
-        loadPortCode: row.load_port_locode, loadPortName: row.load_port_name, dischPortCode: row.disch_port_locode, dischPortName: row.disch_port_name,
-        laycanFrom: row.laycan_from, laycanTo: row.laycan_to, isSpot: row.is_spot, loadRate: row.load_rate == null ? null : Number(row.load_rate),
-        dischRate: row.disch_rate == null ? null : Number(row.disch_rate), loadTerms: row.load_terms, freightIdea: row.freight_idea_usd_mt,
-        commission: row.commission_pct, demurrage: row.demurrage_rate,
-      } satisfies ListingFigures);
-    }
-    const { data: a } = await supabase.from("vessel_availability").select("freight_idea_usd_mt").eq("id", vesselAvailabilityId).maybeSingle();
-    if (a && (a as { freight_idea_usd_mt?: number | null }).freight_idea_usd_mt != null) f.vesselFreightIdea = Number((a as { freight_idea_usd_mt: number }).freight_idea_usd_mt);
-  } catch {
-    // hints are optional; the room is created without them
-  }
-  return f;
+  // hints are optional: without them the room opens with the plain catalogue
+  const hints = await sdk.getFixtureCandidateHints(supabase, input.candidateKey).then(figuresFromHints).catch(() => ({} as ListingFigures));
+  const p = parse(createFromCandidateSchema, { ...input, terms: buildTermCatalogue(hints) });
+  if (!p.ok) return p.error;
+  return sdk.createFixtureRoomFromCandidate(supabase, p.value);
 }
 
-export async function createFixtureRoomAction(input: { cargoListingId: string; vesselAvailabilityId: string; idempotencyKey: string }) {
-  const figures = await listingFigures(input.cargoListingId, input.vesselAvailabilityId).catch(() => ({} as ListingFigures));
-  const p = parse(createRoomSchema, { ...input, terms: buildTermCatalogue(figures) });
-  if (!p.ok) return p.error;
+/** Figures for a restart, from the old room's own snapshot (the member's masked read). */
+const figuresFromRoom = (view: FixtureRoomView): ListingFigures => {
+  const c = view.snapshot.cargo as Record<string, unknown>;
+  const a = (view.snapshot.vessel.availability ?? {}) as Record<string, unknown>;
+  return figuresFromHints({
+    commodity: c.commodity_name, cargoType: c.cargo_type, qtyMin: c.qty_min_mt, qtyMax: c.qty_max_mt, stowageFactor: c.stowage_factor,
+    loadPortCode: c.load_port_locode, loadPortName: c.load_port_name, dischPortCode: c.disch_port_locode, dischPortName: c.disch_port_name,
+    laycanFrom: c.laycan_from, laycanTo: c.laycan_to, isSpot: c.is_spot, loadRate: c.load_rate, dischRate: c.disch_rate,
+    loadTerms: c.load_terms, freightIdea: c.freight_idea_usd_mt, commission: c.commission_pct, demurrage: c.demurrage_rate,
+    vesselFreightIdea: a.freight_idea_usd_mt,
+  });
+};
+
+export async function recreateFixtureRoomAction(input: { roomId: string; idempotencyKey: string }) {
   const supabase = await getSupabaseServerClient();
-  return sdk.createFixtureRoom(supabase, p.value);
+  const view = await sdk.getFixtureRoom(supabase, input.roomId).catch(() => null);
+  const p = parse(recreateRoomSchema, { ...input, terms: buildTermCatalogue(view ? figuresFromRoom(view) : null) });
+  if (!p.ok) return p.error;
+  return sdk.recreateFixtureRoom(supabase, p.value);
 }
 
 export async function inviteFixturePartyAction(input: unknown) {

@@ -72,6 +72,24 @@ begin
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', '', true);
 end $f$;
+-- create a room as the member whose claims are set (C2O-013): members no longer hold
+-- EXECUTE on the raw-id create_fixture_room, so the suites call it as the database owner
+-- with the member's JWT claims left in place; the command reads its actor from the claims,
+-- so every ownership, tier and pairing rule is exercised exactly as before
+create or replace function pg_temp.fx_create(p_cargo uuid, p_avail uuid, p_terms jsonb, p_key text, p_options jsonb default '{}'::jsonb)
+ returns jsonb language plpgsql as $f$
+declare v jsonb; v_role text := current_user;
+begin
+  execute 'reset role';
+  begin
+    v := public.create_fixture_room(p_cargo, p_avail, p_terms, p_key, p_options);
+  exception when others then
+    execute format('set local role %I', v_role);
+    raise;
+  end;
+  execute format('set local role %I', v_role);
+  return v;
+end $f$;
 -- run a statement and report 'OK' or the FX_ prefix it raised
 create or replace function pg_temp.fx_err(p_sql text) returns text language plpgsql as $f$
 declare v jsonb;

@@ -31,7 +31,7 @@ export function listingSyncNotice(
   }
   if (s.vessel.outstanding) {
     lines.push(`Vessel position should read ${s.vessel.target ?? "—"} (currently ${s.vessel.current ?? "—"}).`);
-    if (viewerSide === "vessel" && room.vesselId) {
+    if (viewerSide === "vessel" && room.vesselId && room.vesselAvailabilityId) {
       links.push({ label: "Open the vessel position", href: `/dashboard/vessels/${room.vesselId}/availability/${room.vesselAvailabilityId}/edit` });
     }
   }

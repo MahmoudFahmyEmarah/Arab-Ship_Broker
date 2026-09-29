@@ -11,7 +11,7 @@ import { test, expect as baseExpect } from "@playwright/test";
 // about rendered or persisted state, so a wide budget hides nothing.
 const expect = baseExpect.configure({ timeout: 60_000 });
 import { buildTermCatalogue, FIXTURE_TERM_CATALOGUE_VERSION } from "../lib/fixture-room/terms";
-import { apiClientAs, cleanupAdmin, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed } from "./fixture-room.helpers";
+import { apiClientAs, cleanupAdmin, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed, openRoomViaApi } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "serial", timeout: 180_000 });
@@ -24,13 +24,9 @@ test.beforeAll(async () => {
   seed = await seedFixture();
   admin = await seedAdmin(seed.stamp);
   const ch = await apiClientAs(seed.charterer.email);
-  const created = await ch.rpc("create_fixture_room", {
-    p_cargo_listing_id: seed.cargoId, p_vessel_availability_id: seed.availabilityId, p_terms: buildTermCatalogue(null),
-    p_idempotency_key: `e2e-admin-resp-create-${seed.stamp}`, p_options: { catalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION },
-  });
-  if (created.error) throw new Error(`create_fixture_room: ${created.error.message}`);
-  roomId = (created.data as { data: { roomId: string } }).data.roomId;
-  const version = (created.data as { version: number }).version;
+  const created = await openRoomViaApi(seed, `e2e-admin-resp-create-${seed.stamp}`, buildTermCatalogue(null), { catalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION });
+  roomId = created.roomId;
+  const version = created.version;
   const posted = await ch.rpc("post_fixture_message", {
     p_room_id: roomId, p_body: `Charterer note ${seed.stamp}: layout`, p_kind: "note", p_visibility: "room", p_term_id: null,
     p_expected_version: version, p_idempotency_key: `e2e-admin-resp-msg-${seed.stamp}`, p_as_party_id: null,

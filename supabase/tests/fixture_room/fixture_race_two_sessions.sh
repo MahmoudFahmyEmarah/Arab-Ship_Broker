@@ -24,6 +24,8 @@ U_CH1=00000000-0000-4000-8000-0000000000a1
 C1=00000000-0000-4000-8000-0000000000e1
 A1=00000000-0000-4000-8000-0000000000b1
 A4=00000000-0000-4000-8000-0000000000b4
+U_OW1=00000000-0000-4000-8000-0000000000a3
+C3=00000000-0000-4000-8000-0000000000e3
 q() { $PSQL -At -v ON_ERROR_STOP=1 -c "$1"; }
 claims() { # session-scoped JWT claims for a seeded member
   printf "select set_config('request.jwt.claim.sub', '%s', false); select set_config('request.jwt.claims', '{\"sub\":\"%s\",\"role\":\"authenticated\",\"app_metadata\":{\"role\":\"member\"}}', false);\n" "$1" "$1"
@@ -64,7 +66,7 @@ cleanup
 # ── a room at version 2, the charterer holding the pen ──────────────────────
 ROOM=$($PSQL -At -v ON_ERROR_STOP=1 -q <<SQL | grep '^ROOM=' | cut -d= -f2
 $(claims $U_CH1)
-select 'ROOM=' || (public.create_fixture_room('$C1', '$A1', '$TERMS'::jsonb, 'race-create', '{}'::jsonb)->'data'->>'roomId');
+select 'ROOM=' || (public.create_fixture_room_from_candidate((select (x->>'candidateKey')::uuid from jsonb_array_elements(public.list_fixture_match_candidates('cargo', '$C1')) x where x->>'name' = 'SEED VESSEL ONE'), '$TERMS'::jsonb, 'race-create', '{}'::jsonb)->'data'->>'roomId');
 SQL
 )
 [ -n "$ROOM" ] || { echo "room creation failed"; cleanup; exit 1; }
@@ -98,24 +100,26 @@ ok "$(q "select comment from public.fixture_proposals where room_id = '$ROOM'")"
 ok "$(grep -c 'FX_VERSION_CONFLICT' /tmp/fxrace_b.log)" "1" "session B was refused with FX_VERSION_CONFLICT"
 ok "$(grep -c 'ERROR' /tmp/fxrace_a.log)" "0" "session A saw no error"
 
-# ── race 2: two sessions creating the same pairing ──────────────────────────
+# ── race 2: two handles for the same pairing, two sessions (C2O-013) ────────
+# the owner matches its position a1 against the admin-owned cargo c3 twice: two
+# different candidate keys for one pair; one room wins, the other gets FX_CONFLICT
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_c.log 2>&1 &
-$(claims $U_CH1)
+$(claims $U_OW1)
 begin;
-select public.create_fixture_room('$C1', '$A4', '$TERMS'::jsonb, 'race-create-c', '{}'::jsonb);
+select public.create_fixture_room_from_candidate((select (x->>'candidateKey')::uuid from jsonb_array_elements(public.list_fixture_match_candidates('vessel', '$A1')) x where x->>'ref' = 'FXC-003'), '$TERMS'::jsonb, 'race-create-c', '{}'::jsonb);
 select pg_sleep(4);
 commit;
 SQL
 PID_C=$!
 sleep 1
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_d.log 2>&1 &
-$(claims $U_CH1)
-select public.create_fixture_room('$C1', '$A4', '$TERMS'::jsonb, 'race-create-d', '{}'::jsonb);
+$(claims $U_OW1)
+select public.create_fixture_room_from_candidate((select (x->>'candidateKey')::uuid from jsonb_array_elements(public.list_fixture_match_candidates('vessel', '$A1')) x where x->>'ref' = 'FXC-003'), '$TERMS'::jsonb, 'race-create-d', '{}'::jsonb);
 SQL
 PID_D=$!
 wait $PID_C; wait $PID_D
-ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C1' and vessel_availability_id = '$A4'")" "1" "exactly one room for the raced pairing"
-ok "$(grep -c 'FX_CONFLICT' /tmp/fxrace_d.log)" "1" "the second creator was refused with FX_CONFLICT"
+ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C3' and vessel_availability_id = '$A1'")" "1" "exactly one room for the raced pairing (two handles)"
+ok "$(grep -c 'FX_CONFLICT' /tmp/fxrace_d.log)" "1" "the second handle was refused with FX_CONFLICT"
 
 cleanup
 if [ $fail = 0 ]; then echo "FIXTURE RACE (two sessions): ALL ASSERTIONS PASSED"; else echo "FIXTURE RACE (two sessions): FAILED"; echo "--- A"; cat /tmp/fxrace_a.log; echo "--- B"; cat /tmp/fxrace_b.log; echo "--- D"; cat /tmp/fxrace_d.log; exit 1; fi

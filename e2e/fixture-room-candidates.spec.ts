@@ -22,7 +22,8 @@ let seat: { email: string; userId: string } | null = null;
 test.beforeAll(async () => { seed = await seedFixture(); seat = await seedOrgSeat(seed); });
 test.afterAll(async () => { if (seat) cleanupSeat(seat); if (seed) cleanupFixture(seed); });
 
-const secrets = () => [seed.tbn.name, seed.tbn.vesselId, seed.vesselId, seed.vesselImo];
+// the raw identifiers of the owner's two positions (C2O-013: the availability ids are hull identifiers too)
+const secrets = () => [seed.tbn.name, seed.tbn.vesselId, seed.vesselId, seed.vesselImo, seed.tbn.availabilityId, seed.availabilityId];
 
 test("the charterer sees the TBN hull as TBN, with no identity anywhere in the page", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
@@ -37,11 +38,11 @@ test("the charterer sees the TBN hull as TBN, with no identity anywhere in the p
   });
   await page.goto(`/dashboard/fixture-room/new?cargo=${seed.cargoId}`);
   await dismissOverlays(page);
-  const tbn = page.getByTestId(`cand-vessel-${seed.tbn.availabilityId}`);
+  const tbn = page.getByTestId("cand-vessel").filter({ hasText: "identity withheld" });
   await expect(tbn).toBeVisible();
   await expect(tbn.locator(".fxm-card__name")).toContainText("TBN");
   await expect(tbn).toContainText(/identity withheld/i);
-  await expect(page.getByTestId(`cand-vessel-${seed.availabilityId}`)).toBeVisible();
+  await expect(page.getByTestId("cand-vessel").filter({ hasText: seed.vesselName })).toBeVisible();
   // the reasons are the governed rule's facts, all of them, and none contradicts the match
   await expect(tbn.getByRole("list", { name: /why this matches/i })).toContainText(/grain certified/i);
   await expect(tbn).not.toContainText(/under capacity|opens after laycan|gearless/i);
@@ -49,7 +50,7 @@ test("the charterer sees the TBN hull as TBN, with no identity anywhere in the p
   await page.getByRole("button", { name: /^change$/i }).click();
   const before = bodies.length;
   await page.getByTestId(`pick-cargo-${seed.cargoId}`).getByRole("button").click();
-  await expect(page.getByTestId(`cand-vessel-${seed.tbn.availabilityId}`)).toBeVisible();
+  await expect(page.getByTestId("cand-vessel").filter({ hasText: "identity withheld" })).toBeVisible();
   await expect.poll(() => bodies.length, { message: "the re-pick went through the server action" }).toBeGreaterThan(before);
   const html = await page.content();
   for (const s of secrets()) {
@@ -65,8 +66,9 @@ test("the governed read masks the TBN hull and carries no vessel identifier", as
   expect(error, error?.message).toBeNull();
   const text = JSON.stringify(data);
   for (const s of secrets()) expect(text).not.toContain(s);
-  const tbn = (data as { availabilityId: string; name: string }[]).find((x) => x.availabilityId === seed.tbn.availabilityId);
-  expect(tbn?.name).toBe("TBN");
+  const rows = data as { candidateKey?: string; name: string; availabilityId?: string }[];
+  expect(rows.every((x) => typeof x.candidateKey === "string" && x.availabilityId === undefined), "every candidate is an opaque key, never a raw id").toBe(true);
+  expect(rows.some((x) => x.name === "TBN")).toBe(true);
 });
 
 test("a member cannot list the matches of someone else's cargo", async ({ browser, baseURL }) => {
@@ -78,7 +80,7 @@ test("a member cannot list the matches of someone else's cargo", async ({ browse
   await page.goto(`/dashboard/fixture-room/new?cargo=${seed.cargoId}`);
   await dismissOverlays(page);
   await expect(page.getByTestId("builder-error")).toContainText(/not one of yours/i);
-  await expect(page.getByTestId(/^cand-vessel-/)).toHaveCount(0);
+  await expect(page.getByTestId("cand-vessel")).toHaveCount(0);
   await context.close();
 });
 
@@ -91,7 +93,7 @@ test("a second seat of the charterer organisation picks the organisation's cargo
   const pick = page.getByTestId(`pick-cargo-${seed.cargoId}`);
   await expect(pick).toBeVisible();
   await pick.getByRole("button").click();
-  const tbn = page.getByTestId(`cand-vessel-${seed.tbn.availabilityId}`);
+  const tbn = page.getByTestId("cand-vessel").filter({ hasText: "identity withheld" });
   await expect(tbn).toBeVisible();
   await expect(tbn.locator(".fxm-card__name")).toContainText("TBN");
   const html = await page.content();
@@ -103,6 +105,38 @@ test("a second seat of the charterer organisation picks the organisation's cargo
   expect(JSON.stringify(mine.data)).toContain(seed.cargoId);
   const nul = await api.rpc("list_fixture_match_candidates", { p_kind: null, p_listing_id: seed.cargoId });
   expect(nul.error?.message ?? "").toMatch(/FX_VALIDATION/);   // re-audit item 4: a null kind is refused
+  await context.close();
+});
+
+// C2O-013: the room opened on the TBN hull carries no hull or position id in its page or reads
+test("a room opened from the TBN key reveals no hull or position id", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
+  const bodies: string[] = [];
+  await page.route("**/dashboard/fixture-room/**", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    bodies.push(await response.text());
+    await route.fulfill({ response });
+  });
+  await page.goto(`/dashboard/fixture-room/new?cargo=${seed.cargoId}`);
+  await dismissOverlays(page);
+  await page.getByTestId("cand-vessel").filter({ hasText: "identity withheld" }).getByRole("button", { name: /open fixture/i }).click();
+  await page.waitForURL(/\/dashboard\/fixture-room\/[0-9a-f-]{36}$/);
+  const roomId = new URL(page.url()).pathname.split("/").pop()!;
+  await expect(page.getByTestId("room-header")).toBeVisible();
+  const html = await page.content();
+  for (const s of secrets()) {
+    expect(html, `the room page carries ${s}`).not.toContain(s);
+    for (const b of bodies) expect(b, `a server-action response carries ${s}`).not.toContain(s);
+  }
+  // the governed room read, as the member's own JWT sees it
+  const ch = await apiClientAs(seed.charterer.email);
+  const room = await ch.rpc("get_fixture_room", { p_room_id: roomId });
+  expect(room.error, room.error?.message).toBeNull();
+  for (const s of secrets()) expect(JSON.stringify(room.data), `the room read carries ${s}`).not.toContain(s);
+  // and the raw-id create is no longer callable by a member
+  const raw = await ch.rpc("create_fixture_room", { p_cargo_listing_id: seed.cargoId, p_vessel_availability_id: seed.tbn.availabilityId, p_terms: [], p_idempotency_key: `e2e-raw-${seed.stamp}`, p_options: {} });
+  expect(raw.error?.message ?? "").toMatch(/permission denied/i);
   await context.close();
 });
 

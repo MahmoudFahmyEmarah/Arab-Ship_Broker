@@ -238,7 +238,8 @@ export interface FixtureRoomHeader {
   version: number;
   mediation: "platform" | "member";
   cargoListingId: string;
-  vesselAvailabilityId: string;
+  /** null for a viewer the TBN hull is masked from (C2O-013): a position id identifies the hull too. */
+  vesselAvailabilityId: string | null;
   /** Null while the vessel identity is masked from this viewer (snapshot.vesselIdentityMasked). */
   vesselId: string | null;
   /** The versioned term sheet the room was opened on (fn_fixture_term_catalogue). */

@@ -62,6 +62,10 @@ export function findMaskingLeaks(view: FixtureRoomView): string[] {
     if (vessel.id != null) out.push("view.snapshot.vessel.vessel.id is set for a masked vessel");
     if (availability.vessel_id != null) out.push("view.snapshot.vessel.availability.vessel_id is set for a masked vessel");
     if (view.room.vesselId != null) out.push("view.room.vesselId is set for a masked vessel");
+    // C2O-013: the position id identifies the hull too
+    if (view.room.vesselAvailabilityId != null) out.push("view.room.vesselAvailabilityId is set for a masked vessel");
+    if (availability.id != null) out.push("view.snapshot.vessel.availability.id is set for a masked vessel");
+    if (view.room.listingSync?.vessel.availabilityId != null) out.push("view.room.listingSync.vessel.availabilityId is set for a masked vessel");
     if (view.room.listingSync?.vessel.vesselId != null) out.push("view.room.listingSync.vessel.vesselId is set for a masked vessel");
     for (const id of [vessel.id, availability.vessel_id, view.room.vesselId, view.room.listingSync?.vessel.vesselId]) {
       if (typeof id === "string" && UUID.test(id)) findId(view.events, id, "view.events", out);

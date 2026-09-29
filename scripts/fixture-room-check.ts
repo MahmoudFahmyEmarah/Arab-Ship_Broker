@@ -140,7 +140,7 @@ ok(countdown(new Date(t0 + 702_000).toISOString(), t0) === "11:42" && countdown(
 console.log("6 · masking guard");
 const VESSEL_ID = "3d1f2c7e-0b6a-4c1d-9e8f-1a2b3c4d5e6f";
 const baseView = (): FixtureRoomView => ({
-  room: { id: "r", ref: "FX-2026-00001", status: "negotiating", version: 3, mediation: "platform", cargoListingId: "c", vesselAvailabilityId: "a", vesselId: null, termCatalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION, createdAt: "", updatedAt: "", fixedOnSubsAt: null, fixedAt: null, closedAt: null, closedReason: null, closedNote: null, counterpartyDisclosed: false, counterpartyDisclosedAt: null, negotiationWindowEndsAt: null, supersedesRoomId: null, snapshotAt: "", snapshotHash: "h", brokerageTerms: null, listingSync: null, serverNow: "" },
+  room: { id: "r", ref: "FX-2026-00001", status: "negotiating", version: 3, mediation: "platform", cargoListingId: "c", vesselAvailabilityId: null, vesselId: null, termCatalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION, createdAt: "", updatedAt: "", fixedOnSubsAt: null, fixedAt: null, closedAt: null, closedReason: null, closedNote: null, counterpartyDisclosed: false, counterpartyDisclosedAt: null, negotiationWindowEndsAt: null, supersedesRoomId: null, snapshotAt: "", snapshotHash: "h", brokerageTerms: null, listingSync: null, serverNow: "" },
   snapshot: { cargo: { commodity_name: "Wheat" }, vessel: { availability: { vessel_id: null }, vessel: { id: null, vessel_name: "TBN", imo_number: null } }, vesselIdentityMasked: true },
   viewer: { partyIds: ["p1"], side: "cargo", isAdmin: false, isMediator: false, capabilities: computeCapabilities("negotiating", [P("cargo", "principal")], false) },
   parties: [
@@ -306,7 +306,7 @@ ok(/grant execute on function public\.submit_fixture_proposal\([^)]*\) to authen
 ok(/UPGRADE REGRESSION \(C2O-003\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite names X2 as the upgrade regression (original 203000, then 204000 alone)");
 ok(/drop function if exists public\.sweep_fixture_proposal_lapses\(integer\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops the sweep");
 const harnessSh = read("scripts/fixture-room-harness.sh");
-ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry( notify)?( candidates)?( liftall)?; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
+ok(/20260923204000_fixture_room_expiry_sweep\.sql/.test(harnessSh) && /\[expiry\]="FIXTURE EXPIRY SMOKE"/.test(harnessSh) && /for name in state rls masking idempotency immutability snapshot expiry( notify)?( candidates)?( liftall)?( handles)?; do/.test(harnessSh), "the harness applies the sweep migration and runs the expiry suite");
 ok(!/40001/.test(sweepCode) && !/(pda_|tariff)/.test(sweepCode) && !/update public\.fixture_(proposals|terms)/.test(sweepFnCode), "the sweep raises no 40001, touches no PDA object and rewrites no proposal or term");
 ok(/X1 ok|X5 ok/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")) && /has_function_privilege\('authenticated', 'public\.sweep_fixture_proposal_lapses\(integer\)', 'execute'\)/.test(read("supabase/tests/fixture_room/bodies/expiry.sql")), "the expiry suite covers the sweep and proves the member cannot execute it");
 
@@ -468,7 +468,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/React\.useState\(false\);\s*const audioRef/.test(client), "6 · sound starts off; only an explicit toggle turns it on");
   const lift = read("supabase/migrations/20260923207000_fixture_room_lift_all.sql").replace(/--.*$/gm, "");
   ok(/create or replace function public\.lift_all_fixture_subjects\(/.test(lift) && /fn_fixture_check_version/.test(lift) && /fn_fixture_replay/.test(lift) && /x\.responsible_side is null or x\.responsible_side = rep\.side/.test(lift), "5 · lift all is one governed command: one lock, version check and key; only the side's own subjects");
-  ok(/run\("liftAll"/.test(client) && /createFixtureRoomAction\(\{ cargoListingId, vesselAvailabilityId, idempotencyKey \}\)/.test(client) && !/for \(const s of view\.subjects\)[\s\S]{0,200}liftSubject/.test(client), "5 · the footer calls governed commands only (no client-side loop of lifts)");
+  ok(/run\("liftAll"/.test(client) && /recreateFixtureRoomAction\(\{ roomId: view\.room\.id, idempotencyKey \}\)/.test(client) && !/for \(const s of view\.subjects\)[\s\S]{0,200}liftSubject/.test(client), "5 · the footer calls governed commands only (no client-side loop of lifts)");
   const h = read("scripts/fixture-room-harness.sh");
   ok(/20260923207000_fixture_room_lift_all\.sql/.test(h) && /\[liftall\]="FIXTURE LIFT ALL SMOKE"/.test(h) && /drop function if exists public\.lift_all_fixture_subjects\(uuid, integer, text, uuid, uuid\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "5 · the harness applies, tests and reverses lift all");
 }
@@ -488,5 +488,33 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
   ok(/sdk\.listFixtureMyListings\(supabase\)/.test(act) && !/getMyCargoListings|getMyVesselAvailability/.test(act), "the builder's own-listing lists come from the governed read, not per-account owner queries");
   ok(/drop function if exists public\.list_fixture_my_listings\(\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops the own-listing read");
+}
+
+// -- C2O-013 . private selection handles: no raw id for a counterparty, no raw-id bypass --
+{
+  const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
+  ok(/create table if not exists fixture_private\.match_handles/.test(h) && /revoke all on schema fixture_private from public, anon, authenticated;/.test(h) && /revoke all on table fixture_private\.match_handles from public, anon, authenticated;/.test(h), "the handle table lives in a private schema no member or API role can reach");
+  ok(/actor_user_id\s+uuid not null references public\.users\(id\)/.test(h) && /own_kind/.test(h) && /own_listing_id/.test(h) && /expires_at\s+timestamptz not null/.test(h) && /interval '15 minutes'/.test(h), "a handle binds the users.id actor, the owned source listing and kind, the pair and a short expiry");
+  const list = h.split("create or replace function public.list_fixture_match_candidates")[1].split("end $$;")[0];
+  ok(/'candidateKey', h\.key/.test(list) && !/'availabilityId'|'vesselId'|'id', m\.cargo_id/.test(list), "candidates carry the opaque key and no raw cargo, availability or vessel id");
+  const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
+  const order = ["x.create_idempotency_key = p_idempotency_key", "x.actor_user_id = v_actor", "h.expires_at <= now()", "fn_fixture_owns_listing", "get_matches_for_cargo", "public.create_fixture_room("].map((t) => fromCand.indexOf(t));
+  ok(order.every((i, n) => i > 0 && (n === 0 || i > order[n - 1])), "create-from-handle checks replay, then actor, expiry, live ownership, the match predicate, then the governed create");
+  ok(/revoke execute on function public\.create_fixture_room\(uuid, uuid, jsonb, text, jsonb\) from public, anon, authenticated;/.test(h), "members hold no EXECUTE on the raw-id create (no callable bypass)");
+  ok(/alter function public\.get_fixture_room\(uuid, integer\) rename to fn_fixture_room_read_unscrubbed/.test(h) && /replace\(t, '"' \|\| v_avail::text \|\| '"', 'null'\)/.test(h), "the room read removes every availability and vessel uuid for a masked viewer");
+  const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
+  ok(!/createFixtureRoomAction|sdk\.createFixtureRoom\(|listingFigures\(/.test(act) && /sdk\.createFixtureRoomFromCandidate\(/.test(act) && /sdk\.recreateFixtureRoom\(/.test(act), "the app opens rooms only from a key, and restarts only by room id");
+  const mb = read("components/fixture-room/MatchBuilder.tsx");
+  ok(/createFixtureRoomFromCandidateAction\(\{ candidateKey, idempotencyKey \}\)/.test(mb) && !/cand-vessel-\$\{/.test(mb) && !/cand-cargo-\$\{/.test(mb), "the builder sends only the candidate key and renders no id in a test id");
+  ok(/recreateFixtureRoomAction\(\{ roomId: view\.room\.id, idempotencyKey \}\)/.test(read("components/fixture-room/FixtureRoomClient.tsx")), "a terminal room restarts by its room id, never raw listing ids from the browser");
+  const hs = read("scripts/fixture-room-harness.sh");
+  ok(/20260923208000_fixture_room_candidate_handles\.sql/.test(hs) && /\[handles\]="FIXTURE HANDLES SMOKE"/.test(hs), "the harness applies and tests the handles");
+  const down = read("supabase/rollback/20260923_fixture_room_down.sql");
+  ok(/drop schema if exists fixture_private cascade;/.test(down) && /drop function if exists public\.fn_fixture_room_read_unscrubbed\(uuid, integer\);/.test(down) && /drop function if exists public\.create_fixture_room_from_candidate/.test(down), "the DOWN removes the handles, the commands and the inner read");
+  const body = read("supabase/tests/fixture_room/bodies/handles.sql");
+  ok(["H1 ok", "H2 ok", "H4 ok", "H5 ok", "H6 ok", "H7 ok", "H8 ok", "H9 ok", "H10 ok", "H12 ok"].every((t) => body.includes(t)), "the suite covers raw-id scans, bypass, masked read, replay-after-expiry, two-handle race, wrong actor, lost ownership, stale pair, mismatch and restart");
+  // the masking guard now flags a leaked position id too
+  const guard = read("lib/fixture-room/masking-view.ts");
+  ok(/view\.room\.vesselAvailabilityId != null/.test(guard), "the masking guard flags a position id on a masked view");
 }
 

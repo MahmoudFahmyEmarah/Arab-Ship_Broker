@@ -27,7 +27,7 @@ import { BunkerTicker } from "@/components/portal/BunkerTicker";
 import {
   acceptFixtureProposalAction, acknowledgeFixtureRecapAction, addFixtureSubjectAction, agreeFixtureDisclosureAction, closeFixtureRoomAction,
   extendFixtureSubjectAction, failFixtureSubjectAction, fixFixtureOnSubjectsAction, inviteFixturePartyAction, liftAllFixtureSubjectsAction, liftFixtureSubjectAction, loadFixtureRoom,
-  createFixtureRoomAction,
+  recreateFixtureRoomAction,
   pollFixtureRoomVersion, postFixtureMessageAction, publishFixtureRecapAction, reopenFixtureTermAction, respondFixtureInvitationAction,
   setFixtureTermFlagAction, submitFixtureProposalAction, withdrawFixtureProposalAction,
 } from "@/app/(dashboard)/dashboard/fixture-room/actions";
@@ -229,9 +229,9 @@ export function FixtureRoomClient({ initial, viewerId }: { initial: FixtureRoomV
     if (restarting) return;
     setRestarting(true);
     try {
-      const { cargoListingId, vesselAvailabilityId } = view.room;
-      const outcome = await runGesture(keys, `restart:${cargoListingId}:${vesselAvailabilityId}`, (idempotencyKey) =>
-        createFixtureRoomAction({ cargoListingId, vesselAvailabilityId, idempotencyKey }));
+      // C2O-013: the server reads the pairing from the room row; the browser sends the room id only
+      const outcome = await runGesture(keys, `restart:${view.room.id}`, (idempotencyKey) =>
+        recreateFixtureRoomAction({ roomId: view.room.id, idempotencyKey }));
       if (outcome.kind === "ok") { toast.success(`Room ${outcome.result.data.ref} opened`); router.push(`/dashboard/fixture-room/${outcome.result.data.roomId}`); return; }
       if (outcome.kind === "refused") {
         if (outcome.error.code === "CONFLICT" && outcome.error.roomId) { router.push(`/dashboard/fixture-room/${outcome.error.roomId}`); return; }

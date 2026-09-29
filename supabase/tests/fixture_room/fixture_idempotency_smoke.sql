@@ -79,6 +79,24 @@ begin
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', '', true);
 end $f$;
+-- create a room as the member whose claims are set (C2O-013): members no longer hold
+-- EXECUTE on the raw-id create_fixture_room, so the suites call it as the database owner
+-- with the member's JWT claims left in place; the command reads its actor from the claims,
+-- so every ownership, tier and pairing rule is exercised exactly as before
+create or replace function pg_temp.fx_create(p_cargo uuid, p_avail uuid, p_terms jsonb, p_key text, p_options jsonb default '{}'::jsonb)
+ returns jsonb language plpgsql as $f$
+declare v jsonb; v_role text := current_user;
+begin
+  execute 'reset role';
+  begin
+    v := public.create_fixture_room(p_cargo, p_avail, p_terms, p_key, p_options);
+  exception when others then
+    execute format('set local role %I', v_role);
+    raise;
+  end;
+  execute format('set local role %I', v_role);
+  return v;
+end $f$;
 -- run a statement and report 'OK' or the FX_ prefix it raised
 create or replace function pg_temp.fx_err(p_sql text) returns text language plpgsql as $f$
 declare v jsonb;
@@ -256,7 +274,7 @@ do $$
 declare v jsonb; w jsonb; v_room uuid; v_tid uuid; v_ver int; e text; n1 bigint; n2 bigint;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid; v_ver := (v->>'version')::int;
   v_tid := pg_temp.fx_term(v_room, 'freight');
   v := public.submit_fixture_proposal(v_room, v_tid, '{"num": 24}'::jsonb, 'first', false, null, v_ver, 'idem-bid-1');
@@ -282,7 +300,7 @@ do $$
 declare v jsonb; w jsonb; v_room uuid; v_tid uuid; v_pid uuid; e text; n1 bigint; n2 bigint; v_types text;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   perform pg_temp.fx_as('u_ow1');
   v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'idem-accept-inv');
@@ -303,7 +321,7 @@ begin
   if n2 <> n1 then raise exception 'I2: replay wrote events'; end if;
   -- create replays too, at the room level
   perform pg_temp.fx_as('u_ch1');
-  w := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
+  w := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
   if (w->>'replayed')::boolean is not true or w->'data'->>'roomId' <> v_room::text then raise exception 'I2: create replay %', w; end if;
   raise notice 'I2 ok: a two-event command replays at its final version with its original result; create replays the room';
 end $$;
@@ -313,7 +331,7 @@ do $$
 declare v jsonb; w jsonb; v_room uuid; v_tid uuid; v_pid uuid; n1 bigint; n2 bigint; e text;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'idem-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   perform pg_temp.fx_as('u_ow1');
   v_tid := pg_temp.fx_term(v_room, 'ld_rates');

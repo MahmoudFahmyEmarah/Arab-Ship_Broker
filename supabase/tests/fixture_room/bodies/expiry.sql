@@ -10,7 +10,7 @@ do $$
 declare v jsonb; s jsonb; t jsonb; v_room uuid; v_tid uuid; v_pid uuid; v_fid uuid; v_ver integer; n bigint; e text;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'exp-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'exp-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   perform pg_temp.fx_as('u_ow1');
   v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'exp-accept-inv');

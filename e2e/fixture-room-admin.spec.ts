@@ -10,7 +10,7 @@
  */
 import { test, expect as baseExpect } from "@playwright/test";
 import { buildTermCatalogue, FIXTURE_TERM_CATALOGUE_VERSION } from "../lib/fixture-room/terms";
-import { apiClientAs, cleanupAdmin, dismissOverlays, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed } from "./fixture-room.helpers";
+import { apiClientAs, cleanupAdmin, dismissOverlays, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed, openRoomViaApi } from "./fixture-room.helpers";
 
 const expect = baseExpect.configure({ timeout: 60_000 });
 
@@ -27,13 +27,9 @@ test.beforeAll(async () => {
   admin = await seedAdmin(seed.stamp);
   // the charterer opens the room and posts a room-wide message through the governed RPCs
   const ch = await apiClientAs(seed.charterer.email);
-  const created = await ch.rpc("create_fixture_room", {
-    p_cargo_listing_id: seed.cargoId, p_vessel_availability_id: seed.availabilityId, p_terms: buildTermCatalogue(null),
-    p_idempotency_key: `e2e-admin-create-${seed.stamp}`, p_options: { catalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION },
-  });
-  if (created.error) throw new Error(`create_fixture_room: ${created.error.message}`);
-  roomId = (created.data as { data: { roomId: string }; version: number }).data.roomId;
-  const version = (created.data as { version: number }).version;
+  const created = await openRoomViaApi(seed, `e2e-admin-create-${seed.stamp}`, buildTermCatalogue(null), { catalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION });
+  roomId = created.roomId;
+  const version = created.version;
   messageBody = `Charterer note ${seed.stamp}: workable basis prompt`;
   const posted = await ch.rpc("post_fixture_message", {
     p_room_id: roomId, p_body: messageBody, p_kind: "note", p_visibility: "room", p_term_id: null,

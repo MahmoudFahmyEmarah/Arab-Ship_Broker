@@ -112,6 +112,29 @@ export function createFixtureRoom(supabase: SupabaseClient, input: { cargoListin
   });
 }
 
+/** C2O-013: open a room from an opaque match handle (replay first, then actor, expiry, ownership, match). */
+export function createFixtureRoomFromCandidate(supabase: SupabaseClient, input: { candidateKey: string; terms: readonly FixtureTermInput[]; idempotencyKey: string; catalogueVersion?: string }) {
+  return command<{ roomId: string; ref: string; status: FixtureRoomStatus }>(supabase, "create_fixture_room_from_candidate", {
+    p_candidate_key: input.candidateKey, p_terms: input.terms, p_idempotency_key: input.idempotencyKey,
+    p_options: { catalogueVersion: input.catalogueVersion ?? FIXTURE_TERM_CATALOGUE_VERSION },
+  });
+}
+
+/** C2O-013: a new room on a terminal room's pairing, taken from the room row. */
+export function recreateFixtureRoom(supabase: SupabaseClient, input: { roomId: string; terms: readonly FixtureTermInput[]; idempotencyKey: string; catalogueVersion?: string }) {
+  return command<{ roomId: string; ref: string; status: FixtureRoomStatus }>(supabase, "recreate_fixture_room", {
+    p_room_id: input.roomId, p_terms: input.terms, p_idempotency_key: input.idempotencyKey,
+    p_options: { catalogueVersion: input.catalogueVersion ?? FIXTURE_TERM_CATALOGUE_VERSION },
+  });
+}
+
+/** The listing figures behind a handle, for the term hints only (no identifier comes back). */
+export async function getFixtureCandidateHints(supabase: SupabaseClient, candidateKey: string): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc("get_fixture_candidate_hints", { p_key: candidateKey });
+  if (error) throw new FixtureRequestError(toError(error));
+  return (data ?? {}) as Record<string, unknown>;
+}
+
 export function inviteFixtureParty(supabase: SupabaseClient, input: CommandBase & { side: "cargo" | "vessel"; capacity: "principal" | "broker" | "viewer"; orgId?: string | null; userId?: string | null }) {
   return command<{ partyId: string; status: string }>(supabase, "invite_fixture_party", {
     ...base(input), p_side: input.side, p_capacity: input.capacity, p_org_id: input.orgId ?? null, p_user_id: input.userId ?? null,

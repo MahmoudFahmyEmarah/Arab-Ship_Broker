@@ -24,17 +24,17 @@ begin
   perform pg_temp.fx_as('u_ch1');
   v := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
   s := v::text;
-  select count(*) into n from jsonb_array_elements(v) x where x->>'availabilityId' in (pg_temp.fx_id('a1')::text, pg_temp.fx_id('a3')::text);
+  select count(*) into n from jsonb_array_elements(v) x where x->>'name' in ('TBN', 'SEED VESSEL ONE') and x ? 'candidateKey';
   if n <> 2 then raise exception 'K1: both matching positions must be listed, got % in %', n, s; end if;
-  select x into c from jsonb_array_elements(v) x where x->>'availabilityId' = pg_temp.fx_id('a3')::text;
+  select x into c from jsonb_array_elements(v) x where x->>'name' = 'TBN';
   if c->>'name' <> 'TBN' or (c->>'isTbn')::boolean is not true then raise exception 'K1: the TBN hull must be named TBN: %', c; end if;
   if s like '%SEED TBN HULL%' then raise exception 'K1: the TBN hull name reached the candidate payload'; end if;
   if s like '%' || pg_temp.fx_id('v3')::text || '%' or s like '%' || pg_temp.fx_id('v1')::text || '%' then
     raise exception 'K1: a vessels.id reached the candidate payload'; end if;
   if s like '%9000001%' then raise exception 'K1: an IMO number reached the candidate payload'; end if;
-  if exists (select 1 from jsonb_array_elements(v) x where x ? 'vesselId' or x ? 'vesselRef' or x ? 'imo') then
+  if exists (select 1 from jsonb_array_elements(v) x where x ? 'vesselId' or x ? 'vesselRef' or x ? 'imo' or x ? 'availabilityId') then
     raise exception 'K1: a candidate carries a vessel identifier key'; end if;
-  select x into c from jsonb_array_elements(v) x where x->>'availabilityId' = pg_temp.fx_id('a1')::text;
+  select x into c from jsonb_array_elements(v) x where x->>'name' = 'SEED VESSEL ONE';
   if c->>'name' <> 'SEED VESSEL ONE' then raise exception 'K1: a named vessel keeps its name: %', c; end if;
   raise notice 'K1 ok: the TBN hull is listed as TBN; no vessel id, IMO or hidden name in the payload';
 
@@ -65,7 +65,7 @@ begin
   -- K4 · the vessel side follows the same ownership rule
   perform pg_temp.fx_as('u_ow1');
   v := public.list_fixture_match_candidates('vessel', pg_temp.fx_id('a3'));
-  if not exists (select 1 from jsonb_array_elements(v) x where x->>'id' = pg_temp.fx_id('c6')::text) then
+  if not exists (select 1 from jsonb_array_elements(v) x where x->>'ref' = 'FXC-006') then
     raise exception 'K4: the TBN position must see the matching cargo: %', v; end if;
   perform pg_temp.fx_as('u_ch1');
   begin

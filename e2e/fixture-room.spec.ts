@@ -46,7 +46,7 @@ test("the charterer opens a room from the match builder", async ({ browser, base
   await expect(page.getByTestId("match-builder")).toBeVisible();
   // the pre-seeded side is locked and the owner's position is a ranked candidate
   await expect(page.locator(".fxm__lockedtag")).toHaveText("Your side · fixed");
-  const cand = page.getByTestId(`cand-vessel-${seed.availabilityId}`);
+  const cand = page.getByTestId("cand-vessel").filter({ hasText: seed.vesselName });
   await expect(cand).toBeVisible();
   await cand.getByRole("button", { name: /open fixture/i }).click();
   await page.waitForURL(/\/dashboard\/fixture-room\/[0-9a-f-]{36}$/);
