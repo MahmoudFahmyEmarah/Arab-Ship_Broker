@@ -14,7 +14,7 @@ use it at `/dashboard/fixture-room` (inbox), `/new` (match builder), `/[id]`
 governed RPC; the fixture tables have RLS and no member grant, so PostgREST
 cannot serve them directly.
 
-## Database (migrations `20260923200000` … `20260923203000`)
+## Database (migrations `20260923200000`…`203000` and `20260923206000`…`208000`)
 
 | Object | Purpose |
 |---|---|
@@ -38,12 +38,17 @@ skip every named index and bring the module back without its unique
 indexes (found and fixed 25 Sep 2026).
 
 Reads: `get_fixture_room`, `get_fixture_room_version`, `list_fixture_rooms`,
-and for the admin console `admin_fixture_access_log` (admin-only inside;
-reading the log is not itself logged).
-Commands: `create_fixture_room`, `invite_fixture_party`,
+`list_fixture_match_candidates`, `list_fixture_my_listings`, and for the admin
+console `admin_fixture_access_log` (admin-only inside; reading the log is not
+itself logged).
+Commands: member room creation uses `create_fixture_room_from_candidate` with
+a private, actor-bound selection handle; `create_fixture_room` is service-role
+only after `208000`. Other commands are `recreate_fixture_room`,
+`invite_fixture_party`,
 `respond_fixture_invitation`, `submit_fixture_proposal`,
 `withdraw_fixture_proposal`, `accept_fixture_proposal`, `reopen_fixture_term`,
 `set_fixture_term_flag`, `add_fixture_subject`, `lift_fixture_subject`,
+`lift_all_fixture_subjects`,
 `fail_fixture_subject`, `extend_fixture_subject`, `fix_fixture_on_subjects`,
 `publish_fixture_recap`, `acknowledge_fixture_recap`, `post_fixture_message`,
 `agree_fixture_disclosure`, `close_fixture_room`, `redact_fixture_message`.
@@ -99,15 +104,67 @@ Listing status (decision D4): no command writes `cargo_listings` or
 `FIXED`), leaving them records (cargo `IN`, vessel `OPEN`), each as a
 `listing_sync.required` event; the read model reports the live statuses and
 whether synchronisation is outstanding, and the room links to the existing
-listing edit pages. The one-click action in shared listing components is
-integration-owned.
+  listing edit pages. The released integration adds a governed one-click sync
+  action scoped to the listing the current side owns.
 
-Not in this branch (by the freeze): `fixture_pda_links`,
-`link_fixture_pda_estimate`, `fn_can_read_pda_estimate` (integration range
-`2026092330xxxx`); email / WhatsApp recap delivery (D7); Realtime presence
-(v1 polls the version every 5 s).
+The composed release also supplies `fixture_pda_links`,
+`link_fixture_pda_estimate` and `fn_can_read_pda_estimate` through the shared
+integration migration. Email / WhatsApp recap delivery (D7) and Realtime
+presence remain deferred; v1 polls the version every 5 s.
 
 ## Application
+
+### Presentation (Phase 1.1, design alignment · commit 1, 27 Sep 2026)
+
+The room, the match builder, the inbox and the tier lock render the approved
+standalone design (`asb/negotiation-room`) on its own stylesheet, lifted rule
+for rule from the design bundle onto `app/design-tokens.css` (no colour
+literal survives; `components/fixture-room/fixture-room.css`, sections A–C).
+The vocabulary is the design's: `nr-*` for the shell, header, rail, footer
+and banners; `fx-*` for the term strips, threads, composer, timeline and
+toasts; `fxm-*` for the match builder and the inbox head; `rc-*` for the
+recap slots; `estimator-locked` for the tier lock. The buttons and inputs are
+the portal's `.asb-btn` / `.asb-input`, as on the Post Cargo and Post
+Position pages. A short portal-fit block lets the page scroll and sticks the
+footer, because the prototype filled a fixed frame. What the design adds and
+how it maps to the governed model:
+
+- header actions: bunker ticker (the portal's `BunkerTicker`), sound toggle
+  (a WebAudio chime on the other side's moves, preference in the browser),
+  export deal summary (`lib/fixture-room/summary.ts`, built from the masked
+  read model; the PDF of commit 4 replaces the text file), the Ports Cost
+  Estimator hand-off (`/dashboard/ports-da?from=fixture&roomId&vesselId&load&disch&mt`,
+  ids and ports only, honoured once the estimator reads the parameters), the
+  recap page and "new fixture"; the phase pill and the reply-window clock
+  (`negotiationWindowEndsAt`);
+- toasts for the other side's moves, derived from the events that arrive
+  between two version polls (never invented);
+- presence chips per side from the ledger (`lib/fixture-room/presence.ts`:
+  the latest event a side wrote → online within five minutes, away within
+  the hour, off beyond; decision D-3, no Realtime);
+- strips: holder chip with a presence dot, both figures with turn and final
+  highlights, spread text and a gap bar against the first-round gap, the
+  validity countdown of the figure awaiting an answer, the round badge;
+- threads: presence row with the validity ring, three lanes (cargo, broker,
+  vessel) of bids, offers, notes and nudges pinned to the term, the composer
+  with labelled fields for the viewer's seat, "Use listing figure", "Match
+  their figure", final and validity controls, hold and refer for the
+  mediator, lapse recovery ("Re-send · fresh 12:00" resubmits the same
+  figure with a twelve-minute validity), the final-position flags (decision
+  D-4: each side's `isFinal`; agreement stays by accept);
+- rail: the counterparty card with the two disclosure ticks (decision D-1:
+  no fee amount), recap slots mirroring the strips with linked hover,
+  subjects as the design's checklist buttons, messages as thread bubbles,
+  the activity log;
+- match builder: cards with a fit tier (strong / possible / weak) and up to
+  three reasons computed only from the listing fields the card shows
+  (capacity, rate alignment, laycan vs open date, gear for breakbulk); the
+  candidates themselves still come from the platform's match RPCs;
+- glossary tooltips on chartering abbreviations (`lib/fixture-room/glossary.ts`).
+
+Nothing in the governed layer changed: same RPCs, same envelope, same
+masking, same test ids for the browser suites.
+
 
 - `lib/fixture-room/` — `terms.ts` (catalogue, hints, opening figures),
   `types.ts`, `errors.ts`, `state-machine.ts`, `permissions.ts` (mirror of
@@ -142,8 +199,11 @@ which the shared registry does not know yet (request S5), so `canAccess`
 admits the owner and bounces every sub-admin until it is registered. Every
 read and write uses the admin's own session through the governed RPCs; no
 service-role client and no direct table read. The database's admin authority
-is `fn_is_admin()` (the JWT claim); a session without the claim is told so on
-both pages and is treated as a member by the ledger. The console has no
+is `fn_is_admin()`; since the integration commit `7fb2064` (26 Sep 2026) that
+is the JWT claim `app_metadata.role = 'admin'` AND a current, active `users`
+row with role admin, so a session without the claim, or demoted after its
+token was issued, is told so on both pages and is treated as a member by the
+ledger. The console has no
 member-facing surface; the member room already gives admins the mediator's
 tools.
 
@@ -156,8 +216,10 @@ tools.
 - A relayed party never becomes direct: if the organisation behind it later
   gains a seat, the mediator invites that organisation explicitly.
 - A room cannot pair two listings owned by the same organisation or member.
-- Proposal expiry is lazy: a lapsed proposal is refused on acceptance and
-  reported by the read model; no sweep marks lapses.
+- Proposal expiry is observed lazily, not enforced by a clock: a lapsed
+  proposal is refused on acceptance, reported by the read model, and recorded
+  when its own side replaces it. The optional `204000` sweep is deliberately
+  absent from this release and no expiry job is scheduled.
 - `expired` is a mediator / admin close reason; `negotiation_window_ends_at`
   is informational.
 - Recap invalidation follows agreed content changes (accept, reopen, subject

@@ -11,18 +11,21 @@
  * Runs against the local stack only (see fixture-room.helpers.ts). Uses no
  * shared storage state: each context signs in through the real form.
  */
-import { test, expect as baseExpect, type Page, type Route } from "@playwright/test";
+import { test, expect as baseExpect, type Page } from "@playwright/test";
 
 // Dev-mode server actions take 5–15 s on the local stack, 20–30 s when the shared stack is
 // under load (observed 26 Sep 2026: a room page in 81 s, 60 s of it in the auth proxy); a
 // command refetches the room, so an assertion that follows a command needs that budget twice.
 // Every assertion is about persisted state, so a wide budget hides nothing: a wrong state
 // stays wrong however long the wait.
-const expect = baseExpect.configure({ timeout: 90_000 });
-import { cleanupFixture, dismissOverlays, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+const expect = baseExpect.configure({ timeout: 180_000 });   // 27–28 Sep 2026: <600 MB free on the runner, one accept took >90 s
+import { apiClientAs, cleanupFixture, dismissOverlays, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
-test.describe.configure({ mode: "serial", timeout: 180_000 });
+// Two browsers, about fifteen governed round trips and two sign-ins: on the loaded local machine
+// (26–27 Sep 2026: statement timeouts in the portal loaders under six suites) 180 s runs out before
+// the stale-tab step; the assertions are about persisted state, so the wider budget hides nothing.
+test.describe.configure({ mode: "serial", timeout: 600_000 });
 
 let seed: FixtureSeed;
 let roomUrl = "";
@@ -42,8 +45,8 @@ test("the charterer opens a room from the match builder", async ({ browser, base
   await page.goto(`/dashboard/fixture-room/new?cargo=${seed.cargoId}`);
   await expect(page.getByTestId("match-builder")).toBeVisible();
   // the pre-seeded side is locked and the owner's position is a ranked candidate
-  await expect(page.locator(".fxr-locked-pick__tag")).toHaveText("Your side");
-  const cand = page.getByTestId(`cand-vessel-${seed.availabilityId}`);
+  await expect(page.locator(".fxm__lockedtag")).toHaveText("Your side · fixed");
+  const cand = page.getByTestId("cand-vessel").filter({ hasText: seed.vesselName });
   await expect(cand).toBeVisible();
   await cand.getByRole("button", { name: /open fixture/i }).click();
   await page.waitForURL(/\/dashboard\/fixture-room\/[0-9a-f-]{36}$/);
@@ -88,7 +91,7 @@ test("bid, counter-offer, stale tab refused, accept → one agreed value", async
   await ch.page.locator("#fx-money_per_mt-num").fill("24.5");
   await ch.page.getByTestId("submit-freight").click();
   await expect(ch.page.getByTestId("room-status")).toHaveText(/negotiating/i);
-  await expect(ch.page.getByTestId("term-holder-freight")).toHaveText(/vessel side/i);
+  await expect(ch.page.getByTestId("term-holder-freight")).toHaveText(/→ vessel/i);
 
   // the owner's tab picks the bid up by polling (no reload)
   await expect(ow.page.getByTestId("term-holder-freight")).toHaveText(/your move/i, { timeout: 120_000 });
@@ -96,25 +99,30 @@ test("bid, counter-offer, stale tab refused, accept → one agreed value", async
   await expect(ow.page.getByTestId("term-thread-freight")).toContainText("$24.50/MT");
 
   // the owner counters while the charterer's tab is at the older version. That tab polls
-  // every 5 s and would refresh itself (a dev-mode action takes 5–15 s, so it did, once);
-  // hold its polls and refetches — the reads carry only the room id, a command carries
-  // expectedVersion — so the tab is provably stale when it bids. A blocked poll is a
-  // missed poll, nothing more.
-  const staleTab = (u: URL) => u.pathname === roomUrl;
-  const holdReads = async (route: Route) => {
-    const r = route.request();
-    if (r.method() === "POST" && !(r.postData() ?? "").includes("expectedVersion")) return route.abort();
-    return route.continue();
-  };
-  await ch.page.route(staleTab, holdReads);
+  // every 5 s and would refresh itself; the poll pauses while the document is hidden (the
+  // client checks document.visibilityState on every tick), so a "hidden" charterer tab is
+  // provably stale when it bids. Aborting its requests instead fights the production router
+  // (observed 27 Sep 2026: a hard navigation away from the room) and tests nothing real.
+  const hide = (page: Page) => page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  const show = (page: Page) => page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await hide(ch.page);
   await ow.page.locator("#fx-money_per_mt-num").fill("26.25");
   await ow.page.getByTestId("submit-freight").click();
-  await expect(ow.page.getByTestId("term-holder-freight")).toHaveText(/cargo side/i);
+  await expect(ow.page.getByTestId("term-holder-freight")).toHaveText(/→ cargo/i);
 
   // stale charterer tab: a second bid at the old version is refused, the room refreshes
+  await expect(ch.page.getByTestId("term-holder-freight")).toHaveText(/→ vessel/i);   // still the old view
   await ch.page.locator("#fx-money_per_mt-num").fill("25");
   await ch.page.getByTestId("submit-freight").click();
-  await ch.page.unroute(staleTab, holdReads);
+  await show(ch.page);
   await expect(ch.page.getByTestId("conflict-banner")).toBeVisible();
   await expect(ch.page.getByTestId("term-thread-freight")).toContainText("$26.25/MT");
 
@@ -147,8 +155,38 @@ test("the printable recap renders the published version", async ({ browser, base
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
   await page.goto(`${roomUrl}/recap`);
   await dismissOverlays(page);
-  await expect(page.getByTestId("recap-print")).toContainText("Fixture recap");
+  await expect(page.getByTestId("recap-print")).toContainText(/fixture recap/i);
   await expect(page.getByTestId("recap-print")).toContainText("$26.25/MT");
   await expect(page.getByTestId("recap-print")).toContainText(/withheld/);
+  // the negotiation summary: every round, masked, from the same read model
+  await page.goto(`${roomUrl}/summary`);
+  await expect(page.getByTestId("summary-print")).toContainText(/negotiation summary/i);
+  await expect(page.getByTestId("summary-print")).toContainText("$24.50/MT");
+  await expect(page.getByTestId("summary-print")).toContainText("$26.25/MT");
+  await expect(page.getByTestId("summary-print")).not.toContainText(/E2E Owners/);
+  await context.close();
+});
+
+test("a returning member sees what changed since their last visit", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
+  await page.goto(roomUrl);
+  await dismissOverlays(page);
+  await expect(page.getByTestId("room-header")).toBeVisible();
+  await expect(page.getByTestId("new-since-banner")).toHaveCount(0);   // nothing is new on a visit with no earlier one
+  await page.goto("/dashboard/fixture-room");                           // leaving the room remembers what was seen
+  await expect(page.getByTestId("inbox-list")).toBeVisible();
+  // meanwhile the owner writes to the room through the governed API
+  const ow = await apiClientAs(seed.owner.email);
+  const roomId = roomUrl.split("/").pop()!;
+  const { data: version } = await ow.rpc("get_fixture_room_version", { p_room_id: roomId });
+  const posted = await ow.rpc("post_fixture_message", { p_room_id: roomId, p_body: "Owners ready to lift subjects today.", p_kind: "note", p_visibility: "room", p_term_id: null, p_expected_version: version as number, p_idempotency_key: `e2e-since-${seed.stamp}`, p_as_party_id: null });
+  expect(posted.error, posted.error?.message).toBeNull();
+  // back in the room: the banner and the divider mark it; "Mark as seen" clears it
+  await page.goto(roomUrl);
+  await dismissOverlays(page);
+  await expect(page.getByTestId("new-since-banner")).toContainText(/1 update since your last visit/);
+  await expect(page.getByTestId("new-since-divider")).toBeVisible();
+  await page.getByTestId("new-since-banner").getByRole("button", { name: /mark as seen/i }).click();
+  await expect(page.getByTestId("new-since-banner")).toHaveCount(0);
   await context.close();
 });

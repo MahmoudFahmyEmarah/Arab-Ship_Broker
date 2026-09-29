@@ -18,6 +18,9 @@ const ports: PdaEstimatorPortOption[] = [
 
 const vessel = {
   id: "availability-1",
+  ownedListingId: "availability-1",
+  isOwned: true,
+  canManage: true,
   vesselId: "vessel-1",
   name: "MV BALTIC STAR",
   imo: "9123456",
@@ -47,6 +50,9 @@ const vessel = {
 
 const cargo = {
   id: "cargo-1",
+  ownedListingId: "cargo-1",
+  isOwned: true,
+  canManage: true,
   refId: "cargo-ref-1",
   cargo: "Wheat, Bulk",
   commodity: "Wheat",

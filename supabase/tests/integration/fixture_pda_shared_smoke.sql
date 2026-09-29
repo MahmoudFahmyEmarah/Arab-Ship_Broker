@@ -17,7 +17,7 @@ declare
   v_after_cargo_sync integer;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'shared-create', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'shared-create', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   v_initial_version := pg_temp.fx_ver(v_room);
   if v_initial_version < 1 then raise exception 'INT1: room creation did not write its ledger'; end if;

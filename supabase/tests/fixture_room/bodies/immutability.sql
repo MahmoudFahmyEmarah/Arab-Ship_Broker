@@ -4,7 +4,7 @@ declare v jsonb; v_room uuid; v_tid uuid; v_pid uuid; v_role text; v_ok boolean;
   procedure_sql text[];
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'immut-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'immut-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   v_tid := pg_temp.fx_term(v_room, 'freight');
   v := public.submit_fixture_proposal(v_room, v_tid, '{"num": 24}'::jsonb, null, false, null, pg_temp.fx_ver(v_room), 'immut-bid');
@@ -42,7 +42,7 @@ do $$
 declare v jsonb; v_room uuid; v_mid uuid; v_recap uuid; v_sub uuid; v_ok boolean;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'immut-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'immut-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   v := public.post_fixture_message(v_room, 'a note', 'note', 'room', null, pg_temp.fx_ver(v_room), 'immut-msg');
   v_mid := (v->'data'->>'messageId')::uuid;

@@ -10,7 +10,7 @@
  */
 import { test, expect as baseExpect } from "@playwright/test";
 import { buildTermCatalogue, FIXTURE_TERM_CATALOGUE_VERSION } from "../lib/fixture-room/terms";
-import { apiClientAs, cleanupAdmin, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed } from "./fixture-room.helpers";
+import { apiClientAs, cleanupAdmin, dismissOverlays, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed, openRoomViaApi } from "./fixture-room.helpers";
 
 const expect = baseExpect.configure({ timeout: 60_000 });
 
@@ -27,13 +27,9 @@ test.beforeAll(async () => {
   admin = await seedAdmin(seed.stamp);
   // the charterer opens the room and posts a room-wide message through the governed RPCs
   const ch = await apiClientAs(seed.charterer.email);
-  const created = await ch.rpc("create_fixture_room", {
-    p_cargo_listing_id: seed.cargoId, p_vessel_availability_id: seed.availabilityId, p_terms: buildTermCatalogue(null),
-    p_idempotency_key: `e2e-admin-create-${seed.stamp}`, p_options: { catalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION },
-  });
-  if (created.error) throw new Error(`create_fixture_room: ${created.error.message}`);
-  roomId = (created.data as { data: { roomId: string }; version: number }).data.roomId;
-  const version = (created.data as { version: number }).version;
+  const created = await openRoomViaApi(seed, `e2e-admin-create-${seed.stamp}`, buildTermCatalogue(null), { catalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION });
+  roomId = created.roomId;
+  const version = created.version;
   messageBody = `Charterer note ${seed.stamp}: workable basis prompt`;
   const posted = await ch.rpc("post_fixture_message", {
     p_room_id: roomId, p_body: messageBody, p_kind: "note", p_visibility: "room", p_term_id: null,
@@ -70,6 +66,40 @@ test("the admin sees the room unmasked and the access log records the read", asy
   // this open was logged: reload and the log lists an admin read of this room
   await page.reload();
   await expect(page.getByTestId("fixtures-access-log")).toContainText("admin");
+  await context.close();
+});
+
+test("the admin mediates in the room: the broker console presses a side through the ledger", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, admin.email);
+  await page.goto(`/dashboard/fixture-room/${roomId}`);
+  await dismissOverlays(page);
+  const strip = page.getByTestId("term-strip-freight");
+  if ((await strip.getAttribute("aria-expanded")) !== "true") await strip.click();
+  const consoleBox = page.getByTestId("mediator-freight");
+  await expect(consoleBox).toBeVisible();
+  await expect(page.getByTestId("composer-freight")).toHaveCount(0);   // the mediator proposes nothing of its own
+  await consoleBox.getByTestId("press-cargo-freight").click();
+  await expect(page.getByTestId("term-thread-freight")).toContainText(/asks the cargo side/i);
+  await expect(page.getByTestId("activity-feed")).toContainText(/message/i);
+  await context.close();
+});
+
+// C2O-012 item 2: a mediator has no side of its own, so the side is chosen, never assumed
+test("the mediator must name the side before inviting a viewer", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, admin.email);
+  await page.goto(`/dashboard/fixture-room/${roomId}`);
+  await dismissOverlays(page);
+  const panel = page.getByTestId("invite-panel");
+  await panel.locator("summary").click();
+  await expect(page.getByTestId("invite-side-cargo")).not.toBeChecked();
+  await expect(page.getByTestId("invite-side-vessel")).not.toBeChecked();
+  await page.locator("#fx-invite-id").fill("00000000-0000-4000-8000-000000000999");
+  const submit = page.getByTestId("invite-submit");
+  await expect(submit).toBeDisabled();                       // a valid id alone grants nothing
+  await expect(submit).toHaveText(/choose a side first/i);
+  await page.getByTestId("invite-side-vessel").check();
+  await expect(submit).toBeEnabled();
+  await expect(submit).toHaveText(/invite as vessel viewer/i);
   await context.close();
 });
 

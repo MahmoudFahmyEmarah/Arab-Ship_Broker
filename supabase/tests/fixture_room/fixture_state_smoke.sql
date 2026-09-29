@@ -79,6 +79,24 @@ begin
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', '', true);
 end $f$;
+-- create a room as the member whose claims are set (C2O-013): members no longer hold
+-- EXECUTE on the raw-id create_fixture_room, so the suites call it as the database owner
+-- with the member's JWT claims left in place; the command reads its actor from the claims,
+-- so every ownership, tier and pairing rule is exercised exactly as before
+create or replace function pg_temp.fx_create(p_cargo uuid, p_avail uuid, p_terms jsonb, p_key text, p_options jsonb default '{}'::jsonb)
+ returns jsonb language plpgsql as $f$
+declare v jsonb; v_role text := current_user;
+begin
+  execute 'reset role';
+  begin
+    v := public.create_fixture_room(p_cargo, p_avail, p_terms, p_key, p_options);
+  exception when others then
+    execute format('set local role %I', v_role);
+    raise;
+  end;
+  execute format('set local role %I', v_role);
+  return v;
+end $f$;
 -- run a statement and report 'OK' or the FX_ prefix it raised
 create or replace function pg_temp.fx_err(p_sql text) returns text language plpgsql as $f$
 declare v jsonb;
@@ -256,7 +274,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid; v_n int;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
   if (v->>'ok')::boolean is not true or (v->>'replayed')::boolean then raise exception 'S1: create failed %', v; end if;
   v_room := (v->'data'->>'roomId')::uuid;
   if (v->>'version')::int <> 2 then raise exception 'S1: expected version 2 (room.created + party.invited), got %', v->>'version'; end if;
@@ -283,22 +301,22 @@ do $$
 declare v jsonb; w jsonb; e text;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
   if (v->>'replayed')::boolean is not true then raise exception 'S2: same key must replay'; end if;
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), 'state-create-2', '{}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), 'state-create-2', '{}'));
   if e <> 'FX_CONFLICT' then raise exception 'S2: a second active room for the pairing must be FX_CONFLICT, got %', e; end if;
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), 'state-create-1', '{"x":1}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), 'state-create-1', '{"x":1}'));
   if e <> 'FX_IDEMPOTENCY_MISMATCH' then raise exception 'S2: same key with other args must be FX_IDEMPOTENCY_MISMATCH, got %', e; end if;
   -- gates on creation
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a2'), 'state-create-sanctioned', '{}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a2'), 'state-create-sanctioned', '{}'));
   if e <> 'FX_STATE' then raise exception 'S2: sanctioned vessel must be FX_STATE, got %', e; end if;
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, %L::jsonb, %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), '[]', 'state-create-noterms', '{}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, %L::jsonb, %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), '[]', 'state-create-noterms', '{}'));
   if e <> 'FX_VALIDATION' then raise exception 'S2: empty catalogue must be FX_VALIDATION, got %', e; end if;
   perform pg_temp.fx_as('u_out');
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), 'state-create-outsider', '{}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), 'state-create-outsider', '{}'));
   if e <> 'FX_AUTH' then raise exception 'S2: an outsider owning neither side must be FX_AUTH, got %', e; end if;
   perform pg_temp.fx_as('u_t1');
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a1'), 'state-create-t1', '{}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a1'), 'state-create-t1', '{}'));
   if e <> 'FX_GATE' then raise exception 'S2: a T1 owner must be FX_GATE, got %', e; end if;
   raise notice 'S2 ok: replay, duplicate pairing, mismatch, sanctioned vessel, empty catalogue, outsider and tier gate all answer as specified';
 end $$;
@@ -312,23 +330,23 @@ begin
   -- duplicated, renamed, relabelled, retyped, optionalised, reordered,
   -- recategorised or re-united term, and a term without `required`
   foreach op in array array['missing', 'extra', 'duplicate', 'renamed', 'relabelled', 'retyped', 'optionalised', 'reordered', 'recategorised', 'reunited', 'unrequired'] loop
-    e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms_mut(%L), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), op, 'state-cat-' || op, '{}'));
+    e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms_mut(%L), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), op, 'state-cat-' || op, '{}'));
     if e <> 'FX_VALIDATION' then raise exception 'S2b: a % catalogue must be FX_VALIDATION, got %', op, e; end if;
   end loop;
   -- an unknown catalogue version is refused
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), 'state-cat-version', '{"catalogueVersion":"2026-01-01.v9"}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), 'state-cat-version', '{"catalogueVersion":"2026-01-01.v9"}'));
   if e <> 'FX_VALIDATION' then raise exception 'S2b: an unknown catalogue version must be FX_VALIDATION, got %', e; end if;
   -- nothing was created by the refusals
   if pg_temp.fx_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4')) is not null then
     raise exception 'S2b: a refused catalogue must create no room'; end if;
   -- the exact catalogue named explicitly is accepted (the room is withdrawn again so S5 can open its own on this pairing)
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'state-create-a4-explicit', '{"catalogueVersion":"2026-09-23.v1"}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'state-create-a4-explicit', '{"catalogueVersion":"2026-09-23.v1"}'::jsonb);
   if (v->>'ok')::boolean is not true or (v->>'replayed')::boolean then raise exception 'S2b: the exact v1 catalogue named explicitly must be accepted, got %', v; end if;
   r := public.get_fixture_room((v->'data'->>'roomId')::uuid);
   if r->'room'->>'termCatalogueVersion' <> '2026-09-23.v1' then raise exception 'S2b: catalogue version not persisted: %', r->'room'; end if;
   v := public.close_fixture_room((v->'data'->>'roomId')::uuid, 'withdrawn', 'catalogue check only', pg_temp.fx_ver((v->'data'->>'roomId')::uuid), 'state-close-a4-explicit');
   -- the default (no option) is v1 as well: the S1 room carries it, and its ledger records it
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
   if (v->>'replayed')::boolean is not true then raise exception 'S2b: the S1 key must replay, got %', v; end if;
   r := public.get_fixture_room((v->'data'->>'roomId')::uuid);
   if r->'room'->>'termCatalogueVersion' <> '2026-09-23.v1' then raise exception 'S2b: default catalogue version not persisted: %', r->'room'; end if;
@@ -346,7 +364,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid; v_ver int; e text; v_tid uuid; v_owner_offer uuid; t jsonb;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid; v_ver := (v->>'version')::int;
   v_tid := pg_temp.fx_term(v_room, 'freight');
   -- the owner cannot act before accepting
@@ -396,7 +414,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid; v_ver int; e text; v_tid uuid; v_pid uuid; v_code text; v_sub uuid; v_sub2 uuid; v_recap uuid; t jsonb; v_owner_party uuid;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   -- fixing with open terms is refused
   e := pg_temp.fx_err(format('select public.fix_fixture_on_subjects(%L, %s, %L)', v_room, pg_temp.fx_ver(v_room), 'state-fix-early'));
@@ -437,7 +455,7 @@ declare v jsonb; r jsonb; v_room uuid; e text; v_tid uuid; v_pid uuid; v_code te
 begin
   -- a second pairing: C1 with the solo owner's position A4 (individual member, direct)
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'state-create-a4', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'state-create-a4', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   r := public.get_fixture_room(v_room);
   if not exists (select 1 from jsonb_array_elements(r->'parties') p where p->>'side' = 'vessel' and p->>'participationMode' = 'direct' and p->>'status' = 'invited') then
@@ -500,7 +518,7 @@ declare v jsonb; r jsonb; v_room uuid; e text; v_tid uuid; v_pid uuid; v_code te
 begin
   -- C4 has no member owner but a contact record: the owner opens a room and the charterer side is a contact-backed relayed party
   perform pg_temp.fx_as('u_ow1');
-  v := public.create_fixture_room(pg_temp.fx_id('c4'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c4', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c4'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c4', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   if (v->>'version')::int <> 1 then raise exception 'S6: a relayed counterparty needs no invitation event: version %', v->>'version'; end if;
   r := public.get_fixture_room(v_room);
@@ -551,7 +569,7 @@ begin
   if e <> 'FX_STATE' then raise exception 'S6: message on a terminal room must be FX_STATE, got %', e; end if;
   e := pg_temp.fx_err(format('select public.close_fixture_room(%L, %L, null, %s, %L)', v_room, 'withdrawn', pg_temp.fx_ver(v_room), 'state-c4-close-terminal'));
   if e <> 'FX_STATE' then raise exception 'S6: closing a terminal room must be FX_STATE, got %', e; end if;
-  v := public.create_fixture_room(pg_temp.fx_id('c4'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c4-successor', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c4'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c4-successor', '{}'::jsonb);
   v_room2 := (v->'data'->>'roomId')::uuid;
   if v_room2 = v_room then raise exception 'S6: successor must be a new room'; end if;
   -- withdraw: a principal may; the mediator may only for a relayed side
@@ -562,7 +580,7 @@ begin
   if pg_temp.fx_status(v_room2) <> 'expired' then raise exception 'S6: expected expired'; end if;
   -- C3 is owned by a platform admin → platform-synced → the charterer side is an unresolved party anchored to the listing
   perform pg_temp.fx_as('u_ow1');
-  v := public.create_fixture_room(pg_temp.fx_id('c3'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c3', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c3'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c3', '{}'::jsonb);
   r := public.get_fixture_room((v->'data'->>'roomId')::uuid);
   select x into p from jsonb_array_elements(r->'parties') x where x->>'side' = 'cargo' and x->>'capacity' = 'principal';
   if p->>'participationMode' <> 'relayed' or (p->>'resolved')::boolean or p->>'name' is not null then raise exception 'S6: unresolved anchored party expected: %', p; end if;
@@ -575,7 +593,7 @@ declare v jsonb; r jsonb; v_room uuid; v_a4 uuid; e text; p jsonb; v_broker uuid
 begin
   -- u_two holds two active seats (admin in org_ch, broker in org_two) and owns C5 through org_two
   perform pg_temp.fx_as('u_two');
-  v := public.create_fixture_room(pg_temp.fx_id('c5'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c5', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c5'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'state-create-c5', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   p := pg_temp.fx_party_identity(v_room, 'cargo');
   if (p->>'org_id')::uuid is distinct from pg_temp.fx_id('org_two') or p->>'user_id' is not null then
@@ -592,7 +610,7 @@ begin
     raise exception 'S7: a personally owned position must be represented by the member, not by an unrelated seat: %', p; end if;
   -- and when that member opens a room on it, the creator party is the member too
   perform pg_temp.fx_as('u_solo');
-  v := public.create_fixture_room(pg_temp.fx_id('c2'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'state-create-c2-a4', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c2'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'state-create-c2-a4', '{}'::jsonb);
   p := pg_temp.fx_party_identity((v->'data'->>'roomId')::uuid, 'vessel');
   if p->>'org_id' is not null or (p->>'user_id')::uuid is distinct from pg_temp.fx_id('u_solo') then
     raise exception 'S7: the creator of a personally owned listing must be recorded personally: %', p; end if;

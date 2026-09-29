@@ -3,7 +3,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid; p jsonb; s text;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'mask-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'mask-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   perform pg_temp.fx_as('u_ow1');
   v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'mask-accept');
@@ -35,7 +35,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid; p jsonb; s text; e text;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'mask-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'mask-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   v := public.agree_fixture_disclosure(v_room, pg_temp.fx_ver(v_room), 'mask-disc-ch');
   if (v->'data'->>'disclosed')::boolean then raise exception 'M2: one side agreeing must not disclose'; end if;
@@ -64,7 +64,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'mask-create-tbn', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'mask-create-tbn', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   r := public.get_fixture_room(v_room);
   if r->'snapshot'->'vessel'->'vessel'->>'vessel_name' <> 'TBN' or (r->'snapshot'->'vessel'->'vessel'->>'imo_number') is not null or (r->'snapshot'->>'vesselIdentityMasked')::boolean is not true then
@@ -101,7 +101,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid; v_tid uuid; v_pid uuid; v_code text;
 begin
   perform pg_temp.fx_as('u_ow1');
-  v := public.create_fixture_room(pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'mask-create-tbn-c2', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'mask-create-tbn-c2', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   perform pg_temp.fx_as('u_t1');
   v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'mask-tbn-c2-accept');
@@ -133,7 +133,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid; v_side_msg uuid; v_med_msg uuid; e text; p jsonb; v_relayed uuid;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'mask-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'mask-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   perform pg_temp.fx_as('u_ow1');
   v := public.post_fixture_message(v_room, 'owners internal: walk away above 27', 'note', 'side', null, pg_temp.fx_ver(v_room), 'mask-m4-side');
@@ -162,7 +162,7 @@ begin
   if e <> 'FX_AUTH' then raise exception 'M4: members cannot redact, got %', e; end if;
   -- a contact-backed relayed party: after disclosure the desk name only, never its email or phone
   perform pg_temp.fx_as('u_ow1');
-  v := public.create_fixture_room(pg_temp.fx_id('c4'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'mask-create-c4', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c4'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'mask-create-c4', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   r := public.get_fixture_room(v_room);
   select x into p from jsonb_array_elements(r->'parties') x where x->>'side' = 'cargo';

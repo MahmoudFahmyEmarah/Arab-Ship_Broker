@@ -19,6 +19,8 @@
  *      idempotency_key and an explicit grant; no internal helper is granted; the
  *      excluded PDA objects appear nowhere in the Fixture migrations
  */
+import { notificationFor, lapseWarning, notificationKey, maskedActorLabel, notificationPayload, NOTIFICATION_EXPIRES_AT } from "../lib/fixture-room/notify-model";
+import { newSince, termsTouched, lastSeenKey, nextLastSeen } from "../lib/fixture-room/last-seen";
 import fs from "node:fs";
 import path from "node:path";
 import { FIXTURE_TERM_CATALOGUE, FIXTURE_TERM_CATALOGUE_VERSION, buildTermCatalogue, openingValueFromListing, termHintsFromListing, validateTermCatalogue } from "@/lib/fixture-room/terms";
@@ -27,7 +29,7 @@ import { canUseFixtureRoom, computeCapabilities, roleLabel, type ViewerParty } f
 import { GestureKeys, runGesture } from "@/lib/fixture-room/client";
 import { parseFixtureError, type FixtureError } from "@/lib/fixture-room/errors";
 import { countdown, formatFixtureValue, parseFixtureInput, spreadLabel } from "@/lib/fixture-room/format";
-import { findMaskingLeaks } from "@/lib/fixture-room/masking-view";
+import { findMaskingLeaks, embeddedIdentifiers } from "@/lib/fixture-room/masking-view";
 import { recapSections, renderRecapText } from "@/lib/fixture-room/recap";
 import { listingSyncNotice } from "@/lib/fixture-room/listing-sync";
 import type { FixtureRecapContent, FixtureRoomView } from "@/lib/fixture-room/types";
@@ -138,7 +140,7 @@ ok(countdown(new Date(t0 + 702_000).toISOString(), t0) === "11:42" && countdown(
 console.log("6 · masking guard");
 const VESSEL_ID = "3d1f2c7e-0b6a-4c1d-9e8f-1a2b3c4d5e6f";
 const baseView = (): FixtureRoomView => ({
-  room: { id: "r", ref: "FX-2026-00001", status: "negotiating", version: 3, mediation: "platform", cargoListingId: "c", vesselAvailabilityId: "a", vesselId: null, termCatalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION, createdAt: "", updatedAt: "", fixedOnSubsAt: null, fixedAt: null, closedAt: null, closedReason: null, closedNote: null, counterpartyDisclosed: false, counterpartyDisclosedAt: null, negotiationWindowEndsAt: null, supersedesRoomId: null, snapshotAt: "", snapshotHash: "h", brokerageTerms: null, listingSync: null, serverNow: "" },
+  room: { id: "r", ref: "FX-2026-00001", status: "negotiating", version: 3, mediation: "platform", cargoListingId: "c", vesselAvailabilityId: null, vesselId: null, termCatalogueVersion: FIXTURE_TERM_CATALOGUE_VERSION, createdAt: "", updatedAt: "", fixedOnSubsAt: null, fixedAt: null, closedAt: null, closedReason: null, closedNote: null, counterpartyDisclosed: false, counterpartyDisclosedAt: null, negotiationWindowEndsAt: null, supersedesRoomId: null, snapshotAt: "", snapshotHash: "h", brokerageTerms: null, listingSync: null, serverNow: "" },
   snapshot: { cargo: { commodity_name: "Wheat" }, vessel: { availability: { vessel_id: null }, vessel: { id: null, vessel_name: "TBN", imo_number: null } }, vesselIdentityMasked: true },
   viewer: { partyIds: ["p1"], side: "cargo", isAdmin: false, isMediator: false, capabilities: computeCapabilities("negotiating", [P("cargo", "principal")], false) },
   parties: [
@@ -278,3 +280,273 @@ ok(/drop function if exists public\.admin_fixture_access_log\(uuid, integer\)/.t
 // never the caller.
 const callerSql = (reads + commands).split(/\r?\n/).filter((l) => !/^\s*--/.test(l)).join("\n");
 ok(!/users\.role|u\.role|->>'role'/.test(callerSql) && (callerSql.match(/fn_is_admin\(\)/g) ?? []).length >= 5, "no read or command trusts users.role for the caller's admin decision; fn_is_admin() is the authority (mailbox O2C-004)");
+
+// ── deferred release scope: no proposal sweep or notification projector ──
+const harnessSh = read("scripts/fixture-room-harness.sh");
+const omitted = [
+  "supabase/migrations/20260923204000_fixture_room_expiry_sweep.sql",
+  "supabase/migrations/20260923205000_fixture_room_notifications.sql",
+  "supabase/tests/fixture_room/bodies/expiry.sql",
+  "supabase/tests/fixture_room/bodies/notify.sql",
+  "supabase/tests/fixture_room/fixture_expiry_smoke.sql",
+  "supabase/tests/fixture_room/fixture_notify_smoke.sql",
+];
+ok(omitted.every((p) => !fs.existsSync(path.join(root, p))), "the deferred sweep/projector migrations and suites are physically absent from this release");
+ok(!/2026092320(4000|5000)|\[expiry\]|\[notify\]|\bexpiry\b|\bnotify\b/.test(harnessSh), "the release harness cannot apply or run the deferred sweep/projector");
+ok(!/observe the lapse once|payload->>'proposalId' = v_prev\.id::text/.test(commands), "the released command observes proposal lapse lazily and carries no deferred sweep guard");
+
+// ── Phase 1.1 · design alignment, commit 1 (27 Sep 2026) ───────────────────────
+// The room, the match builder, the inbox and the tier lock render the approved
+// design's markup on its stylesheet, lifted from the standalone bundle onto the
+// shared tokens. The governed layer did not change; these checks pin the
+// presentation contract the browser suites and the masking rules rely on.
+const fxCss = read("components/fixture-room/fixture-room.css");
+const fxCssCode = fxCss.replace(/\/\*[\s\S]*?\*\//g, "");
+ok(!/#[0-9a-fA-F]{3,8}\b/.test(fxCssCode), "the Fixture stylesheet carries no colour literal (design rules on shared tokens)");
+ok(/^\.nr \{/m.test(fxCss) && /^\.fx-strip \{/m.test(fxCss) && /^\.fxm-card \{/m.test(fxCss) && /^\.nrx \{/m.test(fxCss) && /^\.rc-item\b/m.test(fxCss) && /^\.estimator-locked \{/m.test(fxCss), "the stylesheet carries the design's nr / fx / fxm / nrx / rc / lock rule families");
+ok(/C · portal fit/.test(fxCss) && /\.nr \.nr-foot \{ position: sticky/.test(fxCss) && /\.nr \.nr-body, \.nr \.nr-main, \.nr \.nr-items \{ overflow: visible/.test(fxCss), "the portal-fit block lets the page scroll and sticks the footer");
+ok(/@media \(max-width: 1120px\)/.test(fxCss), "the design's 1120 px rail breakpoint is the one the responsive suite asserts");
+const fxUi = [
+  "components/fixture-room/FixtureRoomClient.tsx", "components/fixture-room/TermRow.tsx", "components/fixture-room/RoomRails.tsx",
+  "components/fixture-room/MatchBuilder.tsx", "components/fixture-room/RoomInbox.tsx", "components/fixture-room/FixtureLocked.tsx",
+  "app/(dashboard)/dashboard/fixture-room/page.tsx", "app/(dashboard)/dashboard/fixture-room/new/page.tsx",
+  "app/(dashboard)/dashboard/fixture-room/[id]/page.tsx", "app/(dashboard)/dashboard/fixture-room/loading.tsx",
+].map(read);
+ok(fxUi.every((src) => !/fxr-/.test(src)), "no Fixture page or component keeps the pre-design fxr- vocabulary");
+ok(/className="nr"/.test(fxUi[0]) && /className="nr fxm-wrap"/.test(fxUi[3]) && /className="nr fxm-wrap"/.test(fxUi[4]) && /className="nr"/.test(fxUi[5]), "every Fixture screen mounts on the design's .nr root");
+ok(/data-testid="room-header"/.test(fxUi[0]) && /data-testid="room-footer"/.test(fxUi[0]) && /data-testid="counterparty-chip"/.test(fxUi[0]) && /data-testid=\{`term-strip-\$\{term\.code\}`\}/.test(fxUi[1]) && /data-testid=\{`term-holder-\$\{term\.code\}`\}/.test(fxUi[1]) && /data-testid="counterparty-card"/.test(fxUi[2]) && /data-testid="recap-rail"/.test(fxUi[2]) && /className="fxm__lockedtag"/.test(fxUi[3]), "the browser suites' anchors survive the redesign");
+ok(/id=\{`fx-\$\{kind\}-\$\{name\}`\}/.test(fxUi[1]) && /htmlFor=\{`fx-\$\{kind\}-\$\{name\}`\}/.test(fxUi[1]), "composer inputs keep their labelled ids (the accessibility suite reads label[for=fx-money_per_mt-num])");
+ok(!/window\.__resources|PDAPRICE|ASBData|ASB_COMPANIES|localStorage\.setItem\("asb\.fx\.pair/.test(fxUi.join("\n")), "no prototype data source or browser-store pairing leaked into the room");
+ok(/setInterval|Math\.random\(\)\s*<\s*0\.\d/.test(fxUi[0]) === false, "the room simulates nothing: no interval-driven or random state");
+ok(/sidePresence\(view\.events, view\.parties, "cargo", now\)/.test(fxUi[0]) && /sidePresence\(view\.events, view\.parties, "vessel", now\)/.test(fxUi[0]), "presence chips come from the ledger-derived helper");
+const fxPresence = read("lib/fixture-room/presence.ts");
+ok(/export function sidePresence\(/.test(fxPresence) && !/setInterval|Math\.random|fetch\(|supabase/.test(fxPresence), "presence is a pure derivation from events, never simulated or fetched");
+const fxSummary = read("lib/fixture-room/summary.ts").replace(/\/\/.*$/gm, "");
+ok(/export function buildDealSummary\(/.test(fxSummary) && !/email|phone|userId|contactId|imo_number|orgId/i.test(fxSummary), "the deal summary references no person, email, phone, id or vessel identifier field");
+ok(/p\.name \?\? `\$\{p\.label\} \(via ASB, masked\)`/.test(fxSummary) && /vesselIdentityMasked \? " · identity withheld"/.test(fxSummary), "the deal summary keeps the counterparty and TBN masking of the read model");
+const fxGlossary = read("lib/fixture-room/glossary.ts");
+ok(/MOLOO/.test(fxGlossary) && /FIOST/.test(fxGlossary) && /SHINC/.test(fxGlossary) && /export function glossTokens/.test(fxGlossary), "the glossary carries the design's abbreviations");
+ok(/export function assessFit\(/.test(fxUi[3]) && !/rpc\(|fetch\(/.test(fxUi[3].split("export function assessFit")[1].split("\n}")[0]), "the match builder's fit reasons only explain the platform's candidates from listing fields (no scorer of its own)");
+ok(/href=\{pdaHref\}/.test(fxUi[0]) && /new URLSearchParams\(\{ from: "fixture", ref: room\.ref, cargoId: room\.cargoListingId \}\)/.test(fxUi[0]) && !/imo_number/.test(fxUi[0].split("const pdaParams")[1].split("const pdaHref")[0]), "the estimator hand-off follows the frozen contract (from, ref, cargoId, vesselId, vessel, load, disch, mt) and never carries an IMO");
+ok(/if \(!snapshot\.vesselIdentityMasked && vessel\.vessel_name\) pdaParams\.set\("vessel"/.test(fxUi[0]) && /if \(room\.vesselId\) pdaParams\.set\("vesselId"/.test(fxUi[0]), "the hand-off names the vessel only once it is disclosed (vesselId is already null while masked)");
+const fxComposer = read("components/fixture-room/RecapComposer.tsx");
+ok(/role="dialog" aria-modal="true" aria-label="Send recap"/.test(fxComposer) && /e\.key === "Escape"/.test(fxComposer) && !/fetch\(|rpc\(|sendMail|smtp|whatsapp_outbox/i.test(fxComposer.replace(/IcWhatsapp|WhatsApp/g, "")), "the recap composer is an accessible dialog that sends nothing itself (delivery waits for the notification module, D-2)");
+ok(/latest\?\.contentText \?\? buildDealSummary\(view\)/.test(fxComposer), "the composer body is the published recap or the masked deal summary");
+ok(/kind: "nudge", visibility: "room", termId: term\.id/.test(read("components/fixture-room/TermRow.tsx")), "the nudge button posts a governed nudge message pinned to the term");
+const fxTerm = read("components/fixture-room/TermRow.tsx");
+ok(/data-testid=\{`mediator-\$\{term\.code\}`\}/.test(fxTerm) && /view\.viewer\.isMediator && !mySide/.test(fxTerm), "the mediator sees the broker console on each term (press, acknowledge, hold, refer)");
+ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.match(/kind: "nudge"/g) ?? []).length >= 2, "press and acknowledge are governed nudge / ack messages pinned to the term, never a figure");
+
+// ── Phase 1.1 · notification rules (pure; the shared core stores and delivers) ─
+{
+  const ctx = { roomId: "00000000-0000-4000-8000-000000000001", roomRef: "FX-2026-00001", actor: { side: "vessel" as const, isPlatform: false },
+    payload: { kind: "offer", displayValue: "$26.25/MT", termLabel: "Freight & terms", termCode: "freight", expiresAt: "2026-09-28T12:00:00Z", orgName: "Secret Owners SA", vesselName: "MV HIDDEN", imo: "9876543", reason: "call Tasos on +30 690", actorLabel: "Secret Owners SA" } };
+  const offer = notificationFor("proposal.submitted", ctx);
+  ok(!!offer && offer.importance === "urgent" && offer.audience === "other_side" && offer.deadlineAt === "2026-09-28T12:00:00Z", "an offer with a validity window is urgent, for the other side, with its deadline");
+  const all = ["party.invited", "party.accepted", "proposal.submitted", "proposal.lapsed", "term.agreed", "term.reopened", "term.referred", "room.fixed_on_subjects", "subject.lifted", "subject.failed", "room.fixed", "recap.published", "room.counterparty_disclosed", "message.posted", "room.closed"] as const;
+  const early = new Date("2026-09-28T11:57:00Z");
+  const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n") + (lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, early)?.body ?? "");
+  ok(!/Secret Owners|MV HIDDEN|9876543|Tasos|\+30 690/.test(texts), "no notification text or link carries an organisation, vessel, IMO or a member's free text, even when the payload holds them (hostile actorLabel ignored)");
+  // C2O-010 item 3: the actor label is derived from the governed side, never taken from the caller
+  ok(maskedActorLabel({ side: "cargo", isPlatform: false }) === "Charterer side" && maskedActorLabel({ side: "vessel", isPlatform: false }) === "Owner side"
+     && maskedActorLabel({ side: "mediator", isPlatform: false }) === "Arab ShipBroker" && maskedActorLabel({ side: "cargo", isPlatform: true }) === "Arab ShipBroker" && maskedActorLabel(null) === "Arab ShipBroker",
+     "the actor is named by one of three labels derived from its side");
+  ok(!/actorLabel/.test(read("lib/fixture-room/notify-model.ts").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")), "the model accepts no caller-supplied actor label");
+  const pl = notificationPayload(ctx, 7, "proposal.submitted", offer!);
+  ok(JSON.stringify(Object.keys(pl).sort()) === JSON.stringify(["deadlineAt", "eventSeq", "eventType", "roomId", "roomRef", "termCode"]) && !/Secret|HIDDEN|9876543|Tasos/.test(JSON.stringify(pl)), "the payload sent to the core is a whitelist, never the source event payload");
+  ok(NOTIFICATION_EXPIRES_AT === null && lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, new Date("2026-09-28T12:00:01Z")) === null, "no expiry is sent, and a delayed run never warns about a window already closed");
+  // C2O-010 item 1: importance is urgent | normal | info; the email preference decides digest
+  const kinds = new Set(all.map((t) => notificationFor(t, ctx)?.importance).filter(Boolean));
+  ok([...kinds].every((k) => k === "urgent" || k === "normal" || k === "info"), "importance is only urgent, normal or info (the shared table's check)");
+  ok(notificationFor("proposal.submitted", { ...ctx, payload: { ...ctx.payload, expiresAt: null } })!.importance === "normal", "an open-ended offer is normal, not urgent");
+  ok(notificationFor("message.posted", { ...ctx, payload: { kind: "nudge" } })!.importance === "urgent" && notificationFor("message.posted", { ...ctx, payload: { kind: "note" } })!.importance === "info"
+     && notificationFor("message.posted", { ...ctx, payload: { kind: "note", visibility: "side" } }) === null, "a nudge is urgent, an ordinary note is info, a private note notifies no one");
+  ok(notificationFor("term.referred", ctx)!.audience === "mediator" && notificationFor("room.fixed", ctx)!.audience === "all", "referrals reach the mediator; outcomes reach everyone");
+  ok(notificationFor("term.held", ctx) === null && notificationFor("recap.acknowledged", ctx) === null, "routine bookkeeping events notify no one");
+  // C2O-010 item 2: one logical notification per event and recipient
+  ok(notificationKey(42) === "fixture:42" && notificationKey(42, "lapse-warning") === "fixture:42:lapse-warning" && !/in_app|email|channel/.test(read("lib/fixture-room/notify-model.ts").split("export function notificationKey")[1].split("\n}")[0]), "one logical notification per event (the dedupe key names no channel)");
+  // C2O-012 item 2: a subject's title is member free text and never enters a notification
+  const hostile = { ...ctx, payload: { seq: 2, title: "Sub details - call Tasos +30 690 000 0000 tasos@seed-owners.test" } };
+  const subjTexts = ["subject.lifted", "subject.failed"].map((t) => notificationFor(t as "subject.lifted", hostile)).map((r) => `${r!.title} ${r!.body}`).join(" ");
+  ok(!/Tasos|\+30 690|seed-owners|Sub details/.test(subjTexts) && /subject 2/i.test(subjTexts), "a subject is named by its number, never by the title a member typed");
+}
+// -- Phase 1.1 . printable documents (one model; the server PDF reuses it) --
+{
+  const docs = read("lib/fixture-room/documents.ts").replace(/\/\/.*$/gm, "");
+  ok(/export function recapDocument\(/.test(docs) && /export function summaryDocument\(/.test(docs), "the Fixture Recap and Negotiation Summary share one document model");
+  ok(!/email|phone|userId|orgId|contactId|imo_number|supabase|fetch\(/.test(docs), "documents read only the masked view: no email, phone, ids, IMO or data access of their own");
+  ok(/p\.name \?\? "withheld · via Arab ShipBroker"/.test(docs) && /vesselIdentityMasked \? `withheld/.test(docs), "documents keep counterparty and vessel masking");
+  ok(/contentHash/.test(docs) && /only a published recap version records the fixture/.test(docs), "the recap carries its content hash; the summary says it is not a recap");
+  ok(!/#[0-9a-fA-F]{3,8}\b/.test(read("components/fixture-room/fixture-room.css").replace(/\/\*[\s\S]*?\*\//g, "")), "the document styles use tokens only");
+}
+
+// -- Phase 1.1 . new since your last visit --
+{
+  const ev = (seq: number, actor: string | null, termId?: string) => ({ id: seq, seq, type: "proposal.submitted", at: "2026-09-28T10:00:00Z", command: null, relayed: false, actorPartyId: actor, onBehalfOfPartyId: null, actorLabel: "x", onBehalfOfLabel: null, payload: termId ? { termId } : {} }) as unknown as Parameters<typeof newSince>[0][number];
+  const events = [ev(1, "me"), ev(2, "them", "t1"), ev(3, "me", "t2"), ev(4, "them", "t3"), ev(5, null)];
+  ok(newSince(events, null, ["me"]).length === 0, "a first visit marks nothing new");
+  ok(JSON.stringify(newSince(events, 1, ["me"]).map((e) => e.seq)) === "[2,4,5]", "after the last visit, only other parties' and system events are new, never the viewer's own");
+  const terms = [{ id: "t1" }, { id: "t2" }, { id: "t3" }] as unknown as Parameters<typeof termsTouched>[1];
+  ok(JSON.stringify([...termsTouched(newSince(events, 1, ["me"]), terms)].sort()) === '["t1","t3"]', "the new chip lands on the terms the other side touched");
+  const ls = read("lib/fixture-room/last-seen.ts");
+  ok(/try \{[\s\S]*localStorage\.getItem[\s\S]*\} catch \{ return null; \}/.test(ls) && /catch \{ \/\* convenience only \*\/ \}/.test(ls) && !/fetch\(|supabase|rpc\(/.test(ls), "the marker is browser-only and survives blocked storage");
+  // C2O-012 item 4: one mark per viewer and room, and it only moves forward
+  ok(lastSeenKey("u1", "r1") !== lastSeenKey("u2", "r1") && lastSeenKey("u1", "r1") !== lastSeenKey("u1", "r2"), "the mark is keyed by viewer and room (a second account never inherits it)");
+  ok(nextLastSeen(null, 4) === 4 && nextLastSeen(9, 4) === 9 && nextLastSeen(4, 9) === 9, "a write never moves the mark backwards (a stale tab cannot resurface old updates)");
+  ok(/viewerId=\{user\.id\}/.test(read("app/(dashboard)/dashboard/fixture-room/[id]/page.tsx")) && !/readLastSeen\(initial\.room\.id\)|writeLastSeen\(room\.id/.test(read("components/fixture-room/FixtureRoomClient.tsx")), "the room reads and writes the mark for the signed-in member");
+  // C2O-012 item 3: the feed marks exactly the events the banner counts
+  const rails = read("components/fixture-room/RoomRails.tsx");
+  ok(/newSeqs\?\.has\(e\.seq\) \? " is-new"/.test(rails) && !/e\.seq > lastVisitSeq \? " is-new"/.test(rails) && /newSeqs=\{freshSeqs\}/.test(read("components/fixture-room/FixtureRoomClient.tsx")), "the activity feed marks only other parties' new events, the same list as the banner");
+}
+
+// -- C2O-011 . governed match candidates: own listings only, no vessel identity --
+{
+  const mig = read("supabase/migrations/20260923206000_fixture_room_match_candidates.sql").replace(/--.*$/gm, "");
+  ok(/create or replace function public\.list_fixture_match_candidates\(p_kind text, p_listing_id uuid\)/.test(mig) && /fn_fixture_owns_listing\(case p_kind when 'cargo' then 'cargo' else 'vessel_availability' end, p_listing_id\) is null then\s+raise exception 'FX_AUTH/.test(mig), "candidates are listed only for a listing the actor owns or represents");
+  ok(!/'vesselId'|'vesselRef'|'imo'|m\.vessel_ref|imo_number/.test(mig) && (mig.match(/m\.vessel_id/g) ?? []).length === 1 && /on v\.id = m\.vessel_id/.test(mig), "no candidate carries a vessel id, the matcher's vessel_ref (an IMO) or an IMO");
+  ok(/case when coalesce\(v\.is_tbn, false\)\s+and public\.fn_fixture_owns_listing\('vessel_availability', m\.availability_id\) is null\s+then 'TBN'/.test(mig), "a TBN hull the actor does not own is named TBN");
+  ok(/revoke all on function public\.list_fixture_match_candidates\(text, uuid\) from public, anon;/.test(mig), "anonymous callers cannot list candidates");
+  const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/ (?!──).*$/gm, "");
+  ok(!/getMatchesForCargo|getMatchesForAvailability|vessel_id|vesselId|imo/i.test(act.split("// ── match builder data")[1].split("// ── commands")[0]), "the match builder reads only the governed RPC and maps no vessel identifier");
+  ok(/out\.myCargo\.some\(\(c\) => c\.id === params\.cargo\)/.test(act) && /out\.myVessels\.some\(\(v\) => v\.availabilityId === params\.vessel\)/.test(act), "a preselected listing is honoured only when it is the member's own");
+  const mb = read("components/fixture-room/MatchBuilder.tsx");
+  const fitFn = mb.split("export function assessFit")[1].split("\n}")[0];
+  ok(/export function assessFit\(c: MatchCargoOption, v: MatchVesselOption, f: MatchFacts \| undefined\)/.test(mb) && !/kind: "no"|Under capacity|Opens after laycan|Gearless/.test(fitFn), "fit reasons state only the governed match facts, never a contradiction of a valid match");
+  ok(!/reasons\.slice\(/.test(mb), "every fit reason is shown (no truncation)");
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20260923206000_fixture_room_match_candidates\.sql/.test(h) && /\[candidates\]="FIXTURE CANDIDATES SMOKE"/.test(h) && /drop function if exists public\.list_fixture_match_candidates\(text, uuid\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the harness applies, tests and reverses the candidates read");
+}
+
+// -- C2O-012 . UI and privacy corrections after checkpoint 4 --
+{
+  const composer = read("components/fixture-room/RecapComposer.tsx");
+  const client = read("components/fixture-room/FixtureRoomClient.tsx");
+  ok(/const closeRef = React\.useRef\(onClose\)/.test(composer) && /\}, \[\]\);/.test(composer.split("const closeRef")[1]) && !/\}, \[onClose\]\);/.test(composer), "1 · the recap dialog's focus effect runs once per opening, never per render");
+  ok(/e\.key !== "Tab"/.test(composer) && /last\.focus\(\)/.test(composer) && /first\.focus\(\)/.test(composer) && /opener\.focus\(\)/.test(composer), "1 · the dialog traps Tab and hands focus back to its opener");
+  ok(/const closeRecap = React\.useCallback\(\(\) => setRecapOpen\(false\), \[\]\)/.test(client) && /onClose=\{closeRecap\}/.test(client), "1 · the room passes a stable close callback");
+  const rails = read("components/fixture-room/RoomRails.tsx");
+  ok(/useState<"cargo" \| "vessel" \| null>\(null\)/.test(rails) && /const inviteSide = ownSide \?\? \(view\.viewer\.isMediator \? mediatorSide : null\)/.test(rails) && /side: inviteSide/.test(rails) && !/side: mySide === "vessel" \? "vessel" : "cargo"/.test(rails), "2 · a mediator's invitation side is chosen explicitly, never defaulted");
+  const css = read("components/fixture-room/fixture-room.css");
+  ok(/prefers-reduced-motion: reduce\)\s*\{\s*\.nr \.rc-item\.is-just-filled/.test(css), "3 · reduced motion disables the real recap-slot pulse (.rc-item.is-just-filled)");
+  ok(/React\.useState\(false\);\s*const audioRef/.test(client), "6 · sound starts off; only an explicit toggle turns it on");
+  const lift = read("supabase/migrations/20260923207000_fixture_room_lift_all.sql").replace(/--.*$/gm, "");
+  ok(/create or replace function public\.lift_all_fixture_subjects\(/.test(lift) && /fn_fixture_check_version/.test(lift) && /fn_fixture_replay/.test(lift) && /x\.responsible_side is null or x\.responsible_side = rep\.side/.test(lift), "5 · lift all is one governed command: one lock, version check and key; only the side's own subjects");
+  ok(/run\("liftAll"/.test(client) && /recreateFixtureRoomAction\(\{ roomId: view\.room\.id, idempotencyKey \}\)/.test(client) && !/for \(const s of view\.subjects\)[\s\S]{0,200}liftSubject/.test(client), "5 · the footer calls governed commands only (no client-side loop of lifts)");
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20260923207000_fixture_room_lift_all\.sql/.test(h) && /\[liftall\]="FIXTURE LIFT ALL SMOKE"/.test(h) && /drop function if exists public\.lift_all_fixture_subjects\(uuid, integer, text, uuid, uuid\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "5 · the harness applies, tests and reverses lift all");
+}
+
+// -- C2O-012 re-audit . lift-all replays its first response exactly --
+{
+  const lift = read("supabase/migrations/20260923207000_fixture_room_lift_all.sql").replace(/--.*$/gm, "");
+  ok(/case when v_first is null then v_result end/.test(lift) && /'data', v_result\)/.test(lift) && /'subjectIds', to_jsonb\(v_ids\)/.test(lift), "one typed aggregate is stored on the first event and returned, so a replay equals the first response");
+  ok(/\(v - 'replayed'\) <> \(v_fresh - 'replayed'\)/.test(read("supabase/tests/fixture_room/bodies/liftall.sql")), "the suite asserts full response equality on replay");
+}
+
+// -- C2O-011 re-audit . null kind refused; own listings by the create rule --
+{
+  const mig = read("supabase/migrations/20260923206000_fixture_room_match_candidates.sql").replace(/--.*$/gm, "");
+  ok(/if p_kind is null or p_kind not in \('cargo', 'vessel'\)/.test(mig), "a null kind is refused, never routed to the vessel branch");
+  ok(/create or replace function public\.list_fixture_my_listings\(\)/.test(mig) && (mig.split("list_fixture_my_listings()")[1].match(/fn_fixture_owns_listing\(/g) ?? []).length >= 2 && /fn_fixture_listing_live\('cargo', c\.id\)/.test(mig), "own listings use the create rule (organisation seats included) and only live listings");
+  const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
+  ok(/sdk\.listFixtureMyListings\(supabase\)/.test(act) && !/getMyCargoListings|getMyVesselAvailability/.test(act), "the builder's own-listing lists come from the governed read, not per-account owner queries");
+  ok(/drop function if exists public\.list_fixture_my_listings\(\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the DOWN drops the own-listing read");
+}
+
+// -- C2O-013 . private selection handles: no raw id for a counterparty, no raw-id bypass --
+{
+  const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
+  ok(/create table if not exists fixture_private\.match_handles/.test(h) && /revoke all on schema fixture_private from public, anon, authenticated;/.test(h) && /revoke all on table fixture_private\.match_handles from public, anon, authenticated;/.test(h), "the handle table lives in a private schema no member or API role can reach");
+  ok(/actor_user_id\s+uuid not null references public\.users\(id\)/.test(h) && /own_kind/.test(h) && /own_listing_id/.test(h) && /expires_at\s+timestamptz not null/.test(h) && /interval '15 minutes'/.test(h), "a handle binds the users.id actor, the owned source listing and kind, the pair and a short expiry");
+  const list = h.split("create or replace function public.list_fixture_match_candidates")[1].split("end $$;")[0];
+  ok(/'candidateKey', h\.key/.test(list) && !/'availabilityId'|'vesselId'|'id', m\.cargo_id/.test(list), "candidates carry the opaque key and no raw cargo, availability or vessel id");
+  const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
+  const order = ["fn_fixture_create_replay(v_actor", "x.actor_user_id = v_actor", "h.expires_at <= now()", "fn_fixture_lock_create_inputs(v_actor", "fn_fixture_owns_listing", "get_matches_for_cargo", "public.create_fixture_room("].map((t) => fromCand.indexOf(t));
+  ok(order.every((i, n) => i > 0 && (n === 0 || i > order[n - 1])), "create-from-handle checks replay, then actor, expiry, locks the inputs, then live ownership, the match predicate and the governed create");
+  ok(/revoke execute on function public\.create_fixture_room\(uuid, uuid, jsonb, text, jsonb\) from public, anon, authenticated;/.test(h), "members hold no EXECUTE on the raw-id create (no callable bypass)");
+  ok(/alter function public\.get_fixture_room\(uuid, integer\) rename to fn_fixture_room_read_unscrubbed/.test(h) && /v := public\.fn_fixture_scrub_masked\(v, array\[v_avail, v_vessel\]/.test(h), "the room read removes every availability and vessel uuid for a masked viewer");
+  const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
+  ok(!/createFixtureRoomAction|sdk\.createFixtureRoom\(|listingFigures\(/.test(act) && /sdk\.createFixtureRoomFromCandidate\(/.test(act) && /sdk\.recreateFixtureRoom\(/.test(act), "the app opens rooms only from a key, and restarts only by room id");
+  const mb = read("components/fixture-room/MatchBuilder.tsx");
+  ok(/createFixtureRoomFromCandidateAction\(\{ candidateKey, hints: hints \?\? null, idempotencyKey \}\)/.test(mb) && !/cand-vessel-\$\{/.test(mb) && !/cand-cargo-\$\{/.test(mb), "the builder sends only the candidate key and renders no id in a test id");
+  ok(/recreateFixtureRoomAction\(\{ roomId: view\.room\.id, idempotencyKey \}\)/.test(read("components/fixture-room/FixtureRoomClient.tsx")), "a terminal room restarts by its room id, never raw listing ids from the browser");
+  const hs = read("scripts/fixture-room-harness.sh");
+  ok(/20260923208000_fixture_room_candidate_handles\.sql/.test(hs) && /\[handles\]="FIXTURE HANDLES SMOKE"/.test(hs), "the harness applies and tests the handles");
+  const down = read("supabase/rollback/20260923_fixture_room_down.sql");
+  ok(/drop schema if exists fixture_private cascade;/.test(down) && /drop function if exists public\.fn_fixture_room_read_unscrubbed\(uuid, integer\);/.test(down) && /drop function if exists public\.create_fixture_room_from_candidate/.test(down), "the DOWN removes the handles, the commands and the inner read");
+  const body = read("supabase/tests/fixture_room/bodies/handles.sql");
+  ok(["H1 ok", "H2 ok", "H4 ok", "H5 ok", "H6 ok", "H7 ok", "H8 ok", "H9 ok", "H10 ok", "H12 ok"].every((t) => body.includes(t)), "the suite covers raw-id scans, bypass, masked read, replay-after-expiry, two-handle race, wrong actor, lost ownership, stale pair, mismatch and restart");
+  // the masking guard now flags a leaked position id too
+  const guard = read("lib/fixture-room/masking-view.ts");
+  ok(/view\.room\.vesselAvailabilityId != null/.test(guard), "the masking guard flags a position id on a masked view");
+}
+
+// -- C2O-014 . handle safety and replay --
+{
+  const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
+  // 1 · a JSON-safe recursive scrub, substring and case-insensitive, with and without hyphens
+  const scrub = h.split("create or replace function public.fn_fixture_scrub_walk")[1].split("end $$;")[0] + h.split("create or replace function public.fn_fixture_scrub_masked")[1].split("end $$;")[0];
+  ok(/jsonb_each\(j\)/.test(scrub) && /jsonb_array_elements\(j\) with ordinality/.test(scrub) && /public\.fn_fixture_ci_replace\(t, p_needles\[i\], '\[withheld\]', p_modes\[i\]\)/.test(scrub) && /replace\(lower\(i::text\), '-', ''\)/.test(scrub) && !/::text::jsonb|t::jsonb|v_all::jsonb|regexp_replace/.test(scrub) && /if not v_hit then return j; end if;/.test(scrub), "the scrub walks the JSON and replaces ids inside strings, any case, with or without hyphens, literally (no pattern language, no serialized-text mutation; a read-only fast path when nothing matches)");
+  const guard = read("lib/fixture-room/masking-view.ts");
+  ok(embeddedIdentifiers({ room: { id: "11111111-1111-4111-8111-111111111111" }, messages: [{ id: "22222222-2222-4222-8222-222222222222", body: "ref A3B4C5D6-0000-4000-8000-0000000000B3 please" }] }).length === 1
+     && embeddedIdentifiers({ room: { id: "11111111-1111-4111-8111-111111111111" }, messages: [{ body: "room 11111111111141118111111111111111 is ours" }] }).length === 0
+     && /embeddedIdentifiers\(view\)/.test(guard), "the masking guard flags an identifier embedded in free text (and allows the view's own ids)");
+  // 2 · replay uses create_fixture_room's full request hash, before expiry
+  const replay = h.split("create or replace function public.fn_fixture_create_replay")[1].split("end $$;")[0];
+  ok(/'cmd', 'create_fixture_room', 'cargo', r\.cargo_listing_id, 'vessel', r\.vessel_availability_id,\s*'terms', p_terms, 'options', coalesce\(p_options, '\{\}'::jsonb\)/.test(replay) && /FX_IDEMPOTENCY_MISMATCH/.test(replay), "replay checks the full request hash (pair, terms incl. hints, options)");
+  // 3 · no hint read by key; one renewable handle per actor/source/pair; retention
+  ok(/drop function if exists public\.get_fixture_candidate_hints\(uuid\);/.test(h) && /'hints', public\.fn_fixture_hint_figures\(/.test(h), "hints travel with the candidate; the by-key hint read is gone");
+  ok(/create unique index if not exists match_handles_actor_pair_uq/.test(h) && /on conflict \(actor_user_id, own_kind, own_listing_id, cargo_listing_id, vessel_availability_id\)\s+do update set expires_at = excluded\.expires_at/.test(h) && /delete from fixture_private\.match_handles h where h\.expires_at < now\(\) - interval '1 day'/.test(h), "one renewable handle per actor/source/pair, and stale handles are purged");
+  // 4 · inputs locked to commit before validation
+  const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
+  ok(/perform public\.fn_fixture_lock_create_inputs\(v_actor, h\.cargo_listing_id, h\.vessel_availability_id\);/.test(fromCand), "the cargo, position, vessel and ownership rows are locked to commit (no update between validation and the snapshot)");
+  // 5 · a true unique race names the winner
+  ok(/exception when unique_violation then/.test(fromCand) && /raise exception 'FX_CONFLICT: room % \(%\) already covers this pairing', w\.id, w\.ref/.test(fromCand), "a lost unique race returns the governed conflict naming the winning room");
+  // 6 · the member-JWT integration gate uses the handle path and proves the raw create is denied
+  const integ = read("scripts/fixture-room-integration-check.ts");
+  ok((integ.match(/sdk\.createFixtureRoomFromCandidate\(ch, \{ candidateKey: key,/g) ?? []).length >= 5 && /the raw-id create is denied to a member/.test(integ) && (integ.match(/sdk\.createFixtureRoom\(/g) ?? []).length === 1, "the member-JWT integration flow opens rooms from a key and asserts the raw create is denied");
+  const race = read("supabase/tests/fixture_room/fixture_race_two_sessions.sh");
+  ok(/FX_CONFLICT: room \$WINNER/.test(race) && /no longer matches/.test(race) && /lock timeout/.test(race), "the two-session races prove the winner is named and the create/update window is closed both ways");
+}
+
+// -- C2O-015 . create race invariants --
+{
+  const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
+  const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
+  const handler = fromCand.split("exception when unique_violation then")[1] ?? "";
+  // 1 · the race replay compares the pair
+  ok(/w\.cargo_listing_id <> h\.cargo_listing_id or w\.vessel_availability_id <> h\.vessel_availability_id/.test(handler) && /FX_IDEMPOTENCY_MISMATCH/.test(handler), "a same-key race for a different pair is a mismatch, never the winner's room");
+  // 2 · locking is a create invariant: the wrapper locks, the original body is unreachable otherwise
+  const lock = h.split("create or replace function public.fn_fixture_lock_create_inputs")[1].split("end $$;")[0];
+  const lockOrder = ["from public.users u", "from public.organization_members m", "from public.listing_ownership lo where lo.listing_id in (p_cargo, p_avail) and lo.is_current order by", "from public.cargo_listings c", "from public.vessel_availability va", "from public.vessels v"].map((t) => lock.indexOf(t));
+  ok(lockOrder.every((i, n) => i > 0 && (n === 0 || i > lockOrder[n - 1])) && (lock.match(/for share/g) ?? []).length === 6, "one fixed lock order for every creator: account, seats, ownership, cargo, position, vessel (FOR SHARE)");
+  ok(/alter function public\.create_fixture_room\(uuid, uuid, jsonb, text, jsonb\) rename to fn_fixture_create_room_unlocked/.test(h) && /revoke all on function public\.fn_fixture_create_room_unlocked\(uuid, uuid, jsonb, text, jsonb\) from public, anon, authenticated, service_role;/.test(h)
+     && /perform public\.fn_fixture_lock_create_inputs\(public\.fn_fixture_actor\(\), p_cargo_listing_id, p_vessel_availability_id\);\s+return public\.fn_fixture_create_room_unlocked\(/.test(h), "create_fixture_room locks first, then runs the original body; the unlocked body is reachable only through it");
+  // 3 · authorization is locked with the listings (account and seats) — covered by the lock order above
+  const race = read("supabase/tests/fixture_room/fixture_race_two_sessions.sh");
+  ok(["race-idem-pair", "race-recreate-a", "race-recreate-b", "race-seat-a", "race-seat-b", "race-account-a", "race-account-b"].every((k) => race.includes(k)), "the race script proves the pair-mismatch race, recreate/listing, seat revocation and account/tier races in both orders");
+  // 4 · the browser proof over the real member boundary
+  const spec = read("e2e/fixture-room-candidates.spec.ts");
+  ok(/post_fixture_message/.test(spec) && /toUpperCase\(\)/.test(spec) && /replace\(\/-\/g, ""\)/.test(spec) && /expect\(leaks\(await page\.content\(\)\)/.test(spec) && /expect\(leaks\(JSON\.stringify\(room\.data\)\)/.test(spec), "a hostile message with hidden ids and the hull name is scanned in the page, action bodies and the member-JWT read");
+  // 5 · the hidden hull's name and IMO are withheld in the masked read
+  ok(/fn_fixture_scrub_masked\(v, array\[v_avail, v_vessel\],\s+array\[v_name,/.test(h) && /v_imo\]\)/.test(h), "the masked read withholds the hidden hull's name (with and without an MV prefix) and IMO typed in free text");
+  // 6 · the guard ignores governed hashes
+  ok(embeddedIdentifiers({ room: { id: "x", snapshotHash: "d41d8cd98f00b204e9800998ecf8427e" }, recaps: [{ contentHash: "0cc175b9c0f1b6a831c399e269772661" }], messages: [{ body: "hash d41d8cd98f00b204e9800998ecf8427e noted" }] }).length === 0, "the masking guard does not flag content or snapshot hashes");
+  // the market boundary: only Fixture-issued keys, and a raw preselection only for the member's own listing
+  const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
+  ok(/from fixture_private\.match_handles x where x\.key = p_candidate_key and x\.actor_user_id = v_actor/.test(fromCand) && /out\.myCargo\.some\(\(c\) => c\.id === params\.cargo\)/.test(act) && /out\.myVessels\.some\(\(v\) => v\.availabilityId === params\.vessel\)/.test(act), "only a Fixture key opens a room, and a raw ?cargo= / ?vessel= preselection is honoured only for the member's own listing");
+}
+
+// -- C2O-016 . two redaction edge cases --
+{
+  const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
+  const ci = h.split("create or replace function public.fn_fixture_ci_replace")[1].split("end $$;")[0];
+  ok(/start := pos \+ length\(p_with\);/.test(ci) && /start := pos \+ 1;/.test(ci) && /rel := strpos\(substr\(lt, start\), ln\);/.test(ci), "the replacement resumes after the inserted marker, so a needle inside [withheld] cannot loop");
+  ok(/when 'word' then b !~ '\[\[:alnum:\]\]' and a !~ '\[\[:alnum:\]\]'/.test(ci) && /when 'num'  then b !~ '\[0-9\]' and a !~ '\[0-9\]'/.test(ci), "hull names match as whole words and IMOs as whole numbers (structured values are never altered)");
+  const masked = h.split("create or replace function public.fn_fixture_scrub_masked")[1].split("end $$;")[0];
+  ok(/length\(btrim\(coalesce\(t, ''\)\)\) >= 2/.test(masked) && !/>= 3/.test(masked), "every valid persisted hull name is withheld, including two-character names (the schema minimum)");
+  ok(/\.min\(2, "Vessel name is required"\)/.test(read("lib/schemas/vessel.ts")), "the schema's minimum hull name length is two");
+  const body = read("supabase/tests/fixture_room/bodies/handles.sql");
+  ok(/'HELD'/.test(body) && /'AB'/.test(body) && /H18 ok/.test(body) && /H19 ok/.test(body) && /statement_timeout = '5s'/.test(body), "the suite proves bounded, masked member reads for hulls named HELD and AB");
+}
+

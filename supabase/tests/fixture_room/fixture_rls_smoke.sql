@@ -79,6 +79,24 @@ begin
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', '', true);
 end $f$;
+-- create a room as the member whose claims are set (C2O-013): members no longer hold
+-- EXECUTE on the raw-id create_fixture_room, so the suites call it as the database owner
+-- with the member's JWT claims left in place; the command reads its actor from the claims,
+-- so every ownership, tier and pairing rule is exercised exactly as before
+create or replace function pg_temp.fx_create(p_cargo uuid, p_avail uuid, p_terms jsonb, p_key text, p_options jsonb default '{}'::jsonb)
+ returns jsonb language plpgsql as $f$
+declare v jsonb; v_role text := current_user;
+begin
+  execute 'reset role';
+  begin
+    v := public.create_fixture_room(p_cargo, p_avail, p_terms, p_key, p_options);
+  exception when others then
+    execute format('set local role %I', v_role);
+    raise;
+  end;
+  execute format('set local role %I', v_role);
+  return v;
+end $f$;
 -- run a statement and report 'OK' or the FX_ prefix it raised
 create or replace function pg_temp.fx_err(p_sql text) returns text language plpgsql as $f$
 declare v jsonb;
@@ -290,7 +308,7 @@ do $$
 declare v jsonb; v_room uuid; e text; v_ok boolean; v_list jsonb;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'rls-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'rls-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   -- an outsider (member of another organisation)
   perform pg_temp.fx_as('u_out');
@@ -337,7 +355,7 @@ do $$
 declare v jsonb; r jsonb; v_room uuid; e text; v_tid uuid;
 begin
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'rls-create-1', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'rls-create-1', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   v := public.invite_fixture_party(v_room, 'cargo', 'viewer', pg_temp.fx_id('org_out'), null, pg_temp.fx_ver(v_room), 'rls-invite-viewer');
   -- inviting onto the other side is refused for a principal
@@ -363,7 +381,7 @@ declare v jsonb; r jsonb; v_room uuid; e text; v_tid uuid; v_before bigint; v_af
 begin
   -- the owner (T3) opens a room on the T1 member''s cargo: the T1 member is invited and may act
   perform pg_temp.fx_as('u_ow1');
-  v := public.create_fixture_room(pg_temp.fx_id('c2'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'rls-create-c2', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c2'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'rls-create-c2', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   perform pg_temp.fx_as('u_t1');
   v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'rls-t1-accept');
@@ -423,7 +441,7 @@ declare v jsonb; r jsonb; v_room uuid; e text; p jsonb; v_tid uuid;
 begin
   -- the charterer opens a room on the solo owner's position; the owner accepts, offers, and agrees to disclose
   perform pg_temp.fx_as('u_ch1');
-  v := public.create_fixture_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'rls-create-a4', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'), pg_temp.fx_terms(), 'rls-create-a4', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   perform pg_temp.fx_as('u_solo');
   v := public.respond_fixture_invitation(v_room, true, pg_temp.fx_ver(v_room), 'rls-a4-accept');
@@ -450,7 +468,7 @@ begin
   if e <> 'FX_AUTH' then raise exception 'R5: erased member answering must be FX_AUTH, got %', e; end if;
   e := pg_temp.fx_err(format('select public.post_fixture_message(%L, %L, %L, %L, null, %s, %L)', v_room, 'still here?', 'note', 'room', pg_temp.fx_ver(v_room), 'rls-a4-erased-msg'));
   if e <> 'FX_AUTH' then raise exception 'R5: erased member messaging must be FX_AUTH, got %', e; end if;
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a4'), 'rls-a4-erased-create', '{}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a4'), 'rls-a4-erased-create', '{}'));
   if e <> 'FX_AUTH' then raise exception 'R5: erased member creating must be FX_AUTH, got %', e; end if;
   -- the counterparty keeps the room and its history, and never sees a person behind the vacated seat
   perform pg_temp.fx_as('u_ch1');
@@ -481,13 +499,13 @@ begin
   end if;
   -- without the flag the T1 member is refused on a free pairing (c2 + a3: R4 holds c2 + a1 open, a2 is the seed's sanctioned vessel)
   perform pg_temp.fx_as('u_t1');
-  e := pg_temp.fx_err(format('select public.create_fixture_room(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), 'rls-r6-t1-nopartner', '{}'));
+  e := pg_temp.fx_err(format('select pg_temp.fx_create(%L, %L, pg_temp.fx_terms(), %L, %L::jsonb)', pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), 'rls-r6-t1-nopartner', '{}'));
   if e <> 'FX_GATE' then raise exception 'R6: a T1 member without the flag must be FX_GATE, got %', e; end if;
   -- the platform grants the flag: a service-owned column, written here as the owner with no JWT (the same bypass the service role has)
   perform pg_temp.fx_owner();
   execute format('update public.users set is_market_partner = true where id = %L', pg_temp.fx_id('u_t1'));
   perform pg_temp.fx_as('u_t1');
-  v := public.create_fixture_room(pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'rls-r6-t1-partner', '{}'::jsonb);
+  v := pg_temp.fx_create(pg_temp.fx_id('c2'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'rls-r6-t1-partner', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
   if v_room is null then raise exception 'R6: a flagged T1 member must open a room, got %', v; end if;
   if pg_temp.fx_status(v_room) <> 'invited' then raise exception 'R6: the room must be invited, got %', pg_temp.fx_status(v_room); end if;

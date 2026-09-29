@@ -3,9 +3,12 @@
 --   20260923201000_fixture_room_helpers.sql
 --   20260923202000_fixture_room_reads.sql
 --   20260923203000_fixture_room_commands.sql
+--   20260923206000_fixture_room_match_candidates.sql
+--   20260923207000_fixture_room_lift_all.sql
+--   20260923208000_fixture_room_candidate_handles.sql
 --
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -1 -f supabase/rollback/20260923_fixture_room_down.sql
---   supabase migration repair --status reverted 20260923200000 20260923201000 20260923202000 20260923203000
+--   supabase migration repair --status reverted 20260923208000 20260923207000 20260923206000 20260923203000 20260923202000 20260923201000 20260923200000
 --
 -- Deploy the application without the Fixture Room routes FIRST: the server
 -- actions call these RPCs.
@@ -46,9 +49,27 @@ drop function if exists public.fn_fixture_rep(public.fixture_parties, uuid, bool
 drop function if exists public.fn_fixture_terminal(text);
 
 -- ── reads (20260923202000) ──────────────────────────────────────────────────
+drop function if exists public.recreate_fixture_room(uuid, jsonb, text, jsonb);
+drop function if exists public.create_fixture_room_from_candidate(uuid, jsonb, text, jsonb);
+drop function if exists public.get_fixture_candidate_hints(uuid);
+drop function if exists public.fn_fixture_create_replay(uuid, text, jsonb, jsonb);
+drop function if exists public.fn_fixture_hint_figures(uuid, uuid);
+drop function if exists public.fn_fixture_scrub_ids(jsonb, uuid[]);
+drop function if exists public.fn_fixture_scrub_masked(jsonb, uuid[], text[]);
+drop function if exists public.fn_fixture_scrub_walk(jsonb, text[], text[]);
+drop function if exists public.fn_fixture_scrub_walk(jsonb, text[], text[], text[]);
+drop function if exists public.fn_fixture_ci_replace(text, text, text);
+drop function if exists public.fn_fixture_ci_replace(text, text, text, text);
+drop function if exists public.fn_fixture_lock_create_inputs(uuid, uuid, uuid);
+drop function if exists public.fn_fixture_create_room_unlocked(uuid, uuid, jsonb, text, jsonb);
+drop schema if exists fixture_private cascade;
+drop function if exists public.lift_all_fixture_subjects(uuid, integer, text, uuid, uuid);
+drop function if exists public.list_fixture_my_listings();
+drop function if exists public.list_fixture_match_candidates(text, uuid);
 drop function if exists public.admin_fixture_access_log(uuid, integer);
 drop function if exists public.list_fixture_rooms(text[], integer);
 drop function if exists public.get_fixture_room(uuid, integer);
+drop function if exists public.fn_fixture_room_read_unscrubbed(uuid, integer);
 drop function if exists public.get_fixture_room_version(uuid);
 drop function if exists public.fn_fixture_proposal_json(public.fixture_proposals, text, text, uuid);
 

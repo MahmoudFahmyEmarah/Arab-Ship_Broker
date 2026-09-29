@@ -71,6 +71,25 @@ export async function listFixturePdaLinks(supabase: SupabaseClient, roomId: stri
   return (data ?? []) as FixturePdaLinkDisplay[];
 }
 
+/**
+ * Ranked counterparts for one of the actor's own listings (C2O-011). The RPC
+ * refuses a listing the actor does not own or represent, never returns a
+ * vessel id or IMO, and names a TBN hull 'TBN'. Rows are camelCase JSON.
+ */
+export async function listFixtureMatchCandidates(supabase: SupabaseClient, kind: "cargo" | "vessel", listingId: string): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabase.rpc("list_fixture_match_candidates", { p_kind: kind, p_listing_id: listingId });
+  if (error) throw new FixtureRequestError(toError(error));
+  return (data ?? []) as Record<string, unknown>[];
+}
+
+/** The live listings the actor owns or represents, by the create_fixture_room rule (organisation seats included). */
+export async function listFixtureMyListings(supabase: SupabaseClient): Promise<{ cargo: Record<string, unknown>[]; vessels: Record<string, unknown>[] }> {
+  const { data, error } = await supabase.rpc("list_fixture_my_listings");
+  if (error) throw new FixtureRequestError(toError(error));
+  const d = (data ?? {}) as { cargo?: Record<string, unknown>[]; vessels?: Record<string, unknown>[] };
+  return { cargo: d.cargo ?? [], vessels: d.vessels ?? [] };
+}
+
 /** One durable access-log row of a room (admin console only; the RPC refuses members). */
 export interface FixtureAccessLogEntry {
   id: number;
@@ -96,6 +115,22 @@ export function createFixtureRoom(supabase: SupabaseClient, input: { cargoListin
     p_vessel_availability_id: input.vesselAvailabilityId,
     p_terms: input.terms,
     p_idempotency_key: input.idempotencyKey,
+    p_options: { catalogueVersion: input.catalogueVersion ?? FIXTURE_TERM_CATALOGUE_VERSION },
+  });
+}
+
+/** C2O-013: open a room from an opaque match handle (replay first, then actor, expiry, ownership, match). */
+export function createFixtureRoomFromCandidate(supabase: SupabaseClient, input: { candidateKey: string; terms: readonly FixtureTermInput[]; idempotencyKey: string; catalogueVersion?: string }) {
+  return command<{ roomId: string; ref: string; status: FixtureRoomStatus }>(supabase, "create_fixture_room_from_candidate", {
+    p_candidate_key: input.candidateKey, p_terms: input.terms, p_idempotency_key: input.idempotencyKey,
+    p_options: { catalogueVersion: input.catalogueVersion ?? FIXTURE_TERM_CATALOGUE_VERSION },
+  });
+}
+
+/** C2O-013: a new room on a terminal room's pairing, taken from the room row. */
+export function recreateFixtureRoom(supabase: SupabaseClient, input: { roomId: string; terms: readonly FixtureTermInput[]; idempotencyKey: string; catalogueVersion?: string }) {
+  return command<{ roomId: string; ref: string; status: FixtureRoomStatus }>(supabase, "recreate_fixture_room", {
+    p_room_id: input.roomId, p_terms: input.terms, p_idempotency_key: input.idempotencyKey,
     p_options: { catalogueVersion: input.catalogueVersion ?? FIXTURE_TERM_CATALOGUE_VERSION },
   });
 }
@@ -144,6 +179,11 @@ export function addFixtureSubject(supabase: SupabaseClient, input: CommandBase &
 
 export function liftFixtureSubject(supabase: SupabaseClient, input: CommandBase & { subjectId: string }) {
   return command<{ subjectId: string; subjectStatus: string; roomStatus: FixtureRoomStatus; openSubjects: number }>(supabase, "lift_fixture_subject", { ...behalf(input), p_subject_id: input.subjectId });
+}
+
+/** Lifts every open subject the representing party may lift, in one governed command (C2O-012 item 5). */
+export function liftAllFixtureSubjects(supabase: SupabaseClient, input: CommandBase) {
+  return command<{ lifted: number; openSubjects: number; roomStatus: FixtureRoomStatus; subjectIds: string[] }>(supabase, "lift_all_fixture_subjects", behalf(input));
 }
 
 export function failFixtureSubject(supabase: SupabaseClient, input: CommandBase & { subjectId: string; reason?: string | null }) {

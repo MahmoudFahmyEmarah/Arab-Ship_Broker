@@ -19,7 +19,12 @@ export interface FixtureSeed {
   owner: { email: string; userId: string; orgId: string };
   cargoId: string;
   vesselId: string;
+  vesselImo: string;
+  /** the named (not TBN) hull's display name, how a test finds its candidate card (no id is in the page, C2O-013) */
+  vesselName: string;
   availabilityId: string;
+  /** a TBN hull of the owner that also matches the cargo (C2O-011): its name and id must never reach the cargo side */
+  tbn: { vesselId: string; name: string; availabilityId: string };
 }
 
 function localKeys() {
@@ -71,12 +76,70 @@ export async function seedFixture(): Promise<FixtureSeed> {
   const { data: a, error: ae } = await admin.from("vessel_availability").insert({ vessel_id: v.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(5), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 26, accepts_part_cargo: false }).select("id").single();
   if (ae) throw new Error(`availability: ${ae.message}`);
   await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", a.id);
+  const tbnName = `E2E SECRET HULL ${stamp.toUpperCase()}`;
+  const { data: tv, error: tve } = await admin.from("vessels").insert({ vessel_name: tbnName, imo_number: null, vessel_type: "Bulk Carrier", dwt_grain: 29000, build_year: 2016, flag: "Liberia", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false, is_tbn: true }).select("id").single();
+  if (tve) throw new Error(`tbn vessel: ${tve.message}`);
+  const { data: ta, error: tae } = await admin.from("vessel_availability").insert({ vessel_id: tv.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(7), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 27, accepts_part_cargo: false }).select("id").single();
+  if (tae) throw new Error(`tbn availability: ${tae.message}`);
+  await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", ta.id);
   const { error: oe } = await admin.from("listing_ownership").insert([
     { listing_type: "cargo", listing_id: c.id, owner_user_id: charterer.userId, owner_org_id: charterer.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
     { listing_type: "vessel_availability", listing_id: a.id, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
+    { listing_type: "vessel_availability", listing_id: ta.id, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
   ]);
   if (oe) throw new Error(`ownership: ${oe.message}`);
-  return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, availabilityId: a.id };
+  return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, vesselImo: testImo, vesselName: `E2E HULL ${stamp.toUpperCase()}`, availabilityId: a.id, tbn: { vesselId: tv.id, name: tbnName, availabilityId: ta.id } };
+}
+
+/**
+ * A second active seat in the charterer's organisation (re-audit C2O-011 item 3):
+ * it did not post the cargo, but represents it through the organisation, so the
+ * match builder must offer it. Local stack only; removed by cleanupSeat.
+ */
+export async function seedOrgSeat(seed: FixtureSeed): Promise<{ email: string; userId: string }> {
+  const { url, service } = localKeys();
+  const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
+  const email = `e2e-fx-seat-${seed.stamp}@arabshipbroker.test`;
+  const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
+  if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
+  const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: "E2E second seat", company: `E2E Charterers ${seed.stamp}`, role: "cargo_owner", subscription_tier: "T3", is_active: true });
+  if (e2) throw new Error(`users (seat): ${e2.message}`);
+  const { error: e3 } = await admin.from("organization_members").insert({ org_id: seed.charterer.orgId, user_id: data.user.id, member_role: "broker", is_current: true, status: "active" });
+  if (e3) throw new Error(`seat membership: ${e3.message}`);
+  await admin.from("profiles").insert({ account_id: data.user.id, profile_type: "cargo", display_name: "E2E second seat", is_active: true });
+  return { email, userId: data.user.id as string };
+}
+
+export function cleanupSeat(seat: { userId: string }) {
+  const sql = `
+set session_replication_role = replica;
+delete from public.profiles where account_id = '${seat.userId}';
+delete from public.organization_members where user_id = '${seat.userId}';
+delete from public.users where id = '${seat.userId}';
+delete from auth.users where id = '${seat.userId}';
+`;
+  try {
+    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: sql, stdio: ["pipe", "ignore", "ignore"] });
+  } catch {
+    // leaving rows behind on a disposable database is not a test failure
+  }
+}
+
+/**
+ * The charterer opens a room on the named hull through the governed path a member has
+ * (C2O-013): list the candidates, take the named hull's opaque key, create from it.
+ * Members hold no EXECUTE on the raw-id create_fixture_room any more.
+ */
+export async function openRoomViaApi(seed: FixtureSeed, idempotencyKey: string, terms: unknown, options: Record<string, unknown>): Promise<{ roomId: string; version: number }> {
+  const ch = await apiClientAs(seed.charterer.email);
+  const list = await ch.rpc("list_fixture_match_candidates", { p_kind: "cargo", p_listing_id: seed.cargoId });
+  if (list.error) throw new Error(`list_fixture_match_candidates: ${list.error.message}`);
+  const key = (list.data as { candidateKey: string; name: string }[]).find((x) => x.name === seed.vesselName)?.candidateKey;
+  if (!key) throw new Error(`the named hull ${seed.vesselName} is not a candidate`);
+  const created = await ch.rpc("create_fixture_room_from_candidate", { p_candidate_key: key, p_terms: terms, p_idempotency_key: idempotencyKey, p_options: options });
+  if (created.error) throw new Error(`create_fixture_room_from_candidate: ${created.error.message}`);
+  const d = created.data as { data: { roomId: string }; version: number };
+  return { roomId: d.data.roomId, version: d.version };
 }
 
 export interface AdminSeed { email: string; userId: string }
@@ -140,10 +203,10 @@ delete from public.fixture_proposals where room_id in (select id from public.fix
 delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
 delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
 delete from public.fixture_rooms where cargo_listing_id = '${s.cargoId}';
-delete from public.listing_ownership where listing_id in ('${s.cargoId}', '${s.availabilityId}');
-delete from public.matches where cargo_id = '${s.cargoId}' or vessel_avail_id = '${s.availabilityId}';
-delete from public.vessel_availability where id = '${s.availabilityId}';
-delete from public.vessels where id = '${s.vesselId}';
+delete from public.listing_ownership where listing_id in ('${s.cargoId}', '${s.availabilityId}', '${s.tbn.availabilityId}');
+delete from public.matches where cargo_id = '${s.cargoId}' or vessel_avail_id in ('${s.availabilityId}', '${s.tbn.availabilityId}');
+delete from public.vessel_availability where id in ('${s.availabilityId}', '${s.tbn.availabilityId}');
+delete from public.vessels where id in ('${s.vesselId}', '${s.tbn.vesselId}');
 delete from public.cargo_listings where id = '${s.cargoId}';
 delete from public.profiles where account_id in ('${s.charterer.userId}', '${s.owner.userId}');
 delete from public.organization_members where user_id in ('${s.charterer.userId}', '${s.owner.userId}');

@@ -229,8 +229,12 @@ landing correctly in the dev log:
   at the same time, the stall being inside the dev Next process) exceeded
   the 30 s and then the 90 s assertion budgets while the bid, the accept and
   the acknowledgement all landed. Budgets are now 90 s per assertion, 120 s
-  for the cross-tab waits and 900 s per test: every assertion is about
-  persisted state, so a wide budget hides nothing.
+  for the cross-tab waits and, since the suites run against the production
+  build, 180 s per test (mirrored on 26 Sep from the integration branch's
+  `b88d676`, which also made the sign-in helper assert the observable URL
+  with `toHaveURL` instead of waiting for a page load the client-side
+  router never emits): every assertion is about persisted state, so a wide
+  budget hides nothing.
 
 Then against the **production build** (`npm run build` with the local
 stack's keys, served by `next start -p 3100`; the login page answers in
@@ -540,3 +544,154 @@ passes. Run both ways: the harness on `asb_fixture` (skip) and the assembled
 | `fixture_rls_smoke.sql` standalone on the shared `postgres` database, column present | `R6 ok: a T1 market partner passes the tier gate (FX_GATE without the flag, a room with it)`; ALL ASSERTIONS PASSED |
 | first attempt | R6 paired the T1 cargo with `a2`, whose vessel is the seed's deliberately sanctioned one, so the create was refused for the wrong reason; it now uses `a3` (R4 holds `c2 + a1`) |
 | `scripts/fixture-room-check.ts` | 212 passed, 0 failed |
+## 12 · Phase 1.1 design alignment · commit 1 (27 Sep 2026)
+
+Scope: the stylesheet port, the match builder, the room shell (header
+actions, phase pill, clock, timeline, toasts, presence chips, banners,
+footer), the strips and threads, the right rail and the tier lock, all on
+the design's markup; the recap print page moved to the same vocabulary.
+Governed layer unchanged. Details in the module doc, "Presentation".
+
+Gates run on the worktree: `scripts/fixture-room-check.ts` with twenty-two
+new checks (no colour literal in the stylesheet, the design rule families,
+the portal-fit block, the 1120 px breakpoint, no `fxr-` left, the `.nr`
+root on every screen, the suites' anchors, the labelled composer ids, no
+prototype data source, no simulated state, ledger-derived presence, a
+summary free of person and contact fields, the glossary, the fit reasons
+without a scorer, the estimator hand-off without a vessel name or IMO);
+`tsc --noEmit`; `eslint` on every changed file; a production build with the
+local keys served on port 3101; the six browser suites (member negotiation,
+accessibility, responsive; admin regression, accessibility, responsive)
+against it.
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 229 passed, 0 failed |
+| `tsc --noEmit` / `eslint` on every changed file | 0 errors / clean |
+| production build, local keys | exit 0; `/dashboard/fixture-room`, `/new`, `/[id]`, `/[id]/recap` emitted |
+| `fixture-room-a11y.spec.ts`, `fixture-room-responsive.spec.ts` | pass (3 + 5) |
+| `fixture-room-admin.spec.ts`, `-admin-a11y`, `-admin-responsive` | pass (3 + 4 + 8) |
+| `fixture-room.spec.ts` | 3 of 4 pass (opens a room from the match builder, invitation accept, printable recap); **"bid, counter-offer, stale tab refused, accept" not green on this runner**, see below |
+
+The two-browser negotiation test failed five times at five different steps
+(accept answered after more than 90 s; the owner's tab reloaded itself on a
+failed server action and hung on the loading screen; the 600 s test budget
+ran out, whole run 17 min). The runner had 558–1,200 MB free and the server
+log shows only database statement timeouts (the portal cargo loader hitting
+the 8 s `authenticated` limit). A simple bid took 65 s to appear. Every step
+the test exercises also passes in the other suites. It needs one re-run on a
+machine with headroom before this commit is composed.
+
+Spec changes made to follow the design, not to weaken the test: the locked
+card reads "Your side · fixed"; the holder chip reads "→ Vessel" / "→ Cargo";
+the stale tab is now simulated by hiding the document (the room's poll pauses
+while hidden) instead of aborting its requests, which fought the production
+router; the per-assertion budget is 180 s and the per-test budget 600 s.
+
+## 13 · Phase 1.1 · commit 2 (28 Sep 2026)
+
+Adds the design's recap composer (`RecapComposer`: Email / WhatsApp tabs,
+recipients, subject and body from the published recap or the masked deal
+summary; Copy and Download work, delivery waits for the notification module
+per D-2), the estimator hand-off in the estimator's frozen format (`from,
+ref, cargoId, vesselId, vessel, load, disch, mt`; `vessel` only once the
+vessel is disclosed), a "Nudge" chip that posts a governed nudge pinned to
+the term, and a recap-slot pulse when a term is agreed (reduced-motion
+aware). Separate icons now open the composer and the printable recap.
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 233 passed, 0 failed (4 new: hand-off contract, disclosed-only vessel name, composer sends nothing, nudge is governed) |
+| `tsc --noEmit` / `eslint` | 0 errors / clean |
+| production build, local keys | exit 0, 176 s |
+| `fixture-room-a11y.spec.ts` + `fixture-room-responsive.spec.ts` | 8 passed (3.4 min) |
+| `fixture-room.spec.ts` (two-browser) | not re-run; still needs a runner with memory headroom (section 12) |
+
+## 14 · Phase 1.1 · commit 3: the mediator's console (28 Sep 2026)
+
+When the viewer mediates (Arab ShipBroker, an admin session) and is not
+acting for a relayed party, each open term shows the design's broker console
+instead of "Waiting for the other side": where the ball is and the standing
+figure, "Press Cargo" / "Press Vessel" (governed `nudge` messages pinned to
+the term), "Acknowledge <figure>" (an `ack` message), Hold / Refer, and a
+pointer to "Acting for" for relaying a figure on behalf of an off-platform
+party. The mediator never proposes a figure of its own.
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 235 passed, 0 failed (2 new) |
+| `tsc --noEmit` / `eslint` | 0 errors / clean |
+| production build | exit 0, 118 s (a first attempt failed downloading the Inter font from Google Fonts; network, retried) |
+| `fixture-room-admin.spec.ts` incl. the new mediator test | 4 passed (2.3 min) |
+
+## 15 · The negotiation suite is green: the layout bug behind it (28 Sep 2026)
+
+The two-browser test kept failing after the negotiation itself had succeeded
+(freight agreed at $26.25/MT on both sides, stale tab refused). The next click,
+"Publish recap", was covered: the sticky footer sat in the middle of the page
+with the right-hand rail continuing underneath it. Cause: the design's
+`.nr-body { min-height: 0 }`, written for the prototype's fixed-height frame,
+let the room body shrink to the viewport inside the portal, so the rail spilled
+past the body and the footer (placed after the body) landed mid-rail. Fix in
+the portal-fit block: the body grows with its content (`flex: 1 0 auto;
+min-height: auto`) and the rail scrolls with the page instead of being sticky.
+Earlier failures blamed on memory were partly this bug; the machine was also
+slow, but a covered button never becomes clickable.
+
+Also in this commit: `lib/fixture-room/notify-model.ts`, the Fixture-owned
+notification rules (who hears about each ledger event, how urgently, in what
+masked words, with one delivery key per event, recipient and channel) that the
+projector will call once the shared notification core exists (O2C-009).
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 242 passed, 0 failed (7 new: notification rules, including no organisation name, vessel name or IMO in any title, body or link) |
+| production build | exit 0 |
+| `fixture-room.spec.ts` (two-browser) + `fixture-room-responsive.spec.ts` | **9 passed** (9.5 min) |
+
+## 16 · Deferred notification-projector evidence (not in this release, 28 Sep 2026)
+
+`20260923205000_fixture_room_notifications.sql` adds an AFTER INSERT trigger
+on `fixture_events` that turns each notifiable event into one notification
+per recipient through the shared core's `fn_notification_enqueue` (Codex,
+`feature/shared-fixture-services`, not yet composed). The core owns storage,
+preferences, digest vs instant email, retries and the bell; the projector
+owns who hears, how urgently and in what words, mirroring
+`lib/fixture-room/notify-model.ts`. It is a no-op while the core is absent,
+never fails a negotiation command (own sub-transaction, warning only), never
+notifies the actor, skips side- and mediator-private messages, and reads no
+name, email, phone, vessel name or identifier.
+
+Migration `20260923205000_fixture_room_notifications.sql` and its notify
+smoke/body are intentionally absent from this integration release. No Fixture
+event-to-notification trigger ships here; `notify-model.ts` remains an inert,
+tested contract for a later shared-notification release.
+
+Test setup: the core's migration was applied to the private `asb_fixture`
+database only (Codex's file, read-only; the shared `postgres` database has
+no core).
+
+| Gate | Result |
+|---|---|
+| harness on `asb_fixture` with the core installed | OK: 6 migrations, 8 suites, DOWN, identical fingerprint, residue 0, re-applied (30 s) |
+| `fixture_notify_smoke` with the core | N1 invited owner notified, actor not; N2 acceptance reaches the other side; N3 an offer with validity is urgent, deadlined, deep-linked; N4 side-private messages notify no one; N5 no organisation, vessel, IMO, email or private text in any notification |
+| same suite with the core dropped (rolled back) | N0 no-op, the room still opens |
+| `scripts/fixture-room-check.ts` | 251 passed, 0 failed (9 new: event parity SQL ↔ TS, no-op guard, failure isolation, no self-notification, private messages, no identity columns, dedupe key, DOWN, harness) |
+
+## 17 · Printable documents: Fixture Recap and Negotiation Summary (28 Sep 2026)
+
+`lib/fixture-room/documents.ts` builds both documents as one structured model
+(title, meta block, tables, footer, file name) from the requester's masked
+read model; `FixtureDocumentView` renders it with a letterhead and A4 print
+styles, and "Save as PDF" uses the browser's print dialog. The recap page
+(`/[id]/recap`) now renders a published version this way; the new summary page
+(`/[id]/summary`, the header's download icon) lists every term's rounds with
+time, side, move, figure and note. The server PDF (`@react-pdf/renderer`, on
+Codex's shared branch) will render the same model; nothing else changes.
+
+| Gate | Result |
+|---|---|
+| `scripts/fixture-room-check.ts` | 256 passed, 0 failed (5 new: one model, no identity fields, masking kept, recap hash, tokens only) |
+| `tsc` / `eslint` | 0 / clean |
+| production build | exit 0 |
+| `fixture-room.spec.ts` (incl. summary shows $24.50 and $26.25, no counterparty name) + `fixture-room-a11y.spec.ts` | 7 passed (6.9 min) |

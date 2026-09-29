@@ -47,6 +47,20 @@ export const createRoomSchema = z.object({
   idempotencyKey,
 });
 
+/** C2O-013: a member opens a room from an opaque match handle, never from raw listing ids. */
+export const createFromCandidateSchema = z.object({
+  candidateKey: uuid,
+  terms: z.array(termDefinitionSchema).min(1).max(40),
+  idempotencyKey,
+});
+
+/** C2O-013: a new room on a terminal room's pairing, named by the room only. */
+export const recreateRoomSchema = z.object({
+  roomId: uuid,
+  terms: z.array(termDefinitionSchema).min(1).max(40),
+  idempotencyKey,
+});
+
 export const invitePartySchema = commandBaseSchema.extend({
   side: z.enum(["cargo", "vessel"]),
   capacity: z.enum(["principal", "broker", "viewer"]),
