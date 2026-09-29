@@ -72,10 +72,14 @@ test("the recap dialog keeps focus and caret across clock ticks, traps Tab and r
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
   await page.goto(roomUrl);
   const opener = page.getByTestId("open-recap-composer");
-  await opener.focus();
-  await page.keyboard.press("Enter");
   const dialog = page.getByTestId("recap-composer");
-  await expect(dialog).toBeVisible();
+  await expect(opener).toBeVisible({ timeout: 120_000 });
+  // the keyboard opens it; retried until the page has hydrated (an Enter before hydration does nothing)
+  await expect(async () => {
+    await opener.focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 120_000 });
   const cc = page.locator("#nrx-cc");
   await cc.click();
   await page.keyboard.type("desk@", { delay: 60 });

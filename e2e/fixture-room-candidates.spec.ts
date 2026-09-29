@@ -32,9 +32,13 @@ test("the charterer sees the TBN hull as TBN, with no identity anywhere in the p
   const bodies: string[] = [];
   await page.route("**/dashboard/fixture-room/**", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
-    const response = await route.fetch();
-    bodies.push(await response.text());
-    await route.fulfill({ response });
+    try {
+      const response = await route.fetch();
+      bodies.push(await response.text());
+      await route.fulfill({ response });
+    } catch {
+      // the page navigated (or closed) mid-request; nothing to scan from this one
+    }
   });
   await page.goto(`/dashboard/fixture-room/new?cargo=${seed.cargoId}`);
   await dismissOverlays(page);
@@ -57,6 +61,7 @@ test("the charterer sees the TBN hull as TBN, with no identity anywhere in the p
     expect(html, `the page carries ${s}`).not.toContain(s);
     for (const b of bodies) expect(b, `a server-action response carries ${s}`).not.toContain(s);
   }
+  await page.unrouteAll({ behavior: "ignoreErrors" });
   await context.close();
 });
 
@@ -114,9 +119,13 @@ test("a room opened from the TBN key reveals no hull or position id", async ({ b
   const bodies: string[] = [];
   await page.route("**/dashboard/fixture-room/**", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
-    const response = await route.fetch();
-    bodies.push(await response.text());
-    await route.fulfill({ response });
+    try {
+      const response = await route.fetch();
+      bodies.push(await response.text());
+      await route.fulfill({ response });
+    } catch {
+      // the page navigated (or closed) mid-request; nothing to scan from this one
+    }
   });
   await page.goto(`/dashboard/fixture-room/new?cargo=${seed.cargoId}`);
   await dismissOverlays(page);
@@ -137,6 +146,7 @@ test("a room opened from the TBN key reveals no hull or position id", async ({ b
   // and the raw-id create is no longer callable by a member
   const raw = await ch.rpc("create_fixture_room", { p_cargo_listing_id: seed.cargoId, p_vessel_availability_id: seed.tbn.availabilityId, p_terms: [], p_idempotency_key: `e2e-raw-${seed.stamp}`, p_options: {} });
   expect(raw.error?.message ?? "").toMatch(/permission denied/i);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
   await context.close();
 });
 
