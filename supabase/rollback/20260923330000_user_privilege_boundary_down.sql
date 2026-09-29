@@ -14,9 +14,9 @@ returns boolean
 language sql
 stable
 as $function$
-  select coalesce(
+  SELECT COALESCE(
     (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin',
-    false
+    FALSE
   );
 $function$;
 

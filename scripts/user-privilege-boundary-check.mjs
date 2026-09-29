@@ -14,6 +14,10 @@ const rollback = readFileSync(
   resolve(process.cwd(), "supabase/rollback/20260923330000_user_privilege_boundary_down.sql"),
   "utf8",
 );
+const baseline = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260616120000_remote_baseline.sql"),
+  "utf8",
+);
 const gate = readFileSync(resolve(process.cwd(), "lib/admin/require-admin.ts"), "utf8");
 const reviewActions = readFileSync(resolve(process.cwd(), "app/(admin)/admin/queue/actions.ts"), "utf8");
 const smoke = readFileSync(
@@ -34,6 +38,18 @@ assert.match(migration, /raw_app_meta_data/i);
 assert.match(migration, /fn_is_admin/i);
 assert.match(rollback, /alter function public\.fn_is_admin\(\) security definer/i);
 assert.match(rollback, /alter function public\.fn_is_admin\(\) set search_path\s*=\s*''/i);
+const fnIsAdminBody = (sql) => {
+  const match = sql.match(
+    /create or replace function public\.fn_is_admin\(\)[\s\S]*?as \$function\$\r?\n([\s\S]*?)\r?\n\$function\$;/i,
+  );
+  assert.ok(match, "fn_is_admin body must be present");
+  return match[1].replaceAll("\r\n", "\n");
+};
+assert.equal(
+  fnIsAdminBody(rollback),
+  fnIsAdminBody(baseline),
+  "rollback must restore the byte-identical baseline fn_is_admin body",
+);
 assert.match(marketPartnerMigration, /add column if not exists is_market_partner boolean not null default false/i);
 assert.match(marketPartnerMigration, /service-managed entitlement/i);
 assert.match(gate, /user\.app_metadata\?\.role !== "admin"/);
