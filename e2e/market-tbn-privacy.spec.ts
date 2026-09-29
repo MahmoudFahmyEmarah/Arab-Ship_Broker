@@ -238,10 +238,13 @@ async function seedPrivacy(): Promise<PrivacySeed> {
     { listing_type: "vessel_availability", listing_id: named.availabilityId, owner_user_id: publicOwner.userId, owner_org_id: publicOwner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
   ]);
   if (ownershipError) throw new Error(`ownership: ${ownershipError.message}`);
-  const { error: matchError } = await adminClient.from("matches").insert([
-    { cargo_id: cargo.id, vessel_avail_id: tbn.availabilityId, score_label: "Strong" },
-    { cargo_id: cargo.id, vessel_avail_id: named.availabilityId, score_label: "Good" },
-  ]);
+  const { error: matchError } = await adminClient.from("matches").upsert(
+    [
+      { cargo_id: cargo.id, vessel_avail_id: tbn.availabilityId, score_label: "Strong" },
+      { cargo_id: cargo.id, vessel_avail_id: named.availabilityId, score_label: "Good" },
+    ],
+    { onConflict: "cargo_id,vessel_avail_id" },
+  );
   if (matchError) throw new Error(`matches: ${matchError.message}`);
 
   return {
