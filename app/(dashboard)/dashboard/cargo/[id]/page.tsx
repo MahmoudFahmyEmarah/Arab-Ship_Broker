@@ -12,7 +12,13 @@ import {
 } from "lucide-react";
 
 import { CargoListingRow } from "@/lib/schemas/cargo";
-import { getMatchesForCargo, CargoMatchResult } from "@/sdk/app/cargos";
+import {
+  canManageMarketListing,
+  isMarketVesselRow,
+  listMarketCargo,
+  listMarketMatches,
+  type MarketVesselRow,
+} from "@/sdk/app/market";
 
 export default async function CargoDetailPage({
   params,
@@ -33,6 +39,11 @@ export default async function CargoDetailPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  const isOwner = await canManageMarketListing(supabase, "cargo", id).catch(
+    () => false,
+  );
+  if (!isOwner) notFound();
+
   const { data: cargo, error } = await supabase
     .from("cargo_listings")
     .select("*")
@@ -42,23 +53,17 @@ export default async function CargoDetailPage({
   if (error || !cargo) notFound();
   const listing = cargo as CargoListingRow;
 
-  let isOwner = false;
-  const { data: ownership } = await supabase
-    .from("listing_ownership")
-    .select("id")
-    .eq("listing_id", id)
-    .eq("owner_user_id", user.id)
-    .eq("is_current", true)
-    .single();
-  isOwner = !!ownership;
-
-  let matches: CargoMatchResult[] = [];
+  let matches: MarketVesselRow[] = [];
   if (
     listing.review_status === "APPROVED" &&
     (listing.status === "IN" || listing.status === "PARTIAL")
   ) {
     try {
-      matches = await getMatchesForCargo(supabase, id);
+      const marketRows = await listMarketCargo(supabase);
+      const key = marketRows.find((row) => row.owned_listing_id === id)?.listing_key;
+      if (key) {
+        matches = (await listMarketMatches(supabase, key)).filter(isMarketVesselRow);
+      }
     } catch {
       // Non-fatal
     }
@@ -323,7 +328,7 @@ export default async function CargoDetailPage({
             ) : (
               <div className="space-y-3">
                 {matches.map((match) => (
-                  <VesselMatchCard key={match.availability_id} match={match} />
+                  <VesselMatchCard key={match.listing_key} match={match} />
                 ))}
               </div>
             )}
@@ -334,33 +339,37 @@ export default async function CargoDetailPage({
   );
 }
 
-function VesselMatchCard({ match }: { match: CargoMatchResult }) {
+function VesselMatchCard({ match }: { match: MarketVesselRow }) {
+  const fit = (match.fit ?? {}) as {
+    rate_aligned?: boolean;
+    dwt_delta?: number | null;
+  };
   return (
     <div className="dp-card dp-clickable p-4">
       <div className="flex items-start justify-between gap-4 mb-3 max-[768px]:flex-col">
         <div>
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-asb-navy">
-              {match.vessel_name}
+              {match.vessel.vessel_name}
             </p>
-            {match.is_rate_aligned && (
+            {fit.rate_aligned && (
               <span className="text-[10px] font-semibold bg-asb-green-bg text-asb-green px-2 py-0.5 rounded-[3px]">
                 Rate aligned
               </span>
             )}
           </div>
           <p className="text-xs text-asb-gray-500 mt-0.5">
-            {match.vessel_ref ?? "—"} · {match.vessel_type}
+            {match.ref ?? "—"} · {match.vessel.vessel_type}
           </p>
         </div>
         <div className="text-right max-[768px]:text-left shrink-0">
           <p className="text-sm font-semibold text-asb-navy tabular-nums">
-            {match.dwt_grain
-              ? `${match.dwt_grain.toLocaleString()} MT DWT`
+            {match.vessel.dwt_grain
+              ? `${match.vessel.dwt_grain.toLocaleString()} MT DWT`
               : "DWT unknown"}
           </p>
           <p className="text-xs text-asb-gray-400 tabular-nums">
-            DWT delta: {match.dwt_delta.toLocaleString()} MT
+            DWT delta: {fit.dwt_delta != null ? `${fit.dwt_delta.toLocaleString()} MT` : "—"}
           </p>
         </div>
       </div>
@@ -382,7 +391,7 @@ function VesselMatchCard({ match }: { match: CargoMatchResult }) {
         <div>
           <p className="text-[10px] text-asb-gray-500 font-medium uppercase tracking-wide">Flag</p>
           <p className="font-medium text-asb-ink mt-0.5">
-            {match.flag ?? "—"}
+            {match.vessel.flag ?? "—"}
           </p>
         </div>
         <div>
@@ -398,26 +407,26 @@ function VesselMatchCard({ match }: { match: CargoMatchResult }) {
       <div className="flex flex-wrap gap-1.5">
         <span
           className={`text-xs px-2 py-0.5 rounded border ${
-            match.risk_level === "HIGH"
+            match.vessel.risk_level === "HIGH"
               ? "bg-red-50 text-red-700 border-red-200"
-              : match.risk_level === "MEDIUM"
+              : match.vessel.risk_level === "MEDIUM"
                 ? "bg-amber-50 text-amber-700 border-amber-200"
                 : "bg-green-50 text-green-700 border-green-200"
           }`}
         >
-          {match.risk_level}
+          {match.vessel.risk_level}
         </span>
-        {match.is_geared && (
+        {match.vessel.is_geared && (
           <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
             Geared
           </span>
         )}
-        {match.grain_certified && (
+        {match.vessel.grain_certified && (
           <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200">
             Grain cert
           </span>
         )}
-        {match.dg_certified && (
+        {match.vessel.dg_certified && (
           <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded border border-purple-200">
             DG cert
           </span>
@@ -429,14 +438,14 @@ function VesselMatchCard({ match }: { match: CargoMatchResult }) {
         )}
         <span
           className={`text-xs px-2 py-0.5 rounded border ${
-            match.scope === "In Scope"
+            match.vessel.scope === "In Scope"
               ? "bg-green-50 text-green-700 border-green-200"
-              : match.scope === "Marginal"
+              : match.vessel.scope === "Marginal"
                 ? "bg-amber-50 text-amber-700 border-amber-200"
                 : "bg-asb-gray-100 text-asb-gray-700 border-asb-gray-200"
           }`}
         >
-          {match.scope}
+          {match.vessel.scope}
         </span>
       </div>
     </div>

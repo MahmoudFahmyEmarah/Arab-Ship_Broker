@@ -147,40 +147,62 @@ export function buildPdaEstimatorCatalog(input: {
   ports: PdaEstimatorPortOption[];
 }): PdaEstimatorCatalog {
   return {
-    vessels: input.vessels.map((vessel) => ({
-      id: vessel.id,
-      vesselId: vessel.vesselId ?? null,
-      name: vessel.name,
-      imo: vessel.imo,
-      type: vessel.type,
-      dwt: vessel.dwt,
-      gt: vessel.gt ?? null,
-      scnrt: vessel.scnrt ?? null,
-      loaM: vessel.loaM ?? null,
-      serviceSpeed: vessel.serviceSpeed ?? null,
-    })),
-    cargos: input.cargos.map((cargo) => ({
-      id: cargo.id,
-      refId: cargo.refId,
-      cargo: cargo.cargo,
-      commodity: cargo.commodity,
-      type: cargo.type,
-      quantityMinMt: cargo.qty.min,
-      quantityMaxMt: cargo.qty.max,
-      quantityLabel: cargo.qtyMt,
-      loadRateMtPerDay: cargo.loadRate,
-      dischargeRateMtPerDay: cargo.dischRate,
-      loadPort: normalizedCargoPort(
-        cargo.route.polCode,
-        cargo.route.polName,
-        cargo.portScope?.polScope,
-      ),
-      dischargePort: normalizedCargoPort(
-        cargo.route.podCode,
-        cargo.route.podName,
-        cargo.portScope?.podScope,
-      ),
-    })),
+    // The calculator persists real foreign keys. Its catalogue therefore comes
+    // only from exact owner/admin management rows; opaque market handles must
+    // never be promoted to vessel_availability.id or cargo_listings.id.
+    vessels: input.vessels.flatMap((vessel) => {
+      if (
+        vessel.isOwned !== true ||
+        vessel.canManage !== true ||
+        !vessel.ownedListingId ||
+        !vessel.vesselId
+      ) {
+        return [];
+      }
+      return [{
+        id: vessel.ownedListingId,
+        vesselId: vessel.vesselId,
+        name: vessel.name,
+        imo: vessel.imo,
+        type: vessel.type,
+        dwt: vessel.dwt,
+        gt: vessel.gt ?? null,
+        scnrt: vessel.scnrt ?? null,
+        loaM: vessel.loaM ?? null,
+        serviceSpeed: vessel.serviceSpeed ?? null,
+      }];
+    }),
+    cargos: input.cargos.flatMap((cargo) => {
+      if (
+        cargo.isOwned !== true ||
+        cargo.canManage !== true ||
+        !cargo.ownedListingId
+      ) {
+        return [];
+      }
+      return [{
+        id: cargo.ownedListingId,
+        refId: cargo.refId,
+        cargo: cargo.cargo,
+        commodity: cargo.commodity,
+        type: cargo.type,
+        quantityMinMt: cargo.qty.min,
+        quantityMaxMt: cargo.qty.max,
+        quantityLabel: cargo.qtyMt,
+        loadRateMtPerDay: cargo.loadRate,
+        dischargeRateMtPerDay: cargo.dischRate,
+        loadPort: normalizedCargoPort(
+          cargo.route.polCode,
+          cargo.route.polName,
+          cargo.portScope?.polScope,
+        ),
+        dischargePort: normalizedCargoPort(
+          cargo.route.podCode,
+          cargo.route.podName,
+          cargo.portScope?.podScope,
+        ),
+      }];
+    }),
     ports: input.ports.map((port) => ({
       ...port,
       locode: port.locode.replace(/\s+/g, "").toUpperCase(),

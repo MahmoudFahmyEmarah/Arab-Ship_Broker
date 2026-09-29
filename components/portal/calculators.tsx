@@ -172,8 +172,16 @@ const vesselOpts = (vessels: VesselView[]) => vessels.map((v) => ({ value: v.id,
 // ════════════════════════════════════════════════════════════════════════════
 export function VoyageEstimator({ vessels, cargos, fuel, initialVesselId, initialCargoId }: { vessels: VesselView[]; cargos: CargoView[]; fuel: FuelPrices; initialVesselId?: string; initialCargoId?: string }) {
   const tier = useViewerTier();
-  const [vesselId, setVesselId] = React.useState(initialVesselId || vessels[0]?.id || "");
-  const [cargoId, setCargoId] = React.useState(initialCargoId || cargos[0]?.id || "");
+  const [vesselId, setVesselId] = React.useState(() =>
+    vessels.some((vessel) => vessel.id === initialVesselId)
+      ? initialVesselId!
+      : vessels[0]?.id ?? "",
+  );
+  const [cargoId, setCargoId] = React.useState(() =>
+    cargos.some((cargo) => cargo.id === initialCargoId)
+      ? initialCargoId!
+      : cargos[0]?.id ?? "",
+  );
 
   const vessel = vessels.find((v) => v.id === vesselId) ?? null;
   const cargo = cargos.find((c) => c.id === cargoId) ?? null;

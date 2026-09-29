@@ -108,10 +108,10 @@ export default async function AdminUserDetailPage({
   const { data: queueHistory } = await supabase
     .from("review_queue")
     .select(
-      "id, listing_type, status, action_taken, review_reason, reviewed_at, created_at",
+      "id, listing_type, status, action_taken, review_reason, reviewed_at, created_at:submitted_at",
     )
     .eq("submitted_by", u.id)
-    .order("created_at", { ascending: false })
+    .order("submitted_at", { ascending: false })
     .limit(20);
 
   return (

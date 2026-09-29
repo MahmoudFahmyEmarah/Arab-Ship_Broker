@@ -15,6 +15,30 @@ import {
   stripVesselNamePrefix,
 } from "@/lib/schemas/vessel";
 import { CargoView, VesselView, CargoScope, VesselStatusView } from "./types";
+import type {
+  MarketCargoRow,
+  MarketPosterRow,
+  MarketVesselRow,
+} from "@/sdk/app/market";
+
+interface OwnedAccess {
+  listingKey?: string | null;
+  ownedListingId?: string | null;
+  isOwned?: boolean;
+  canManage?: boolean;
+  listingKeyExpiresAt?: string | null;
+}
+
+function posterView(poster: MarketPosterRow | null | undefined) {
+  if (!poster) return null;
+  return {
+    name: poster.name,
+    company: poster.company,
+    kind: poster.kind,
+    isAdmin: poster.is_admin,
+    orgId: null,
+  } as const;
+}
 
 function portList(
   v: CargoListingRow["load_ports"],
@@ -48,7 +72,9 @@ function scopeFromStatus(status: CargoListingRow["status"]): CargoScope {
   }
 }
 
-function imsbcGroup(row: CargoListingRow): string {
+function imsbcGroup(
+  row: Pick<CargoListingRow, "is_dg_cargo" | "is_grain_cargo">,
+): string {
   if (row.is_dg_cargo) return "DG";
   if (row.is_grain_cargo) return "A";
   return "C";
@@ -57,8 +83,9 @@ function imsbcGroup(row: CargoListingRow): string {
 const numFmt = new Intl.NumberFormat("en-US");
 
 export function toCargoView(
-  row: CargoListingRow,
+  row: CargoListingRow | MarketCargoRow,
   matches = 0,
+  ownedAccess: OwnedAccess = {},
 ): CargoView {
   // Stowage factor is stored in ft³/LT; the card shows m³/t.
   const sf =
@@ -66,9 +93,20 @@ export function toCargoView(
       ? Math.round(row.stowage_factor * FT3LT_TO_M3T * 100) / 100
       : null;
 
+  const market = "listing_key" in row ? row : null;
+  const publicId = market?.listing_key ?? row.id;
+  const isOwned = market?.is_owned ?? ownedAccess.isOwned ?? false;
+  const canManage = market?.can_manage ?? ownedAccess.canManage ?? false;
   return {
-    id: row.id,
-    refId: row.ref ?? row.id.slice(0, 8).toUpperCase(),
+    id: publicId,
+    listingKey: market?.listing_key ?? ownedAccess.listingKey ?? null,
+    ownedListingId:
+      market?.owned_listing_id ?? ownedAccess.ownedListingId ?? null,
+    isOwned,
+    canManage,
+    listingKeyExpiresAt:
+      market?.expires_at ?? ownedAccess.listingKeyExpiresAt ?? null,
+    refId: row.ref ?? publicId.slice(0, 8).toUpperCase(),
     cargo: row.commodity_name,
     commodity: row.commodity_name,
     type: row.cargo_type,
@@ -84,8 +122,14 @@ export function toCargoView(
     portScope: {
       polScope: row.load_port_scope ?? null,
       podScope: row.disch_port_scope ?? null,
-      polRef: row.load_ref_locode ?? row.load_port_2_locode ?? null,
-      podRef: row.disch_ref_locode ?? row.disch_port_2_locode ?? null,
+      polRef:
+        row.load_ref_locode ??
+        ("load_port_2_locode" in row ? row.load_port_2_locode : null) ??
+        null,
+      podRef:
+        row.disch_ref_locode ??
+        ("disch_port_2_locode" in row ? row.disch_port_2_locode : null) ??
+        null,
     },
     loadPorts: portList(row.load_ports),
     dischPorts: portList(row.disch_ports),
@@ -106,7 +150,7 @@ export function toCargoView(
     freightIdea: row.freight_idea_usd_mt,
     commission: row.commission_ttl_pct ?? row.commission_pct,
     demurrage: row.demurrage_rate,
-    matches,
+    matches: market?.match_count ?? matches,
     spot: row.is_spot,
     forCirculation: row.review_status === "APPROVED",
     partnerSlug: row.broker,
@@ -116,6 +160,7 @@ export function toCargoView(
     maxDraft: row.max_draft_m,
     isGrain: row.is_grain_cargo,
     isDg: row.is_dg_cargo,
+    poster: posterView(market?.poster),
   };
 }
 
@@ -131,8 +176,9 @@ function urgencyFromDays(days: number | null): "red" | "amber" | "green" {
 const YEAR = new Date().getFullYear();
 
 export function vesselFromAvailability(
-  row: VesselAvailabilityWithVessel,
+  row: VesselAvailabilityWithVessel | MarketVesselRow,
   matches = 0,
+  ownedAccess: OwnedAccess = {},
 ): VesselView {
   const v = row.vessel;
   const days = daysFromNow(row.open_date);
@@ -144,9 +190,26 @@ export function vesselFromAvailability(
     lsmgo_port_mt_day?: number | null;
   };
   const vv = v as unknown as { gross_tonnage?: number | null; scnrt?: number | null; max_loa_m?: number | null };
+  const market = "listing_key" in row ? row : null;
+  const publicId = market?.listing_key ?? row.id;
+  const isOwned = market?.is_owned ?? ownedAccess.isOwned ?? false;
+  const canManage = market?.can_manage ?? ownedAccess.canManage ?? false;
+  const rawVesselId =
+    "listing_key" in row
+      ? (v as { id?: string | null }).id ?? null
+      : row.vessel_id ?? ("id" in v ? v.id : null);
   return {
-    id: row.id,
-    vesselId: row.vessel_id,
+    id: publicId,
+    listingKey: market?.listing_key ?? ownedAccess.listingKey ?? null,
+    ownedListingId:
+      market?.owned_listing_id ?? ownedAccess.ownedListingId ?? null,
+    isOwned,
+    canManage,
+    listingKeyExpiresAt:
+      market?.expires_at ?? ownedAccess.listingKeyExpiresAt ?? null,
+    vesselId: canManage && rawVesselId ? rawVesselId : undefined,
+    identityMasked:
+      Boolean((v as { is_tbn?: boolean }).is_tbn) && !canManage,
     gt: vv.gross_tonnage ?? null,
     scnrt: vv.scnrt ?? null,
     loaM: vv.max_loa_m ?? null,
@@ -170,7 +233,8 @@ export function vesselFromAvailability(
     // Freshness clock — when the position was posted/last confirmed
     postedAt: (row as { refreshed_at?: string | null }).refreshed_at ?? row.created_at ?? null,
     status: statusFromAvailability(row.status),
-    matches,
+    matches: market?.match_count ?? matches,
+    poster: posterView(market?.poster),
     fuel: {
       vlsfoSea: pf.vlsfo_sea_mt_day ?? "—",
       vlsfoPort: pf.vlsfo_port_mt_day ?? "—",

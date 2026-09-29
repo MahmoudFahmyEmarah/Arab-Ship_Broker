@@ -98,13 +98,14 @@ export async function getOverview(): Promise<Result<DqOverview>> {
       sb.rpc("fn_dq_open_by_severity", { p_table: null }), // one grouped count (workstream F)
       sb.from("dq_runs").select("*").in("status", ["completed", "completed_with_errors", "failed", "cancelled"]).order("created_at", { ascending: false }).limit(2),
       sb.from("dq_ai_suggestions").select("kind").eq("status", "pending"),
-      sb.from("v_vessel_flag_issues").select("*", { count: "exact", head: true }),
+      sb.rpc("count_admin_vessel_flag_issues"),
       sb.from("commodity_review_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
       sb.from("vessel_review_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
       sb.from("vessels").select("id", { count: "exact", head: true }).or("is_sanctioned.eq.true,risk_level.eq.HIGH"),
       sb.from("sync_staged_row").select("id", { count: "exact", head: true }).eq("classification", "invalid").eq("committed", false),
     ]);
     if (healthRes.error) throw new Error(healthRes.error.message);
+    if (flags.error) throw new Error(flags.error.message);
     const trendBy = new Map<string, number[]>();
     for (const s of (snaps.data ?? []) as { table_name: string; score: number }[]) { const a = trendBy.get(s.table_name) ?? []; a.push(Number(s.score)); trendBy.set(s.table_name, a); }
     const health = ((healthRes.data ?? []) as Omit<DqHealthTile, "trend">[]).map((h) => {
@@ -121,7 +122,7 @@ export async function getOverview(): Promise<Result<DqOverview>> {
       { label: "Live cargo not resolved to a LOCODE", n: c05, source: "cargo_listings.load_port_locode is null · DQ-C05", severity: "error", table: "cargo_listings" },
       { label: "Vessels without IMO (Manual Review)", n: vrq.count ?? 0, source: "vessel_review_queue", severity: "warn", table: "vessels" },
       { label: 'Sync rows "Needs fixing" (uncommitted)', n: syncFlags.count ?? 0, source: "sync_staged_row.classification = invalid", severity: "error", table: "sync_staged_row" },
-      { label: "Vessels with an unknown flag", n: flags.count ?? 0, source: "v_vessel_flag_issues", severity: "error", table: "vessels" },
+      { label: "Vessels with an unknown flag", n: Number(flags.data ?? 0), source: "vessels flag audit", severity: "error", table: "vessels" },
       { label: "Sanctioned / high-risk vessels", n: sanctioned.count ?? 0, source: "vessels.is_sanctioned, risk_level", severity: "error", table: "vessels" },
     ];
     // what changed since the last completed run

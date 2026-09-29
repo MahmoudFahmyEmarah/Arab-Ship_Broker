@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { PostPositionButton } from "@/components/vessels/PostPositionButton";
 import { UpgradeWall } from "@/components/vessels/UpgradeWall";
 import { viewerTierFrom, isSubscriber } from "@/lib/tiers";
+import { getManagedVessel } from "@/sdk/app/market";
 
 type Params = { vesselId: string };
 
@@ -46,11 +47,7 @@ export async function generateMetadata({
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
   );
-  const { data } = await supabase
-    .from("vessels")
-    .select("vessel_name")
-    .eq("id", vesselId)
-    .single();
+  const data = await getManagedVessel(supabase, vesselId);
 
   return { title: data ? `${data.vessel_name} Arab ShipBroker` : "Vessel" };
 }
@@ -74,17 +71,12 @@ export default async function VesselDetailPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  // Read through the masked view: counterparty PII (owner/manager/
-  // commercial-contact/PIC/website/charterer) resolves to NULL unless the
-  // viewer is admin or this vessel's own claimant. Contact firewall lives
-  // in the DB, not the UI.
-  const { data: vessel, error } = await supabase
-    .from("v_vessel_detail")
-    .select("*")
-    .eq("id", vesselId)
-    .single();
-
-  if (error || !vessel) notFound();
+  // This raw-id route is a governed management surface. The RPC returns the
+  // complete row only to an admin, vessel claimant, or the exact personal/org
+  // owner of one of this hull's positions. Market viewers stay on opaque
+  // listing handles and never reach this page payload.
+  const vessel = await getManagedVessel(supabase, vesselId);
+  if (!vessel) notFound();
   const v = vessel as VesselRow;
 
   const { data: claim } = await supabase

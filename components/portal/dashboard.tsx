@@ -197,7 +197,7 @@ export function DashVesselRow({
         <span className="dash-row__sep">·</span>
         <span title="Open date">{formatShortDate(v.openDate)}</span>
       </div>
-      <PosterLine poster={v.poster} className="dash-row__poster" />
+      <PosterLine poster={v.poster} brokered={v.identityMasked} className="dash-row__poster" />
     </div>
   );
 }

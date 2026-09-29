@@ -10,7 +10,10 @@ export const metadata = { title: "Voyage Cost Estimator Arab ShipBroker" };
 export default async function VoyageEstimatorPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vessel?: string; cargo?: string }>;
+  searchParams: Promise<{
+    vessel?: string | string[];
+    cargo?: string | string[];
+  }>;
 }) {
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -35,8 +38,8 @@ export default async function VoyageEstimatorPage({
       vessels={vessels.views}
       cargos={cargos.views}
       fuel={fuel}
-      initialVesselId={params.vessel}
-      initialCargoId={params.cargo}
+      initialVesselId={typeof params.vessel === "string" ? params.vessel : undefined}
+      initialCargoId={typeof params.cargo === "string" ? params.cargo : undefined}
     />
   );
 }

@@ -120,11 +120,11 @@ export default async function AdminVesselAvailabilityDetailPage({
   const { data: queueItems } = await adminClient
     .from("review_queue")
     .select(
-      "id, status, action_taken, review_reason, amendment_detail, created_at, reviewed_at",
+      "id, status, action_taken, review_reason, amendment_detail, created_at:submitted_at, reviewed_at",
     )
     .eq("listing_id", id)
     .eq("listing_type", "vessel_availability")
-    .order("created_at", { ascending: false });
+    .order("submitted_at", { ascending: false });
 
   const queueHistory = (queueItems ?? []) as ReviewQueueHistoryItem[];
   const pendingQueueItemId =

@@ -7,21 +7,24 @@
 // live data therefore required no UI changes — just these loaders.
 import { getAppUserRow } from "@/lib/app-user";
 import { getSpotActiveDays, getVesselActiveDays } from "@/lib/app-settings";
-import { getCargos, getMyCargoListings } from "@/sdk/app/cargos";
+import { getMyCargoListings } from "@/sdk/app/cargos";
 import {
-  getOpenVesselAvailability,
   getMyVesselAvailability,
 } from "@/sdk/app/vessels";
+import {
+  listMarketCargo,
+  listMarketVessels,
+  type MarketCargoRow,
+  type MarketVesselRow,
+} from "@/sdk/app/market";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { PortGeo } from "./port-coords";
 import { getTemporalAccess, type TemporalAccess } from "@/lib/temporal";
 import { toCargoView, vesselFromAvailability } from "./adapters";
 import { MOCK_CARGOS, MOCK_VESSELS } from "./mock";
-import { CargoView, VesselView, type PosterView } from "./types";
+import { CargoView, VesselView } from "./types";
 import { legInfo, portKey, type PortNames } from "./route-legs";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CargoListingRow } from "@/lib/schemas/cargo";
-import type { VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
 import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 import type { CargoOpt, VesselOpt } from "./post-types";
 
@@ -53,52 +56,6 @@ function isSupabaseConfigured(): boolean {
   return !!url && !url.includes("placeholder");
 }
 
-// Match COUNTS come from the precomputed `matches` cache table — one query for
-// the whole board instead of an N-way RPC fan-out. The table is refreshed by
-// the /api/cron/refresh-matches job (fn_refresh_matches), which applies the
-// SAME eligibility gates as the get_matches_for_* RPCs. The RPCs remain the
-// source for the per-listing "view matches" drill-down (always fresh); this is
-// the cheap aggregate path for badges. On any failure we fall back to 0 so the
-// boards still render.
-async function tallyMatchCounts(
-  supabase: SupabaseClient,
-  column: "cargo_id" | "vessel_avail_id",
-  ids: string[],
-): Promise<Record<string, number>> {
-  if (!ids.length) return {};
-  try {
-    // One RPC (ids travel in the body, so a 1,000-listing board is fine).
-    // Counts LIVE counterparts only — an expired cargo or a fixed vessel never
-    // counts — but ignores the viewer's freshness window, so a match that is
-    // merely outside the current filters still shows (owner's rule).
-    const { data, error } = await supabase.rpc("count_live_matches", {
-      p_type: column === "cargo_id" ? "cargo" : "vessel_availability",
-      p_ids: ids,
-    });
-    if (error) throw error;
-    const counts: Record<string, number> = {};
-    for (const row of (data ?? []) as { listing_id: string; n: number }[]) counts[row.listing_id] = Number(row.n) || 0;
-    return counts;
-  } catch (err) {
-    console.error("[portal] match count tally failed:", err);
-    return {};
-  }
-}
-
-function cargoMatchCounts(
-  supabase: SupabaseClient,
-  rows: CargoListingRow[],
-): Promise<Record<string, number>> {
-  return tallyMatchCounts(supabase, "cargo_id", rows.map((r) => r.id));
-}
-
-function availabilityMatchCounts(
-  supabase: SupabaseClient,
-  rows: VesselAvailabilityWithVessel[],
-): Promise<Record<string, number>> {
-  return tallyMatchCounts(supabase, "vessel_avail_id", rows.map((r) => r.id));
-}
-
 // Live bunker prices for the calculators — the SAME admin-managed fuel_prices
 // table the bunker ticker reads. Falls back to the econ defaults if unset.
 export async function loadFuelPrices(): Promise<{ vlsfo: number; lsmgo: number; port: string; updated: string }> {
@@ -124,33 +81,6 @@ export async function loadFuelPrices(): Promise<{ vlsfo: number; lsmgo: number; 
   } catch (err) {
     console.error("[portal] fuel price load failed:", err);
     return fallback;
-  }
-}
-
-// Who posted each listing — one RPC per board load (display fields only).
-// A failure degrades to "no poster line", never to a failed board.
-async function loadPosters(
-  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
-  type: "cargo" | "vessel_availability",
-  ids: string[],
-): Promise<Record<string, PosterView>> {
-  try {
-    const { data, error } = await supabase.rpc("get_listing_posters", { p_type: type, p_ids: ids });
-    if (error || !data) return {};
-    const out: Record<string, PosterView> = {};
-    for (const r of data as { listing_id: string; poster_name: string | null; poster_company: string | null; poster_kind: string; is_admin: boolean; org_id: string | null }[]) {
-      out[r.listing_id] = {
-        name: r.poster_name,
-        company: r.poster_company,
-        kind: (["individual", "company", "employee"].includes(r.poster_kind) ? r.poster_kind : "individual") as PosterView["kind"],
-        isAdmin: !!r.is_admin,
-        orgId: r.org_id,
-      };
-    }
-    return out;
-  } catch (err) {
-    console.error("[portal] posters load failed:", err);
-    return {};
   }
 }
 
@@ -187,10 +117,40 @@ export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<Carg
   if (isSupabaseConfigured()) {
     try {
       const supabase = await getSupabaseServerClient();
-      let rows: CargoListingRow[];
       let archiveLabel: string | undefined;
+      let views: CargoView[];
       if (mine) {
-        rows = await getMyCargoListings(supabase);
+        const [rows, governed] = await Promise.all([
+          getMyCargoListings(supabase),
+          listMarketCargo(supabase).catch(() => [] as MarketCargoRow[]),
+        ]);
+        const byOwnedId = new Map(
+          governed
+            .filter((row) => row.owned_listing_id)
+            .map((row) => [row.owned_listing_id!, row]),
+        );
+        views = rows.map((row) => {
+          const safe = byOwnedId.get(row.id);
+          const view = toCargoView(row, safe?.match_count ?? 0, {
+            listingKey: safe?.listing_key ?? null,
+            ownedListingId: row.id,
+            isOwned: true,
+            canManage: true,
+            listingKeyExpiresAt: safe?.expires_at ?? null,
+          });
+          return safe?.poster
+            ? {
+                ...view,
+                poster: {
+                  name: safe.poster.name,
+                  company: safe.poster.company,
+                  kind: safe.poster.kind,
+                  isAdmin: safe.poster.is_admin,
+                  orgId: null,
+                },
+              }
+            : view;
+        });
       } else {
         // Discovery: bound the result to the viewer's tier-based archive window,
         // and age out spot cargoes past the admin-configured active window so the
@@ -201,23 +161,25 @@ export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<Carg
         const spotActiveFrom = new Date(Date.now() - spotDays * 86_400_000)
           .toISOString()
           .slice(0, 10);
-        rows = await getCargos(supabase, {
-          archiveCutoff: access.archiveCutoff ?? undefined,
-          spotActiveFrom,
+        const rows = await listMarketCargo(supabase, {
+          archiveCutoff: access.archiveCutoff,
+          activeFrom: spotActiveFrom,
         });
+        views = rows.map((row) => toCargoView(row));
       }
-      const counts = rows.length ? await cargoMatchCounts(supabase, rows) : {};
-      const posters = rows.length ? await loadPosters(supabase, "cargo", rows.map((r) => r.id)) : {};
-      const names = rows.length ? await loadPortNames() : null;
+      const names = views.length ? await loadPortNames() : null;
       // Configured = real environment: return live results even when empty so
       // members see a proper empty state, never mock listings.
       return {
-        views: rows.map((r) => withLegs({ ...toCargoView(r, counts[r.id] ?? 0), poster: posters[r.id] ?? null }, names)),
+        views: views.map((view) => withLegs(view, names)),
         source: "live",
         archiveLabel,
       };
     } catch (err) {
-      console.error("[portal] live cargo load failed, using sample:", err);
+      // A configured environment fails closed. Sample rows are design-preview
+      // data only and must never replace a governed market response.
+      console.error("[portal] governed cargo market load failed:", err);
+      return { views: [], source: "live" };
     }
   }
   return {
@@ -261,10 +223,40 @@ export async function loadVesselViews({ mine = false } = {}): Promise<Loaded<Ves
   if (isSupabaseConfigured()) {
     try {
       const supabase = await getSupabaseServerClient();
-      let rows: VesselAvailabilityWithVessel[];
       let archiveLabel: string | undefined;
+      let views: VesselView[];
       if (mine) {
-        rows = await getMyVesselAvailability(supabase);
+        const [rows, governed] = await Promise.all([
+          getMyVesselAvailability(supabase),
+          listMarketVessels(supabase).catch(() => [] as MarketVesselRow[]),
+        ]);
+        const byOwnedId = new Map(
+          governed
+            .filter((row) => row.owned_listing_id)
+            .map((row) => [row.owned_listing_id!, row]),
+        );
+        views = rows.map((row) => {
+          const safe = byOwnedId.get(row.id);
+          const view = vesselFromAvailability(row, safe?.match_count ?? 0, {
+            listingKey: safe?.listing_key ?? null,
+            ownedListingId: row.id,
+            isOwned: true,
+            canManage: true,
+            listingKeyExpiresAt: safe?.expires_at ?? null,
+          });
+          return safe?.poster
+            ? {
+                ...view,
+                poster: {
+                  name: safe.poster.name,
+                  company: safe.poster.company,
+                  kind: safe.poster.kind,
+                  isAdmin: safe.poster.is_admin,
+                  orgId: null,
+                },
+              }
+            : view;
+        });
       } else {
         const access = await loadArchiveAccess(supabase);
         archiveLabel = access.archiveLabel;
@@ -272,20 +264,20 @@ export async function loadVesselViews({ mine = false } = {}): Promise<Loaded<Ves
         const vesselActiveFrom = new Date(Date.now() - vesselDays * 86_400_000)
           .toISOString()
           .slice(0, 10);
-        rows = await getOpenVesselAvailability(supabase, {
-          archiveCutoff: access.archiveCutoff ?? undefined,
-          vesselActiveFrom,
+        const rows = await listMarketVessels(supabase, {
+          archiveCutoff: access.archiveCutoff,
+          activeFrom: vesselActiveFrom,
         });
+        views = rows.map((row) => vesselFromAvailability(row));
       }
-      const counts = rows.length ? await availabilityMatchCounts(supabase, rows) : {};
-      const posters = rows.length ? await loadPosters(supabase, "vessel_availability", rows.map((r) => r.id)) : {};
       return {
-        views: rows.map((r) => ({ ...vesselFromAvailability(r, counts[r.id] ?? 0), poster: posters[r.id] ?? null })),
+        views,
         source: "live",
         archiveLabel,
       };
     } catch (err) {
-      console.error("[portal] live vessel load failed, using sample:", err);
+      console.error("[portal] governed vessel market load failed:", err);
+      return { views: [], source: "live" };
     }
   }
   return {
@@ -335,33 +327,29 @@ export async function loadMyVesselsList(): Promise<VesselOpt[]> {
       const supabase = await getSupabaseServerClient();
       // Prod has no v_my_vessels: a user's fleet = distinct vessels behind the
       // availability positions they own (listing_ownership).
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: own } = await supabase
-          .from("listing_ownership")
-          .select("listing_id")
-          .eq("owner_user_id", user.id)
-          .eq("listing_type", "vessel_availability")
-          .eq("is_current", true)
-          .eq("role", "primary");
-        const ids = (own ?? []).map((o: { listing_id: string }) => o.listing_id);
-        if (ids.length) {
-          const { data } = await supabase
-            .from("vessel_availability")
-            .select("vessel:vessels ( id, vessel_name, imo_number )")
-            .in("id", ids);
-          type VJoin = { id: string; vessel_name: string; imo_number: string | null };
-          const seen = new Set<string>();
-          const out: VesselOpt[] = [];
-          for (const row of (data ?? []) as { vessel: VJoin | VJoin[] | null }[]) {
-            const v = Array.isArray(row.vessel) ? row.vessel[0] : row.vessel;
-            if (v && !seen.has(v.id)) {
-              seen.add(v.id);
-              out.push({ id: v.id, name: stripVesselNamePrefix(v.vessel_name), imo: v.imo_number ?? "—" });
-            }
+      const { data: own } = await supabase
+        .from("listing_ownership")
+        .select("listing_id")
+        .eq("listing_type", "vessel_availability")
+        .eq("is_current", true)
+        .eq("role", "primary");
+      const ids = (own ?? []).map((o: { listing_id: string }) => o.listing_id);
+      if (ids.length) {
+        const { data } = await supabase
+          .from("vessel_availability")
+          .select("vessel:vessels ( id, vessel_name, imo_number )")
+          .in("id", ids);
+        type VJoin = { id: string; vessel_name: string; imo_number: string | null };
+        const seen = new Set<string>();
+        const out: VesselOpt[] = [];
+        for (const row of (data ?? []) as { vessel: VJoin | VJoin[] | null }[]) {
+          const v = Array.isArray(row.vessel) ? row.vessel[0] : row.vessel;
+          if (v && !seen.has(v.id)) {
+            seen.add(v.id);
+            out.push({ id: v.id, name: stripVesselNamePrefix(v.vessel_name), imo: v.imo_number ?? "—" });
           }
-          if (out.length) return out;
         }
+        if (out.length) return out;
       }
     } catch (err) {
       console.error("[portal] my vessels list load failed:", err);

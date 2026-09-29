@@ -130,7 +130,7 @@ export interface VesselRegistryHit {
 }
 
 const VESSEL_REGISTRY_COLUMNS =
-  "id, imo_number, vessel_name, vessel_type, dwt_grain, build_year, flag, gross_tonnage, max_loa_m, beam_m, max_draft_m, class_society, is_verified, vessel_config, num_holds, num_hatches, box_shaped, hatch_type, strengthened_heavy, holds_may_be_empty, log_fitted, is_geared, crane_count, crane_swl_mt, registered_owner, parent_group, technical_operator, disponent_owner, source_tag";
+  "id, imo_number, vessel_name, vessel_type, dwt_grain, build_year, flag, gross_tonnage, max_loa_m, beam_m, max_draft_m, class_society, is_verified, vessel_config, num_holds, num_hatches, box_shaped, hatch_type, strengthened_heavy, holds_may_be_empty, log_fitted, is_geared, crane_count, crane_swl_mt, source_tag";
 
 export async function getVesselRegistryById(supabase: SupabaseClient, vesselId: string): Promise<VesselRegistryHit | null> {
   const { data, error } = await supabase

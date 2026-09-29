@@ -28,8 +28,8 @@ export function VesselCard({
   masked?: boolean;
   /** live cargoes this vessel can match against — enables the matches popup on the badge */
   matchPool?: CargoView[];
-  /** called with the matched cargo's id when the user picks one in the popup */
-  onFocusMatch?: (cargoId: string) => void;
+  /** Called with the matched cargo's actor-bound board key. */
+  onFocusMatch?: (cargoKey: string) => void;
 }) {
   const v = data;
   const [matchesOpen, setMatchesOpen] = React.useState(false);
@@ -110,7 +110,7 @@ export function VesselCard({
         </div>
       )}
 
-      <PosterLine poster={v.poster} />
+      <PosterLine poster={v.poster} brokered={v.identityMasked} />
 
       <div className="row" style={{ paddingTop: 8, borderTop: "var(--bd)" }}>
         <span className="mono" style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-gray-500)" }}>{imo}</span>
@@ -125,9 +125,11 @@ export function VesselCard({
             <span className="asb-match" title={masked ? "Matches are a Subscriber feature" : v.matches === 0 ? "No matching cargoes on the market right now" : undefined}>{v.matches} matches</span>
           )}
           <Link
-            href={`/dashboard/fixture-room/new?vessel=${encodeURIComponent(v.id)}`}
+            href={v.canManage && v.ownedListingId
+              ? `/dashboard/fixture-room/new?vessel=${encodeURIComponent(v.ownedListingId)}`
+              : "/dashboard/fixture-room/new"}
             style={{ fontSize: "var(--fs-body-sm)", color: "var(--asb-blue)", textDecoration: "none" }}
-            title="Start a Fixture Room from this vessel position"
+            title={v.canManage ? "Start a Fixture Room from this vessel position" : "Open the Fixture Room match builder"}
             onClick={(e) => e.stopPropagation()}
           >
             Fixture →

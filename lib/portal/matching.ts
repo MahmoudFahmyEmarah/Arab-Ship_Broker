@@ -4,7 +4,7 @@
 // matches" on its card while the map highlights 4 vessels).
 //
 // Authoritative counts still come from the DB match RPCs
-// (get_matches_for_cargo / get_matches_for_availability) — this module mirrors
+// (the governed market matcher) — this module mirrors
 // the same hard gates client-side for instant surfaces (map pairing, top
 // matches) operating on already-loaded views.
 import { CargoView, VesselView } from "./types";
@@ -19,7 +19,7 @@ export function cargoQtyMax(c: CargoView): number {
 }
 
 // Client-side fallback gates — mirror the canonical DB funnel
-// (get_matches_for_availability / get_matches_for_cargo, latest = the DG-block
+// (governed market matcher, latest = the DG-block
 // refactor) as closely as the loaded view fields allow. The AUTHORITATIVE
 // eligibility on the map comes from the DB RPC on anchor; this is only used in
 // sample/offline mode and to rank Top Matches. Stages mirrored: 3 geography,

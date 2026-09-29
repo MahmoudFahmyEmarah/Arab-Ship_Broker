@@ -7,7 +7,7 @@ import type { RouteLeg } from "./route-legs";
 export type CargoScope = "in" | "partial" | "out" | "fixed";
 
 // Who put the listing on the market — always a platform account, resolved
-// server-side (get_listing_posters): the member who owns it, else the admin
+// server-side governed market payload: the member who owns it, else the admin
 // who synced it, else the platform itself. Never the circular's sender.
 // kind: individual = member with no company seat; company = the company's
 // admin seat (or the platform); employee = a member seat.
@@ -16,10 +16,21 @@ export interface PosterView {
   company: string | null;
   kind: "individual" | "company" | "employee";
   isAdmin: boolean;
-  orgId: string | null;
+  /** Present only on private owner/admin surfaces; governed market payloads omit it. */
+  orgId?: string | null;
 }
 
-export interface CargoView {
+export interface GovernedListingAccess {
+  /** Actor-bound market handle. It is never a database listing/vessel id. */
+  listingKey?: string | null;
+  /** Raw listing id, returned only for an exact owner/admin management path. */
+  ownedListingId?: string | null;
+  isOwned?: boolean;
+  canManage?: boolean;
+  listingKeyExpiresAt?: string | null;
+}
+
+export interface CargoView extends GovernedListingAccess {
   id: string;
   refId: string;
   cargo: string;
@@ -85,8 +96,8 @@ export interface CargoView {
 
 export type VesselStatusView = "open" | "review" | "fixed";
 
-// Ownership card data — fetched on panel open from the firewalled
-// v_vessel_detail. `entitled` is false for non-owner market viewers, in which
+// Ownership card data — fetched on panel open from the governed detail RPC.
+// `entitled` is false for non-owner market viewers, in which
 // case every field is null and the card shows the brokered/masked state.
 export interface VesselOwnershipView {
   entitled: boolean;
@@ -100,7 +111,7 @@ export interface VesselOwnershipView {
   managerDesk: string | null;
 }
 
-export interface VesselView {
+export interface VesselView extends GovernedListingAccess {
   id: string;
   name: string;
   imo: string;
@@ -131,7 +142,10 @@ export interface VesselView {
     lsmgoPort: number | string;
   };
   // Detail-panel extras (optional; "—" when the source row has no value)
-  vesselId?: string; // the vessels.id — keys the firewalled v_vessel_detail lookup
+  /** Raw vessels.id. Never present on an unowned market row. */
+  vesselId?: string;
+  /** True when the governed API intentionally masks a TBN hull identity. */
+  identityMasked?: boolean;
   gt?: number | null;    // registered Gross Tonnage (real; estimator falls back to DWT×0.54)
   scnrt?: number | null; // Suez Canal Net Registered Tonnage (from the SC certificate)
   loaM?: number | null;  // LOA in metres (numeric, for calculators)

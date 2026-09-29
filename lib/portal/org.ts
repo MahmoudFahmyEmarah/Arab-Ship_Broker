@@ -67,8 +67,8 @@ const OWNER_IDS = ["orientseas", "abkshipping", "denizid"];
 const MANAGER_IDS = ["thalatta", "suezship"];
 /**
  * @deprecated SUPERSEDED — the vessel Ownership card now reads the real
- * owner_org_id / manager_org_id link via the firewalled v_vessel_detail
- * (migration …000870 + fetchVesselOwnership). Kept only for reference.
+ * owner/manager link through the governed listing-detail RPC. Kept only for
+ * reference while the prototype organisation directory is retired.
  * DEMO: deterministic vessel → registry owner + ship manager.
  */
 export function orgForVessel(key: string): { owner: Org; manager: Org } {

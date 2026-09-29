@@ -58,8 +58,8 @@ export function CargoCard({
   limited?: boolean;
   /** open tonnage this cargo can match against — enables the matches popup on the badge */
   matchPool?: VesselView[];
-  /** called with the matched vessel's id when the user picks one in the popup */
-  onFocusMatch?: (vesselId: string) => void;
+  /** Called with the matched vessel's actor-bound board key. */
+  onFocusMatch?: (vesselKey: string) => void;
 }) {
   const c = data;
   const [matchesOpen, setMatchesOpen] = React.useState(false);
@@ -227,10 +227,12 @@ export function CargoCard({
           </span>
         </div>
         <Link
-          href={`/dashboard/fixture-room/new?cargo=${encodeURIComponent(c.id)}`}
+          href={c.canManage && c.ownedListingId
+            ? `/dashboard/fixture-room/new?cargo=${encodeURIComponent(c.ownedListingId)}`
+            : "/dashboard/fixture-room/new"}
           className="cc-foot-col"
           style={{ color: "var(--asb-blue)", textDecoration: "none", fontSize: 11, fontWeight: 600, alignSelf: "stretch", display: "flex", alignItems: "center" }}
-          title="Start a Fixture Room from this cargo"
+          title={c.canManage ? "Start a Fixture Room from this cargo" : "Open the Fixture Room match builder"}
           onClick={(e) => e.stopPropagation()}
         >
           Fixture →

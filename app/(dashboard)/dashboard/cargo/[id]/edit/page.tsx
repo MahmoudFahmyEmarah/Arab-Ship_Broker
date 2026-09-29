@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 import { CargoForm } from "@/components/cargo/CargoForm";
 import { CargoListingRow } from "@/lib/schemas/cargo";
+import { canManageMarketListing } from "@/sdk/app/market";
 
 export default async function EditCargoPage({
   params,
@@ -24,16 +25,10 @@ export default async function EditCargoPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: ownership } = await supabase
-    .from("listing_ownership")
-    .select("role")
-    .eq("listing_id", id)
-    .eq("owner_user_id", user.id)
-    .eq("listing_type", "cargo")
-    .eq("is_current", true)
-    .single();
-
-  if (!ownership) notFound();
+  const canManage = await canManageMarketListing(supabase, "cargo", id).catch(
+    () => false,
+  );
+  if (!canManage) notFound();
 
   const { data: cargo, error } = await supabase
     .from("cargo_listings")

@@ -1,6 +1,11 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { PortOption, CargoListingRow } from "@/lib/schemas/cargo";
-import { VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
+import { PortOption } from "@/lib/schemas/cargo";
+import {
+  listMarketCargo,
+  listMarketVessels,
+  type MarketCargoRow,
+  type MarketVesselRow,
+} from "@/sdk/app/market";
 
 export async function searchPorts(
   supabase: SupabaseClient,
@@ -36,8 +41,8 @@ export async function getPortByLocode(
 
 export type PortActivity = {
   port: PortOption;
-  cargos: CargoListingRow[];
-  vessels: VesselAvailabilityWithVessel[];
+  cargos: MarketCargoRow[];
+  vessels: MarketVesselRow[];
 };
 
 export async function getPortActivity(
@@ -47,41 +52,21 @@ export async function getPortActivity(
   const port = await getPortByLocode(supabase, locode);
   if (!port) return null;
 
-  const { data: cargoData, error: cargoError } = await supabase
-    .from("cargo_listings")
-    .select("*")
-    .or(`load_port_locode.eq.${locode},disch_port_locode.eq.${locode}`)
-    .in("status", ["IN", "PARTIAL"])
-    .eq("review_status", "APPROVED")
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  if (cargoError) throw cargoError;
-
-  const { data: vesselData, error: vesselError } = await supabase
-    .from("vessel_availability")
-    .select(
-      `*,
-       vessel:vessels (
-         vessel_name, imo_number, vessel_type, dwt_grain, dwt_bale,
-         grain_cbm, bale_cbm,
-         build_year, flag, scope, risk_level,
-         is_sanctioned, is_geared, grain_certified, dg_certified,
-         max_draft_m, preferred_zones
-       )`,
-    )
-    .eq("open_port_locode", locode)
-    .eq("status", "OPEN")
-    .eq("review_status", "APPROVED")
-    .order("open_date", { ascending: true, nullsFirst: false })
-    .limit(50);
-
-  if (vesselError) throw vesselError;
+  const [cargoData, vesselData] = await Promise.all([
+    listMarketCargo(supabase),
+    listMarketVessels(supabase),
+  ]);
 
   return {
     port,
-    cargos: (cargoData ?? []) as CargoListingRow[],
-    vessels: (vesselData ?? []) as VesselAvailabilityWithVessel[],
+    cargos: cargoData
+      .filter((cargo) =>
+        cargo.load_port_locode === locode || cargo.disch_port_locode === locode,
+      )
+      .slice(0, 50),
+    vessels: vesselData
+      .filter((position) => position.open_port_locode === locode)
+      .slice(0, 50),
   };
 }
 

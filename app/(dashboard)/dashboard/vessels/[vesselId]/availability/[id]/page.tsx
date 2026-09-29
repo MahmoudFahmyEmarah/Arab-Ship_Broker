@@ -16,9 +16,14 @@ import {
 
 import {
   getAvailabilityById,
-  getMatchesForAvailability,
 } from "@/sdk/app/vessels";
-import { VesselMatchResult } from "@/lib/schemas/vessel";
+import {
+  canManageMarketListing,
+  isMarketCargoRow,
+  listMarketMatches,
+  listMarketVessels,
+  type MarketCargoRow,
+} from "@/sdk/app/market";
 
 interface PageProps {
   params: Promise<{ vesselId: string; id: string }>;
@@ -39,6 +44,13 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  const canManage = await canManageMarketListing(
+    supabase,
+    "vessel_availability",
+    id,
+  ).catch(() => false);
+  if (!canManage) notFound();
+
   const availability = await getAvailabilityById(supabase, id);
   if (!availability) notFound();
   if (availability.vessel_id !== vesselId) {
@@ -46,13 +58,17 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
   }
 
   // Fetch matches only for approved/open records
-  let matches: VesselMatchResult[] = [];
+  let matches: MarketCargoRow[] = [];
   if (
     availability.review_status === "APPROVED" &&
     availability.status === "OPEN"
   ) {
     try {
-      matches = await getMatchesForAvailability(supabase, id);
+      const marketRows = await listMarketVessels(supabase);
+      const key = marketRows.find((row) => row.owned_listing_id === id)?.listing_key;
+      if (key) {
+        matches = (await listMarketMatches(supabase, key)).filter(isMarketCargoRow);
+      }
     } catch {
       // Non-fatal — show empty matches
     }
@@ -308,7 +324,7 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
             ) : (
               <div className="space-y-3">
                 {matches.map((match) => (
-                  <MatchCard key={match.cargo_id} match={match} />
+                  <MatchCard key={match.listing_key} match={match} />
                 ))}
               </div>
             )}
@@ -319,7 +335,11 @@ export default async function AvailabilityDetailPage({ params }: PageProps) {
   );
 }
 
-function MatchCard({ match }: { match: VesselMatchResult }) {
+function MatchCard({ match }: { match: MarketCargoRow }) {
+  const fit = (match.fit ?? {}) as {
+    rate_aligned?: boolean;
+    dwt_delta?: number | null;
+  };
   return (
     <div className="dp-card dp-clickable p-5">
       <div className="flex items-start justify-between gap-4 mb-3">
@@ -328,7 +348,7 @@ function MatchCard({ match }: { match: VesselMatchResult }) {
             <p className="text-sm font-bold text-asb-navy">
               {match.commodity_name}
             </p>
-            {match.is_rate_aligned && (
+            {fit.rate_aligned && (
               <span className="text-xs font-semibold bg-green-50 text-green-700 px-2 py-0.5 rounded-md border border-green-200">
                 Rate aligned
               </span>
@@ -349,7 +369,7 @@ function MatchCard({ match }: { match: VesselMatchResult }) {
             {match.qty_max_mt.toLocaleString()} MT
           </p>
           <p className="text-xs text-asb-gray-400">
-            DWT delta: {match.dwt_delta.toLocaleString()} MT
+            DWT delta: {fit.dwt_delta != null ? `${fit.dwt_delta.toLocaleString()} MT` : "—"}
           </p>
         </div>
       </div>

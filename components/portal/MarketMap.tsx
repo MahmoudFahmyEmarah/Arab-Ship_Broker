@@ -32,10 +32,13 @@ import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
 import { flagCode } from "@/lib/portal/flags";
 import "flag-icons/css/flag-icons.min.css";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { functionalStore } from "@/lib/consent";
 import { logEvent } from "@/lib/portal/events";
-import { getMatchesForCargo } from "@/sdk/app/cargos";
-import { getMatchesForAvailability } from "@/sdk/app/vessels";
+import {
+  isMarketCargoRow,
+  isMarketVesselRow,
+  listMarketMatches,
+  marketBoardKey,
+} from "@/sdk/app/market";
 
 // Geographic bearing a→b (deg clockwise from north) — for the vector arrowhead.
 function bearing(a: [number, number], b: [number, number]): number {
@@ -654,9 +657,8 @@ export default function MarketMap({
   const anchorVessel = pairAnchor?.kind === "vessel" ? vessels.find((v) => v.id === pairAnchor.id) ?? null : null;
 
   // AUTHORITATIVE eligibility (09 §9): on anchor, fetch the match set from the
-  // SAME database RPC the count badges use (get_matches_for_cargo /
-  // get_matches_for_availability). dbEligible holds the opposite-side ids
-  // (vessel ids when a cargo is anchored, cargo ids when a vessel is anchored).
+  // SAME governed opaque-key RPC the count badges use. dbEligible holds the
+  // opposite-side market handles, never database listing/vessel ids.
   // If the DB is unreachable (sample/offline), we fall back to the client gates
   // in lib/portal/matching, which mirror the same funnel.
   const [dbEligible, setDbEligible] = React.useState<Set<string> | null>(null);
@@ -668,18 +670,30 @@ export default function MarketMap({
       try {
         const supabase = getSupabaseBrowserClient();
         if (pairAnchor.kind === "cargo") {
-          const res = await getMatchesForCargo(supabase, pairAnchor.id);
-          if (!cancelled) setDbEligible(new Set(res.map((r) => r.availability_id)));
+          const source = cargos.find((cargo) => cargo.id === pairAnchor.id);
+          if (!source?.listingKey) throw new Error("No governed cargo key");
+          const res = await listMarketMatches(supabase, source.listingKey);
+          if (!cancelled) {
+            setDbEligible(
+              new Set(res.filter(isMarketVesselRow).map(marketBoardKey)),
+            );
+          }
         } else {
-          const res = await getMatchesForAvailability(supabase, pairAnchor.id);
-          if (!cancelled) setDbEligible(new Set(res.map((r) => r.cargo_id)));
+          const source = vessels.find((vessel) => vessel.id === pairAnchor.id);
+          if (!source?.listingKey) throw new Error("No governed vessel key");
+          const res = await listMarketMatches(supabase, source.listingKey);
+          if (!cancelled) {
+            setDbEligible(
+              new Set(res.filter(isMarketCargoRow).map(marketBoardKey)),
+            );
+          }
         }
       } catch {
         if (!cancelled) setDbEligible(null); // -> client fallback below
       }
     })();
     return () => { cancelled = true; };
-  }, [pairAnchor]);
+  }, [pairAnchor, cargos, vessels]);
 
   const eligibleVesselIds = React.useMemo(
     () => (anchorCargo ? (dbEligible ?? new Set(visVessels.filter((v) => pairEligible(anchorCargo, v)).map((v) => v.id))) : null),
@@ -829,7 +843,6 @@ export default function MarketMap({
     });
     ro.observe(hostRef.current);
     roRef.current = ro;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(
@@ -1333,11 +1346,10 @@ export default function MarketMap({
         interactive: false,
       }).addTo(lyr);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visCargos, flowsOn, ready]);
 
-  // Deep links (P3): the open card writes #/cargo/{ref} · #/vessel/{id}, and
-  // an arriving hash opens that listing once the data is on board.
+  // Deep links (P3): the open card writes only actor-bound board keys. Cargo
+  // references and database ids must never become public navigation handles.
   // The inbound hash must be captured at FIRST render — the popup-sync effect
   // below would otherwise clear it (popup starts null) before it can be read.
   const initialHash = React.useRef<string>(typeof window !== "undefined" ? window.location.hash : "");
@@ -1349,29 +1361,48 @@ export default function MarketMap({
           history.replaceState(null, "", window.location.pathname + window.location.search);
         return;
       }
-      const tag = popup.kind === "cargo"
-        ? `#/cargo/${encodeURIComponent(popup.data.refId)}`
-        : `#/vessel/${popup.data.id}`;
-      history.replaceState(null, "", tag);
+      const listingKey = popup.data.listingKey;
+      if (!listingKey) {
+        if (window.location.hash.startsWith("#/"))
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+        return;
+      }
+      const url = new URL(window.location.href);
+      // `?listing=` is the browse-page hand-off. Once the map has opened the
+      // listing, keep one canonical correlation mechanism so a reload cannot
+      // preselect from the query and then toggle the same row off via the hash.
+      url.searchParams.delete("listing");
+      url.hash = popup.kind === "cargo"
+        ? `/cargo/${encodeURIComponent(listingKey)}`
+        : `/vessel/${encodeURIComponent(listingKey)}`;
+      history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     } catch {}
   }, [popup]);
   React.useEffect(() => {
     if (hashHandled.current || !ready) return;
     const m = /^#\/(cargo|vessel)\/(.+)$/.exec(initialHash.current);
     if (!m) { hashHandled.current = true; return; }
+    let listingKey: string;
+    try {
+      listingKey = decodeURIComponent(m[2]);
+    } catch {
+      hashHandled.current = true;
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+      return;
+    }
     if (m[1] === "cargo") {
-      const c = cargos.find((x) => x.refId === decodeURIComponent(m[2]));
+      const c = cargos.find((x) => x.listingKey === listingKey);
       if (!c) return; // data may still be loading — retry on next change
       hashHandled.current = true;
       const g = geoFor(routeLegs(c).polCode);
       const ll = g ? anchoredLL(g, "land", (c.id || "").charCodeAt(0) || 0, (c.id || "").charCodeAt(1) || 0) : null;
       setPopup({ kind: "cargo", data: c, ll: ll ? L.latLng(ll[0], ll[1]) : L.latLng(24, 40) });
-      onSelectCargo?.(c);
+      if (focusedCargoId !== c.id) onSelectCargo?.(c);
     } else {
-      const v = vessels.find((x) => x.id === m[2]);
+      const v = vessels.find((x) => x.listingKey === listingKey);
       if (!v) return;
       hashHandled.current = true;
-      onSelectVessel?.(v); // focus effect deep-zooms and opens the card
+      if (focusedVesselId !== v.id) onSelectVessel?.(v); // focus effect deep-zooms and opens the card
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, cargos, vessels]);
@@ -1528,9 +1559,17 @@ export default function MarketMap({
               if (voyLocked) { toast.info("Voy OPEX is a Subscriber (T3+) tool."); return; }
               setVoyOpen(true);
             }}
-            onCopyLink={() => {
+            onCopyLink={async () => {
               try {
-                navigator.clipboard.writeText(window.location.href);
+                const listingKey = popup.data.listingKey;
+                if (!listingKey) {
+                  toast.error("This listing does not have a shareable market key.");
+                  return;
+                }
+                const url = new URL(window.location.href);
+                url.searchParams.delete("listing");
+                url.hash = `/${popup.kind}/${encodeURIComponent(listingKey)}`;
+                await navigator.clipboard.writeText(url.toString());
                 toast.success("Link copied — opens the map centred on this listing.");
               } catch { toast.error("Could not copy the link."); }
             }}

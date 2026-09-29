@@ -2,7 +2,6 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import {
   CargoFormValues,
   CargoListingRow,
-  CargoListingFilters,
   sfToFt3Lt,
 } from "@/lib/schemas/cargo";
 
@@ -184,68 +183,6 @@ export async function updateCargo(
   return data as CargoListingRow;
 }
 
-export async function getCargos(
-  supabase: SupabaseClient,
-  filters: CargoListingFilters = {},
-): Promise<CargoListingRow[]> {
-  let qb = supabase
-    .from("cargo_listings")
-    .select("*")
-    .in("status", ["IN", "PARTIAL"])
-    .eq("review_status", "APPROVED");
-
-  if (filters.zone) qb = qb.eq("load_zone", filters.zone);
-  if (filters.cargo_type) qb = qb.eq("cargo_type", filters.cargo_type);
-  if (filters.is_dg_only) qb = qb.eq("is_dg_cargo", true);
-  if (filters.min_qty) qb = qb.gte("qty_max_mt", filters.min_qty);
-  if (filters.max_qty) qb = qb.lte("qty_min_mt", filters.max_qty);
-  if (filters.laycan_from)
-    qb = qb.or(`laycan_from.gte.${filters.laycan_from},is_spot.eq.true`);
-  if (filters.laycan_to)
-    qb = qb.or(`laycan_to.lte.${filters.laycan_to},is_spot.eq.true`);
-
-  if (filters.archiveCutoff) {
-    qb = qb.or(
-      [
-        `is_spot.eq.true`,
-        `laycan_from.gte.${filters.archiveCutoff}`,
-        `and(laycan_from.is.null,created_at.gte.${filters.archiveCutoff})`,
-      ].join(","),
-    );
-  }
-
-  // Age out stale spot cargoes: a spot listing is only shown while it is within
-  // the active window (posted on/after spotActiveFrom). Non-spot rows (is_spot
-  // false or null) pass this clause unconditionally.
-  if (filters.spotActiveFrom) {
-    qb = qb.or(
-      [
-        `is_spot.is.null`,
-        `is_spot.eq.false`,
-        `created_at.gte.${filters.spotActiveFrom}`,
-      ].join(","),
-    );
-  }
-
-  switch (filters.sort) {
-    case "qty_asc":
-      qb = qb.order("qty_max_mt", { ascending: true });
-      break;
-    case "qty_desc":
-      qb = qb.order("qty_max_mt", { ascending: false });
-      break;
-    case "laycan_asc":
-      qb = qb.order("laycan_from", { ascending: true, nullsFirst: false });
-      break;
-    default:
-      qb = qb.order("created_at", { ascending: false });
-  }
-
-  const { data, error } = await qb;
-  if (error) throw error;
-  return (data ?? []) as CargoListingRow[];
-}
-
 export async function getCargoById(
   supabase: SupabaseClient,
   id: string,
@@ -262,15 +199,9 @@ export async function getCargoById(
 export async function getMyCargoListings(
   supabase: SupabaseClient,
 ): Promise<CargoListingRow[]> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
-
   const { data: ownership, error: ownershipError } = await supabase
     .from("listing_ownership")
     .select("listing_id")
-    .eq("owner_user_id", user.id)
     .eq("listing_type", "cargo")
     .eq("is_current", true)
     .eq("role", "primary");
@@ -304,41 +235,6 @@ export async function getCargoSafetyAnswers(
       .filter((row) => row.answer_value !== null)
       .map((row) => [row.question_key, row.answer_value as string]),
   );
-}
-
-export type CargoMatchResult = {
-  availability_id: string;
-  vessel_ref: string | null;
-  vessel_id: string;
-  vessel_name: string;
-  vessel_type: string;
-  dwt_grain: number | null;
-  build_year: number | null;
-  flag: string | null;
-  scope: string;
-  risk_level: string;
-  is_geared: boolean | null;
-  grain_certified: boolean | null;
-  dg_certified: boolean | null;
-  open_port_name: string;
-  open_zone: string;
-  open_date: string | null;
-  open_date_range_days: number;
-  accepts_part_cargo: boolean;
-  freight_idea_usd_mt: number | null;
-  is_rate_aligned: boolean;
-  dwt_delta: number;
-};
-
-export async function getMatchesForCargo(
-  supabase: SupabaseClient,
-  cargoId: string,
-): Promise<CargoMatchResult[]> {
-  const { data, error } = await supabase.rpc("get_matches_for_cargo", {
-    p_cargo_id: cargoId,
-  });
-  if (error) throw error;
-  return (data ?? []) as CargoMatchResult[];
 }
 
 /**

@@ -3,10 +3,8 @@ import {
   VesselRow,
   VesselAvailabilityRow,
   VesselAvailabilityWithVessel,
-  VesselMatchResult,
   AvailabilityFormValues,
   VesselCreateValues,
-  MyVesselRow,
 } from "@/lib/schemas/vessel";
 
 const VESSEL_BROKER_FIELDS = [
@@ -32,9 +30,8 @@ const VESSEL_BROKER_FIELDS = [
   "is_sanctioned",
   "vessel_review_status",
   // Counterparty PII (owner_company, owner_country, manager_company, …) is
-  // intentionally NOT selected here — it is locked at the DB layer and only
-  // readable by the vessel's own owner (via v_vessel_detail) or admin.
-  "notes",
+  // intentionally NOT selected here. Governed market detail exposes it only
+  // to the exact owner/admin; the registry search never selects it.
 ].join(", ");
 
 export async function searchVessels(
@@ -168,10 +165,13 @@ export async function setAvailabilityStatus(
   id: string,
   status: "OPEN" | "ON SUBS" | "FIXED" | "INACTIVE",
 ): Promise<void> {
-  const { error } = await supabase
-    .from("vessel_availability")
-    .update({ status })
-    .eq("id", id);
+  const { error } = await supabase.rpc(
+    "set_market_vessel_availability_status",
+    {
+      p_availability_id: id,
+      p_status: status,
+    },
+  );
 
   if (error) throw error;
 }
@@ -179,15 +179,9 @@ export async function setAvailabilityStatus(
 export async function getMyVesselAvailability(
   supabase: SupabaseClient,
 ): Promise<VesselAvailabilityWithVessel[]> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
-
   const { data: ownership, error: ownershipError } = await supabase
     .from("listing_ownership")
     .select("listing_id")
-    .eq("owner_user_id", user.id)
     .eq("listing_type", "vessel_availability")
     .eq("is_current", true)
     .eq("role", "primary");
@@ -239,76 +233,6 @@ export async function getAvailabilityById(
 
   if (error) return null;
   return data as VesselAvailabilityWithVessel;
-}
-
-export async function getMatchesForAvailability(
-  supabase: SupabaseClient,
-  availabilityId: string,
-): Promise<VesselMatchResult[]> {
-  const { data, error } = await supabase.rpc("get_matches_for_availability", {
-    p_availability_id: availabilityId,
-  });
-
-  if (error) throw error;
-  return (data ?? []) as VesselMatchResult[];
-}
-
-export async function getOpenVesselAvailability(
-  supabase: SupabaseClient,
-  options: {
-    archiveCutoff?: string | null;
-    zone?: string | null;
-    limit?: number;
-    // ISO date; when set, vessels with no fixed open date must have been posted
-    // on/after this date to appear (mirrors get_public_stats()'s vessel window).
-    // Vessels that carry an open_date are unaffected by this clause.
-    vesselActiveFrom?: string | null;
-  } = {},
-): Promise<VesselAvailabilityWithVessel[]> {
-  let qb = supabase
-    .from("vessel_availability")
-    .select(
-      `*,
-       vessel:vessels (
-         vessel_name, imo_number, vessel_type, dwt_grain,
-         grain_cbm, bale_cbm,
-         build_year, flag, risk_level, is_sanctioned,
-         is_geared, grain_certified, dg_certified, max_draft_m,
-         preferred_zones
-       )`,
-    )
-    .eq("status", "OPEN")
-    .eq("review_status", "APPROVED");
-
-  if (options.zone) qb = qb.eq("open_zone", options.zone);
-
-  if (options.archiveCutoff) {
-    qb = qb.or(
-      [`open_date.is.null`, `open_date.gte.${options.archiveCutoff}`].join(
-        ",",
-      ),
-    );
-  }
-
-  // Age out stale open-ended vessels: one with no fixed open date shows only
-  // while within the active window (posted on/after vesselActiveFrom). Vessels
-  // that carry an open_date pass this clause unconditionally.
-  if (options.vesselActiveFrom) {
-    qb = qb.or(
-      [
-        `open_date.not.is.null`,
-        `created_at.gte.${options.vesselActiveFrom}`,
-      ].join(","),
-    );
-  }
-
-  qb = qb
-    .order("open_date", { ascending: true, nullsFirst: false })
-    .limit(options.limit ?? 200);
-
-  const { data, error } = await qb;
-  if (error) throw error;
-  return (data ?? []) as VesselAvailabilityWithVessel[];
 }
 
 export async function createVessel(
@@ -371,78 +295,4 @@ export async function createVessel(
 
   if (error) throw error;
   return { id: data as string };
-}
-
-export async function getMyVessels(
-  supabase: SupabaseClient,
-): Promise<MyVesselRow[]> {
-  const { data, error } = await supabase
-    .from("v_my_vessels")
-    .select("*")
-    .order("claimed_at", { ascending: false });
-
-  if (error) throw error;
-  return (data ?? []) as MyVesselRow[];
-}
-
-export async function getVesselWithClaimStatus(
-  supabase: SupabaseClient,
-  vesselId: string,
-): Promise<{ vessel: VesselRow | null; isClaimed: boolean }> {
-  const [vesselResult, claimResult] = await Promise.all([
-    // Masked view: counterparty PII is NULL unless viewer is admin/owner.
-    supabase
-      .from("v_vessel_detail")
-      .select(
-        [
-          "id",
-          "vessel_name",
-          "imo_number",
-          "vessel_type",
-          "dwt_grain",
-          "dwt_bale",
-          "grain_cbm",
-          "bale_cbm",
-          "build_year",
-          "flag",
-          "flag_category",
-          "scope",
-          "risk_level",
-          "risk_notes",
-          "preferred_zones",
-          "is_geared",
-          "crane_count",
-          "crane_swl_mt",
-          "grain_certified",
-          "dg_certified",
-          "max_loa_m",
-          "max_draft_m",
-          "pi_club",
-          "is_sanctioned",
-          "owner_company",
-          "owner_country",
-          "manager_company",
-          "manager_country",
-          "notes",
-          "created_at",
-          "updated_at",
-        ].join(", "),
-      )
-      .eq("id", vesselId)
-      .eq("is_sanctioned", false)
-      .single(),
-
-    supabase
-      .from("vessel_claims")
-      .select("id")
-      .eq("vessel_id", vesselId)
-      .maybeSingle(),
-  ]);
-
-  return {
-    vessel: vesselResult.error
-      ? null
-      : (vesselResult.data as unknown as VesselRow),
-    isClaimed: !!claimResult.data,
-  };
 }

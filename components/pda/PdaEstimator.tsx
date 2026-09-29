@@ -74,7 +74,15 @@ export function PdaEstimator({ ports, coverage, terminals, vessels }: Props) {
       terminalId: terminalId || null,
       callDate,
       vessel: {
-        vesselId: vessel && isUuid(vessel.vesselId ?? vessel.id) ? (vessel.vesselId ?? vessel.id) : null,
+        // A market listing handle is deliberately never accepted as a vessel
+        // foreign key. Only an exact owner/admin row carries `vesselId`.
+        vesselId:
+          vessel?.isOwned === true &&
+          vessel.canManage === true &&
+          vessel.vesselId &&
+          isUuid(vessel.vesselId)
+            ? vessel.vesselId
+            : null,
         vesselName: vessel?.name ?? null,
         imo: vessel?.imo ?? null,
         vesselType: vessel?.type ?? null,

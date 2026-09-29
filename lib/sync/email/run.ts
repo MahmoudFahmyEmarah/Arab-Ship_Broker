@@ -197,7 +197,7 @@ async function stageAndFinish(
   const source = new EmailLlmSource(sheets);
   const label = `Email sync · ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
   // startedBy = the admin running the sync — credited as the poster on the
-  // market cards (get_listing_posters), never the circular's sender.
+  // governed market cards, never the circular's sender.
   const result = await stageBatch({ supabase, source, fileName, label, startedBy });
   step(emit, "stage", "done", `${result.totals.new} new · ${result.totals.updated} updated`);
   step(emit, "gate", "done", result.gate ? `${result.gate.blocked} blocked · ${result.gate.warned} warned · ${result.gate.rules} rules` : "gate did not run");

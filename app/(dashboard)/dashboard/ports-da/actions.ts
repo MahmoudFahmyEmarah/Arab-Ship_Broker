@@ -78,8 +78,16 @@ function numberFromDisplay(value: string): number | null {
 }
 
 function authoritativeVesselFacts(vessel: VesselView): PdaRequest["vessel"] {
+  const vesselId =
+    vessel.isOwned === true &&
+    vessel.canManage === true &&
+    vessel.ownedListingId &&
+    vessel.vesselId &&
+    UUID.test(vessel.vesselId)
+      ? vessel.vesselId
+      : null;
   return {
-    vesselId: vessel.vesselId && UUID.test(vessel.vesselId) ? vessel.vesselId : null,
+    vesselId,
     vesselName: vessel.name,
     imo: vessel.imo,
     vesselType: vessel.type,
@@ -87,6 +95,34 @@ function authoritativeVesselFacts(vessel: VesselView): PdaRequest["vessel"] {
     scnrt: vessel.scnrt ?? null,
     dwt: numberFromDisplay(vessel.dwt),
     loaM: vessel.loaM ?? null,
+  };
+}
+
+async function canonicalStandaloneRequest(request: PdaRequest): Promise<PdaRequest> {
+  const requestedVesselId = request.vessel.vesselId;
+  if (!requestedVesselId) return request;
+
+  const vessels = await loadVesselViews({ mine: true });
+  if (vessels.source !== "live") {
+    throw new UserFacingActionError("Live vessel records could not be loaded");
+  }
+  const vessel = vessels.views.find(
+    (item) =>
+      item.isOwned === true &&
+      item.canManage === true &&
+      item.vesselId === requestedVesselId,
+  );
+  if (!vessel) {
+    throw new UserFacingActionError(
+      "The selected vessel is not available to this account",
+    );
+  }
+  return {
+    ...request,
+    vessel: {
+      ...request.vessel,
+      ...authoritativeVesselFacts(vessel),
+    },
   };
 }
 
@@ -144,9 +180,19 @@ async function requireRouteSelections(
   if (vessels.source !== "live" || cargos.source !== "live") {
     throw new UserFacingActionError("Live vessel or cargo records could not be loaded");
   }
-  const vessel = vessels.views.find((item) => item.id === selection.vesselAvailabilityId);
+  const vessel = vessels.views.find(
+    (item) =>
+      item.isOwned === true &&
+      item.canManage === true &&
+      item.ownedListingId === selection.vesselAvailabilityId,
+  );
   if (!vessel) throw new UserFacingActionError("The selected vessel is not available to this account");
-  const cargo = cargos.views.find((item) => item.id === selection.cargoId);
+  const cargo = cargos.views.find(
+    (item) =>
+      item.isOwned === true &&
+      item.canManage === true &&
+      item.ownedListingId === selection.cargoId,
+  );
   if (!cargo) throw new UserFacingActionError("The selected cargo is not available to this account");
   return { vessel, cargo };
 }
@@ -175,7 +221,9 @@ export async function previewPda(raw: PdaRequest): Promise<ActionResult<PdaCalcu
       return { ok: false, error: validationErrorMessage(parsed.error.issues, "Invalid PDA request") };
     }
     const { supabase, manualActorLabel } = await viewer();
-    const request = attributeManualLines(parsed.data as PdaRequest, manualActorLabel);
+    const request = await canonicalStandaloneRequest(
+      attributeManualLines(parsed.data as PdaRequest, manualActorLabel),
+    );
     const context = await getPdaCalculationContext(supabase, request);
     return { ok: true, data: calculatePda(request, context.tariffVersion ?? null) };
   } catch (error) {
@@ -190,7 +238,9 @@ export async function persistPda(raw: PdaRequest): Promise<ActionResult<{ estima
       return { ok: false, error: validationErrorMessage(parsed.error.issues, "Invalid PDA request") };
     }
     const { supabase, appUser, manualActorLabel, ownerOrgId } = await viewer();
-    const request = attributeManualLines(parsed.data as PdaRequest, manualActorLabel);
+    const request = await canonicalStandaloneRequest(
+      attributeManualLines(parsed.data as PdaRequest, manualActorLabel),
+    );
     const context = await getPdaCalculationContext(supabase, request);
     const result = calculatePda(request, context.tariffVersion ?? null);
     const estimateId = await savePdaEstimate(getSupabaseAdminClient(), {
@@ -257,9 +307,9 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
         displayCurrency: input.displayCurrency,
         allocation: input.allocation,
         canonical: {
-          vesselAvailabilityId: vessel.id,
+          vesselAvailabilityId: vessel.ownedListingId!,
           vesselId: vessel.vesselId && UUID.test(vessel.vesselId) ? vessel.vesselId : null,
-          cargoId: cargo.id,
+          cargoId: cargo.ownedListingId!,
           quantityMt: input.selection.quantityMt,
           loadRequest,
           dischargeRequest,

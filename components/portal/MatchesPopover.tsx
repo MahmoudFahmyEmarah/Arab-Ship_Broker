@@ -5,8 +5,8 @@
 // arrow-keyed when there are several. Clicking a match focuses it on the map,
 // exactly like clicking its own row.
 //
-// Source of truth = the same RPCs the map pairing uses (get_matches_for_cargo
-// / get_matches_for_availability); details come from the board's own lists so
+// Source of truth = the governed opaque-key market match RPC. Details come
+// from the board's own safe lists so
 // what you read here is what the row shows. If the RPC is unavailable the
 // client-side eligibility gate (pairEligible) fills in, so the list never
 // silently stays empty.
@@ -16,8 +16,12 @@ import { toast } from "sonner";
 import type { CargoView, VesselView } from "@/lib/portal/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { logEvent } from "@/lib/portal/events";
-import { getMatchesForCargo } from "@/sdk/app/cargos";
-import { getMatchesForAvailability } from "@/sdk/app/vessels";
+import {
+  isMarketCargoRow,
+  isMarketVesselRow,
+  listMarketMatches,
+  marketBoardKey,
+} from "@/sdk/app/market";
 import { pairEligible, fitLabel, type FitBand } from "@/lib/portal/matching";
 import { formatLaycanRange, formatShortDate, formatQtyVol } from "@/lib/portal/format";
 import { flagCode } from "@/lib/portal/flags";
@@ -49,29 +53,34 @@ export function MatchesPopover({
 
   React.useEffect(() => {
     let x = false;
-    logEvent("match_popup", { target: source.view.id, meta: { kind: source.kind, count } });
+    logEvent("match_popup", {
+      target: source.view.listingKey ?? null,
+      meta: { kind: source.kind, count },
+    });
     (async () => {
       const sb = getSupabaseBrowserClient();
       let out: Item[] = [];
       try {
+        const listingKey = source.view.listingKey ?? null;
+        if (!listingKey) throw new Error("No governed market key for this listing");
+        const rows = await listMarketMatches(sb, listingKey);
         if (source.kind === "cargo") {
-          const rows = await getMatchesForCargo(sb, source.view.id);
           const vessels = pool as VesselView[];
-          out = rows.map((r) => {
-            const v = vessels.find((x) => x.id === r.availability_id) ?? null;
+          out = rows.filter(isMarketVesselRow).map((r) => {
+            const id = marketBoardKey(r);
+            const v = vessels.find((x) => x.id === id) ?? null;
             return {
-              kind: "vessel", id: r.availability_id, view: v,
-              fallback: v ? null : { name: r.vessel_name, dwt: r.dwt_grain, open: [r.open_port_name, r.open_zone].filter(Boolean).join(" · ") },
+              kind: "vessel", id, view: v,
+              fallback: v ? null : { name: r.vessel.vessel_name, dwt: r.vessel.dwt_grain, open: [r.open_port_name, r.open_zone].filter(Boolean).join(" · ") },
               fit: v ? fitLabel(source.view, v) : null,
             };
           });
         } else {
-          const rows = (await getMatchesForAvailability(sb, source.view.id)) as unknown as Record<string, unknown>[];
           const cargos = pool as CargoView[];
-          out = rows.map((r) => {
-            const id = String(r.cargo_id ?? r.listing_id ?? "");
+          out = rows.filter(isMarketCargoRow).map((r) => {
+            const id = marketBoardKey(r);
             const c = cargos.find((x) => x.id === id) ?? null;
-            const name = String(r.commodity_name ?? r.commodity ?? "Cargo");
+            const name = r.commodity_name || "Cargo";
             const qty = r.qty_max_mt != null ? `${Number(r.qty_max_mt).toLocaleString()} MT` : "";
             const route = [r.load_port_name ?? r.load_zone, r.disch_port_name ?? r.disch_zone].filter(Boolean).join(" → ");
             return { kind: "cargo", id, view: c, fallback: c ? null : { name, qty, route }, fit: c ? fitLabel(c, source.view) : null };
@@ -192,7 +201,7 @@ function VesselDetails({ v }: { v: VesselView }) {
         <Row k="Built" v={v.built ? `${v.built} (${v.age} yrs)` : "—"} />
         <Row k="Grain cap" v={`${v.grainCap} m³`} />
       </div>
-      <PosterLine poster={v.poster} />
+      <PosterLine poster={v.poster} brokered={v.identityMasked} />
     </>
   );
 }

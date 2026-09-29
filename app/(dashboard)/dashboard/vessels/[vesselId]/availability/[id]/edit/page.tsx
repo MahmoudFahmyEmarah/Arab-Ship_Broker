@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { AvailabilityForm } from "@/components/vessels/AvailabilityForm";
 import { VesselAvailabilityRow, VesselRow } from "@/lib/schemas/vessel";
+import { canManageMarketListing } from "@/sdk/app/market";
 
 export default async function EditAvailabilityPage({
   params,
@@ -24,16 +25,12 @@ export default async function EditAvailabilityPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: ownership } = await supabase
-    .from("listing_ownership")
-    .select("role")
-    .eq("listing_id", id)
-    .eq("owner_user_id", user.id)
-    .eq("listing_type", "vessel_availability")
-    .eq("is_current", true)
-    .single();
-
-  if (!ownership) notFound();
+  const canManage = await canManageMarketListing(
+    supabase,
+    "vessel_availability",
+    id,
+  ).catch(() => false);
+  if (!canManage) notFound();
 
   const { data: availability } = await supabase
     .from("vessel_availability")

@@ -29,8 +29,27 @@ function KindIcon({ kind }: { kind: PosterView["kind"] }) {
   }
 }
 
-export function PosterLine({ poster, className }: { poster?: PosterView | null; className?: string }) {
-  if (!poster || (!poster.name && !poster.company)) return null;
+export function PosterLine({
+  poster,
+  className,
+  brokered = false,
+}: {
+  poster?: PosterView | null;
+  className?: string;
+  brokered?: boolean;
+}) {
+  if (!poster || (!poster.name && !poster.company)) {
+    if (!brokered) return null;
+    return (
+      <div
+        className={`poster-line${className ? ` ${className}` : ""}`}
+        title="Counterparty identity is protected until governed disclosure"
+      >
+        <span className="poster-line__icon is-company"><KindIcon kind="company" /></span>
+        <span className="poster-line__co">Platform brokered</span>
+      </div>
+    );
+  }
   const name = poster.name;
   const company = poster.company && poster.company !== poster.name ? poster.company : null;
   const title = `${KIND_LABEL[poster.kind]}${poster.isAdmin ? " · platform admin" : ""}`;

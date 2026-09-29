@@ -1,7 +1,10 @@
-// View models for the detail-panel match list, mapped from the match RPC
-// result rows (CargoMatchResult / VesselMatchResult).
-import type { CargoMatchResult } from "@/sdk/app/cargos";
-import type { VesselMatchResult } from "@/lib/schemas/vessel";
+// View models for the detail-panel match list, mapped from governed market
+// rows. Their ids are opaque listing keys, never listing/vessel primary keys.
+import {
+  marketBoardKey,
+  type MarketCargoRow,
+  type MarketVesselRow,
+} from "@/sdk/app/market";
 import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 
 // A vessel that matches a cargo (shown in the cargo detail panel).
@@ -38,26 +41,34 @@ export interface MatchCargoView {
   rateAligned: boolean;
 }
 
-export function toMatchVessel(r: CargoMatchResult): MatchVesselView {
+function rateAligned(fit: unknown): boolean {
+  return Boolean(
+    fit &&
+      typeof fit === "object" &&
+      (fit as { rate_aligned?: unknown }).rate_aligned,
+  );
+}
+
+export function toMatchVessel(r: MarketVesselRow): MatchVesselView {
   return {
-    id: r.availability_id,
-    name: stripVesselNamePrefix(r.vessel_name),
-    type: r.vessel_type,
-    dwt: r.dwt_grain,
-    flag: r.flag,
-    built: r.build_year,
-    openPort: r.open_port_name,
-    openZone: r.open_zone,
+    id: marketBoardKey(r),
+    name: stripVesselNamePrefix(r.vessel.vessel_name),
+    type: r.vessel.vessel_type,
+    dwt: r.vessel.dwt_grain,
+    flag: r.vessel.flag,
+    built: r.vessel.build_year,
+    openPort: r.open_port_name ?? "—",
+    openZone: r.open_zone ?? "—",
     openDate: r.open_date,
     freight: r.freight_idea_usd_mt,
-    rateAligned: r.is_rate_aligned,
-    geared: r.is_geared,
+    rateAligned: rateAligned(r.fit),
+    geared: r.vessel.is_geared,
   };
 }
 
-export function toMatchCargo(r: VesselMatchResult): MatchCargoView {
+export function toMatchCargo(r: MarketCargoRow): MatchCargoView {
   return {
-    id: r.cargo_id,
+    id: marketBoardKey(r),
     commodity: r.commodity_name,
     type: r.cargo_type,
     qtyMin: r.qty_min_mt,
@@ -70,6 +81,6 @@ export function toMatchCargo(r: VesselMatchResult): MatchCargoView {
     laycanTo: r.laycan_to,
     isSpot: r.is_spot,
     freight: r.freight_idea_usd_mt,
-    rateAligned: r.is_rate_aligned,
+    rateAligned: rateAligned(r.fit),
   };
 }

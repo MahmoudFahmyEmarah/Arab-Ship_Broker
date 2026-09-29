@@ -11,7 +11,6 @@ import { MatchVesselView, MatchCargoView } from "@/lib/portal/match-views";
 import { fetchCargoMatches, fetchAvailabilityMatches, fetchVesselOwnership } from "@/lib/portal/actions";
 import { FieldRow } from "./ui";
 import { IconBack, IconClose } from "./icons";
-import { orgForCargo, ORG_TYPE_LABEL } from "@/lib/portal/org";
 
 const dash = (v: React.ReactNode) =>
   v === null || v === undefined || v === "" || v === "—" ? "—" : v;
@@ -19,21 +18,35 @@ const dash = (v: React.ReactNode) =>
 const num = (n: number | null | undefined) => (n != null ? n.toLocaleString() : "—");
 
 // ── Live match lists (fetched on open via server actions) ──────────────────
-function useMatches<T>(load: () => Promise<T[]>) {
-  const [list, setList] = React.useState<T[] | null>(null);
+function useMatches<T>(
+  listingKey: string | null,
+  load: (key: string) => Promise<T[]>,
+) {
+  const [result, setResult] = React.useState<{
+    key: string | null;
+    list: T[] | null;
+  }>({ key: listingKey, list: null });
   React.useEffect(() => {
     let alive = true;
-    load().then((r) => alive && setList(r)).catch(() => alive && setList([]));
+    if (!listingKey) {
+      setResult({ key: null, list: [] });
+      return () => {
+        alive = false;
+      };
+    }
+    setResult({ key: listingKey, list: null });
+    load(listingKey)
+      .then((list) => alive && setResult({ key: listingKey, list }))
+      .catch(() => alive && setResult({ key: listingKey, list: [] }));
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return list;
+  }, [listingKey, load]);
+  return result.key === listingKey ? result.list : null;
 }
 
-function CargoMatchList({ cargoId }: { cargoId: string }) {
-  const list = useMatches<MatchVesselView>(() => fetchCargoMatches(cargoId));
+function CargoMatchList({ listingKey }: { listingKey: string | null }) {
+  const list = useMatches<MatchVesselView>(listingKey, fetchCargoMatches);
   if (list === null) return <div className="pm-loading">Loading matches…</div>;
   if (!list.length) return <div className="pm-empty">No vessel matches yet.</div>;
   return (
@@ -57,8 +70,8 @@ function CargoMatchList({ cargoId }: { cargoId: string }) {
   );
 }
 
-function VesselMatchList({ availabilityId }: { availabilityId: string }) {
-  const list = useMatches<MatchCargoView>(() => fetchAvailabilityMatches(availabilityId));
+function VesselMatchList({ listingKey }: { listingKey: string | null }) {
+  const list = useMatches<MatchCargoView>(listingKey, fetchAvailabilityMatches);
   if (list === null) return <div className="pm-loading">Loading matches…</div>;
   if (!list.length) return <div className="pm-empty">No cargo matches yet.</div>;
   return (
@@ -111,7 +124,9 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
             <span className="mono" style={{ fontSize: 12, color: "var(--asb-gray-500)" }}>{cargo.refId}</span>
           </button>
           <div className="row" style={{ gap: 4 }}>
-            <Link className="asb-btn primary" href={`/dashboard/cargo/${cargo.id}/edit`} style={{ textDecoration: "none" }}>Full edit →</Link>
+            {cargo.canManage && cargo.ownedListingId ? (
+              <Link className="asb-btn primary" href={`/dashboard/cargo/${cargo.ownedListingId}/edit`} style={{ textDecoration: "none" }}>Full edit →</Link>
+            ) : null}
             <button className="asb-btn ghost" onClick={onClose} style={{ padding: "5px 8px" }}>
               <IconClose size={14} />
             </button>
@@ -188,31 +203,27 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
         <div className="section">
           <h4>Matches</h4>
           <MatchBox count={cargo.matches} label="vessel matches found" sub="via Arab ShipBroker review" />
-          <CargoMatchList cargoId={cargo.id} />
+          <CargoMatchList listingKey={cargo.listingKey ?? null} />
         </div>
 
-        {(() => {
-          // Org model — listing circulates under the company desk; the handler is
-          // shown to the owning desk / admin (DEMO org until owner_org_id is seeded).
-          const { org, handler } = orgForCargo(cargo.refId || cargo.id);
-          return (
-            <div className="section">
-              <h4>Posted by</h4>
-              <div className="grid-2">
-                <FieldRow label="Company" value={org.name} />
-                <FieldRow label="Type" value={ORG_TYPE_LABEL[org.type]} />
-                <FieldRow label="Country" value={org.country} />
-                <FieldRow label="Subscription" value={org.tier} />
-                <FieldRow label="Handled by" value={handler.name} />
-                <FieldRow label="Desk" value={org.desk.name} />
-                <FieldRow label="Desk email" value={org.desk.email} valueClass="blue" />
-              </div>
-            </div>
-          );
-        })()}
+        <div className="section">
+          <h4>Posted by</h4>
+          <div className="grid-2">
+            <FieldRow label="Company" value={cargo.poster?.company ?? "Arab ShipBroker"} />
+            <FieldRow label="Contact" value={cargo.poster?.name ?? "Platform brokered"} />
+          </div>
+        </div>
 
-        <FixtureRoomLink href={`/dashboard/fixture-room/new?cargo=${encodeURIComponent(cargo.id)}`} />
-        <EstimateVoyageLink href={`/dashboard/voyage-estimator?cargo=${cargo.id}`} />
+        <FixtureRoomLink
+          href={cargo.canManage && cargo.ownedListingId
+            ? `/dashboard/fixture-room/new?cargo=${encodeURIComponent(cargo.ownedListingId)}`
+            : "/dashboard/fixture-room/new"}
+        />
+        <EstimateVoyageLink
+          href={cargo.listingKey
+            ? `/dashboard/voyage-estimator?cargo=${encodeURIComponent(cargo.listingKey)}`
+            : "/dashboard/voyage-estimator"}
+        />
 
         <PrivacyNote text="Your data is encrypted end-to-end. Visible only to Arab ShipBroker until your listing is approved." />
       </div>
@@ -231,7 +242,9 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
             <span className="mono" style={{ fontSize: 12, color: "var(--asb-gray-500)" }}>IMO {v.imo}</span>
           </button>
           <div className="row" style={{ gap: 4 }}>
-            <Link className="asb-btn primary" href={`/dashboard/vessels/${v.vesselId ?? v.id}`} style={{ textDecoration: "none" }}>Edit vessel →</Link>
+            {v.canManage && v.vesselId ? (
+              <Link className="asb-btn primary" href={`/dashboard/vessels/${v.vesselId}`} style={{ textDecoration: "none" }}>Edit vessel →</Link>
+            ) : null}
             <button className="asb-btn ghost" onClick={onClose} style={{ padding: "5px 8px" }}>
               <IconClose size={14} />
             </button>
@@ -302,13 +315,21 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
         <div className="section">
           <h4>Matches</h4>
           <MatchBox count={v.matches} label="cargo matches available" sub={`in ${v.openPortZone} and adjacent zones`} />
-          <VesselMatchList availabilityId={v.id} />
+          <VesselMatchList listingKey={v.listingKey ?? null} />
         </div>
 
-        <VesselOwnership vesselId={v.vesselId} />
+        <VesselOwnership listingKey={v.listingKey ?? null} />
 
-        <FixtureRoomLink href={`/dashboard/fixture-room/new?vessel=${encodeURIComponent(v.id)}`} />
-        <EstimateVoyageLink href={`/dashboard/voyage-estimator?vessel=${v.vesselId ?? v.id}`} />
+        <FixtureRoomLink
+          href={v.canManage && v.ownedListingId
+            ? `/dashboard/fixture-room/new?vessel=${encodeURIComponent(v.ownedListingId)}`
+            : "/dashboard/fixture-room/new"}
+        />
+        <EstimateVoyageLink
+          href={v.listingKey
+            ? `/dashboard/voyage-estimator?vessel=${encodeURIComponent(v.listingKey)}`
+            : "/dashboard/voyage-estimator"}
+        />
 
         <PrivacyNote text="Your vessel data is encrypted. Visible only to Arab ShipBroker until you publish a position." />
       </div>
@@ -317,24 +338,23 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
 }
 
 // Ownership / commercial management — real company link from the firewalled
-// v_vessel_detail. The DB returns identity only to admin or the vessel's own
-// owner; a non-owner market viewer gets `entitled: false` and the masked
-// "brokered" card. No counterparty email/phone is ever shown (firewall).
-function VesselOwnership({ vesselId }: { vesselId?: string }) {
+// The governed detail RPC returns ownership only to admin or the exact owner;
+// a market viewer receives the masked brokered state.
+function VesselOwnership({ listingKey }: { listingKey: string | null }) {
   const [data, setData] = React.useState<VesselOwnershipView | null | undefined>(undefined);
   React.useEffect(() => {
     let alive = true;
-    if (!vesselId) {
+    if (!listingKey) {
       setData(null);
       return;
     }
-    fetchVesselOwnership(vesselId)
+    fetchVesselOwnership(listingKey)
       .then((r) => alive && setData(r))
       .catch(() => alive && setData(null));
     return () => {
       alive = false;
     };
-  }, [vesselId]);
+  }, [listingKey]);
 
   if (data === undefined) {
     return (

@@ -14,8 +14,8 @@ import {
 } from "lucide-react";
 
 import { getPortActivity } from "@/sdk/app/ports";
-import { CargoListingRow, ZONE_LABELS, ZoneCode } from "@/lib/schemas/cargo";
-import { VesselAvailabilityWithVessel } from "@/lib/schemas/vessel";
+import { ZONE_LABELS, ZoneCode } from "@/lib/schemas/cargo";
+import type { MarketCargoRow, MarketVesselRow } from "@/sdk/app/market";
 
 function fmt(iso: string | null): string {
   if (!iso) return "—";
@@ -34,7 +34,7 @@ function CargoRow({
   cargo,
   locode,
 }: {
-  cargo: CargoListingRow;
+  cargo: MarketCargoRow;
   locode: string;
 }) {
   const isLoad = cargo.load_port_locode === locode;
@@ -51,7 +51,9 @@ function CargoRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <Link
-            href={`/dashboard/cargo/${cargo.id}`}
+            href={cargo.can_manage && cargo.owned_listing_id
+              ? `/dashboard/cargo/${cargo.owned_listing_id}`
+              : `/dashboard/cargo?listing=${encodeURIComponent(cargo.listing_key)}`}
             className="text-sm font-bold text-asb-navy truncate hover:text-asb-blue transition-colors"
           >
             {cargo.commodity_name}
@@ -106,7 +108,9 @@ function CargoRow({
         </p>
       </div>
       <Link
-        href={`/dashboard/cargo/${cargo.id}`}
+        href={cargo.can_manage && cargo.owned_listing_id
+          ? `/dashboard/cargo/${cargo.owned_listing_id}`
+          : `/dashboard/cargo?listing=${encodeURIComponent(cargo.listing_key)}`}
         className="text-asb-gray-400 group-hover:text-asb-blue shrink-0 transition-colors"
         aria-label="View cargo details"
       >
@@ -116,7 +120,10 @@ function CargoRow({
   );
 }
 
-function VesselRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
+function VesselRow({ listing }: { listing: MarketVesselRow }) {
+  const href = listing.can_manage && listing.owned_listing_id && listing.vessel.id
+    ? `/dashboard/vessels/${listing.vessel.id}/availability/${listing.owned_listing_id}`
+    : `/dashboard/vessels/browse?listing=${encodeURIComponent(listing.listing_key)}`;
   return (
     <div className="flex items-center gap-4 dp-card dp-clickable px-5 py-4 group">
       <div className="w-8 h-8 rounded bg-foam-50 border border-foam-100 flex items-center justify-center shrink-0">
@@ -124,7 +131,7 @@ function VesselRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
       </div>
       <div className="flex-1 min-w-0">
         <Link
-          href={`/dashboard/vessels/${listing.vessel_id}/availability/${listing.id}`}
+          href={href}
           className="text-sm font-bold text-asb-navy truncate hover:text-asb-blue transition-colors"
         >
           {listing.vessel.vessel_name}
@@ -147,7 +154,7 @@ function VesselRow({ listing }: { listing: VesselAvailabilityWithVessel }) {
         </p>
       </div>
       <Link
-        href={`/dashboard/vessels/${listing.vessel_id}/availability/${listing.id}`}
+        href={href}
         className="text-asb-gray-400 group-hover:text-asb-blue shrink-0 transition-colors"
         aria-label="View availability details"
       >

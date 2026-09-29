@@ -1,7 +1,7 @@
 // Subscription tier (T1–T4) helpers.
 //
 // FIREWALL NOTE: tier does NOT grant counterparty contact. Identity/contact
-// stays admin/owner-only (enforced in the DB via v_vessel_detail). Tier only
+// stays admin/owner-only (enforced by the governed detail RPC). Tier only
 // decides which non-owner view is shown: the upgrade teaser (non-subscribers)
 // or the "brokered by Arab ShipBroker" locked card (subscribers).
 

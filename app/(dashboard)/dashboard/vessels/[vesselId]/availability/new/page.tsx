@@ -7,7 +7,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { AvailabilityForm } from "@/components/vessels/AvailabilityForm";
 import { ProfileGuard } from "@/components/ProfileGuard";
-import { getClaimedVesselById } from "@/sdk/app/vessels";
+import { getManagedVessel } from "@/sdk/app/market";
 
 interface PageProps {
   params: Promise<{ vesselId: string }>;
@@ -41,7 +41,7 @@ export default async function NewAvailabilityPage({ params }: PageProps) {
 
   if (!canAccessVesselPages) redirect("/dashboard");
 
-  const prefilledVessel = await getClaimedVesselById(supabase, vesselId);
+  const prefilledVessel = await getManagedVessel(supabase, vesselId);
   if (!prefilledVessel) notFound();
 
   return (
