@@ -367,75 +367,109 @@ grant execute on function public.recreate_fixture_room(uuid, jsonb, text, jsonb)
 revoke execute on function public.create_fixture_room(uuid, uuid, jsonb, text, jsonb) from public, anon, authenticated;
 grant execute on function public.create_fixture_room(uuid, uuid, jsonb, text, jsonb) to service_role;
 
--- ── a JSON-safe recursive scrub (C2O-014 item 1, C2O-015 item 5) ───────────
+-- ── a JSON-safe recursive scrub (C2O-014 item 1, C2O-015 item 5, C2O-016) ──
 -- Case-insensitive LITERAL replacement (no pattern language, so a hull name with
--- regex characters is matched as written).
-create or replace function public.fn_fixture_ci_replace(p_text text, p_needle text, p_with text)
+-- regex characters is matched as written), in three modes:
+--   'sub'  anywhere (the hidden uuids, with or without hyphens: ref:<uuid>x is caught);
+--   'word' not next to a letter or digit (a hull name: "AB" is withheld in "the AB is
+--          ready" but "about" is untouched, and a hull called "FIX" never alters the
+--          room status "fixed");
+--   'num'  not next to a digit (an IMO: "imo9000009" is withheld, "19000009" is not).
+-- After each replacement the search resumes AFTER the inserted marker, so a needle
+-- that occurs inside "[withheld]" (a hull called HELD or WITH) can never rematch its
+-- own output (C2O-016 item 2): the loop only moves forward and always terminates.
+drop function if exists public.fn_fixture_ci_replace(text, text, text);
+create or replace function public.fn_fixture_ci_replace(p_text text, p_needle text, p_with text, p_mode text default 'sub')
  returns text language plpgsql immutable set search_path to 'public'
 as $$
-declare t text := p_text; pos int; n int := length(p_needle);
+declare t text := p_text; lt text; ln text; n int := length(p_needle); start int := 1; rel int; pos int; b text; a text; ok boolean;
 begin
   if t is null or p_needle is null or n = 0 then return t; end if;
+  ln := lower(p_needle);
   loop
-    pos := strpos(lower(t), lower(p_needle));
-    exit when pos = 0;
-    t := substr(t, 1, pos - 1) || p_with || substr(t, pos + n);
+    lt := lower(t);
+    exit when start > length(lt);
+    rel := strpos(substr(lt, start), ln);
+    exit when rel = 0;
+    pos := start + rel - 1;
+    b := case when pos > 1 then substr(t, pos - 1, 1) else '' end;
+    a := substr(t, pos + n, 1);
+    ok := case p_mode
+            when 'word' then b !~ '[[:alnum:]]' and a !~ '[[:alnum:]]'
+            when 'num'  then b !~ '[0-9]' and a !~ '[0-9]'
+            else true end;
+    if ok then
+      t := substr(t, 1, pos - 1) || p_with || substr(t, pos + n);
+      start := pos + length(p_with);          -- never re-scan the inserted marker
+    else
+      start := pos + 1;
+    end if;
   end loop;
   return t;
 end $$;
-revoke all on function public.fn_fixture_ci_replace(text, text, text) from public, anon, authenticated;
+revoke all on function public.fn_fixture_ci_replace(text, text, text, text) from public, anon, authenticated;
 
 -- Walks objects and arrays; keys, numbers and structure are never touched. In every
 -- string: a string that IS a forbidden id becomes JSON null (an id field); a forbidden
--- id (with or without hyphens) or hidden hull name / IMO inside text becomes "[withheld]".
--- The needles are built once; the walk takes them ready-made.
+-- id, or the hidden hull's name / IMO, inside text becomes "[withheld]". The needles
+-- and their modes are built once; the walk takes them ready-made.
 drop function if exists public.fn_fixture_scrub_ids(jsonb, uuid[]);
-create or replace function public.fn_fixture_scrub_walk(j jsonb, p_exact text[], p_needles text[])
+drop function if exists public.fn_fixture_scrub_walk(jsonb, text[], text[]);
+create or replace function public.fn_fixture_scrub_walk(j jsonb, p_exact text[], p_needles text[], p_modes text[])
  returns jsonb language plpgsql immutable set search_path to 'public'
 as $$
-declare out jsonb; t text; lt text; n text;
+declare out jsonb; t text; lt text; i int;
 begin
   case jsonb_typeof(j)
     when 'object' then
-      select coalesce(jsonb_object_agg(e.key, public.fn_fixture_scrub_walk(e.value, p_exact, p_needles)), '{}'::jsonb) into out from jsonb_each(j) e;
+      select coalesce(jsonb_object_agg(e.key, public.fn_fixture_scrub_walk(e.value, p_exact, p_needles, p_modes)), '{}'::jsonb) into out from jsonb_each(j) e;
       return out;
     when 'array' then
-      select coalesce(jsonb_agg(public.fn_fixture_scrub_walk(e.value, p_exact, p_needles) order by e.ord), '[]'::jsonb) into out
+      select coalesce(jsonb_agg(public.fn_fixture_scrub_walk(e.value, p_exact, p_needles, p_modes) order by e.ord), '[]'::jsonb) into out
         from jsonb_array_elements(j) with ordinality e(value, ord);
       return out;
     when 'string' then
       t := j #>> '{}'; lt := lower(t);
       if lt = any (p_exact) then return 'null'::jsonb; end if;
-      foreach n in array p_needles loop
-        if strpos(lt, n) > 0 then t := public.fn_fixture_ci_replace(t, n, '[withheld]'); lt := lower(t); end if;
+      for i in 1 .. coalesce(array_length(p_needles, 1), 0) loop
+        if strpos(lt, p_needles[i]) > 0 then
+          t := public.fn_fixture_ci_replace(t, p_needles[i], '[withheld]', p_modes[i]); lt := lower(t);
+        end if;
       end loop;
       return to_jsonb(t);
     else
       return j;
   end case;
 end $$;
-revoke all on function public.fn_fixture_scrub_walk(jsonb, text[], text[]) from public, anon, authenticated;
+revoke all on function public.fn_fixture_scrub_walk(jsonb, text[], text[], text[]) from public, anon, authenticated;
 
+-- p_texts: the hidden hull's names (whole-word) and, last, its IMO (whole-number).
+-- Every valid persisted hull name is included: the schema's minimum is two characters.
 create or replace function public.fn_fixture_scrub_masked(j jsonb, p_ids uuid[], p_texts text[])
  returns jsonb language plpgsql immutable set search_path to 'public'
 as $$
-declare v_exact text[]; v_needles text[]; v_all text; n text; v_hit boolean := false;
+declare v_exact text[]; v_needles text[]; v_modes text[]; v_all text; n text; v_hit boolean := false; v_imo text;
 begin
   if j is null then return j; end if;
   select coalesce(array_agg(x), '{}') into v_exact
     from (select lower(i::text) as x from unnest(coalesce(p_ids, '{}')) i where i is not null
           union select replace(lower(i::text), '-', '') from unnest(coalesce(p_ids, '{}')) i where i is not null) q;
+  v_imo := lower(btrim(coalesce(p_texts[array_length(p_texts, 1)], '')));
   -- longest first, so "MV NAME" is withheld whole before "NAME"
-  select coalesce(array_agg(x order by length(x) desc), '{}') into v_needles
-    from (select unnest(v_exact) as x
-          union select lower(btrim(x)) from unnest(coalesce(p_texts, '{}')) x where length(btrim(coalesce(x, ''))) >= 3) q;
+  select coalesce(array_agg(x order by length(x) desc, x), '{}'), coalesce(array_agg(m order by length(x) desc, x), '{}') into v_needles, v_modes
+    from (select distinct on (x) x, m from (
+            select unnest(v_exact) as x, 'sub' as m
+            union all
+            select lower(btrim(t)), case when lower(btrim(t)) = v_imo and v_imo ~ '^[0-9]+$' then 'num' else 'word' end
+              from unnest(coalesce(p_texts, '{}')) t where length(btrim(coalesce(t, ''))) >= 2) q0
+          order by x, m desc) q;
   -- fast path (read-only): nothing to withhold anywhere → the payload is returned untouched
   v_all := lower(j::text);
   foreach n in array v_needles loop
     if strpos(v_all, n) > 0 then v_hit := true; exit; end if;
   end loop;
   if not v_hit then return j; end if;
-  return public.fn_fixture_scrub_walk(j, v_exact, v_needles);
+  return public.fn_fixture_scrub_walk(j, v_exact, v_needles, v_modes);
 end $$;
 revoke all on function public.fn_fixture_scrub_masked(jsonb, uuid[], text[]) from public, anon, authenticated;
 

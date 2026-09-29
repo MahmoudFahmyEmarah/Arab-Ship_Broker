@@ -523,7 +523,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
   // 1 · a JSON-safe recursive scrub, substring and case-insensitive, with and without hyphens
   const scrub = h.split("create or replace function public.fn_fixture_scrub_walk")[1].split("end $$;")[0] + h.split("create or replace function public.fn_fixture_scrub_masked")[1].split("end $$;")[0];
-  ok(/jsonb_each\(j\)/.test(scrub) && /jsonb_array_elements\(j\) with ordinality/.test(scrub) && /public\.fn_fixture_ci_replace\(t, n, '\[withheld\]'\)/.test(scrub) && /replace\(lower\(i::text\), '-', ''\)/.test(scrub) && !/::text::jsonb|t::jsonb|v_all::jsonb|regexp_replace/.test(scrub) && /if not v_hit then return j; end if;/.test(scrub), "the scrub walks the JSON and replaces ids inside strings, any case, with or without hyphens, literally (no pattern language, no serialized-text mutation; a read-only fast path when nothing matches)");
+  ok(/jsonb_each\(j\)/.test(scrub) && /jsonb_array_elements\(j\) with ordinality/.test(scrub) && /public\.fn_fixture_ci_replace\(t, p_needles\[i\], '\[withheld\]', p_modes\[i\]\)/.test(scrub) && /replace\(lower\(i::text\), '-', ''\)/.test(scrub) && !/::text::jsonb|t::jsonb|v_all::jsonb|regexp_replace/.test(scrub) && /if not v_hit then return j; end if;/.test(scrub), "the scrub walks the JSON and replaces ids inside strings, any case, with or without hyphens, literally (no pattern language, no serialized-text mutation; a read-only fast path when nothing matches)");
   const guard = read("lib/fixture-room/masking-view.ts");
   ok(embeddedIdentifiers({ room: { id: "11111111-1111-4111-8111-111111111111" }, messages: [{ id: "22222222-2222-4222-8222-222222222222", body: "ref A3B4C5D6-0000-4000-8000-0000000000B3 please" }] }).length === 1
      && embeddedIdentifiers({ room: { id: "11111111-1111-4111-8111-111111111111" }, messages: [{ body: "room 11111111111141118111111111111111 is ours" }] }).length === 0
@@ -572,5 +572,18 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   // the market boundary: only Fixture-issued keys, and a raw preselection only for the member's own listing
   const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
   ok(/from fixture_private\.match_handles x where x\.key = p_candidate_key and x\.actor_user_id = v_actor/.test(fromCand) && /out\.myCargo\.some\(\(c\) => c\.id === params\.cargo\)/.test(act) && /out\.myVessels\.some\(\(v\) => v\.availabilityId === params\.vessel\)/.test(act), "only a Fixture key opens a room, and a raw ?cargo= / ?vessel= preselection is honoured only for the member's own listing");
+}
+
+// -- C2O-016 . two redaction edge cases --
+{
+  const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
+  const ci = h.split("create or replace function public.fn_fixture_ci_replace")[1].split("end $$;")[0];
+  ok(/start := pos \+ length\(p_with\);/.test(ci) && /start := pos \+ 1;/.test(ci) && /rel := strpos\(substr\(lt, start\), ln\);/.test(ci), "the replacement resumes after the inserted marker, so a needle inside [withheld] cannot loop");
+  ok(/when 'word' then b !~ '\[\[:alnum:\]\]' and a !~ '\[\[:alnum:\]\]'/.test(ci) && /when 'num'  then b !~ '\[0-9\]' and a !~ '\[0-9\]'/.test(ci), "hull names match as whole words and IMOs as whole numbers (structured values are never altered)");
+  const masked = h.split("create or replace function public.fn_fixture_scrub_masked")[1].split("end $$;")[0];
+  ok(/length\(btrim\(coalesce\(t, ''\)\)\) >= 2/.test(masked) && !/>= 3/.test(masked), "every valid persisted hull name is withheld, including two-character names (the schema minimum)");
+  ok(/\.min\(2, "Vessel name is required"\)/.test(read("lib/schemas/vessel.ts")), "the schema's minimum hull name length is two");
+  const body = read("supabase/tests/fixture_room/bodies/handles.sql");
+  ok(/'HELD'/.test(body) && /'AB'/.test(body) && /H18 ok/.test(body) && /H19 ok/.test(body) && /statement_timeout = '5s'/.test(body), "the suite proves bounded, masked member reads for hulls named HELD and AB");
 }
 

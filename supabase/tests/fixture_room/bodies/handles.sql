@@ -17,6 +17,21 @@ insert into public.listing_ownership (listing_type, listing_id, owner_user_id, o
   ('cargo', pg_temp.fx_id('c6'), pg_temp.fx_id('u_ch1'), pg_temp.fx_id('org_ch'), 'primary', true, 'initial_post')
 on conflict do nothing;
 update public.vessels set imo_number = '9000009' where id = pg_temp.fx_id('v3');   -- a TBN hull with a known IMO
+-- C2O-016: a TBN hull whose name occurs inside the marker "[withheld]", and a two-letter one
+insert into fx_ids (k, v) values ('v4', '00000000-0000-4000-8000-0000000000f4'), ('v5', '00000000-0000-4000-8000-0000000000f5'),
+                                 ('a5', '00000000-0000-4000-8000-0000000000b5'), ('a6', '00000000-0000-4000-8000-0000000000b6') on conflict do nothing;
+insert into public.vessels (id, vessel_name, imo_number, vessel_type, dwt_grain, build_year, flag, is_geared, grain_certified, dg_certified, is_sanctioned, is_tbn) values
+  (pg_temp.fx_id('v4'), 'HELD', null, 'Bulk Carrier', 29500, 2014, 'Malta', true, true, false, false, true),
+  (pg_temp.fx_id('v5'), 'AB',   null, 'Bulk Carrier', 30500, 2016, 'Malta', true, true, false, false, true)
+on conflict (id) do nothing;
+insert into public.vessel_availability (id, vessel_id, open_port_locode, open_port_name, open_zone, open_date, status, review_status, freight_idea_usd_mt, accepts_part_cargo) values
+  (pg_temp.fx_id('a5'), pg_temp.fx_id('v4'), 'ZZFXA', 'Fixture Load Port', 'E.MED', current_date + 7, 'OPEN', 'APPROVED', 27.00, false),
+  (pg_temp.fx_id('a6'), pg_temp.fx_id('v5'), 'ZZFXA', 'Fixture Load Port', 'E.MED', current_date + 7, 'OPEN', 'APPROVED', 27.00, false)
+on conflict (id) do nothing;
+insert into public.listing_ownership (listing_type, listing_id, owner_user_id, owner_org_id, role, is_current, transfer_reason) values
+  ('vessel_availability', pg_temp.fx_id('a5'), pg_temp.fx_id('u_ow1'), pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post'),
+  ('vessel_availability', pg_temp.fx_id('a6'), pg_temp.fx_id('u_ow1'), pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post')
+on conflict do nothing;
 set local session_replication_role = origin;
 
 -- the raw identifiers a member must never receive for these candidates
@@ -40,7 +55,7 @@ begin
   if exists (select 1 from jsonb_array_elements(l) x where not (x ? 'candidateKey') or x ? 'availabilityId' or x ? 'vesselId' or x ? 'id') then
     raise exception 'H1: every candidate carries a candidateKey and no raw id key: %', l; end if;
   if pg_temp.fx_leaks(l::text) is not null then raise exception 'H1: raw identifiers in the candidate list: %', pg_temp.fx_leaks(l::text); end if;
-  k1 := pg_temp.fx_key(l, 'name', 'TBN');
+  k1 := pg_temp.fx_key(l, 'dwt', '32000');
   if k1 is null then raise exception 'H1: the TBN candidate must be listed as TBN'; end if;
   raise notice 'H1 ok: candidates carry opaque keys; no availability id, vessel id, IMO or hidden name';
 
@@ -89,7 +104,7 @@ begin
 
   -- H6 · two handles for one pair: the live-room rule decides, the second gets FX_CONFLICT
   l := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
-  k2 := pg_temp.fx_key(l, 'name', 'TBN');
+  k2 := pg_temp.fx_key(l, 'dwt', '32000');
   e := pg_temp.fx_err(format('select public.create_fixture_room_from_candidate(%L, %L::jsonb, %L)', k2, pg_temp.fx_terms(), 'h-second'));
   if e <> 'FX_CONFLICT' then raise exception 'H6: a second handle for a live pair must be FX_CONFLICT, got %', e; end if;
   raise notice 'H6 ok: two handles may race; one live room wins and the other is refused with the governed conflict';
@@ -99,7 +114,7 @@ begin
   e := pg_temp.fx_err(format('select public.create_fixture_room_from_candidate(%L, %L::jsonb, %L)', k2, pg_temp.fx_terms(), 'h-colleague'));
   if e <> 'FX_NOT_FOUND' then raise exception 'H7: another actor''s key must be FX_NOT_FOUND, got %', e; end if;
   l := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
-  if pg_temp.fx_key(l, 'name', 'TBN') = k2 then raise exception 'H7: a colleague must get a key of their own'; end if;
+  if pg_temp.fx_key(l, 'dwt', '32000') = k2 then raise exception 'H7: a colleague must get a key of their own'; end if;
   raise notice 'H7 ok: a key works only for the member it was issued to';
 
   -- H8 · ownership lost after the key was issued
@@ -186,7 +201,7 @@ begin
   if pg_temp.fx_key(l, 'name', 'SEED VESSEL ONE') <> k2 then raise exception 'H15: listing again must reuse the key'; end if;
   perform pg_temp.fx_owner();
   select count(*) into n from fixture_private.match_handles where actor_user_id = pg_temp.fx_id('u_ch1');
-  if n > 2 then raise exception 'H15: one handle per actor/source/pair expected, got %', n; end if;
+  if n <> jsonb_array_length(l) then raise exception 'H15: one handle per actor/source/pair expected (% candidates), got %', jsonb_array_length(l), n; end if;
   update fixture_private.match_handles set expires_at = now() - interval '2 days' where key in (k1, k2);
   perform pg_temp.fx_as('u_ch2');
   l := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));   -- any listing call purges stale rows
@@ -210,7 +225,54 @@ begin
     raise exception 'H17: create_fixture_room must lock its inputs'; end if;
   raise notice 'H17 ok: create_fixture_room locks account, seats, ownership, listings and vessel before the original body runs';
 
+  -- H18 · the scrub terminates and matches correctly on names that stress it (C2O-016)
+  perform pg_temp.fx_owner();
+  set local statement_timeout = '3s';
+  if public.fn_fixture_scrub_masked('{"b":"the HELD is ready, withheld? held-over"}'::jsonb, '{}', array['HELD', null])->>'b'
+       <> 'the [withheld] is ready, withheld? [withheld]-over' then raise exception 'H18: a needle inside the marker must not rematch'; end if;
+  if public.fn_fixture_scrub_masked('{"b":"WITH us, without"}'::jsonb, '{}', array['WITH', null])->>'b' <> '[withheld] us, without' then raise exception 'H18: WITH'; end if;
+  if public.fn_fixture_scrub_masked('{"b":"the AB is ready; about ab.","status":"fixed"}'::jsonb, '{}', array['AB', null])
+       <> '{"b":"the [withheld] is ready; about [withheld].","status":"fixed"}'::jsonb then raise exception 'H18: a two-letter name is withheld as a word only'; end if;
+  if public.fn_fixture_scrub_masked('{"status":"fixed","b":"FIX ok"}'::jsonb, '{}', array['FIX', null])->>'status' <> 'fixed' then
+    raise exception 'H18: a hull name must never alter a structured value'; end if;
+  if public.fn_fixture_scrub_masked('{"b":"imo9000009, 19000009, 9000009"}'::jsonb, '{}', array['X Y', '9000009'])->>'b' <> 'imo[withheld], 19000009, [withheld]' then
+    raise exception 'H18: an IMO is withheld as a whole number'; end if;
+  set local statement_timeout = 0;
+  raise notice 'H18 ok: the scrub always terminates (a needle inside [withheld] never rematches); two-letter names, words, IMOs and structured values behave';
+
+  -- H19 · over the member read: rooms on TBN hulls named HELD and AB, the names typed into a
+  --       message, an offer comment and a subject title; the masked read returns promptly and masked
+  declare v_rooms uuid[] := '{}'; r uuid; nm text; k uuid; dwt int; txt text;
+  begin
+    foreach dwt in array array[29500, 30500] loop
+      perform pg_temp.fx_as('u_ch1');
+      l := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
+      k := pg_temp.fx_key(l, 'dwt', dwt::text);
+      if k is null then raise exception 'H19: the TBN hull of % DWT must be a candidate', dwt; end if;
+      v := public.create_fixture_room_from_candidate(k, pg_temp.fx_terms(), 'h19-create-' || dwt, '{}'::jsonb);
+      r := (v->'data'->>'roomId')::uuid; v_rooms := v_rooms || r;
+      nm := case dwt when 29500 then 'HELD' else 'AB' end;
+      perform pg_temp.fx_as('u_ow1');
+      v := public.respond_fixture_invitation(r, true, pg_temp.fx_ver(r), 'h19-accept-' || dwt);
+      v := public.post_fixture_message(r, 'the ' || nm || ' is ready; ' || lower(nm) || '-class', 'note', 'room', null, pg_temp.fx_ver(r), 'h19-msg-' || dwt);
+      v := public.submit_fixture_proposal(r, pg_temp.fx_term(r, 'freight'), '{"num": 26.5}'::jsonb, 'firm on ' || lower(nm), false, null, pg_temp.fx_ver(r), 'h19-offer-' || dwt);
+      v := public.add_fixture_subject(r, 'Sub ' || nm || ' inspection', null, 'vessel', null, pg_temp.fx_ver(r), 'h19-subject-' || dwt);
+      perform pg_temp.fx_as('u_ch1');
+      set local statement_timeout = '5s';
+      v := public.get_fixture_room(r);
+      set local statement_timeout = 0;
+      txt := replace(lower(v::text), '[withheld]', '');
+      if txt ~ ('\m' || lower(nm) || '\M') then raise exception 'H19: the hull name % survived the masked read', nm; end if;
+      if v::text not like '%the [withheld] is ready; [withheld]-class%' or v::text not like '%firm on [withheld]%' or v::text not like '%Sub [withheld] inspection%' then
+        raise exception 'H19: message, comment and subject must be masked for %: %', nm, v->'messages'; end if;
+      if (v->'room'->>'status') not in ('negotiating', 'invited') then raise exception 'H19: structured values stay intact: %', v->'room'->>'status'; end if;
+    end loop;
+  end;
+  perform pg_temp.fx_owner();
+  raise notice 'H19 ok: TBN hulls named HELD and AB are withheld in messages, comments and subjects over the member read, promptly, with structure intact';
+
   -- H12 · a terminal room restarts from the room row; a live one does not
+  perform pg_temp.fx_as('u_ch1');
   e := pg_temp.fx_err(format('select public.recreate_fixture_room(%L, %L::jsonb, %L)', v_room, pg_temp.fx_terms(), 'h-recreate-live'));
   if e <> 'FX_STATE' then raise exception 'H12: a live room cannot be restarted, got %', e; end if;
   v := public.close_fixture_room(v_room, 'withdrawn', null, pg_temp.fx_ver(v_room), 'h-close');
