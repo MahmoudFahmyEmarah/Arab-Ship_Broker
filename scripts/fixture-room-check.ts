@@ -498,10 +498,10 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const list = h.split("create or replace function public.list_fixture_match_candidates")[1].split("end $$;")[0];
   ok(/'candidateKey', h\.key/.test(list) && !/'availabilityId'|'vesselId'|'id', m\.cargo_id/.test(list), "candidates carry the opaque key and no raw cargo, availability or vessel id");
   const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
-  const order = ["fn_fixture_create_replay(v_actor", "x.actor_user_id = v_actor", "h.expires_at <= now()", "for share", "fn_fixture_owns_listing", "get_matches_for_cargo", "public.create_fixture_room("].map((t) => fromCand.indexOf(t));
+  const order = ["fn_fixture_create_replay(v_actor", "x.actor_user_id = v_actor", "h.expires_at <= now()", "fn_fixture_lock_create_inputs(v_actor", "fn_fixture_owns_listing", "get_matches_for_cargo", "public.create_fixture_room("].map((t) => fromCand.indexOf(t));
   ok(order.every((i, n) => i > 0 && (n === 0 || i > order[n - 1])), "create-from-handle checks replay, then actor, expiry, locks the inputs, then live ownership, the match predicate and the governed create");
   ok(/revoke execute on function public\.create_fixture_room\(uuid, uuid, jsonb, text, jsonb\) from public, anon, authenticated;/.test(h), "members hold no EXECUTE on the raw-id create (no callable bypass)");
-  ok(/alter function public\.get_fixture_room\(uuid, integer\) rename to fn_fixture_room_read_unscrubbed/.test(h) && /v := public\.fn_fixture_scrub_ids\(v, array\[v_avail, v_vessel\]\)/.test(h), "the room read removes every availability and vessel uuid for a masked viewer");
+  ok(/alter function public\.get_fixture_room\(uuid, integer\) rename to fn_fixture_room_read_unscrubbed/.test(h) && /v := public\.fn_fixture_scrub_masked\(v, array\[v_avail, v_vessel\]/.test(h), "the room read removes every availability and vessel uuid for a masked viewer");
   const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
   ok(!/createFixtureRoomAction|sdk\.createFixtureRoom\(|listingFigures\(/.test(act) && /sdk\.createFixtureRoomFromCandidate\(/.test(act) && /sdk\.recreateFixtureRoom\(/.test(act), "the app opens rooms only from a key, and restarts only by room id");
   const mb = read("components/fixture-room/MatchBuilder.tsx");
@@ -522,8 +522,8 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
 {
   const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
   // 1 · a JSON-safe recursive scrub, substring and case-insensitive, with and without hyphens
-  const scrub = h.split("create or replace function public.fn_fixture_scrub_ids")[1].split("end $$;")[0];
-  ok(/jsonb_each\(j\)/.test(scrub) && /jsonb_array_elements\(j\) with ordinality/.test(scrub) && /regexp_replace\(t, n, '\[withheld\]', 'gi'\)/.test(scrub) && /replace\(lower\(i::text\), '-', ''\)/.test(scrub) && !/::text::jsonb|t::jsonb/.test(scrub), "the scrub walks the JSON and replaces ids inside strings, any case, with or without hyphens (no serialized-text mutation)");
+  const scrub = h.split("create or replace function public.fn_fixture_scrub_walk")[1].split("end $$;")[0] + h.split("create or replace function public.fn_fixture_scrub_masked")[1].split("end $$;")[0];
+  ok(/jsonb_each\(j\)/.test(scrub) && /jsonb_array_elements\(j\) with ordinality/.test(scrub) && /public\.fn_fixture_ci_replace\(t, n, '\[withheld\]'\)/.test(scrub) && /replace\(lower\(i::text\), '-', ''\)/.test(scrub) && !/::text::jsonb|t::jsonb|v_all::jsonb|regexp_replace/.test(scrub) && /if not v_hit then return j; end if;/.test(scrub), "the scrub walks the JSON and replaces ids inside strings, any case, with or without hyphens, literally (no pattern language, no serialized-text mutation; a read-only fast path when nothing matches)");
   const guard = read("lib/fixture-room/masking-view.ts");
   ok(embeddedIdentifiers({ room: { id: "11111111-1111-4111-8111-111111111111" }, messages: [{ id: "22222222-2222-4222-8222-222222222222", body: "ref A3B4C5D6-0000-4000-8000-0000000000B3 please" }] }).length === 1
      && embeddedIdentifiers({ room: { id: "11111111-1111-4111-8111-111111111111" }, messages: [{ body: "room 11111111111141118111111111111111 is ours" }] }).length === 0
@@ -536,7 +536,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/create unique index if not exists match_handles_actor_pair_uq/.test(h) && /on conflict \(actor_user_id, own_kind, own_listing_id, cargo_listing_id, vessel_availability_id\)\s+do update set expires_at = excluded\.expires_at/.test(h) && /delete from fixture_private\.match_handles h where h\.expires_at < now\(\) - interval '1 day'/.test(h), "one renewable handle per actor/source/pair, and stale handles are purged");
   // 4 · inputs locked to commit before validation
   const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
-  ok((fromCand.match(/for share/g) ?? []).length >= 4, "the cargo, position, vessel and ownership rows are locked to commit (no update between validation and the snapshot)");
+  ok(/perform public\.fn_fixture_lock_create_inputs\(v_actor, h\.cargo_listing_id, h\.vessel_availability_id\);/.test(fromCand), "the cargo, position, vessel and ownership rows are locked to commit (no update between validation and the snapshot)");
   // 5 · a true unique race names the winner
   ok(/exception when unique_violation then/.test(fromCand) && /raise exception 'FX_CONFLICT: room % \(%\) already covers this pairing', w\.id, w\.ref/.test(fromCand), "a lost unique race returns the governed conflict naming the winning room");
   // 6 · the member-JWT integration gate uses the handle path and proves the raw create is denied
@@ -544,5 +544,33 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok((integ.match(/sdk\.createFixtureRoomFromCandidate\(ch, \{ candidateKey: key,/g) ?? []).length >= 5 && /the raw-id create is denied to a member/.test(integ) && (integ.match(/sdk\.createFixtureRoom\(/g) ?? []).length === 1, "the member-JWT integration flow opens rooms from a key and asserts the raw create is denied");
   const race = read("supabase/tests/fixture_room/fixture_race_two_sessions.sh");
   ok(/FX_CONFLICT: room \$WINNER/.test(race) && /no longer matches/.test(race) && /lock timeout/.test(race), "the two-session races prove the winner is named and the create/update window is closed both ways");
+}
+
+// -- C2O-015 . create race invariants --
+{
+  const h = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").replace(/--.*$/gm, "");
+  const fromCand = h.split("create or replace function public.create_fixture_room_from_candidate")[1].split("end $$;")[0];
+  const handler = fromCand.split("exception when unique_violation then")[1] ?? "";
+  // 1 · the race replay compares the pair
+  ok(/w\.cargo_listing_id <> h\.cargo_listing_id or w\.vessel_availability_id <> h\.vessel_availability_id/.test(handler) && /FX_IDEMPOTENCY_MISMATCH/.test(handler), "a same-key race for a different pair is a mismatch, never the winner's room");
+  // 2 · locking is a create invariant: the wrapper locks, the original body is unreachable otherwise
+  const lock = h.split("create or replace function public.fn_fixture_lock_create_inputs")[1].split("end $$;")[0];
+  const lockOrder = ["from public.users u", "from public.organization_members m", "from public.listing_ownership lo where lo.listing_id in (p_cargo, p_avail) and lo.is_current order by", "from public.cargo_listings c", "from public.vessel_availability va", "from public.vessels v"].map((t) => lock.indexOf(t));
+  ok(lockOrder.every((i, n) => i > 0 && (n === 0 || i > lockOrder[n - 1])) && (lock.match(/for share/g) ?? []).length === 6, "one fixed lock order for every creator: account, seats, ownership, cargo, position, vessel (FOR SHARE)");
+  ok(/alter function public\.create_fixture_room\(uuid, uuid, jsonb, text, jsonb\) rename to fn_fixture_create_room_unlocked/.test(h) && /revoke all on function public\.fn_fixture_create_room_unlocked\(uuid, uuid, jsonb, text, jsonb\) from public, anon, authenticated, service_role;/.test(h)
+     && /perform public\.fn_fixture_lock_create_inputs\(public\.fn_fixture_actor\(\), p_cargo_listing_id, p_vessel_availability_id\);\s+return public\.fn_fixture_create_room_unlocked\(/.test(h), "create_fixture_room locks first, then runs the original body; the unlocked body is reachable only through it");
+  // 3 · authorization is locked with the listings (account and seats) — covered by the lock order above
+  const race = read("supabase/tests/fixture_room/fixture_race_two_sessions.sh");
+  ok(["race-idem-pair", "race-recreate-a", "race-recreate-b", "race-seat-a", "race-seat-b", "race-account-a", "race-account-b"].every((k) => race.includes(k)), "the race script proves the pair-mismatch race, recreate/listing, seat revocation and account/tier races in both orders");
+  // 4 · the browser proof over the real member boundary
+  const spec = read("e2e/fixture-room-candidates.spec.ts");
+  ok(/post_fixture_message/.test(spec) && /toUpperCase\(\)/.test(spec) && /replace\(\/-\/g, ""\)/.test(spec) && /expect\(leaks\(await page\.content\(\)\)/.test(spec) && /expect\(leaks\(JSON\.stringify\(room\.data\)\)/.test(spec), "a hostile message with hidden ids and the hull name is scanned in the page, action bodies and the member-JWT read");
+  // 5 · the hidden hull's name and IMO are withheld in the masked read
+  ok(/fn_fixture_scrub_masked\(v, array\[v_avail, v_vessel\],\s+array\[v_name,/.test(h) && /v_imo\]\)/.test(h), "the masked read withholds the hidden hull's name (with and without an MV prefix) and IMO typed in free text");
+  // 6 · the guard ignores governed hashes
+  ok(embeddedIdentifiers({ room: { id: "x", snapshotHash: "d41d8cd98f00b204e9800998ecf8427e" }, recaps: [{ contentHash: "0cc175b9c0f1b6a831c399e269772661" }], messages: [{ body: "hash d41d8cd98f00b204e9800998ecf8427e noted" }] }).length === 0, "the masking guard does not flag content or snapshot hashes");
+  // the market boundary: only Fixture-issued keys, and a raw preselection only for the member's own listing
+  const act = read("app/(dashboard)/dashboard/fixture-room/actions.ts");
+  ok(/from fixture_private\.match_handles x where x\.key = p_candidate_key and x\.actor_user_id = v_actor/.test(fromCand) && /out\.myCargo\.some\(\(c\) => c\.id === params\.cargo\)/.test(act) && /out\.myVessels\.some\(\(v\) => v\.availabilityId === params\.vessel\)/.test(act), "only a Fixture key opens a room, and a raw ?cargo= / ?vessel= preselection is honoured only for the member's own listing");
 }
 

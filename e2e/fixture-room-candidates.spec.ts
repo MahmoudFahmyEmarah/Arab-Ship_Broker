@@ -24,6 +24,11 @@ test.afterAll(async () => { if (seat) cleanupSeat(seat); if (seed) cleanupFixtur
 
 // the raw identifiers of the owner's two positions (C2O-013: the availability ids are hull identifiers too)
 const secrets = () => [seed.tbn.name, seed.tbn.vesselId, seed.vesselId, seed.vesselImo, seed.tbn.availabilityId, seed.availabilityId];
+// C2O-015 item 4: a leak in any form — any case, and a uuid with or without its hyphens
+const leaks = (text: string) => {
+  const t = text.toLowerCase(), flat = t.replace(/-/g, "");
+  return secrets().filter((s) => { const x = s.toLowerCase(); return t.includes(x) || flat.includes(x.replace(/-/g, "")); });
+};
 
 test("the charterer sees the TBN hull as TBN, with no identity anywhere in the page", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
@@ -138,11 +143,29 @@ test("a room opened from the TBN key reveals no hull or position id", async ({ b
     expect(html, `the room page carries ${s}`).not.toContain(s);
     for (const b of bodies) expect(b, `a server-action response carries ${s}`).not.toContain(s);
   }
-  // the governed room read, as the member's own JWT sees it
+  // the owner joins and types hidden identifiers into the room (C2O-015 items 4 and 5):
+  // the position id in upper case, the vessel id without hyphens, the hull's name in lower case
+  const ow = await apiClientAs(seed.owner.email);
+  const v1 = (await ow.rpc("get_fixture_room_version", { p_room_id: roomId })).data as number;
+  const joined = await ow.rpc("respond_fixture_invitation", { p_room_id: roomId, p_accept: true, p_expected_version: v1, p_idempotency_key: `e2e-hostile-accept-${seed.stamp}` });
+  expect(joined.error, joined.error?.message).toBeNull();
+  const v2 = (await ow.rpc("get_fixture_room_version", { p_room_id: roomId })).data as number;
+  const hostile = `our ref ${seed.tbn.availabilityId.toUpperCase()}/x, hull ${seed.tbn.vesselId.replace(/-/g, "")}, she is the ${seed.tbn.name.toLowerCase()}`;
+  const posted = await ow.rpc("post_fixture_message", { p_room_id: roomId, p_body: hostile, p_kind: "note", p_visibility: "room", p_term_id: null, p_expected_version: v2, p_idempotency_key: `e2e-hostile-msg-${seed.stamp}`, p_as_party_id: null });
+  expect(posted.error, posted.error?.message).toBeNull();
+  // the charterer's page, its server-action bodies and its own JWT read carry none of it, in any form
+  bodies.length = 0;
+  await page.reload();
+  await dismissOverlays(page);
+  await expect(page.getByTestId("room-header")).toBeVisible();
+  await expect(page.getByText(/our ref \[withheld\]/)).toBeVisible();
+  expect(leaks(await page.content()), "the room page after the hostile message").toEqual([]);
+  for (const b of bodies) expect(leaks(b), "a server-action body after the hostile message").toEqual([]);
   const ch = await apiClientAs(seed.charterer.email);
   const room = await ch.rpc("get_fixture_room", { p_room_id: roomId });
   expect(room.error, room.error?.message).toBeNull();
-  for (const s of secrets()) expect(JSON.stringify(room.data), `the room read carries ${s}`).not.toContain(s);
+  expect(leaks(JSON.stringify(room.data)), "the member-JWT room read").toEqual([]);
+  expect(JSON.stringify(room.data)).toContain("[withheld]");
   // and the raw-id create is no longer callable by a member
   const raw = await ch.rpc("create_fixture_room", { p_cargo_listing_id: seed.cargoId, p_vessel_availability_id: seed.tbn.availabilityId, p_terms: [], p_idempotency_key: `e2e-raw-${seed.stamp}`, p_options: {} });
   expect(raw.error?.message ?? "").toMatch(/permission denied/i);

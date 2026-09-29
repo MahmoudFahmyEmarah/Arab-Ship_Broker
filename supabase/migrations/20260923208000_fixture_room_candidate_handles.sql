@@ -32,6 +32,23 @@
 --     "[withheld]").
 --   * authenticated loses EXECUTE on the raw-id create_fixture_room: no
 --     callable bypass remains (service_role and the commands above keep it).
+--
+-- C2O-015 invariants:
+--   * locking lives in create_fixture_room itself: the 203000 body becomes the
+--     inner fn_fixture_create_room_unlocked and create_fixture_room is a wrapper
+--     that first locks, FOR SHARE and in one fixed order, the actor's account,
+--     the actor's seats in the owning organisations, the ownership rows, the
+--     cargo, the position and the vessel; the inner body then re-checks the
+--     account, tier, ownership, live listings and reads both snapshots. So every
+--     path (candidate create, terminal recreate, the trusted service path) is
+--     stable through commit: a concurrent revocation, deactivation, tier change
+--     or listing update either lands first (and the create refuses) or waits.
+--   * a unique race on the same idempotency key replays only the same pairing;
+--     another pairing under that key is FX_IDEMPOTENCY_MISMATCH.
+--   * the masked read also withholds the hidden hull's name and IMO wherever a
+--     party typed them (the mutual-disclosure rule itself is unchanged).
+--   * Fixture keys are its own: a key from any other domain (e.g. a future
+--     market handle) is simply not found here.
 
 create schema if not exists fixture_private;
 revoke all on schema fixture_private from public, anon, authenticated;
@@ -61,6 +78,57 @@ alter table fixture_private.match_handles enable row level security;
 revoke all on table fixture_private.match_handles from public, anon, authenticated;
 comment on table fixture_private.match_handles is
   'Fixture Room (C2O-013): opaque match-candidate handles, one per actor/source/pair. Private: no API exposure, no member policy; read and written only by the Fixture SECURITY DEFINER functions. Purged a day after expiry.';
+
+-- ── one lock order for every room creation (C2O-015 items 2 and 3) ─────────
+-- account → seats in the owning organisations → ownership rows → cargo →
+-- position → vessel, all FOR SHARE and held to commit. Every creator takes the
+-- same order, so two creators never deadlock; an update to any of these rows
+-- either commits before (and is seen by the checks that follow) or waits.
+create or replace function public.fn_fixture_lock_create_inputs(p_actor uuid, p_cargo uuid, p_avail uuid)
+ returns void language plpgsql volatile security definer set search_path to 'public'
+as $$
+declare v_vessel uuid;
+begin
+  perform 1 from public.users u where u.id = p_actor for share;
+  perform 1 from public.organization_members m
+   where m.user_id = p_actor
+     and m.org_id in (select lo.owner_org_id from public.listing_ownership lo
+                       where lo.listing_id in (p_cargo, p_avail) and lo.is_current and lo.owner_org_id is not null)
+   order by m.org_id, m.user_id for share;
+  perform 1 from public.listing_ownership lo where lo.listing_id in (p_cargo, p_avail) and lo.is_current order by lo.listing_id for share;
+  perform 1 from public.cargo_listings c where c.id = p_cargo for share;
+  select va.vessel_id into v_vessel from public.vessel_availability va where va.id = p_avail for share;
+  if v_vessel is not null then
+    perform 1 from public.vessels v where v.id = v_vessel for share;
+  end if;
+end $$;
+revoke all on function public.fn_fixture_lock_create_inputs(uuid, uuid, uuid) from public, anon, authenticated;
+
+-- the 203000 create becomes the inner body; create_fixture_room locks, then calls it.
+-- The rename runs only while create_fixture_room is still the original (a re-applied
+-- 203000 restores it), so this file re-applies cleanly.
+do $$
+begin
+  if exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.create_fixture_room(uuid, uuid, jsonb, text, jsonb)')
+                                    and p.prosrc not like '%fn_fixture_create_room_unlocked%') then
+    drop function if exists public.fn_fixture_create_room_unlocked(uuid, uuid, jsonb, text, jsonb);
+    alter function public.create_fixture_room(uuid, uuid, jsonb, text, jsonb) rename to fn_fixture_create_room_unlocked;
+  end if;
+end $$;
+revoke all on function public.fn_fixture_create_room_unlocked(uuid, uuid, jsonb, text, jsonb) from public, anon, authenticated, service_role;
+
+create or replace function public.create_fixture_room(
+  p_cargo_listing_id uuid, p_vessel_availability_id uuid, p_terms jsonb, p_idempotency_key text, p_options jsonb default '{}'::jsonb)
+ returns jsonb language plpgsql volatile security definer set search_path to 'public'
+as $$
+begin
+  -- lock first (the actor's account, seats, ownership, listings, vessel), then the original
+  -- body re-checks account, tier, ownership and live listings and reads both snapshots
+  perform public.fn_fixture_lock_create_inputs(public.fn_fixture_actor(), p_cargo_listing_id, p_vessel_availability_id);
+  return public.fn_fixture_create_room_unlocked(p_cargo_listing_id, p_vessel_availability_id, p_terms, p_idempotency_key, p_options);
+end $$;
+comment on function public.create_fixture_room(uuid, uuid, jsonb, text, jsonb) is
+  'Fixture Room (C2O-015): locks the actor account, seats, ownership rows, cargo, position and vessel (FOR SHARE, fixed order) and then runs the original create; every creation path goes through here. Service role only; members use create_fixture_room_from_candidate.';
 
 -- hints are now part of the candidate list (C2O-014 item 3): no separate read by key
 drop function if exists public.get_fixture_candidate_hints(uuid);
@@ -191,7 +259,7 @@ create or replace function public.create_fixture_room_from_candidate(
   p_candidate_key uuid, p_terms jsonb, p_idempotency_key text, p_options jsonb default '{}'::jsonb)
  returns jsonb language plpgsql volatile security definer set search_path to 'public'
 as $$
-declare v_actor uuid := public.fn_fixture_actor(); h fixture_private.match_handles; v jsonb; v_room public.fixture_rooms; v_vessel uuid; w public.fixture_rooms;
+declare v_actor uuid := public.fn_fixture_actor(); h fixture_private.match_handles; v jsonb; v_room public.fixture_rooms; w public.fixture_rooms;
 begin
   if p_idempotency_key is null or btrim(p_idempotency_key) = '' or length(p_idempotency_key) > 200 then
     raise exception 'FX_VALIDATION: idempotency_key is required (1–200 characters)' using errcode = '22023';
@@ -220,13 +288,10 @@ begin
   if h.expires_at <= now() then
     raise exception 'FX_STATE: this match has expired; reload the match list' using errcode = '55000';
   end if;
-  -- 4 · lock the governed inputs to commit: a listing, position, vessel or ownership update
-  --     either happened before (and is seen below) or waits until the room exists
-  perform 1 from public.cargo_listings x where x.id = h.cargo_listing_id for share;
-  select x.vessel_id into v_vessel from public.vessel_availability x where x.id = h.vessel_availability_id for share;
-  perform 1 from public.vessels x where x.id = v_vessel for share;
-  perform 1 from public.listing_ownership x
-   where x.listing_id in (h.cargo_listing_id, h.vessel_availability_id) and x.is_current for share;
+  -- 4 · lock the governed inputs to commit (the same helper and order create_fixture_room
+  --     uses): an account, seat, ownership, listing, position or vessel update either
+  --     happened before (and is seen below) or waits until the room exists
+  perform public.fn_fixture_lock_create_inputs(v_actor, h.cargo_listing_id, h.vessel_availability_id);
   -- 5 · the actor still owns or represents the source listing
   if public.fn_fixture_owns_listing(case h.own_kind when 'cargo' then 'cargo' else 'vessel_availability' end, h.own_listing_id) is null then
     raise exception 'FX_AUTH: you no longer own or represent this listing' using errcode = '42501';
@@ -246,9 +311,16 @@ begin
   begin
     v := public.create_fixture_room(h.cargo_listing_id, h.vessel_availability_id, p_terms, p_idempotency_key, p_options);
   exception when unique_violation then
-    -- a true race: the same key committed first → replay; another room won the pair → name it
+    -- a true race: the same key committed first → replay, but only for this same pairing
+    -- (C2O-015 item 1); another room won the pair → name it
     v := public.fn_fixture_create_replay(v_actor, p_idempotency_key, p_terms, p_options);
-    if v is not null then return v; end if;
+    if v is not null then
+      select * into w from public.fixture_rooms x where x.id = (v->'data'->>'roomId')::uuid;
+      if w.cargo_listing_id <> h.cargo_listing_id or w.vessel_availability_id <> h.vessel_availability_id then
+        raise exception 'FX_IDEMPOTENCY_MISMATCH: idempotency key % was already used for a different pairing', p_idempotency_key using errcode = 'P0001';
+      end if;
+      return v;
+    end if;
     select * into w from public.fixture_rooms x
      where x.cargo_listing_id = h.cargo_listing_id and x.vessel_availability_id = h.vessel_availability_id
        and not public.fn_fixture_terminal(x.status)
@@ -295,42 +367,77 @@ grant execute on function public.recreate_fixture_room(uuid, jsonb, text, jsonb)
 revoke execute on function public.create_fixture_room(uuid, uuid, jsonb, text, jsonb) from public, anon, authenticated;
 grant execute on function public.create_fixture_room(uuid, uuid, jsonb, text, jsonb) to service_role;
 
--- ── a JSON-safe recursive scrub (C2O-014 item 1) ────────────────────────────
--- Walks objects and arrays; in every string, each forbidden identifier is found
--- case-insensitively, with or without hyphens. A string that IS the identifier
--- becomes JSON null (an id field); an identifier inside free text is replaced
--- with "[withheld]". Keys, numbers and structure are never touched.
-create or replace function public.fn_fixture_scrub_ids(j jsonb, p_ids uuid[])
+-- ── a JSON-safe recursive scrub (C2O-014 item 1, C2O-015 item 5) ───────────
+-- Case-insensitive LITERAL replacement (no pattern language, so a hull name with
+-- regex characters is matched as written).
+create or replace function public.fn_fixture_ci_replace(p_text text, p_needle text, p_with text)
+ returns text language plpgsql immutable set search_path to 'public'
+as $$
+declare t text := p_text; pos int; n int := length(p_needle);
+begin
+  if t is null or p_needle is null or n = 0 then return t; end if;
+  loop
+    pos := strpos(lower(t), lower(p_needle));
+    exit when pos = 0;
+    t := substr(t, 1, pos - 1) || p_with || substr(t, pos + n);
+  end loop;
+  return t;
+end $$;
+revoke all on function public.fn_fixture_ci_replace(text, text, text) from public, anon, authenticated;
+
+-- Walks objects and arrays; keys, numbers and structure are never touched. In every
+-- string: a string that IS a forbidden id becomes JSON null (an id field); a forbidden
+-- id (with or without hyphens) or hidden hull name / IMO inside text becomes "[withheld]".
+-- The needles are built once; the walk takes them ready-made.
+drop function if exists public.fn_fixture_scrub_ids(jsonb, uuid[]);
+create or replace function public.fn_fixture_scrub_walk(j jsonb, p_exact text[], p_needles text[])
  returns jsonb language plpgsql immutable set search_path to 'public'
 as $$
-declare out jsonb; t text; n text; v_needles text[] := '{}';
+declare out jsonb; t text; lt text; n text;
 begin
-  if j is null or p_ids is null or cardinality(p_ids) = 0 then return j; end if;
-  select coalesce(array_agg(x), '{}') into v_needles
-    from (select lower(i::text) as x from unnest(p_ids) i where i is not null
-          union select replace(lower(i::text), '-', '') from unnest(p_ids) i where i is not null) s;
   case jsonb_typeof(j)
     when 'object' then
-      select coalesce(jsonb_object_agg(e.key, public.fn_fixture_scrub_ids(e.value, p_ids)), '{}'::jsonb) into out from jsonb_each(j) e;
+      select coalesce(jsonb_object_agg(e.key, public.fn_fixture_scrub_walk(e.value, p_exact, p_needles)), '{}'::jsonb) into out from jsonb_each(j) e;
       return out;
     when 'array' then
-      select coalesce(jsonb_agg(public.fn_fixture_scrub_ids(e.value, p_ids) order by e.ord), '[]'::jsonb) into out
+      select coalesce(jsonb_agg(public.fn_fixture_scrub_walk(e.value, p_exact, p_needles) order by e.ord), '[]'::jsonb) into out
         from jsonb_array_elements(j) with ordinality e(value, ord);
       return out;
     when 'string' then
-      t := j #>> '{}';
-      foreach n in array v_needles loop
-        if strpos(lower(t), n) > 0 then
-          if lower(t) = n then return 'null'::jsonb; end if;
-          t := regexp_replace(t, n, '[withheld]', 'gi');   -- n is hex and hyphens only: a safe literal pattern
-        end if;
+      t := j #>> '{}'; lt := lower(t);
+      if lt = any (p_exact) then return 'null'::jsonb; end if;
+      foreach n in array p_needles loop
+        if strpos(lt, n) > 0 then t := public.fn_fixture_ci_replace(t, n, '[withheld]'); lt := lower(t); end if;
       end loop;
       return to_jsonb(t);
     else
       return j;
   end case;
 end $$;
-revoke all on function public.fn_fixture_scrub_ids(jsonb, uuid[]) from public, anon, authenticated;
+revoke all on function public.fn_fixture_scrub_walk(jsonb, text[], text[]) from public, anon, authenticated;
+
+create or replace function public.fn_fixture_scrub_masked(j jsonb, p_ids uuid[], p_texts text[])
+ returns jsonb language plpgsql immutable set search_path to 'public'
+as $$
+declare v_exact text[]; v_needles text[]; v_all text; n text; v_hit boolean := false;
+begin
+  if j is null then return j; end if;
+  select coalesce(array_agg(x), '{}') into v_exact
+    from (select lower(i::text) as x from unnest(coalesce(p_ids, '{}')) i where i is not null
+          union select replace(lower(i::text), '-', '') from unnest(coalesce(p_ids, '{}')) i where i is not null) q;
+  -- longest first, so "MV NAME" is withheld whole before "NAME"
+  select coalesce(array_agg(x order by length(x) desc), '{}') into v_needles
+    from (select unnest(v_exact) as x
+          union select lower(btrim(x)) from unnest(coalesce(p_texts, '{}')) x where length(btrim(coalesce(x, ''))) >= 3) q;
+  -- fast path (read-only): nothing to withhold anywhere → the payload is returned untouched
+  v_all := lower(j::text);
+  foreach n in array v_needles loop
+    if strpos(v_all, n) > 0 then v_hit := true; exit; end if;
+  end loop;
+  if not v_hit then return j; end if;
+  return public.fn_fixture_scrub_walk(j, v_exact, v_needles);
+end $$;
+revoke all on function public.fn_fixture_scrub_masked(jsonb, uuid[], text[]) from public, anon, authenticated;
 
 -- ── the room read: no availability or vessel uuid for a masked viewer ───────
 -- The 202000 read is kept, renamed, as the inner builder; get_fixture_room
@@ -349,13 +456,16 @@ revoke all on function public.fn_fixture_room_read_unscrubbed(uuid, integer) fro
 create or replace function public.get_fixture_room(p_room_id uuid, p_events_after integer default 0)
  returns jsonb language plpgsql volatile security definer set search_path to 'public'
 as $$
-declare v jsonb; v_avail uuid; v_vessel uuid;
+declare v jsonb; v_avail uuid; v_vessel uuid; v_name text; v_imo text;
 begin
   v := public.fn_fixture_room_read_unscrubbed(p_room_id, p_events_after);
   if coalesce((v->'snapshot'->>'vesselIdentityMasked')::boolean, false) then
-    select x.vessel_availability_id, x.vessel_id into v_avail, v_vessel from public.fixture_rooms x where x.id = p_room_id;
-    -- every occurrence, in every string (ids, messages, comments, titles, notes, event payloads)
-    v := public.fn_fixture_scrub_ids(v, array[v_avail, v_vessel]);
+    select x.vessel_availability_id, x.vessel_id, x.vessel_snapshot->'vessel'->>'vessel_name', x.vessel_snapshot->'vessel'->>'imo_number'
+      into v_avail, v_vessel, v_name, v_imo from public.fixture_rooms x where x.id = p_room_id;
+    -- every occurrence, in every string (ids, messages, comments, titles, notes, event payloads);
+    -- the hidden hull's name (with and without an MV prefix) and IMO are withheld too
+    v := public.fn_fixture_scrub_masked(v, array[v_avail, v_vessel],
+           array[v_name, regexp_replace(coalesce(v_name, ''), '^\s*(m\s*/\s*v|mv|m\.v\.)\s+', '', 'i'), v_imo]);
   end if;
   return v;
 end $$;

@@ -77,8 +77,11 @@ export function findMaskingLeaks(view: FixtureRoomView): string[] {
   return out;
 }
 
-const UUID_RE = /[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/gi;
+// a hyphenated uuid, or a hyphenless one with the v4 layout (version 4, variant 8-b); a
+// governed content or snapshot hash (32 hex, no layout) is not an identifier (C2O-015 item 6)
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}/gi;
 const isIdKey = (k: string) => k === "id" || /Id$/.test(k) || /_id$/.test(k) || /Ids$/.test(k);
+const isHashKey = (k: string) => /hash$/i.test(k);
 
 /**
  * C2O-014: on a masked view no free-text string may carry an identifier. The view's own
@@ -96,7 +99,7 @@ export function embeddedIdentifiers(view: unknown): string[] {
   const out: string[] = [];
   const walk = (v: unknown, path: string, k: string) => {
     if (typeof v === "string") {
-      if (isIdKey(k)) return;
+      if (isIdKey(k) || isHashKey(k)) return;
       for (const m of v.match(UUID_RE) ?? []) {
         if (!allowed.has(m.toLowerCase().replace(/-/g, ""))) out.push(`${path} carries an identifier in free text`);
       }

@@ -16,6 +16,7 @@ on conflict (id) do nothing;
 insert into public.listing_ownership (listing_type, listing_id, owner_user_id, owner_org_id, role, is_current, transfer_reason) values
   ('cargo', pg_temp.fx_id('c6'), pg_temp.fx_id('u_ch1'), pg_temp.fx_id('org_ch'), 'primary', true, 'initial_post')
 on conflict do nothing;
+update public.vessels set imo_number = '9000009' where id = pg_temp.fx_id('v3');   -- a TBN hull with a known IMO
 set local session_replication_role = origin;
 
 -- the raw identifiers a member must never receive for these candidates
@@ -23,8 +24,9 @@ create or replace function pg_temp.fx_leaks(p_text text) returns text language s
   select string_agg(k, ', ') from (values
     ('a1', pg_temp.fx_id('a1')::text), ('a3', pg_temp.fx_id('a3')::text),
     ('v1', pg_temp.fx_id('v1')::text), ('v3', pg_temp.fx_id('v3')::text),
-    ('imo', '9000001'), ('hull', 'SEED TBN HULL')) x(k, needle)
-  where p_text like '%' || needle || '%' $f$;
+    ('imo', '9000001'), ('tbn-imo', '9000009'), ('hull', 'seed tbn hull'),
+    ('a3-flat', replace(pg_temp.fx_id('a3')::text, '-', '')), ('v3-flat', replace(pg_temp.fx_id('v3')::text, '-', ''))) x(k, needle)
+  where lower(p_text) like '%' || lower(needle) || '%' $f$;
 create or replace function pg_temp.fx_key(p_list jsonb, p_field text, p_value text) returns uuid language sql immutable as $f$
   select (x->>'candidateKey')::uuid from jsonb_array_elements(p_list) x where x->>p_field = p_value limit 1 $f$;
 
@@ -149,6 +151,10 @@ begin
   perform pg_temp.fx_as('u_ow1');
   v := public.post_fixture_message(v_room, 'our ref ' || upper(pg_temp.fx_id('a3')::text) || '/x and hull ' || replace(pg_temp.fx_id('v3')::text, '-', '') || ' ok',
                                    'note', 'room', null, pg_temp.fx_ver(v_room), 'h-hostile-msg');
+  -- C2O-015 item 5: the hull's own name and IMO, typed voluntarily, any case, embedded
+  v := public.post_fixture_message(v_room, 'she is the Seed Tbn Hull, imo9000009, ready', 'note', 'room', null, pg_temp.fx_ver(v_room), 'h-hostile-name');
+  v := public.submit_fixture_proposal(v_room, pg_temp.fx_term(v_room, 'freight'), '{"num": 26.5}'::jsonb, 'firm on seed tbn hull', false, null, pg_temp.fx_ver(v_room), 'h-hostile-offer');
+  v := public.add_fixture_subject(v_room, 'Sub inspection of SEED TBN HULL', null, 'vessel', null, pg_temp.fx_ver(v_room), 'h-hostile-subject');
   v := public.get_fixture_room(v_room);
   if v::text not ilike '%' || pg_temp.fx_id('a3')::text || '%' then raise exception 'H13: the vessel side keeps its own message text'; end if;
   perform pg_temp.fx_as('u_ch1');
@@ -158,7 +164,10 @@ begin
      or strpos(t, pg_temp.fx_id('v3')::text) > 0 or strpos(t, replace(pg_temp.fx_id('v3')::text, '-', '')) > 0 then
     raise exception 'H13: an embedded identifier survived the masked read'; end if;
   if v::text not like '%our ref [withheld]/x and hull [withheld] ok%' then raise exception 'H13: the rest of the message stays readable: %', v->'messages'; end if;
-  raise notice 'H13 ok: ids embedded in free text (prefixed, suffixed, upper-case, hyphenless) are withheld; the rest stays';
+  if pg_temp.fx_leaks(v::text) is not null then raise exception 'H13: the masked read leaks %', pg_temp.fx_leaks(v::text); end if;
+  if v::text not like '%she is the [withheld], imo[withheld], ready%' or v::text not like '%Sub inspection of [withheld]%' or v::text not like '%firm on [withheld]%' then
+    raise exception 'H13: the hull name and IMO are withheld in messages and subject titles: %', v->'messages'; end if;
+  raise notice 'H13 ok: ids (prefixed, suffixed, upper-case, hyphenless) and the hidden hull name / IMO typed in free text are withheld; the rest stays';
 
   -- H14 · the same key with any changed term, hint or option is a mismatch (C2O-014 item 2)
   e := pg_temp.fx_err(format('select public.create_fixture_room_from_candidate(%L, %L::jsonb, %L)', k1,
@@ -187,6 +196,19 @@ begin
   v := public.create_fixture_room_from_candidate(k1, pg_temp.fx_terms(), 'h-create', '{}'::jsonb);
   if (v->>'replayed')::boolean is not true then raise exception 'H15: replay needs no handle row (the room is the record): %', v; end if;
   raise notice 'H15 ok: one renewable key per pair; stale rows purged; replay survives the purge';
+
+  -- H16 · a key from any other domain (e.g. a future market handle) is not a Fixture key
+  e := pg_temp.fx_err(format('select public.create_fixture_room_from_candidate(%L, %L::jsonb, %L)', gen_random_uuid(), pg_temp.fx_terms(), 'h-foreign-key'));
+  if e <> 'FX_NOT_FOUND' then raise exception 'H16: an unknown key must be FX_NOT_FOUND, got %', e; end if;
+  raise notice 'H16 ok: only Fixture-issued keys open a room; any other key is not found';
+
+  -- H17 · every creation path locks: the inner create is unreachable except through the locking wrapper
+  if has_function_privilege('service_role', 'public.fn_fixture_create_room_unlocked(uuid, uuid, jsonb, text, jsonb)', 'execute')
+     or has_function_privilege('authenticated', 'public.fn_fixture_create_room_unlocked(uuid, uuid, jsonb, text, jsonb)', 'execute') then
+    raise exception 'H17: the unlocked create must be reachable only through create_fixture_room'; end if;
+  if (select prosrc from pg_proc where oid = 'public.create_fixture_room(uuid, uuid, jsonb, text, jsonb)'::regprocedure) not like '%fn_fixture_lock_create_inputs%' then
+    raise exception 'H17: create_fixture_room must lock its inputs'; end if;
+  raise notice 'H17 ok: create_fixture_room locks account, seats, ownership, listings and vessel before the original body runs';
 
   -- H12 · a terminal room restarts from the room row; a live one does not
   e := pg_temp.fx_err(format('select public.recreate_fixture_room(%L, %L::jsonb, %L)', v_room, pg_temp.fx_terms(), 'h-recreate-live'));
