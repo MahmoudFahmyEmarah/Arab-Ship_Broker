@@ -1,0 +1,44 @@
+/* Voyage estimator data — admin control plane (Stream S). Tokens only. */
+.vd-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--adm-bd); margin: 12px 0 16px; }
+.vd-tab { padding: 8px 12px; font-size: 12px; font-weight: 700; color: var(--adm-muted); text-decoration: none; border-bottom: 2px solid transparent; }
+.vd-tab.is-active { color: var(--adm-ink); border-bottom-color: var(--adm-accent); }
+.vd-grid { display: grid; gap: 16px; margin: 0 0 16px; }
+.vd-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.vd-panel { background: var(--asb-white, #fff); border: 1px solid var(--adm-bd); border-radius: var(--adm-r-card); padding: 16px; }
+.vd-panel h2 { margin: 0 0 4px; font-size: 15px; color: var(--adm-ink); }
+.vd-panel p.vd-help { margin: 0 0 12px; font-size: 12px; color: var(--adm-muted); line-height: 1.5; }
+.vd-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.vd-form--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.vd-form label { display: grid; gap: 3px; font-size: 11px; font-weight: 700; color: var(--adm-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.vd-form input, .vd-form select, .vd-form textarea { border: 1px solid var(--adm-bd-2); border-radius: var(--adm-r); padding: 7px 9px; font: inherit; font-size: 13px; color: var(--adm-ink); text-transform: none; letter-spacing: 0; }
+.vd-form textarea { grid-column: 1 / -1; min-height: 90px; font-family: var(--adm-font-mono); font-size: 12px; }
+.vd-form .vd-span { grid-column: 1 / -1; }
+.vd-form button, .vd-row form button, .vd-inline button { background: var(--adm-accent); color: #fff; border: 0; border-radius: var(--adm-r); padding: 8px 12px; font-weight: 700; font-size: 12px; cursor: pointer; }
+.vd-form button.ghost, .vd-row form button.ghost { background: transparent; color: var(--adm-ink); border: 1px solid var(--adm-bd-2); }
+.vd-form button.danger, .vd-row form button.danger { background: var(--adm-red); }
+.vd-list { display: grid; gap: 0; }
+.vd-row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-top: 1px solid var(--adm-hair); padding: 10px 0; }
+.vd-row:first-child { border-top: 0; }
+.vd-row__main { display: grid; gap: 2px; min-width: 0; }
+.vd-row__title { font-weight: 700; font-size: 13px; color: var(--adm-ink); }
+.vd-row__meta, .vd-muted { font-size: 12px; color: var(--adm-muted); }
+.vd-row form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.vd-row form input, .vd-row form select { border: 1px solid var(--adm-bd-2); border-radius: var(--adm-r); padding: 5px 7px; font-size: 12px; }
+.vd-chip { display: inline-block; padding: 1px 7px; border-radius: var(--adm-r-chip); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.vd-chip--published { background: var(--adm-green-bg); color: var(--adm-green); }
+.vd-chip--draft { background: var(--adm-amber-bg); color: var(--adm-amber-fg); }
+.vd-chip--other { background: var(--adm-steel-bg); color: var(--adm-steel); }
+.vd-chip--placeholder { background: var(--adm-red-bg); color: var(--adm-red); }
+.vd-alert { padding: 10px 12px; border-radius: var(--adm-r); margin: 10px 0; font-size: 13px; }
+.vd-alert--success { background: var(--adm-green-bg); color: var(--adm-green); }
+.vd-alert--error { background: var(--adm-red-bg); color: var(--adm-red); }
+.vd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.vd-table th, .vd-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--adm-hair); vertical-align: top; }
+.vd-table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--adm-muted); }
+.vd-table td.num, .vd-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.vd-table code { font-family: var(--adm-font-mono); font-size: 11px; }
+.vd-item { border: 1px solid var(--adm-hair); border-radius: var(--adm-r); padding: 10px; margin: 8px 0; }
+.vd-item summary { cursor: pointer; font-weight: 700; font-size: 13px; color: var(--adm-ink); }
+.vd-item summary span { font-weight: 400; color: var(--adm-muted); font-size: 12px; }
+.vd-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+@media (max-width: 900px) { .vd-grid--2, .vd-form, .vd-form--3 { grid-template-columns: 1fr; } .vd-row { display: grid; } }
