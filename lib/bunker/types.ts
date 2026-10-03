@@ -27,12 +27,16 @@ export interface FuelIndexProduct {
   sulphurClass: SulphurClass;
   /** Mean of live normalised quotes, one per supplier. What the estimator uses. */
   averageUsdMt: number;
-  minUsdMt: number;
-  medianUsdMt: number;
-  maxUsdMt: number;
+  /** Null for members when fewer than 3 suppliers quote (cohortSuppressed). */
+  minUsdMt: number | null;
+  medianUsdMt: number | null;
+  maxUsdMt: number | null;
   quoteCount: number;
+  /** True when min/median/max are withheld to protect a small cohort (< 3). */
+  cohortSuppressed: boolean;
   /** Freshness of the newest counted quote (expired quotes never count). */
   freshness: Extract<QuoteFreshness, "current" | "stale">;
+  /** Newest counted quote, floored to the hour. */
   latestQuoteAt: string;
   /** True when barge fee + mandatory charges are folded into the per-MT price. */
   normalised: boolean;
@@ -43,6 +47,8 @@ export interface FuelPriceIndex {
   /** The port actually used: the requested one, else the fallback's reference. */
   port: string | null;
   scope: FuelIndexScope;
+  /** Stem (MT) the fixed delivery charges were spread over. */
+  stemMt: number;
   products: FuelIndexProduct[];
   /** Indicators; null when either side has no live quote. */
   spreads: { hsfoVlsfo: number | null; vlsfoLsmgo: number | null };
@@ -54,6 +60,8 @@ export interface FuelPriceIndexParams {
   portLocode?: string;
   productKeys?: FuelProductKey[];
   asOf?: string;
+  /** Stem in MT for normalising fixed charges; the database defaults to 500. */
+  stemMt?: number;
 }
 
 // ── Ticker strip (B-owned, not a cross-stream contract) ─────────────────────
@@ -72,8 +80,9 @@ export interface BunkerTickerPrice {
 export interface BunkerTickerSponsor {
   name: string;
   url: string | null;
-  /** Display names of the ports quoted on this row. */
-  ports: string[];
+  /** One row per sponsor and port: prices differ by port. */
+  port: string;
+  portLocode: string;
   freshness: Exclude<QuoteFreshness, "hidden">;
   ageDays: number;
   latestQuoteAt: string;

@@ -46,6 +46,7 @@ export async function getFuelPriceIndex(
     p_port_locode: params.portLocode ?? null,
     p_product_keys: params.productKeys?.length ? params.productKeys : null,
     ...(params.asOf ? { p_as_of: params.asOf } : {}),
+    ...(params.stemMt ? { p_stem_mt: params.stemMt } : {}),
   });
   if (isMissingRpc(error)) throw new BunkerNotDeployedError("get_fuel_price_index");
   if (error) throw new Error(`get_fuel_price_index failed: ${error.message}`);
