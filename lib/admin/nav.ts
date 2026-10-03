@@ -47,7 +47,10 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { id: "porttariffs", label: "Port tariffs", href: "/admin/port-tariffs", icon: "DocAudit", superOnly: true },
       { id: "risk", label: "Risk areas", href: "/admin/risk-areas", icon: "Map" },
       { id: "bunker", label: "Bunker ticker", href: "/admin/bunker", icon: "TrendUp" },
-      { id: "safety", label: "Intelligence rules", href: "/admin/safety-questions", icon: "Sliders" },
+      { id: "voyagedata", label: "Voyage estimator data", href: "/admin/voyage-data", icon: "Map" },
+      { id: "intelligence", label: "Intelligence rules", href: "/admin/intelligence-rules", icon: "Sliders" },
+      { id: "matching", label: "Matchmaking rules", href: "/admin/matching-rules", icon: "Layers", superOnly: true },
+      { id: "safety", label: "Safety questions", href: "/admin/safety-questions", icon: "Check" },
     ],
   },
   {

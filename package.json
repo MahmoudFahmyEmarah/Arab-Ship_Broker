@@ -16,11 +16,15 @@
     "test:fixture-room:e2e": "playwright test --config=playwright.fixture-room.config.ts",
     "test:module-integration": "node scripts/module-integration-contract-check.mjs",
     "test:market-privacy": "node --import tsx scripts/market-privacy-check.ts",
-    "prebuild": "npm run test:route-alerts && npm run test:zones && npm run test:llm-providers && npm run test:user-privileges && npm run test:port-tariff-inventory && npm run test:pda && npm run test:fixture-room && npm run test:module-integration && npm run test:market-privacy",
+    "prebuild": "npm run test:route-alerts && npm run test:zones && npm run test:llm-providers && npm run test:user-privileges && npm run test:port-tariff-inventory && npm run test:pda && npm run test:fixture-room && npm run test:module-integration && npm run test:market-privacy && npm run test:suez && npm run test:voyage && npm run test:bunker && npm run test:rules",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "wa:worker": "node --env-file=.env.local --import tsx scripts/whatsapp-worker.ts"
+    "wa:worker": "node --env-file=.env.local --import tsx scripts/whatsapp-worker.ts",
+    "test:suez": "node --import tsx scripts/suez-check.ts",
+    "test:voyage": "node --import tsx scripts/voyage-check.ts",
+    "test:bunker": "node --import tsx scripts/bunker-check.ts",
+    "test:rules": "node --import tsx scripts/rules-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",

@@ -29,6 +29,9 @@ export const ADMIN_SECTIONS: { id: string; href: string }[] = [
   { id: "billing", href: "/admin/billing" },
   { id: "messages", href: "/admin/messages" },
   { id: "bunker", href: "/admin/bunker" },
+  { id: "voyagedata", href: "/admin/voyage-data" },
+  { id: "matching", href: "/admin/matching-rules" },
+  { id: "intelligence", href: "/admin/intelligence-rules" },
   { id: "datasync", href: "/admin/data-sync" },
   { id: "dataquality", href: "/admin/data-quality" },
   { id: "porttariffs", href: "/admin/port-tariffs" },
@@ -42,7 +45,7 @@ export const ADMIN_SECTIONS: { id: string; href: string }[] = [
 // Admins manages other admins; Settings flips platform-wide flags (beta mode);
 // Data Sync commits bulk writes to every core table (with rollback).
 // Group Mail can broadcast to every list member and holds hosting credentials.
-export const OWNER_ONLY: Record<string, boolean> = { eta: true, admins: true, settings: true, datasync: true, groupmail: true, porttariffs: true, fixtures: true };
+export const OWNER_ONLY: Record<string, boolean> = { eta: true, admins: true, settings: true, datasync: true, groupmail: true, porttariffs: true, fixtures: true, matching: true };
 
 // Sub-admin presets — the design's profiles (Sales / Broker / Accountant /
 // IT) mapped onto this app's real sections. Dashboard is implicit view for
@@ -63,7 +66,7 @@ export const ADMIN_PRESETS: Record<
       review: "edit", cargo: "edit", vesselavail: "edit",
       vessels: "view", users: "view", commodities: "view", ports: "view",
       bunker: "view", safety: "view", orgmembers: "view", risk: "view",
-      dataquality: "view",
+      dataquality: "view", voyagedata: "view", intelligence: "view",
     },
   },
   accountant: {
@@ -82,7 +85,7 @@ export const ADMIN_PRESETS: Record<
     perms: {
       ports: "edit", commodities: "edit", safety: "edit",
       bunker: "edit", vessels: "edit", messages: "view", risk: "edit",
-      dataquality: "edit",
+      dataquality: "edit", voyagedata: "edit", intelligence: "edit",
     },
   },
 };
