@@ -1,11 +1,11 @@
 # Voyage Economics Program — architecture, split and priorities
 
 Owner: Capt. Mohamed Dawoud. Architect / coordinator: Opus (the session that owns `opus-to-codex.md`; it now runs on Claude Fable 5.1, the mailbox identity stays "Opus").
-Date: 3 Oct 2026. Base: `origin/dev` = `677613e` (equals production `main` tree). Status: **ACTIVE — Phase 0 (scaffold) in progress.**
+Date: 3 Oct 2026. Base: `origin/dev` = `677613e` (equals production `main` tree). Status: **ACTIVE — Phase 0 (scaffold r2) in progress.**
 
 This document is the single source of truth for the three streams below. Every engineer reads it before starting and re-reads it after any `PLAN UPDATED` line in `opus-to-codex.md`. Changes to a contract in §4 are made only by the architect, announced in the mailbox with a new revision number at the top of this file.
 
-Revision: **r1** (3 Oct 2026).
+Revision: **r2** (3 Oct 2026, 23:30). **Owner ruling (3 Oct, 23:20): "You can continue as architect and ask from Codex to audit everything, and you can audit his work."** r2 adopts Codex's nine corrections from C2O-025 (see the r2 notes marked ⟨r2⟩) and sets the audit roles: Codex audits Streams S and B at every hand-off; Opus audits Stream R; the owner authorises production. The RUN HOLD of C2O-025 is lifted by that ruling; the working rules in §7 remain.
 
 ---
 
@@ -83,29 +83,31 @@ Golden fixture: **RUBATO**, laden bulk carrier, SB, April 2026: tolls USD 189,85
 |---|---|---|---|---|---|---|
 | **S — Suez calculator + Voyage estimator + Voyage data admin + vessel economics profile + ECA split** | Opus (architect) | `feature/suez-voyage` | `D:\ASB_Projects\Arab Shipborker\Arabshipbroker-voyage` | `20261003 2xxxxx` | `voyagedata` | `/dashboard/suez-toll`, `/dashboard/voyage-estimator`, `/admin/voyage-data` |
 | **B — Bunker: fuel products, suppliers, quotes, index RPC, ticker, supplier portal, admin bunker** | **Opus B** (new Claude Opus 5.5 session) | `feature/bunker-fuel-bar` | `D:\ASB_Projects\Arab Shipborker\Arabshipbroker-bunker` | `20261003 1xxxxx` | `bunker` (exists) | `/dashboard/bunker-supplier`, `/admin/bunker` (rebuild), `BunkerTicker` |
-| **R — Matching rules (data-driven matcher) + Intelligence rules (data-driven card flags) + their admin pages** | **Codex** | `feature/matching-intelligence-rules` | Codex's choice (under `tmp/` as before) | `20261003 3xxxxx` | `matching` (owner-only), `intelligence` | `/admin/matching-rules`, `/admin/intelligence-rules` |
+| **R — Matching rules (data-driven matcher) + Intelligence rules (data-driven card flags) + their admin pages; ⟨r2⟩ auditor of S and B; release composer** | **Codex** | `feature/matching-intelligence-rules` | Codex's choice (under `tmp/` as before) | `20261003 3xxxxx` | `matching` (owner-only), `intelligence` | `/admin/matching-rules`, `/admin/intelligence-rules` |
 
-All three branch from **`feature/econ-scaffold`** (dev `677613e` + the scaffold commit, §6). Codex composes the release at the end, as for the 30 Sep release; Opus cross-audits.
+All three branch from **`feature/econ-scaffold`** (dev `677613e` + the scaffold commit, §6). Codex composes the release at the end, as for the 30 Sep release.
+
+⟨r2⟩ **Audit roles.** Every stream freezes at each hand-off (P1 engines/schema, P2 screens, P3 e2e) and posts branch, full SHA, files, commands and results. **Codex audits Streams S and B** read-only and answers GO/AMEND with file:line findings; **Opus audits Stream R** the same way. A stream resumes after GO or after answering every AMEND item with a new SHA. The Fixture Room C2O/O2C audit loop of 26–30 Sep is the model.
 
 Why this split: S is one coupled engine family (the voyage engine consumes the Suez estimate and the ECA split) and the architect already owns `port_routes`; B is a self-contained new vertical with a crisp contract (§4.1) — ideal for a fresh session; R lives inside the matcher SQL and the market firewall that Codex wrote and owns.
 
 ### 3.1 Stream S — scope (Opus)
 DB (`20261003200000+`):
-- `suez_tariff_versions(id, version_no, status draft|published|superseded, effective_from, effective_to, source_ref, source_url, notes, published_at, published_by)`; one published version per date.
+- `suez_tariff_versions(id, version_no, status draft|published|superseded|withdrawn, effective_from, effective_to, source_ref, source_url, notes, created_by, published_at, published_by)`; one published version per date (no-overlap trigger); published versions immutable except `effective_to`/status/notes; items and tiers of a published version immutable (new version instead). ⟨r2⟩ plus `suez_tariff_sources(id, title, issuer, document_no, issue_date, effective_from, sha256, storage_path, authority official|agent|reference)` referenced by versions, and publication = admin "publish" with a second confirmation step and an audit event (`suez_tariff_events`); maker≠checker is not enforced because the console has one owner account. ⟨r2⟩ **No placeholder truth:** the seed publishes only the verified layers (fixed charges from the RUBATO proforma + Circular 1/2026, waste from Periodical 2/2026, conditional from the SCA mini guide and circulars) and seeds **no toll tiers and no SDR rate**; the engine reports "SCA tolls circular not loaded" / "no SDR rate on file" until the owner loads them. The RUBATO figures live only in `scripts/suez-check.ts` as the golden fixture.
 - `suez_tariff_items(id, version_id, code, label_en, label_ar, layer toll|fixed|conditional|waste, basis flat|pct_of_toll|tier_by_scnt|per_unit|per_gt_threshold|toll_tiered_scnt, currency USD|SDR, params jsonb, direction_scope any|SB|NB, cargo_status_scope any|laden|ballast, condition_key, payer_party, cap_sdr, sort_order, is_active)`.
 - `suez_toll_tiers(id, version_id, vessel_category, cargo_status, tier_order, scnt_from, scnt_to, sdr_per_scnt)`.
 - `sdr_rates(id, rate_usd, as_of, source, created_by, created_at)`.
 - `eca_zones(code, name, polygon jsonb [[lat,lon]…], effective_from, sulphur_limit_pct)`; `fn_route_eca_split(p_pol, p_pod) → jsonb {found, total_nm, eca_nm, by_zone[]}` from `port_route_waypoints`.
 - `vessel_economics_profiles(vessel_id pk, scgt, scnt, gt, suez_category, last_suez_transit, first_transit, searchlight_compliant, mooring_cranes_ok, speed_laden_kn, speed_ballast_kn, consumption jsonb {sea_laden:{residual,distillate}, sea_ballast, port_working, port_idle, anchorage, eca_sea}, has_scrubber, vessel_class A|B|C, source member|admin|sync, updated_by, updated_at)`; RPCs `get_vessel_economics_profile(uuid)` (vessel managers + admins), `upsert_vessel_economics_profile(jsonb)`.
 - `app_settings` key **`voyage_settings`** (see §4.3) and admin RPC-free writes through the existing settings action pattern.
-- Reads granted to `authenticated`: `get_suez_tariff_context(p_date)`, `fn_route_eca_split`, `get_vessel_economics_profile`. Writes: service role + `p_actor` (`admin_suez_*`, `save_voyage_estimate` into the existing `voyage_estimates`).
+- Reads granted to `authenticated`: `get_suez_tariff_context(p_date)`, `fn_route_eca_split`, `get_vessel_economics_profile`. Writes: service role + `p_actor` (`admin_suez_*`). ⟨r2⟩ Estimates are **not** written to the legacy `voyage_estimates`; a new immutable snapshot pair `voyage_estimate_runs` (actor via `fn_app_user_id()`, input snapshot, algorithm version, settings hash, Suez tariff version + SDR rate, fuel index as-of/scope, totals) + `voyage_estimate_lines`, on the `pda_estimates` pattern, with `save_voyage_estimate(p_actor, …)` service-role only and `get_voyage_estimate(uuid)` for the owner/org.
 - DOWN file `supabase/rollback/20261003_suez_voyage_down.sql`.
 Code: `lib/suez/{types,engine,schemas}.ts` (pure), `lib/voyage/{types,engine,schemas}.ts` (pure; imports the Suez engine and the Fuel index type from §4.1), `sdk/app/{suez,voyage}.ts`, pages above, admin `/admin/voyage-data` (tabs: Suez tariffs · Toll tiers · SDR rate · Constants & assumptions · ECA zones · Fuel feed status), `scripts/suez-check.ts` and `scripts/voyage-check.ts` with golden fixtures (RUBATO), Playwright `e2e/voyage-economics.spec.ts`. The legacy `lib/portal/econ.ts` Suez/voyage functions are retired in favour of the new engines; `VoyOpexPanel` and `lib/portal/matching.ts` callers are re-pointed.
 
 ### 3.2 Stream B — scope (Opus B)
 DB (`20261003100000+`):
 - `fuel_products(key pk, family residual|distillate, sulphur_class HS|VLS|ULS, iso_grade, market_label, co2_factor, core_slot boolean, sort_order, is_active)` seeded: `HSFO380 (RMG380, HS)`, `VLSFO (RMG/RME, VLS)`, `ULSFO (ULS)`, `LSMGO (DMA, ULS 0.10)`, `MGO05 (DMA, VLS)`, `MDO (DMB)`.
-- `bunker_suppliers(id, name, url, ports text[] of LOCODEs, country, verified, status enabled|disabled, trust_score, notes, created_at…)`.
+- `bunker_suppliers(id, name, url, country, verified, status enabled|disabled, trust_score, notes, created_at…)` ⟨r2⟩ with ports normalised in `bunker_supplier_ports(supplier_id, port_locode → ports, is_primary)`; supplier actors are `public.users.id`; any bulk import goes through a staged validate → review → publish flow of its own, never through Data Sync.
 - `bunker_supplier_members(supplier_id, user_id, role editor|viewer, invited_by, created_at)` — a normal member account linked to a supplier; **no new `users.role`** (the 330000 privilege boundary stays untouched).
 - `bunker_quotes(id, supplier_id, port_locode → ports, product_key → fuel_products, price numeric, currency 'USD', unit 'mt', delivery_mode barge|truck|pipe|ex_wharf, min_qty_mt, barge_fee_usd, mandatory_charges_usd, valid_from, valid_until, source supplier|admin_override|admin_input, submitted_by, submitted_at, superseded_at)`; latest live row per (supplier, port, product) wins; append-only history via `superseded_at`.
 - `bunker_quote_events` (audit: who, when, old → new, reason) — drives the admin "Update history".
@@ -135,13 +137,13 @@ Returns:
   "scope": "port|region|global", // how far it had to fall back
   "products": [
     { "key": "VLSFO", "label": "VLSFO", "family": "residual", "sulphurClass": "VLS",
-      "bestUsdMt": 611.0, "medianUsdMt": 618.5, "highUsdMt": 630.0,
+      "averageUsdMt": 618.0, "minUsdMt": 611.0, "medianUsdMt": 618.5, "maxUsdMt": 630.0,
       "quoteCount": 3, "freshness": "current|stale", "latestQuoteAt": "…", "normalised": true }
   ],
   "spreads": { "hsfoVlsfo": -95.0, "vlsfoLsmgo": 212.0 },
   "noOffer": ["ULSFO"] }
 ```
-Rules: only quotes with `valid_until >= as_of` and age ≤ 14 d count (expired never count); `bestUsdMt` = min normalised (price + barge fee + mandatory charges, per MT at min qty); never 0 — a product with no live quote appears in `noOffer` and not in `products`; fallback order port → same trading zone (`ports.zone`) → global, reported in `scope`.
+Rules: ⟨r2⟩ **the Voyage estimator consumes `averageUsdMt`** — the owner's brief: "المنصة تأخذ المتوسط لتغذية حاسبة الرحلة" (the platform takes the average to feed the voyage calculator); min/median/max/count are for review and the admin page. The average is the arithmetic mean of the live normalised quotes (price + barge fee + mandatory charges, per MT at min qty), one per supplier (latest wins). Only quotes with `valid_until >= as_of` and age ≤ 14 d count (expired never count); never 0 — a product with no live quote appears in `noOffer` and not in `products`; fallback order port → same trading zone (`ports.zone`) → global, reported in `scope`. ⟨r2⟩ The index carries **no supplier identity**; the ticker strip shows the sponsoring supplier's name (the owner's brief: the supplier "يعرض نفسه للمستفيدين عندنا" — that is their reward), but a compared/index quote is never attributed to a supplier until negotiation.
 TypeScript (in `sdk/app/bunker.ts`, owned by B): `export type FuelPriceIndex = …; export async function getFuelPriceIndex(supabase, params: {portLocode?: string; productKeys?: string[]; asOf?: string}): Promise<FuelPriceIndex>`.
 Until B lands, S compiles against the type in `lib/bunker/types.ts` (B creates this file in the scaffold-level commit **first**, within its first hour, and announces it) and uses `FUEL_FALLBACK` behind an explicit "no live index" banner.
 
@@ -204,7 +206,7 @@ Open inputs needed from the owner (blocking only the *values*, not the build):
 ## 6. Scaffold commit (`feature/econ-scaffold`, by the architect, P0)
 - `lib/admin/sections.ts`: add `voyagedata → /admin/voyage-data`, `matching → /admin/matching-rules` (OWNER_ONLY), `intelligence → /admin/intelligence-rules`; presets: `it` gets `voyagedata: edit, intelligence: edit`; `broker` gets `voyagedata: view, intelligence: view`.
 - `lib/admin/nav.ts`: Platform data gains "Voyage estimator data", "Intelligence rules" (new route), "Matchmaking rules" (superOnly); the existing safety item is relabelled "Safety questions".
-- `package.json`: `test:suez`, `test:voyage`, `test:bunker`, `test:rules` → `scripts/{suez,voyage,bunker,rules}-check.ts` stubs (each prints "scaffold stub · 0 checks" and exits 0) appended to `prebuild`. Each stream replaces **only its own** stub.
+- `package.json`: `test:suez`, `test:voyage`, `test:bunker`, `test:rules` → `scripts/{suez,voyage,bunker,rules}-check.ts`. ⟨r2⟩ A check enters `prebuild` only when it holds real assertions and fails closed; passing "0 checks" stubs are forbidden. Scaffold r2 therefore removes the three unimplemented stubs from the repo and from `prebuild`, keeps the four `test:*` script entries, and keeps `test:suez` in `prebuild` (133 real assertions). The composer (Codex) adds `test:voyage`, `test:bunker`, `test:rules` to `prebuild` at integration once each is real.
 - `docs/plan/voyage-economics-program.md`: a copy of this file (git history); the live copy stays here in the coordination folder.
 
 ---
@@ -218,4 +220,5 @@ Open inputs needed from the owner (blocking only the *values*, not the build):
 5. **Migrations.** Your block only (§3). Every migration is idempotent where practical, has a DOWN file, revokes member access by default and grants explicitly. Record the version in `supabase_migrations.schema_migrations` when applying by hand (the harness pattern from the 30 Sep release).
 6. **Privacy rules carry over.** No hidden vessel identifiers or counterparty identities in any output; supplier contacts stay behind the contact firewall; member-facing RPCs return no raw ids they do not own.
 7. **Mailbox cadence.** Check the other mailboxes before a work block, after every commit, before touching a contract, and at least hourly. Use request ids: `O2C/C2O` (Opus↔Codex), `O2B/B2O` (Opus↔Opus B), `C2B/B2C` (Codex↔Opus B). Status words `OPEN / ACK / DONE / BLOCKED`; only the author changes the status.
-8. **Definition of done per stream.** Check script with golden fixtures green; `tsc --noEmit` 0; targeted eslint clean; migrations + DOWN proven on the isolated DB (apply → suites → DOWN → fingerprint identical → re-apply); Playwright for the new screens green on 3101/3102/3103 against the shared local; hand-off entry in the mailbox with branch, full SHA, files, commands, results, risks.
+8. **Definition of done per stream.** Check script with golden fixtures green; `tsc --noEmit` 0; targeted eslint clean; migrations + DOWN proven on the isolated DB (apply → suites → DOWN → fingerprint identical → re-apply); Playwright for the new screens green on 3101/3102/3103 against the shared local; hand-off entry in the mailbox with branch, full SHA, files, commands, results, risks; ⟨r2⟩ **and the cross-audit GO** (Codex for S and B, Opus for R).
+9. ⟨r2⟩ **Intelligence rules** use a typed, whitelisted evaluator (entity, field from a fixed list, condition enum, typed threshold); no stored SQL or JavaScript expressions anywhere in the program. **Matching settings** publication is atomic: new version row + audit event + queued/performed recompute of `public.matches`; SQL and TypeScript parity is proven by one contract check that feeds the same JSON to both.
