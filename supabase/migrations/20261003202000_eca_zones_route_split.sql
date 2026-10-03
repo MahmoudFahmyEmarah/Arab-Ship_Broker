@@ -28,7 +28,7 @@ grant select on table public.eca_zones to authenticated;
 
 insert into public.eca_zones (code, name, polygon, sulphur_limit_pct, effective_from, notes)
 values ('MED', 'Mediterranean Sea ECA (SOx)',
-  '[[35.85,-5.6],[36.15,-5.6],[36.7,-4.4],[37.6,-0.6],[38.9,0.3],[40.5,0.6],[41.3,2.3],[42.8,3.3],[43.4,5.0],[43.8,7.5],[44.4,9.0],[43.9,10.4],[41.9,12.3],[40.6,14.8],[39.0,16.5],[40.4,18.5],[41.9,16.2],[43.6,13.5],[45.0,12.4],[45.8,13.5],[44.9,14.0],[43.5,16.0],[42.5,18.5],[40.2,19.7],[37.9,21.0],[36.3,23.0],[38.0,24.5],[39.5,25.5],[40.1,26.2],[39.0,26.6],[37.0,27.5],[36.3,30.0],[36.8,31.5],[36.2,34.2],[35.5,35.9],[33.9,35.5],[32.1,34.8],[31.3,34.3],[31.3,32.3],[31.5,30.0],[31.1,28.0],[32.0,24.0],[32.9,21.5],[30.5,19.0],[32.9,13.2],[33.9,10.9],[36.9,10.3],[37.1,8.5],[36.8,3.0],[35.7,-0.6],[35.3,-3.0]]'::jsonb,
+  '[[35.85,-5.6],[36.15,-5.6],[36.7,-4.4],[37.6,-0.6],[38.9,0.3],[40.5,0.6],[41.3,2.3],[42.8,3.3],[43.4,5.0],[43.8,7.5],[44.4,9.0],[43.9,10.4],[41.9,12.3],[40.8,14.3],[39.9,15.7],[38.1,15.6],[38.0,16.1],[39.0,17.1],[40.4,17.2],[40.0,18.0],[39.8,18.4],[40.1,18.5],[40.6,18.0],[41.1,16.9],[41.9,16.2],[43.6,13.5],[44.07,12.5],[44.45,12.2],[44.95,12.5],[45.45,12.3],[45.7,13.7],[44.9,14.0],[43.5,16.0],[42.5,18.5],[40.2,19.7],[37.9,21.0],[36.3,23.0],[38.0,24.5],[39.5,25.5],[40.1,26.2],[39.0,26.6],[37.0,27.5],[36.3,30.0],[36.8,31.5],[36.9,34.6],[36.55,35.4],[36.72,36.25],[36.0,35.95],[35.5,35.9],[33.9,35.5],[32.1,34.8],[31.3,34.3],[31.3,32.3],[31.3,31.0],[31.1,29.8],[30.85,28.6],[31.35,27.2],[31.55,25.1],[32.0,24.0],[32.9,21.5],[30.5,19.0],[32.9,13.2],[33.9,10.9],[36.9,10.3],[37.1,8.5],[36.8,3.0],[35.7,-0.6],[35.3,-3.0]]'::jsonb,
   0.10, date '2025-05-01',
   'MARPOL Annex VI Med SOx ECA, 0.10% from 1 May 2025. Excludes the Marmara/Black Sea and the Suez Canal.')
 on conflict (code) do nothing;
@@ -84,8 +84,9 @@ declare
   v_pod text := upper(trim(coalesce(p_pod, '')));
   r public.port_routes%rowtype;
   v_zone record;
-  v_prev record;
   v_cur record;
+  v_have_prev boolean;
+  v_prev_nm numeric;
   v_seg numeric;
   v_total numeric := 0;
   v_by jsonb := '{}'::jsonb;
@@ -109,21 +110,21 @@ begin
   end if;
 
   for v_zone in select code, polygon from public.eca_zones where is_active and effective_from <= current_date loop
-    v_eca := 0; v_prev := null; v_in_prev := null;
+    v_eca := 0; v_have_prev := false; v_prev_nm := null; v_in_prev := false;
     for v_cur in
       select w.latitude, w.longitude, w.cumulative_nm
         from public.port_route_waypoints w
        where w.route_id = r.id
        order by w.seq
     loop
-      v_in_cur := public.fn_point_in_ring(v_cur.latitude, v_cur.longitude, v_zone.polygon);
-      if v_prev is not null and v_cur.cumulative_nm is not null and v_prev.cumulative_nm is not null then
-        v_seg := greatest(v_cur.cumulative_nm - v_prev.cumulative_nm, 0);
+      v_in_cur := coalesce(public.fn_point_in_ring(v_cur.latitude, v_cur.longitude, v_zone.polygon), false);
+      if v_have_prev and v_cur.cumulative_nm is not null and v_prev_nm is not null then
+        v_seg := greatest(v_cur.cumulative_nm - v_prev_nm, 0);
         if v_in_cur and v_in_prev then v_eca := v_eca + v_seg;
         elsif v_in_cur or v_in_prev then v_eca := v_eca + v_seg / 2;
         end if;
       end if;
-      v_prev := v_cur; v_in_prev := v_in_cur;
+      v_have_prev := true; v_prev_nm := v_cur.cumulative_nm; v_in_prev := v_in_cur;
     end loop;
     v_by := v_by || jsonb_build_object(v_zone.code, round(v_eca, 1));
     v_total := v_total + v_eca;
