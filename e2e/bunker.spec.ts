@@ -1,0 +1,185 @@
+/**
+ * Fuel Bar browser proof (plan r2 §3.2, Stream B).
+ *
+ * An unverified supplier's editor publishes a price in the supplier portal; it
+ * waits for approval and is invisible to the index; an admin approves it in
+ * /admin/bunker; the sponsor then appears on the dashboard ticker and the
+ * index average reflects it without naming the supplier. An outsider gets the
+ * invitation page and cannot submit through the API either.
+ *
+ * Seeds are tagged `src:bunker-e2e` and removed in afterAll (local stack only).
+ */
+import { test, expect, type Browser } from "@playwright/test";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { execSync } from "node:child_process";
+import { PASSWORD, apiClientAs, signInAs } from "./fixture-room.helpers";
+
+test.use({ storageState: { cookies: [], origins: [] } });
+test.describe.configure({ mode: "serial", timeout: 600_000 });
+
+const PORT = "GRPIR";
+const PRICE = 612;
+
+interface Seed {
+  stamp: string;
+  supplierName: string;
+  supplierId: string;
+  editor: { email: string; userId: string };
+  outsider: { email: string; userId: string };
+  admin: { email: string; userId: string };
+}
+
+function localKeys() {
+  let url = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
+  let service = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
+  if (!service) {
+    const out = execSync("npx supabase status -o env", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    service = out.match(/^SERVICE_ROLE_KEY="?([^"\n]+)"?/m)?.[1];
+    url = out.match(/^API_URL="?([^"\n]+)"?/m)?.[1] ?? url;
+  }
+  if (!service) throw new Error("No local service key");
+  if (!/127\.0\.0\.1|localhost/.test(url)) throw new Error(`Refusing to seed bunker data against ${url}`);
+  return { url, service };
+}
+
+async function seed(): Promise<Seed> {
+  const { url, service } = localKeys();
+  const db: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
+  const stamp = Date.now().toString(36);
+  const mk = async (prefix: string, admin: boolean) => {
+    const email = `e2e-bk-${prefix}-${stamp}@arabshipbroker.test`;
+    const { data, error } = await db.auth.admin.createUser({
+      email, password: PASSWORD, email_confirm: true, app_metadata: { role: admin ? "admin" : "member" },
+    });
+    if (error || !data.user) throw new Error(`auth ${prefix}: ${error?.message}`);
+    const userId = data.user.id;
+    const { error: e2 } = await db.from("users").insert({
+      id: userId, supabase_user_id: userId, email, full_name: `src:bunker-e2e ${prefix}`,
+      company: "src:bunker-e2e", role: admin ? "admin" : "vessel_owner", admin_tier: admin ? "super" : null,
+      subscription_tier: admin ? "T4" : "T3", is_active: true,
+    });
+    if (e2) throw new Error(`users ${prefix}: ${e2.message}`);
+    return { email, userId };
+  };
+  const admin = await mk("admin", true);
+  const editor = await mk("editor", false);
+  const outsider = await mk("outsider", false);
+  const supplierName = `src:bunker-e2e Supplier ${stamp}`;
+  const { data: supplierId, error } = await db.rpc("admin_bunker_upsert_supplier", {
+    p_actor: admin.userId,
+    p_supplier: { name: supplierName, url: "https://example.com/bunker-e2e", verified: false, status: "enabled",
+                  ports: [{ locode: PORT, isPrimary: true }] },
+  });
+  if (error) throw new Error(`supplier: ${error.message}`);
+  const { error: e3 } = await db.rpc("admin_bunker_set_member", {
+    p_actor: admin.userId, p_supplier_id: supplierId, p_user_id: editor.userId, p_role: "editor",
+  });
+  if (e3) throw new Error(`member: ${e3.message}`);
+  return { stamp, supplierName, supplierId: supplierId as string, editor, outsider, admin };
+}
+
+function cleanup(s: Seed) {
+  const ids = [s.editor.userId, s.outsider.userId, s.admin.userId].map((x) => `'${x}'`).join(",");
+  // Quotes and events are append-only by trigger; replica mode bypasses it for test teardown.
+  const sql = `
+set session_replication_role = replica;
+delete from public.bunker_quote_events where supplier_id = '${s.supplierId}';
+delete from public.bunker_quotes where supplier_id = '${s.supplierId}';
+delete from public.bunker_supplier_members where supplier_id = '${s.supplierId}';
+delete from public.bunker_supplier_ports where supplier_id = '${s.supplierId}';
+delete from public.bunker_suppliers where id = '${s.supplierId}';
+delete from public.profiles where account_id in (${ids});
+delete from public.users where id in (${ids});
+delete from auth.users where id in (${ids});
+`;
+  try {
+    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0",
+      { input: sql, stdio: ["pipe", "ignore", "ignore"] });
+  } catch {
+    // local disposable data; a leftover is visible by its src:bunker-e2e tag
+  }
+}
+
+let s: Seed;
+const base = (b: { baseURL?: string }) => b.baseURL ?? "http://127.0.0.1:3102";
+
+test.beforeAll(async () => { s = await seed(); });
+test.afterAll(async () => { if (s) cleanup(s); });
+
+async function signedIn(browser: Browser, baseURL: string, email: string) {
+  return signInAs(browser, baseURL, email);
+}
+
+test("outsider gets the invitation page and cannot submit through the API", async ({ browser }, info) => {
+  const { context, page } = await signedIn(browser, base(info.project.use), s.outsider.email);
+  await page.goto("/dashboard/bunker-supplier");
+  await expect(page.getByRole("heading", { name: "Bunker prices" })).toBeVisible();
+  await expect(page.getByText("Supplier access is by invitation")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Contact us to join" })).toBeVisible();
+  await context.close();
+
+  const api = await apiClientAs(s.outsider.email);
+  const { error } = await api.rpc("supplier_upsert_quotes", {
+    p_quotes: [{ portLocode: PORT, productKey: "VLSFO", priceUsdMt: 1, validUntil: new Date(Date.now() + 864e5).toISOString() }],
+    p_supplier_id: s.supplierId,
+  });
+  expect(error?.code).toBe("42501");
+});
+
+test("supplier publishes; the quote waits for approval and stays out of the index", async ({ browser }, info) => {
+  const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
+  await page.goto("/dashboard/bunker-supplier");
+  await expect(page.getByRole("heading", { name: s.supplierName })).toBeVisible();
+  await expect(page.getByText("Prices are reviewed before going live")).toBeVisible();
+  await page.getByLabel(new RegExp(`New VLSFO price at ${PORT}`)).fill(String(PRICE));
+  await page.getByRole("button", { name: "Publish new prices" }).click();
+  await expect(page.getByRole("status")).toContainText("go live after Arab ShipBroker approves");
+  await expect(page.getByText(`$${PRICE} awaiting approval`)).toBeVisible();
+  await context.close();
+
+  const api = await apiClientAs(s.editor.email);
+  const { data } = await api.rpc("get_fuel_price_index", { p_port_locode: PORT, p_product_keys: ["VLSFO"] });
+  const vlsfo = (data as { products: { key: string; averageUsdMt: number }[] }).products.find((p) => p.key === "VLSFO");
+  expect(vlsfo?.averageUsdMt ?? null).not.toBe(PRICE);
+});
+
+test("admin approves in /admin/bunker; the price goes live", async ({ browser }, info) => {
+  const { context, page } = await signedIn(browser, base(info.project.use), s.admin.email);
+  await page.goto("/admin/bunker");
+  await expect(page.getByText("Awaiting approval").first()).toBeVisible();
+  const row = page.getByRole("row").filter({ hasText: s.supplierName });
+  await row.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByRole("status")).toContainText("Quote approved");
+  const live = page.getByRole("row").filter({ hasText: s.supplierName });
+  await expect(live).toContainText(`$${PRICE}`);
+  await expect(live).toContainText("Current");
+  await page.getByRole("link", { name: /Update history/ }).click();
+  await expect(page.getByRole("row").filter({ hasText: s.supplierName }).first()).toBeVisible();
+  await context.close();
+});
+
+test("the sponsor appears on the dashboard ticker; the index averages without naming it", async ({ browser }, info) => {
+  const { context, page } = await signedIn(browser, base(info.project.use), s.outsider.email);
+  const ticker = page.getByRole("region", { name: "Bunker prices ticker" });
+  await expect(ticker).toBeVisible();
+  const seg = ticker.locator(".bt-seg", { hasText: s.supplierName }).first();
+  await expect(seg).toContainText("VLSFO");
+  await expect(seg).toContainText(`$${PRICE}/MT`);
+  await expect(seg.getByRole("link", { name: new RegExp(s.supplierName) })).toHaveAttribute("href", "https://example.com/bunker-e2e");
+  await context.close();
+
+  const api = await apiClientAs(s.outsider.email);
+  const { data, error } = await api.rpc("get_fuel_price_index", { p_port_locode: PORT, p_product_keys: ["VLSFO"] });
+  expect(error).toBeNull();
+  const idx = data as { scope: string; products: { key: string; averageUsdMt: number; quoteCount: number; cohortSuppressed: boolean; minUsdMt: number | null }[] };
+  expect(idx.scope).toBe("port");
+  const vlsfo = idx.products.find((p) => p.key === "VLSFO")!;
+  expect(vlsfo.averageUsdMt).toBeGreaterThan(0);
+  if (vlsfo.quoteCount === 1) expect(vlsfo.averageUsdMt).toBe(PRICE);
+  if (vlsfo.quoteCount < 3) {
+    expect(vlsfo.cohortSuppressed).toBe(true);
+    expect(vlsfo.minUsdMt).toBeNull();
+  }
+  expect(JSON.stringify(data)).not.toContain(s.supplierName);
+  expect(JSON.stringify(data)).not.toContain(s.supplierId);
+});
