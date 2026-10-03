@@ -1,5 +1,15 @@
--- DOWN for Stream S (Voyage Economics): 20261003200000, 200100, 201000, 202000, 203000.
+-- DOWN for Stream S (Voyage Economics): 20261003200000, 200100, 201000, 202000, 203000, 204000.
 -- Returns the schema to 677613e. Order: dependents first.
+
+drop function if exists public.list_my_voyage_estimates(integer);
+drop function if exists public.get_voyage_estimate(uuid);
+drop function if exists public.save_voyage_estimate(uuid, jsonb);
+drop function if exists public.fn_can_read_voyage_run(uuid);
+drop trigger if exists trg_voyage_lines_immutable on public.voyage_estimate_lines;
+drop trigger if exists trg_voyage_run_immutable on public.voyage_estimate_runs;
+drop function if exists public.fn_voyage_run_immutable();
+drop table if exists public.voyage_estimate_lines;
+drop table if exists public.voyage_estimate_runs;
 
 drop function if exists public.fn_route_eca_split(text, text);
 drop function if exists public.fn_point_in_ring(numeric, numeric, jsonb);

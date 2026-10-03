@@ -29,3 +29,34 @@ export function mergeVoyageSettings(v: Partial<VoyageSettings> | null | undefine
     fuelFallback: { ...d.fuelFallback, ...(v.fuelFallback ?? {}) },
   };
 }
+
+// ── Saved estimates (migration 20261003204000) ─────────────────────────────
+
+export interface VoyageEstimateSummary {
+  id: string;
+  label: string | null;
+  createdAt: string;
+  vesselId: string | null;
+  cargoListingId: string | null;
+  totals: Record<string, unknown>;
+  algorithmVersion: string;
+}
+
+export async function listMyVoyageEstimates(supabase: SupabaseClient, limit = 20): Promise<VoyageEstimateSummary[]> {
+  const { data, error } = await supabase.rpc("list_my_voyage_estimates", { p_limit: limit });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as VoyageEstimateSummary[];
+}
+
+export async function getVoyageEstimate(supabase: SupabaseClient, runId: string): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc("get_voyage_estimate", { p_run_id: runId });
+  if (error) throw new Error(error.message);
+  return data as Record<string, unknown>;
+}
+
+// Service-role write after the server action verified the session (p_actor = public.users.id).
+export async function saveVoyageEstimate(adminClient: SupabaseClient, actorUserId: string, payload: Record<string, unknown>): Promise<string> {
+  const { data, error } = await adminClient.rpc("save_voyage_estimate", { p_actor: actorUserId, p_payload: payload });
+  if (error) throw new Error(error.message);
+  return data as string;
+}

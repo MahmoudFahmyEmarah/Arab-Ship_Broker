@@ -1,0 +1,38 @@
+/* Voyage estimator v2 — layout on top of the voyage-estimator classes. Tokens only. */
+.vy-layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .vy-layout { grid-template-columns: 1fr; } }
+.vy-rail { display: grid; gap: 12px; }
+.vy-main { min-width: 0; }
+.vy-field { display: grid; gap: 3px; font-size: 11px; color: var(--asb-gray-500); }
+.vy-field > span { font-weight: 600; }
+.vy-field input, .vy-field select { border: 1px solid var(--asb-gray-200); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12px; color: var(--asb-navy); background: var(--asb-white, #fff); }
+.vy-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vy-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.vy-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--asb-navy); line-height: 1.35; }
+.vy-cons { width: 100%; border-collapse: collapse; font-size: 11px; }
+.vy-cons th { text-align: left; font-weight: 600; color: var(--asb-gray-500); padding: 2px 4px; }
+.vy-cons td { padding: 2px 4px; }
+.vy-cons input { width: 100%; box-sizing: border-box; border: 1px solid var(--asb-gray-200); border-radius: 4px; padding: 4px 6px; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.vy-leg { border-top: 0.5px solid var(--asb-gray-200); padding: 6px 0; display: grid; gap: 4px; }
+.vy-leg__title { font-size: 12px; font-weight: 600; color: var(--asb-navy); display: flex; justify-content: space-between; }
+.vy-leg__meta { font-size: 11px; color: var(--asb-gray-500); }
+.vy-badge { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.vy-badge--auto { background: var(--asb-green-bg); color: var(--asb-green); }
+.vy-badge--manual { background: var(--asb-amber-bg); color: var(--asb-amber); }
+.vy-badge--missing { background: var(--asb-red-bg); color: var(--asb-red); }
+.vy-badge--fallback { background: var(--asb-amber-bg); color: var(--asb-amber); }
+.vy-pill { display: inline-flex; gap: 6px; align-items: center; font-size: 11px; color: var(--asb-navy); border: 1px solid var(--asb-gray-200); border-radius: 999px; padding: 3px 9px; margin-right: 6px; }
+.vy-pill b { font-variant-numeric: tabular-nums; }
+.vy-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.vy-table th, .vy-table td { padding: 5px 6px; border-bottom: 0.5px solid var(--asb-gray-200); text-align: left; vertical-align: top; }
+.vy-table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--asb-gray-500); }
+.vy-table td.num, .vy-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.vy-table td small { display: block; color: var(--asb-gray-500); font-size: 10px; }
+.vy-notes { margin-top: 16px; background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200); border-radius: 6px; padding: 10px 12px; }
+.vy-notes h4 { margin: 0 0 4px; font-size: 12px; color: var(--asb-navy); }
+.vy-notes ul { margin: 0 0 8px; padding-left: 18px; font-size: 12px; color: var(--asb-navy); line-height: 1.5; }
+.vy-notes .is-warn li { color: var(--asb-amber); }
+.vy-unavailable { background: var(--asb-amber-bg); border: 1px solid var(--asb-amber); color: var(--asb-navy); border-radius: 6px; padding: 10px 12px; font-size: 12px; margin-bottom: 12px; }
+.vy-save { display: grid; gap: 4px; margin-top: 6px; }
+.vy-error { color: var(--asb-red); }
+.vy-muted { color: var(--asb-gray-500); font-size: 11px; }
