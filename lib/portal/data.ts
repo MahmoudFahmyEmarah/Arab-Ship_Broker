@@ -8,6 +8,7 @@
 import { getAppUserRow } from "@/lib/app-user";
 import { getSpotActiveDays, getVesselActiveDays } from "@/lib/app-settings";
 import { getMyCargoListings } from "@/sdk/app/cargos";
+import { BunkerNotDeployedError, getFuelPriceIndex } from "@/sdk/app/bunker";
 import {
   getMyVesselAvailability,
 } from "@/sdk/app/vessels";
@@ -58,28 +59,33 @@ function isSupabaseConfigured(): boolean {
 
 // Live bunker prices for the calculators — the SAME admin-managed fuel_prices
 // table the bunker ticker reads. Falls back to the econ defaults if unset.
-export async function loadFuelPrices(): Promise<{ vlsfo: number; lsmgo: number; port: string; updated: string }> {
-  const fallback = { vlsfo: 585, lsmgo: 725, port: "Singapore", updated: "" };
+// Fuel prices for the voyage estimator: the platform index average
+// (sdk/app/bunker.ts, plan r2 §4.1). When the index is not deployed or has no
+// live quote for a product, that product keeps the fallback value and `live`
+// says so, so the page can show its "no live index" banner.
+export async function loadFuelPrices(): Promise<{
+  vlsfo: number; lsmgo: number; port: string; updated: string; live: { vlsfo: boolean; lsmgo: boolean };
+}> {
+  const fallback = { vlsfo: 585, lsmgo: 725, port: "Fallback values", updated: "", live: { vlsfo: false, lsmgo: false } };
   if (!isSupabaseConfigured()) return fallback;
   try {
     const supabase = await getSupabaseServerClient();
-    const { data } = await supabase
-      .from("fuel_prices")
-      .select("vlsfo_usd_mt, lsmgo_usd_mt, port_area, updated_at")
-      .eq("is_active", true)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const fp = data as { vlsfo_usd_mt?: number | null; lsmgo_usd_mt?: number | null; port_area?: string | null; updated_at?: string | null } | null;
-    if (!fp) return fallback;
+    const index = await getFuelPriceIndex(supabase, { productKeys: ["VLSFO", "LSMGO"] });
+    const vlsfo = index.products.find((p) => p.key === "VLSFO");
+    const lsmgo = index.products.find((p) => p.key === "LSMGO");
+    if (!vlsfo && !lsmgo) return fallback;
+    const latest = [vlsfo?.latestQuoteAt, lsmgo?.latestQuoteAt].filter(Boolean).sort().pop();
     return {
-      vlsfo: fp.vlsfo_usd_mt ?? fallback.vlsfo,
-      lsmgo: fp.lsmgo_usd_mt ?? fallback.lsmgo,
-      port: fp.port_area ?? fallback.port,
-      updated: fp.updated_at ? new Date(fp.updated_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : fallback.updated,
+      vlsfo: vlsfo?.averageUsdMt ?? fallback.vlsfo,
+      lsmgo: lsmgo?.averageUsdMt ?? fallback.lsmgo,
+      port: index.port ?? "Platform index (all ports)",
+      updated: latest
+        ? new Date(latest).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+        : "",
+      live: { vlsfo: !!vlsfo, lsmgo: !!lsmgo },
     };
   } catch (err) {
-    console.error("[portal] fuel price load failed:", err);
+    if (!(err instanceof BunkerNotDeployedError)) console.error("[portal] fuel index load failed:", err);
     return fallback;
   }
 }
