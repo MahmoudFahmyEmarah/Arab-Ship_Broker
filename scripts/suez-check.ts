@@ -41,7 +41,6 @@ function seedItems(versionNo: 1 | 2): SuezTariffItem[] {
     item({ code: "imposed_tug", labelEn: "Imposed tug", layer: "conditional", basis: "flat", currency: "SDR", params: { amount: 22000 }, conditionKey: "no_mooring_cranes", sortOrder: 200 }),
     item({ code: "late_arrival", labelEn: "Late arrival for the convoy", layer: "conditional", basis: "pct_of_toll", currency: "SDR", directionScope: "SB", conditionKey: "late_arrival", sortOrder: 210,
       params: { bands: [{ key: "b1", pct: 5, capSdr: 12500 }, { key: "b2", pct: 10, capSdr: 25000 }, { key: "b3", pct: 12, capSdr: 30000 }] } }),
-    item({ code: "no_searchlight", labelEn: "Searchlight absent or non-compliant", layer: "conditional", basis: "flat", params: { amount: 500 }, conditionKey: "no_searchlight", sortOrder: 220 }),
     item({ code: "not_ready", labelEn: "Not ready in the convoy", layer: "conditional", basis: "flat", params: { amount: 5000 }, conditionKey: "not_ready", sortOrder: 230 }),
     item({ code: "heavy_lift", labelEn: "Heavy unit ≥ 250 t", layer: "conditional", basis: "pct_of_toll", currency: "SDR", cargoStatusScope: "laden", params: { pct: 50 }, conditionKey: "heavy_lift", payerParty: "charterer", sortOrder: 240 }),
     item({ code: "floating_unit", labelEn: "Floating unit SCGT ≥ 300", layer: "conditional", basis: "pct_of_toll", currency: "SDR", cargoStatusScope: "laden", params: { pct: 125 }, conditionKey: "floating_unit", payerParty: "charterer", sortOrder: 250 }),
@@ -59,7 +58,10 @@ function seedItems(versionNo: 1 | 2): SuezTariffItem[] {
   const mooring = versionNo === 1
     ? item({ code: "mooring", labelEn: "Mooring, unmooring & projector", layer: "fixed", basis: "flat", params: { amount: 3500 }, sortOrder: 40 })
     : item({ code: "mooring", labelEn: "Mooring services", layer: "fixed", basis: "gt_threshold", params: { threshold: 2500, below: 2350, atOrAbove: 3800, unit: "GT" }, sortOrder: 40 });
-  return [...shared, mooring];
+  const searchlight = versionNo === 1
+    ? item({ code: "no_searchlight", labelEn: "Searchlight not in conformity (art. 28)", layer: "conditional", basis: "flat", params: { amount: 5000, fromSecondTransit: true }, conditionKey: "no_searchlight", sortOrder: 220 })
+    : item({ code: "no_searchlight", labelEn: "Searchlight absent or non-compliant", layer: "conditional", basis: "flat", params: { amount: 500 }, conditionKey: "no_searchlight", sortOrder: 220 });
+  return [...shared, mooring, searchlight];
 }
 
 const CATS = ["dry_bulk", "general_cargo", "container", "tanker_crude", "tanker_product", "chemical_tanker", "lpg", "lng", "roro", "car_carrier", "passenger", "other"];
@@ -141,7 +143,12 @@ const rubato: SuezInput = {
   ok(by.late_arrival.triggered, "late arrival triggered");
   near(by.late_arrival.appliedUsd, (tollSdr * 0.10) * rate, 0.02, "late band b2 = 10% of toll (under cap)");
   near(by.late_arrival.potentialUsd ?? 0, (tollSdr * 0.12) * rate, 0.02, "late potential = worst band");
-  near(by.no_searchlight.appliedUsd, 500, 0.01, "searchlight fine");
+  near(by.no_searchlight.appliedUsd, 5000, 0.01, "v1 (art. 28): USD 5,000 on a second or later transit");
+  const first = estimateSuezTransit({ vessel: { ...rubato.vessel, searchlightCompliant: false, firstTransit: true }, voyage: rubato.voyage }, ctxFor(1, "2026-04-20"));
+  const fl = first.layers.conditional.find((f) => f.code === "no_searchlight")!;
+  ok(!fl.triggered && fl.reason.includes("day-time"), "v1: first transit without a searchlight is a delay, not a due");
+  const v2 = estimateSuezTransit({ vessel: { ...rubato.vessel, searchlightCompliant: false, firstTransit: true }, voyage: { ...rubato.voyage, transitDate: "2026-06-01" } }, ctxFor(2, "2026-06-01"));
+  near(v2.layers.conditional.find((f) => f.code === "no_searchlight")!.appliedUsd, 500, 0.01, "v2 (Circular 1/2026): USD 500 per transit from the first transit");
   near(by.not_ready.appliedUsd, 5000, 0.01, "not ready");
   near(by.heavy_lift.appliedUsd, tollSdr * 0.5 * rate, 0.02, "heavy lift +50%");
   near(by.military_cargo.appliedUsd, tollSdr * 0.25 * rate, 0.02, "military +25%");

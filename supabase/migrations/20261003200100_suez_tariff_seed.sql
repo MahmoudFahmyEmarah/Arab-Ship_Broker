@@ -68,7 +68,6 @@ begin
     ('late_arrival', 'Late arrival for the convoy', 'الوصول بعد الموعد', 'conditional', 'pct_of_toll', 'SDR',
        '{"bands": [{"key": "b1", "label": "23:00–00:00", "pct": 5, "capSdr": 12500}, {"key": "b2", "label": "00:00–01:00", "pct": 10, "capSdr": 25000}, {"key": "b3", "label": "after 01:00", "pct": 12, "capSdr": 30000}]}',
        'SB', 'any', 'late_arrival', 'owner', 210, 'Southbound limit line 23:00 LT; extensions against additional tolls.'),
-    ('no_searchlight', 'Searchlight absent or non-compliant', 'غياب الكشاف أو عدم مطابقته', 'conditional', 'flat', 'USD', '{"amount": 500}', 'any', 'any', 'no_searchlight', 'owner', 220, 'Per transit, from the first transit (Circular 1/2026).'),
     ('not_ready', 'Vessel enlisted in the convoy and found not ready', 'السفينة غير جاهزة في القافلة', 'conditional', 'flat', 'USD', '{"amount": 5000}', 'any', 'any', 'not_ready', 'owner', 230, null),
     ('heavy_lift', 'Heavy unit of 250 t or more on board', 'حمولة ثقيلة 250 طناً فأكثر', 'conditional', 'pct_of_toll', 'SDR', '{"pct": 50}', 'any', 'laden', 'heavy_lift', 'charterer', 240, '50% surcharge on the transit toll (project cargo).'),
     ('floating_unit', 'Floating unit of SCGT 300 or more carried (semi-submersible rule)', 'وحدة عائمة 300 طن فأكثر', 'conditional', 'pct_of_toll', 'SDR', '{"pct": 125}', 'any', 'laden', 'floating_unit', 'charterer', 250, '125% plus escort tugs assigned by the SCA.'),
@@ -84,6 +83,15 @@ begin
     ('waste_bags', 'UN-approved bags supplied by the contractor', 'أكياس معتمدة', 'waste', 'per_unit', 'USD', '{"rate": 10, "unit": "bag_m3", "freeUnits": 0}', 'any', 'any', null, 'owner', 420, 'USD 10 per bag per m³.'),
     ('waste_barge_hours', 'Self-propelled garbage barge waiting', 'انتظار صندل المخلفات', 'waste', 'per_unit', 'USD', '{"rate": 200, "unit": "hour", "freeUnits": 1}', 'any', 'any', null, 'owner', 430, 'First hour free, USD 200 per additional hour.')
    ) as t(code, label_en, label_ar, layer, basis, currency, params, dir, cs, cond, payer, so, notes);
+
+  -- ── Searchlight: Rules of Navigation art. 28(9) until Circular 1/2026 ─────
+  insert into public.suez_tariff_items (version_id, code, label_en, label_ar, layer, basis, currency, params, condition_key, sort_order, notes)
+  values (v1, 'no_searchlight', 'Searchlight / electrical connections not in conformity', 'غياب الكشاف أو عدم مطابقته', 'conditional', 'flat', 'USD',
+          '{"amount": 5000, "fromSecondTransit": true}', 'no_searchlight', 220,
+          'Rules of Navigation art. 28(9): day-time transit only; USD 5,000 at the second and each following transit. Spec: bow-mounted, 1,800 m beam, 3 million candela (2,000 W up to 30,000 SCGT, 3,000 W above), type-test certificate.'),
+         (v2, 'no_searchlight', 'Searchlight absent or non-compliant', 'غياب الكشاف أو عدم مطابقته', 'conditional', 'flat', 'USD',
+          '{"amount": 500}', 'no_searchlight', 220,
+          'Circular 1/2026 art. 3: USD 500 per transit, from the first transit; no SCA electrician boards. Spec per Rules of Navigation art. 28.');
 
   -- ── Mooring: differs between the two versions ─────────────────────────────
   insert into public.suez_tariff_items (version_id, code, label_en, label_ar, layer, basis, currency, params, sort_order, notes)

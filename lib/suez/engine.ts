@@ -148,11 +148,16 @@ export function estimateSuezTransit(input: SuezInput, ctx: SuezTariffContext): S
         else reason = "Arrival before the 23:00 limit line.";
         break;
       }
-      case "no_searchlight":
-        if (vessel.searchlightCompliant === false) { triggered = true; reason = "No compliant searchlight on board."; }
-        else if (vessel.searchlightCompliant == null) { reason = "Searchlight compliance not sourced."; warnings.push("Searchlight compliance is not sourced (Circular 1/2026 fine USD 500 per transit)."); }
+      case "no_searchlight": {
+        const fromSecond = bool(item.params?.fromSecondTransit);
+        if (vessel.searchlightCompliant === false) {
+          if (fromSecond && bool(vessel.firstTransit)) { reason = "No compliant searchlight on a first transit: day-time transit only (delay), no due until the second transit."; }
+          else { triggered = true; reason = fromSecond ? "No compliant searchlight on a second or later transit." : "No compliant searchlight on board."; }
+        }
+        else if (vessel.searchlightCompliant == null) { reason = "Searchlight compliance not sourced."; warnings.push("Searchlight compliance is not sourced (Rules of Navigation art. 28; Circular 1/2026)."); }
         else reason = "Compliant searchlight on board.";
         break;
+      }
       case "not_ready":
         triggered = bool(voyage.notReady); reason = triggered ? "Vessel declared not ready for the convoy." : "Applies only if the vessel is found not ready.";
         break;
