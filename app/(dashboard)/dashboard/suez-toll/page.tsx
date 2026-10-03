@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { loadViewerContext, loadVesselViews } from "@/lib/portal/data";
 import { ComingSoon } from "@/components/portal/ComingSoon";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
@@ -7,9 +8,31 @@ import { CalculatorLocked } from "@/components/portal/calculators";
 import { SuezCalculator } from "@/components/suez/SuezCalculator";
 import { getSuezTariffContext } from "@/sdk/app/suez";
 import type { SuezTariffContextResult } from "@/lib/suez/types";
+import { suezOptionFromAdminRow, suezOptionFromView, type AdminVesselRow, type SuezVesselOption } from "@/lib/suez/vessel-options";
 
 export const metadata = { title: "Suez Canal Transit Cost Arab ShipBroker" };
 export const dynamic = "force-dynamic";
+
+// Admins pick from every current position with its hull facts. The vessel
+// master is closed to the authenticated role by the market firewall, so this
+// read uses the service role on the server, after the admin gate above.
+async function loadAdminVesselOptions(): Promise<SuezVesselOption[]> {
+  const db = getSupabaseAdminClient();
+  const { data } = await db
+    .from("vessel_availability")
+    .select("id, vessel_id, vessel:vessels(id, vessel_name, imo_number, vessel_type, dwt_grain, gross_tonnage, scnrt, build_year)")
+    .order("open_date", { ascending: false })
+    .limit(300);
+  const seen = new Set<string>();
+  const out: SuezVesselOption[] = [];
+  for (const row of (data ?? []) as unknown as AdminVesselRow[]) {
+    const opt = suezOptionFromAdminRow(row);
+    if (!opt || !opt.vesselId || seen.has(opt.vesselId)) continue;
+    seen.add(opt.vesselId);
+    out.push(opt);
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export default async function SuezTollPage({ searchParams }: { searchParams: Promise<{ vessel?: string | string[] }> }) {
   const supabase = await getSupabaseServerClient();
@@ -26,11 +49,11 @@ export default async function SuezTollPage({ searchParams }: { searchParams: Pro
   const today = new Date().toISOString().slice(0, 10);
   let context: SuezTariffContextResult = { found: false, date: today };
   try { context = await getSuezTariffContext(supabase, today); } catch { /* the calculator shows the unavailable state */ }
-  const vessels = await loadVesselViews();
+  const vessels = role === "admin" ? await loadAdminVesselOptions() : (await loadVesselViews({ mine: true })).views.map(suezOptionFromView);
 
   return (
     <SuezCalculator
-      vessels={vessels.views}
+      vessels={vessels}
       initialContext={context}
       initialVesselId={typeof params.vessel === "string" ? params.vessel : undefined}
     />

@@ -13,7 +13,7 @@ import {
   SUEZ_VESSEL_CATEGORIES, suezCategoryFromVesselType,
   type SuezCargoStatus, type SuezDirection, type SuezEstimate, type SuezLateBand, type SuezTariffContextResult,
 } from "@/lib/suez/types";
-import type { VesselView } from "@/lib/portal/types";
+import type { SuezVesselOption } from "@/lib/suez/vessel-options";
 import { logEvent } from "@/lib/portal/events";
 import type { VesselEconomicsProfile } from "@/sdk/app/suez";
 import { loadSuezContextAction, loadVesselEconomicsAction, saveVesselEconomicsAction } from "@/app/(dashboard)/dashboard/suez-toll/actions";
@@ -45,7 +45,7 @@ interface VoyageFacts {
   sdrOverride: string;
 }
 
-export function SuezCalculator({ vessels, initialContext, initialVesselId }: { vessels: VesselView[]; initialContext: SuezTariffContextResult; initialVesselId?: string }) {
+export function SuezCalculator({ vessels, initialContext, initialVesselId }: { vessels: SuezVesselOption[]; initialContext: SuezTariffContextResult; initialVesselId?: string }) {
   const [vesselId, setVesselId] = React.useState(initialVesselId && vessels.some((v) => v.id === initialVesselId) ? initialVesselId : vessels[0]?.id ?? "");
   const vessel = vessels.find((v) => v.id === vesselId) ?? null;
   const [context, setContext] = React.useState<SuezTariffContextResult>(initialContext);
@@ -315,7 +315,7 @@ function TriState({ label, value, onChange }: { label: string; value: "unknown" 
   );
 }
 
-function Results({ estimate, vessel }: { estimate: SuezEstimate; vessel: VesselView }) {
+function Results({ estimate, vessel }: { estimate: SuezEstimate; vessel: SuezVesselOption }) {
   const t = estimate.totals;
   const triggered = estimate.layers.conditional.filter((f) => f.triggered);
   const flags = estimate.layers.conditional.filter((f) => !f.triggered);

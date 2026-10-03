@@ -1,0 +1,26 @@
+import { defineConfig, devices } from "@playwright/test";
+
+/**
+ * Voyage Economics (Stream S) browser proof: the admin control plane at
+ * /admin/voyage-data and the member Suez calculator at /dashboard/suez-toll.
+ * Self-seeding on the local stack (one super admin per run, removed after);
+ * independent of the Data Quality global setup. Port 3101 by convention.
+ */
+export default defineConfig({
+  testDir: "./e2e",
+  testMatch: /voyage-economics.*\.spec\.ts/,
+  fullyParallel: false,
+  forbidOnly: !!process.env.CI,
+  retries: 0,
+  workers: 1,
+  reporter: [["list"], ["html", { open: "never", outputFolder: "e2e/.voyage-report" }]],
+  timeout: 180_000,
+  expect: { timeout: 60_000 },
+  use: {
+    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3101",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    video: "off",
+  },
+  projects: [{ name: "voyage", use: { ...devices["Desktop Chrome"] } }],
+});
