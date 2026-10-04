@@ -5,7 +5,7 @@ first-hand physical bunker suppliers publish their price tables; the platform
 shows each sponsor on a ticker (their exposure) and computes an index whose
 **average** feeds the Voyage estimator.
 
-## Data model (migrations `20261003100000`–`107000`)
+## Data model (migrations `20261003100000`–`108000`)
 
 | Table | Purpose | Member access |
 |---|---|---|
@@ -64,6 +64,30 @@ product. Approving a quote supersedes the previous live one.
   super tier or `admin_perms.bunker`): suppliers and ports, member links,
   overrides (or staff input under the platform supplier, approved at once, reason
   required), approve/reject/withdraw, `admin_bunker_dashboard`.
+
+## Pilot suppliers (owner ruling, 4 Oct 2026)
+
+`20261003108000` registers **O Bunker**, **Bahri Bunker** and **التعاون للبترول**
+with placeholder details: contact "PLACEHOLDER — replace…", emails at
+`example.invalid`, sample Egyptian ports (Port Said, Sokhna, Alexandria,
+Damietta), unverified, no prices, no member accounts. They are invisible to
+members until they publish. To replace them with real data, as an admin with
+bunker edit rights:
+
+1. `/admin/bunker` → **Suppliers & access**. The amber card lists the pilots
+   still on sample data, and each carries a *Placeholder details* badge.
+2. Open a supplier and edit the name, website, country, ports (LOCODEs, `*` =
+   primary), contact name/email/phone (private) and trust score; clear the
+   notes; **Save supplier**. The badge disappears once the notes no longer start
+   with `PILOT PLACEHOLDER` and the email is real.
+3. Have the supplier's contact sign up, then link the account under **Member
+   email → Editor (publishes prices)**.
+4. Tick **Verified** only for a first-hand physical supplier (its quotes go live
+   without approval); otherwise each price waits in *Awaiting approval*.
+5. Send the contact the link `/dashboard/bunker-supplier`.
+
+A supplier not in the pilot list is added with **Add a supplier** at the bottom
+of the same tab.
 
 ## Surfaces
 

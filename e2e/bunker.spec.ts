@@ -167,6 +167,9 @@ test("admin approves in /admin/bunker; the price goes live", async ({ browser },
   const live = page.getByRole("row").filter({ hasText: s.supplierName });
   await expect(live).toContainText(`$${PRICE}`);
   await expect(live).toContainText("Current");
+  await page.getByRole("link", { name: /Suppliers & access/ }).click();
+  await expect(page.getByText("Pilot suppliers: replace the sample details")).toBeVisible();
+  await expect(page.getByText("Placeholder details").first()).toBeVisible();
   await page.getByRole("link", { name: /Update history/ }).click();
   await expect(page.getByRole("row").filter({ hasText: s.supplierName }).first()).toBeVisible();
   await context.close();

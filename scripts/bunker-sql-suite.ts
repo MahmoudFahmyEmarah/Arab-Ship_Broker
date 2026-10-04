@@ -21,6 +21,23 @@ const sql = (s: string) => out.push(s.trim());
 sql(`\\set QUIET on
 begin;
 set local client_min_messages = warning;
+-- 108000 pilot seed: registered with placeholder markers, nothing public.
+do $t$ declare n int;
+begin
+  select count(*) into n from public.bunker_suppliers s
+   where s.name in ('O Bunker', 'Bahri Bunker', 'التعاون للبترول')
+     and s.notes like 'PILOT PLACEHOLDER%' and s.contact_email like '%@example.invalid' and not s.verified
+     and exists (select 1 from public.bunker_supplier_ports sp where sp.supplier_id = s.id and sp.is_primary);
+  if n <> 3 then raise exception 'S1 FAILED: expected 3 placeholder pilot suppliers with a primary port, found %', n; end if;
+  if exists (select 1 from public.bunker_quotes q join public.bunker_suppliers s on s.id = q.supplier_id
+              where s.name in ('O Bunker', 'Bahri Bunker', 'التعاون للبترول'))
+     or exists (select 1 from public.bunker_supplier_members m join public.bunker_suppliers s on s.id = m.supplier_id
+              where s.name in ('O Bunker', 'Bahri Bunker', 'التعاون للبترول')) then
+    raise exception 'S1 FAILED: pilot seed carries quotes or members'; end if;
+  if (public.get_bunker_ticker())::text ~ '(O Bunker|Bahri Bunker|التعاون)' then
+    raise exception 'S1 FAILED: pilot supplier on the ticker without a quote'; end if;
+end $t$;
+select 'S1 ok: pilot suppliers seeded as placeholders, nothing public';
 update public.bunker_suppliers set status = 'disabled' where status = 'enabled';`);
 
 // ── Fixtures ────────────────────────────────────────────────────────────────

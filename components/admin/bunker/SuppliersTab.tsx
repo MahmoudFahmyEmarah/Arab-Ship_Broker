@@ -1,6 +1,10 @@
 import { saveSupplier, setSupplierMember } from "@/app/(admin)/admin/bunker/actions";
 import type { AdminBunkerDashboard, AdminBunkerSupplier } from "@/lib/bunker/admin";
 
+// Seeded pilot rows (migration 20261003108000) carry sample contacts until replaced.
+const isPlaceholder = (s: AdminBunkerSupplier) =>
+  (s.notes ?? "").startsWith("PILOT PLACEHOLDER") || (s.contactEmail ?? "").endsWith("@example.invalid");
+
 const ago = (iso: string | null) => {
   if (!iso) return "never";
   const d = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
@@ -67,8 +71,25 @@ function MemberForm({ supplierId }: { supplierId: string }) {
 
 export function SuppliersTab({ dash, canEdit }: { dash: AdminBunkerDashboard; canEdit: boolean }) {
   const alerts = dash.alerts.filter((a) => a.kind !== "pending_approval");
+  const placeholders = dash.suppliers.filter(isPlaceholder);
   return (
     <>
+      {placeholders.length > 0 && (
+        <section className="adm-card" style={{ borderLeft: "2px solid var(--adm-amber-bd)" }}>
+          <div className="adm-card__head">
+            <span className="adm-card__title">Pilot suppliers: replace the sample details</span>
+            <span className="adm-card__sub">
+              {placeholders.map((s) => s.name).join(" · ")} were registered with sample contacts and ports.
+            </span>
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 18, fontSize: "var(--fs-body-sm)", lineHeight: 1.7 }}>
+            <li>Open the supplier below and replace the contact name, email, phone, website and ports (LOCODEs, <code>*</code> marks the primary port); clear the notes; save.</li>
+            <li>Ask the supplier&apos;s contact to sign up on the platform, then link that account under <em>Member email → Editor</em>.</li>
+            <li>Tick <em>Verified</em> only for a first-hand physical supplier: its prices then go live without approval.</li>
+            <li>Send the contact the link <code>/dashboard/bunker-supplier</code>. Nothing appears on the ticker until they publish a price.</li>
+          </ol>
+        </section>
+      )}
       {alerts.length > 0 && (
         <section className="adm-card" style={{ borderLeft: "2px solid var(--adm-amber-bd)" }}>
           <div className="adm-card__head"><span className="adm-card__title">Freshness alerts</span></div>
@@ -92,6 +113,7 @@ export function SuppliersTab({ dash, canEdit }: { dash: AdminBunkerDashboard; ca
             <strong>{s.name}</strong>
             <span className={`adm-badge ${s.status === "enabled" ? "active" : "inactive"}`}>{s.status === "enabled" ? "Enabled" : "Disabled"}</span>
             {s.isPlatform ? <span className="adm-badge tier">Platform</span> : s.verified ? <span className="adm-badge live">Verified</span> : <span className="adm-badge pending">Unverified</span>}
+            {isPlaceholder(s) && <span className="adm-badge amber">Placeholder details</span>}
             <span className="adm-card__sub">
               {s.ports.map((p) => p.name).join(" · ") || "no ports"} · {s.members.length} member{s.members.length === 1 ? "" : "s"} · last quote {ago(s.latestQuoteAt)}
             </span>
