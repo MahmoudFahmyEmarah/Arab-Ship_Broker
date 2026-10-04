@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getAppUserRow } from "@/lib/app-user";
 import { loadViewerContext, loadVesselViews } from "@/lib/portal/data";
 import { ComingSoon } from "@/components/portal/ComingSoon";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
@@ -49,12 +50,16 @@ export default async function SuezTollPage({ searchParams }: { searchParams: Pro
   const today = new Date().toISOString().slice(0, 10);
   let context: SuezTariffContextResult = { found: false, date: today };
   try { context = await getSuezTariffContext(supabase, today); } catch { /* the calculator shows the unavailable state */ }
-  const vessels = role === "admin" ? await loadAdminVesselOptions() : (await loadVesselViews({ mine: true })).views.map(suezOptionFromView);
+  const [vessels, viewer] = await Promise.all([
+    role === "admin" ? loadAdminVesselOptions() : loadVesselViews({ mine: true }).then((r) => r.views.map(suezOptionFromView)),
+    getAppUserRow(supabase, user.id, "id"),
+  ]);
 
   return (
     <SuezCalculator
       vessels={vessels}
       initialContext={context}
+      viewerUserId={viewer?.id ?? null}
       initialVesselId={typeof params.vessel === "string" ? params.vessel : undefined}
     />
   );

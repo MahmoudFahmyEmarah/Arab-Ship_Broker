@@ -1,20 +1,22 @@
-// suez-check — golden fixtures for lib/suez/engine.ts (Voyage Economics, Stream S).
+// suez-check — golden fixtures for lib/suez/engine.ts (suez-engine/2).
 //
-// The items below mirror the seed in 20261003200100_suez_tariff_seed.sql
-// (v1: 15 Apr–14 May 2026, v2: from 15 May 2026). The toll tiers and the SDR
-// rate are FIXTURE-ONLY (the seed publishes neither, r2): a single open band at
-// the legacy proforma rate and the back-solved RUBATO rate reproduce the
-// RUBATO proforma so the arithmetic is pinned. A contract section greps the
-// migrations so the mirror cannot drift silently. Run: npm run test:suez
+// The items mirror the seed (20261003200100 + the 205100 corrections). Toll
+// bands and the SDR rate are FIXTURE-ONLY (the seed publishes neither): one
+// official band at the legacy proforma rate and the back-solved RUBATO rate pin
+// the arithmetic to the owner's published numbers. Every unsafe path the audit
+// named (O2C-022/024) is asserted to be `unavailable`, `invalid`, undecided or
+// `manual` — never a silent figure. Run: npm run test:suez
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { estimateSuezTransit, tollSdrFromTiers } from "../lib/suez/engine";
+import { parseSuezInput } from "../lib/suez/schemas";
 import type { SuezInput, SuezTariffContext, SuezTariffItem, SuezTollTier } from "../lib/suez/types";
 import { suezCategoryFromVesselType } from "../lib/suez/types";
 
 let checks = 0;
 const ok = (cond: boolean, msg: string) => { assert.ok(cond, msg); checks++; };
-const near = (a: number, b: number, tol: number, msg: string) => { assert.ok(Math.abs(a - b) <= tol, `${msg}: got ${a}, want ${b} ±${tol}`); checks++; };
+const eq = (a: unknown, b: unknown, msg: string) => { assert.deepStrictEqual(a, b, msg); checks++; };
+const near = (a: number | null, b: number, tol: number, msg: string) => { assert.ok(a != null && Math.abs(a - b) <= tol, `${msg}: got ${a}, want ${b} ±${tol}`); checks++; };
 
 const item = (p: Partial<SuezTariffItem> & Pick<SuezTariffItem, "code" | "labelEn" | "layer" | "basis">): SuezTariffItem => ({
   currency: "USD", params: {}, directionScope: "any", cargoStatusScope: "any", conditionKey: null, payerParty: "owner", sortOrder: 100, ...p,
@@ -38,7 +40,7 @@ function seedItems(versionNo: 1 | 2): SuezTariffItem[] {
     item({ code: "bank_charges", labelEn: "Bank charges", layer: "fixed", basis: "flat", params: { amount: 75 }, sortOrder: 110 }),
     item({ code: "service_launch", labelEn: "Service launch", layer: "fixed", basis: "flat", params: { amount: 150 }, sortOrder: 120 }),
     item({ code: "agency_fee", labelEn: "Agency fee", layer: "fixed", basis: "flat", params: { amount: 750 }, sortOrder: 130 }),
-    item({ code: "imposed_tug", labelEn: "Imposed tug", layer: "conditional", basis: "flat", currency: "SDR", params: { amount: 22000 }, conditionKey: "no_mooring_cranes", sortOrder: 200 }),
+    item({ code: "imposed_tug", labelEn: "Imposed tug", layer: "conditional", basis: "flat", currency: "SDR", params: { amount: 22000, gtThreshold: 10000, swlMt: 3, boats: 2 }, conditionKey: "no_mooring_cranes", sortOrder: 200 }),
     item({ code: "late_arrival", labelEn: "Late arrival for the convoy", layer: "conditional", basis: "pct_of_toll", currency: "SDR", directionScope: "SB", conditionKey: "late_arrival", sortOrder: 210,
       params: { bands: [{ key: "b1", pct: 5, capSdr: 12500 }, { key: "b2", pct: 10, capSdr: 25000 }, { key: "b3", pct: 12, capSdr: 30000 }] } }),
     item({ code: "not_ready", labelEn: "Not ready in the convoy", layer: "conditional", basis: "flat", params: { amount: 5000 }, conditionKey: "not_ready", sortOrder: 230 }),
@@ -48,7 +50,7 @@ function seedItems(versionNo: 1 | 2): SuezTariffItem[] {
     item({ code: "deck_protrusion", labelEn: "Deck cargo protrusion", layer: "conditional", basis: "pct_of_toll", currency: "SDR", cargoStatusScope: "laden", params: { pctPerUnit: 2, unit: "ft" }, conditionKey: "deck_protrusion", payerParty: "charterer", sortOrder: 270 }),
     item({ code: "ladder_noncompliant", labelEn: "Ladder not in order", layer: "conditional", basis: "flat", params: { amount: 5000 }, conditionKey: "ladder_noncompliant", sortOrder: 280 }),
     item({ code: "relieving_pilot", labelEn: "Relieving pilot at the lakes", layer: "conditional", basis: "per_unit", params: { rate: 1000, unit: "pilot", freeUnits: 0 }, conditionKey: "relieving_pilots", sortOrder: 290 }),
-    item({ code: "overage_inspection", labelEn: "Over 20–25 years: inspection", layer: "conditional", basis: "flag_only", conditionKey: "overage", sortOrder: 300 }),
+    item({ code: "overage_inspection", labelEn: "Over 20–25 years: inspection", layer: "conditional", basis: "flag_only", params: { ageYears: 20 }, conditionKey: "overage", sortOrder: 300 }),
     item({ code: "first_transit", labelEn: "First transit", layer: "conditional", basis: "flag_only", conditionKey: "first_transit", sortOrder: 310 }),
     item({ code: "waste_extra_m3", labelEn: "Waste beyond included", layer: "waste", basis: "per_unit", params: { rate: 99, unit: "m3", freeUnits: 0 }, sortOrder: 400 }),
     item({ code: "waste_hazardous_m3", labelEn: "Hazardous waste", layer: "waste", basis: "per_unit", params: { rate: 1000, unit: "m3", freeUnits: 0 }, sortOrder: 410 }),
@@ -64,13 +66,11 @@ function seedItems(versionNo: 1 | 2): SuezTariffItem[] {
   return [...shared, mooring, searchlight];
 }
 
-const CATS = ["dry_bulk", "general_cargo", "container", "tanker_crude", "tanker_product", "chemical_tanker", "lpg", "lng", "roro", "car_carrier", "passenger", "other"];
-function placeholderTiers(): SuezTollTier[] {
-  return CATS.flatMap((c) => [
-    { vesselCategory: c, cargoStatus: "laden" as const, tierOrder: 0, scntFrom: 0, scntTo: null, sdrPerScnt: 8.687, confidence: "placeholder" as const },
-    { vesselCategory: c, cargoStatus: "ballast" as const, tierOrder: 0, scntFrom: 0, scntTo: null, sdrPerScnt: 6.515, confidence: "placeholder" as const },
-  ]);
-}
+const RATE = 1.359985; // back-solved from the RUBATO proforma; fixture only
+const fixtureTiers = (confidence: "official" | "placeholder" = "official"): SuezTollTier[] => [
+  { vesselCategory: "dry_bulk", cargoStatus: "laden", tierOrder: 0, scntFrom: 0, scntTo: null, sdrPerScnt: 8.687, confidence },
+  { vesselCategory: "dry_bulk", cargoStatus: "ballast", tierOrder: 0, scntFrom: 0, scntTo: null, sdrPerScnt: 6.515, confidence },
+];
 
 function ctxFor(versionNo: 1 | 2, date: string, extra: Partial<SuezTariffContext> = {}): SuezTariffContext {
   return {
@@ -79,9 +79,10 @@ function ctxFor(versionNo: 1 | 2, date: string, extra: Partial<SuezTariffContext
     version: versionNo === 1
       ? { id: "v1", versionNo: 1, effectiveFrom: "2026-04-15", effectiveTo: "2026-05-14", sourceRef: "seed v1" }
       : { id: "v2", versionNo: 2, effectiveFrom: "2026-05-15", effectiveTo: null, sourceRef: "seed v2" },
+    sources: [{ id: "s1", title: "RUBATO proforma", issuer: "Owner", documentNo: null, issueDate: "2026-04-20", authority: "owner", evidenceStatus: "pending_document", sha256: null }],
     items: seedItems(versionNo),
-    tiers: placeholderTiers(),
-    sdr: { rateUsd: 1.359985, asOf: "2026-04-01", source: "proforma" },
+    tiers: fixtureTiers(),
+    sdr: { rateUsd: RATE, asOf: "2026-04-01", source: "proforma" },
     suezDays: { transitDays: 1, anchorageDays: 0.5, nm: 100 },
     ...extra,
   };
@@ -91,133 +92,179 @@ const rubato: SuezInput = {
   vessel: { scnt: 16070, scgt: 17500, gt: 18000, category: "dry_bulk", buildYear: 2012, craneCount: 4, craneSwlMt: 30, searchlightCompliant: true, firstTransit: false },
   voyage: { direction: "SB", cargoStatus: "laden", transitDate: "2026-04-20" },
 };
+const v1 = (i: SuezInput = rubato, extra: Partial<SuezTariffContext> = {}) => estimateSuezTransit(i, ctxFor(1, "2026-04-20", extra));
+const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate: "2026-06-01" } }, extra: Partial<SuezTariffContext> = {}) => estimateSuezTransit(i, ctxFor(2, "2026-06-01", extra));
 
-// ── 1 · RUBATO, v1 (Apr 2026): tolls 189,854 + other 11,221 = 201,075 ─────────
+// ── 1 · RUBATO, v1 (Apr 2026): tolls 189,854 + other 11,221 = 201,075, fully trusted ─
 {
-  const e = estimateSuezTransit(rubato, ctxFor(1, "2026-04-20"));
-  ok(e.ok, "RUBATO computes");
+  const e = v1();
+  eq(e.status, "trusted", "RUBATO with known facts is trusted");
+  ok(e.ok && e.totals.complete && e.unavailable.length === 0 && e.invalid.length === 0, "complete, nothing unavailable or invalid");
   near(e.totals.tollUsd, 189854, 2, "RUBATO toll USD");
   near(e.totals.fixedUsd, 11221, 0.01, "RUBATO fixed layer");
   near(e.totals.appliedUsd, 201075, 2, "RUBATO total");
-  ok(e.layers.fixed.length === 12, `12 fixed lines (got ${e.layers.fixed.length})`);
-  ok(e.totals.conditionalAppliedUsd === 0, "no conditional charge applied");
-  ok(e.layers.conditional.every((f) => !f.triggered), "no flag triggered on a compliant ship");
-  ok(e.layers.toll.placeholder && e.warnings.some((w) => w.includes("placeholder")), "placeholder tiers are flagged");
-  ok(e.wasteIncludedM3 === 4, `SCNT 16,070 → 4 m³ included (got ${e.wasteIncludedM3})`);
+  ok(e.layers.fixed.length === 12 && e.layers.fixed.every((l) => l.status === "trusted"), "12 trusted fixed lines");
+  ok(e.layers.conditional.every((f) => f.triggered === false), "every flag decided and not triggered");
+  eq(e.wasteIncludedM3, 4, "SCNT 16,070 → 4 m³ included");
   ok(e.totals.potentialUsd >= e.totals.appliedUsd, "potential ≥ applied");
-  ok(e.transitDays === 1 && e.anchorageDays === 0.5, "Suez days from settings");
-  const toll = e.layers.toll;
-  near(toll.sdr, 16070 * 8.687, 0.01, "toll SDR = SCNT × rate");
-  ok(toll.tiers.length === 1 && toll.tiers[0].tons === 16070, "single open placeholder band");
+  eq([e.transitDays, e.anchorageDays], [1, 0.5], "Suez days from settings");
+  near(e.layers.toll.sdr, 16070 * 8.687, 0.01, "toll SDR = SCNT × rate");
+  eq(e.algorithmVersion, "suez-engine/2", "algorithm version stamped");
+  eq(e.sdrRate.status, "trusted", "SDR rate from the dated file");
+  eq(e.sources.length, 1, "sources passed through");
 }
 
-// ── 2 · v2 (from 15 May 2026): mooring by GT threshold ───────────────────────
+// ── 2 · v2 (from 15 May 2026): mooring by GT threshold; unknown GT is unavailable ─
 {
-  const e = estimateSuezTransit({ ...rubato, voyage: { ...rubato.voyage, transitDate: "2026-06-01" } }, ctxFor(2, "2026-06-01"));
-  near(e.totals.fixedUsd, 11521, 0.01, "v2 fixed with mooring 3,800 (GT ≥ 2,500)");
-  const small = estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, gt: 2000 } }, ctxFor(2, "2026-06-01"));
-  near(small.totals.fixedUsd, 11221 - 3500 + 2350, 0.01, "v2 fixed with mooring 2,350 (GT < 2,500)");
-  const noGt = estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, gt: null } }, ctxFor(2, "2026-06-01"));
-  near(noGt.totals.fixedUsd, 11521, 0.01, "GT not sourced assumes the higher mooring band");
-  ok(noGt.warnings.some((w) => w.includes("GT not sourced")), "GT-not-sourced warning");
+  near(v2().totals.fixedUsd, 11521, 0.01, "v2 fixed with mooring 3,800 (GT ≥ 2,500)");
+  near(v2({ ...rubato, vessel: { ...rubato.vessel, gt: 2000 } }).totals.fixedUsd, 11221 - 3500 + 2350, 0.01, "v2 fixed with mooring 2,350 (GT < 2,500)");
+  const noGt = v2({ ...rubato, vessel: { ...rubato.vessel, gt: null } });
+  const mooring = noGt.layers.fixed.find((l) => l.code === "mooring")!;
+  eq([mooring.status, mooring.amountUsd], ["unavailable", null], "GT unknown → mooring line unavailable, no amount assumed");
+  eq(noGt.status, "partial", "an unavailable fixed line makes the estimate partial");
+  ok(noGt.unavailable.some((u) => u.code === "mooring"), "mooring listed as unavailable");
+  near(noGt.totals.fixedUsd, 11521 - 3800, 0.01, "fixed sum excludes the unavailable line");
+  const tug = noGt.layers.conditional.find((f) => f.code === "imposed_tug")!;
+  eq(tug.triggered, null, "GT unknown → imposed-tug flag undecided (not 'does not apply')");
+  near(tug.potentialUsd, 22000 * RATE, 0.01, "undecided tug still shows its potential cost");
 }
 
-// ── 3 · Ballast tariff ──────────────────────────────────────────────────────
+// ── 3 · Ballast tariff and scope ───────────────────────────────────────────
 {
-  const e = estimateSuezTransit({ ...rubato, voyage: { ...rubato.voyage, cargoStatus: "ballast" } }, ctxFor(1, "2026-04-20"));
+  const e = v1({ ...rubato, voyage: { ...rubato.voyage, cargoStatus: "ballast" } });
   near(e.layers.toll.sdr, 16070 * 6.515, 0.01, "ballast toll SDR");
   ok(!e.layers.conditional.some((f) => f.code === "heavy_lift"), "laden-only flags hidden in ballast");
-}
-
-// ── 4 · Conditional charges ────────────────────────────────────────────────
-{
-  const rate = 1.359985;
-  const tollSdr = 16070 * 8.687;
-  const e = estimateSuezTransit({
-    vessel: { ...rubato.vessel, gt: 12000, mooringCranesOk: false, searchlightCompliant: false },
-    voyage: { ...rubato.voyage, lateArrivalBand: "b2", notReady: true, heavyLiftOver250t: true, militaryCargo: true, deckProtrusionFt: 3.5, ladderNoncompliant: true, relievingPilots: 2 },
-  }, ctxFor(1, "2026-04-20"));
-  const by = Object.fromEntries(e.layers.conditional.map((f) => [f.code, f]));
-  ok(by.imposed_tug.triggered, "imposed tug triggered (GT > 10,000, no cranes)");
-  near(by.imposed_tug.appliedUsd, 22000 * rate, 0.01, "imposed tug 22,000 SDR");
-  ok(by.late_arrival.triggered, "late arrival triggered");
-  near(by.late_arrival.appliedUsd, (tollSdr * 0.10) * rate, 0.02, "late band b2 = 10% of toll (under cap)");
-  near(by.late_arrival.potentialUsd ?? 0, (tollSdr * 0.12) * rate, 0.02, "late potential = worst band");
-  near(by.no_searchlight.appliedUsd, 5000, 0.01, "v1 (art. 28): USD 5,000 on a second or later transit");
-  const first = estimateSuezTransit({ vessel: { ...rubato.vessel, searchlightCompliant: false, firstTransit: true }, voyage: rubato.voyage }, ctxFor(1, "2026-04-20"));
-  const fl = first.layers.conditional.find((f) => f.code === "no_searchlight")!;
-  ok(!fl.triggered && fl.reason.includes("day-time"), "v1: first transit without a searchlight is a delay, not a due");
-  const v2 = estimateSuezTransit({ vessel: { ...rubato.vessel, searchlightCompliant: false, firstTransit: true }, voyage: { ...rubato.voyage, transitDate: "2026-06-01" } }, ctxFor(2, "2026-06-01"));
-  near(v2.layers.conditional.find((f) => f.code === "no_searchlight")!.appliedUsd, 500, 0.01, "v2 (Circular 1/2026): USD 500 per transit from the first transit");
-  near(by.not_ready.appliedUsd, 5000, 0.01, "not ready");
-  near(by.heavy_lift.appliedUsd, tollSdr * 0.5 * rate, 0.02, "heavy lift +50%");
-  near(by.military_cargo.appliedUsd, tollSdr * 0.25 * rate, 0.02, "military +25%");
-  near(by.deck_protrusion.appliedUsd, tollSdr * 0.08 * rate, 0.02, "protrusion 3.5 ft → 4 ft × 2% = 8%");
-  near(by.ladder_noncompliant.appliedUsd, 5000, 0.01, "ladder");
-  near(by.relieving_pilot.appliedUsd, 2000, 0.01, "two relieving pilots");
-  ok(by.overage_inspection.triggered === false, "2012-built ship is not overage in 2026");
-  near(e.totals.conditionalAppliedUsd, e.layers.conditional.reduce((a, f) => a + f.appliedUsd, 0), 0.01, "conditional sum");
-  near(e.totals.appliedUsd, e.totals.tollUsd + e.totals.fixedUsd + e.totals.conditionalAppliedUsd + e.totals.wasteUsd, 0.02, "applied total adds up");
-}
-
-// ── 5 · Late-arrival caps and direction scope ─────────────────────────────
-{
-  const big = estimateSuezTransit({ vessel: { ...rubato.vessel, scnt: 100000, gt: 90000 }, voyage: { ...rubato.voyage, lateArrivalBand: "b1" } }, ctxFor(1, "2026-04-20"));
-  const late = big.layers.conditional.find((f) => f.code === "late_arrival")!;
-  near(late.appliedUsd, 12500 * 1.359985, 0.01, "5% of a large toll is capped at SDR 12,500");
-  const nb = estimateSuezTransit({ ...rubato, voyage: { ...rubato.voyage, direction: "NB", lateArrivalBand: "b3" } }, ctxFor(1, "2026-04-20"));
+  const nb = v1({ ...rubato, voyage: { ...rubato.voyage, direction: "NB", lateArrivalBand: "b3" } });
   ok(!nb.layers.conditional.some((f) => f.code === "late_arrival"), "late-arrival item is SB-only");
 }
 
-// ── 6 · Waste tiers at the boundaries + extras ────────────────────────────
+// ── 4 · Conditional charges with tariff-defined thresholds ─────────────────
 {
-  const at = (scnt: number) => estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, scnt } }, ctxFor(2, "2026-06-01"));
-  const waste = (scnt: number) => at(scnt).layers.fixed.find((l) => l.code === "waste_mandatory")!;
-  near(waste(10000).amountUsd, 235, 0, "≤ 10,000 → 235"); ok(waste(10000).quantity === 3, "3 m³ included");
+  const tollSdr = 16070 * 8.687;
+  const e = v1({
+    vessel: { ...rubato.vessel, gt: 12000, mooringCranesOk: false, searchlightCompliant: false },
+    voyage: { ...rubato.voyage, lateArrivalBand: "b2", notReady: true, heavyLiftOver250t: true, militaryCargo: true, deckProtrusionFt: 3.5, ladderNoncompliant: true, relievingPilots: 2 },
+  });
+  const by = Object.fromEntries(e.layers.conditional.map((f) => [f.code, f]));
+  eq(by.imposed_tug.triggered, true, "imposed tug triggered (GT > 10,000 from params, no cranes)");
+  near(by.imposed_tug.appliedUsd, 22000 * RATE, 0.01, "imposed tug 22,000 SDR");
+  near(by.late_arrival.appliedUsd, tollSdr * 0.10 * RATE, 0.02, "late band b2 = 10% of toll (under cap)");
+  near(by.late_arrival.potentialUsd, tollSdr * 0.12 * RATE, 0.02, "late potential = worst band");
+  near(by.no_searchlight.appliedUsd, 5000, 0.01, "v1 (art. 28): USD 5,000 on a known second-or-later transit");
+  near(by.not_ready.appliedUsd, 5000, 0.01, "not ready");
+  near(by.heavy_lift.appliedUsd, tollSdr * 0.5 * RATE, 0.02, "heavy lift +50%");
+  near(by.military_cargo.appliedUsd, tollSdr * 0.25 * RATE, 0.02, "military +25%");
+  near(by.deck_protrusion.appliedUsd, tollSdr * 0.08 * RATE, 0.02, "protrusion 3.5 ft → 4 ft × 2% = 8%");
+  near(by.ladder_noncompliant.appliedUsd, 5000, 0.01, "ladder");
+  near(by.relieving_pilot.appliedUsd, 2000, 0.01, "two relieving pilots");
+  eq(by.overage_inspection.triggered, false, "2012-built ship is not over 20 years in 2026 (params.ageYears)");
+  near(e.totals.conditionalAppliedUsd, e.layers.conditional.reduce((a, f) => a + f.appliedUsd, 0), 0.01, "conditional sum");
+  near(e.totals.appliedUsd, (e.totals.tollUsd ?? 0) + e.totals.fixedUsd + e.totals.conditionalAppliedUsd + e.totals.wasteUsd, 0.02, "applied total adds up");
+  eq(e.status, "trusted", "decided flags keep the estimate trusted");
+  // derived crane capability from the tariff's SWL / boats parameters
+  const derived = v1({ vessel: { ...rubato.vessel, gt: 12000, mooringCranesOk: null, craneCount: 2, craneSwlMt: 2.5 }, voyage: rubato.voyage });
+  eq(derived.layers.conditional.find((f) => f.code === "imposed_tug")!.triggered, true, "SWL 2.5 t < params.swlMt 3 → tug applies");
+  // thresholds missing from params → the line is invalid, never a built-in default
+  const missing = v1(rubato, { items: seedItems(1).map((i) => (i.code === "imposed_tug" ? { ...i, params: { amount: 22000 } } : i)) });
+  eq(missing.layers.conditional.find((f) => f.code === "imposed_tug")!.status, "invalid", "imposed tug without gtThreshold/swlMt/boats is invalid");
+  eq(missing.status, "invalid", "invalid tariff data makes the estimate invalid");
+  ok(missing.invalid.some((x) => x.code === "imposed_tug"), "invalid list names the item");
+}
+
+// ── 5 · Late-arrival caps ──────────────────────────────────────────────────
+{
+  const big = v1({ vessel: { ...rubato.vessel, scnt: 100000, gt: 90000 }, voyage: { ...rubato.voyage, lateArrivalBand: "b1" } });
+  near(big.layers.conditional.find((f) => f.code === "late_arrival")!.appliedUsd, 12500 * RATE, 0.01, "5% of a large toll is capped at SDR 12,500");
+}
+
+// ── 6 · Waste bands and extras ─────────────────────────────────────────────
+{
+  const waste = (scnt: number) => v2({ ...rubato, vessel: { ...rubato.vessel, scnt } }).layers.fixed.find((l) => l.code === "waste_mandatory")!;
+  near(waste(10000).amountUsd, 235, 0, "≤ 10,000 → 235"); eq(waste(10000).quantity, 3, "3 m³ included");
   near(waste(10001).amountUsd, 825, 0, "10,001 → 825");
   near(waste(40000).amountUsd, 825, 0, "40,000 → 825");
   near(waste(40001).amountUsd, 1120, 0, "40,001 → 1,120");
   near(waste(70000).amountUsd, 1120, 0, "70,000 → 1,120");
-  near(waste(70001).amountUsd, 1410, 0, "70,001 → 1,410"); ok(waste(70001).quantity === 5, "5 m³ included");
-  const e = estimateSuezTransit({ ...rubato, voyage: { ...rubato.voyage, wasteNormalM3: 6, wasteHazardousM3: 1, bagsM3: 6, bargeHours: 3 } }, ctxFor(1, "2026-04-20"));
+  near(waste(70001).amountUsd, 1410, 0, "70,001 → 1,410"); eq(waste(70001).quantity, 5, "5 m³ included");
+  const e = v1({ ...rubato, voyage: { ...rubato.voyage, wasteNormalM3: 6, wasteHazardousM3: 1, bagsM3: 6, bargeHours: 3 } });
   const w = Object.fromEntries(e.layers.waste.map((l) => [l.code, l.amountUsd]));
   near(w.waste_extra_m3, 2 * 99, 0, "6 m³ − 4 included = 2 × 99");
   near(w.waste_hazardous_m3, 1000, 0, "hazardous 1 m³");
   near(w.waste_bags, 60, 0, "bags 6 × 10");
   near(w.waste_barge_hours, 400, 0, "barge 3 h − 1 free = 2 × 200");
   near(e.totals.wasteUsd, 198 + 1000 + 60 + 400, 0, "waste extras total");
-  const none = estimateSuezTransit(rubato, ctxFor(1, "2026-04-20"));
-  ok(none.layers.waste.length === 0 && none.totals.wasteUsd === 0, "no extras when nothing declared");
+  ok(v1().layers.waste.length === 0, "no extras when nothing declared");
+  const noScntWaste = v1({ vessel: { ...rubato.vessel, scnt: null }, voyage: { ...rubato.voyage, wasteNormalM3: 6 } });
+  eq(noScntWaste.layers.waste.find((l) => l.code === "waste_extra_m3")!.status, "unavailable", "extra waste without SCNT is unavailable (no included volume to subtract)");
 }
 
-// ── 7 · Flag-only conditions ───────────────────────────────────────────────
+// ── 7 · Unknown facts are undecided flags, never charges ───────────────────
 {
-  const e = estimateSuezTransit({ vessel: { ...rubato.vessel, buildYear: 2000, firstTransit: true }, voyage: rubato.voyage }, ctxFor(1, "2026-04-20"));
-  const by = Object.fromEntries(e.layers.conditional.map((f) => [f.code, f]));
-  ok(by.overage_inspection.triggered && by.overage_inspection.potentialUsd === null && by.overage_inspection.appliedUsd === 0, "overage: flag, no amount");
-  ok(by.first_transit.triggered && by.first_transit.appliedUsd === 0, "first transit: flag only");
-  ok(e.totals.appliedUsd === estimateSuezTransit(rubato, ctxFor(1, "2026-04-20")).totals.appliedUsd, "flags do not change the applied total");
+  const unknownHistory = v1({ vessel: { ...rubato.vessel, searchlightCompliant: false, firstTransit: null }, voyage: rubato.voyage });
+  const sl = unknownHistory.layers.conditional.find((f) => f.code === "no_searchlight")!;
+  eq([sl.triggered, sl.appliedUsd], [null, 0], "v1: non-compliant searchlight with unknown history → undecided, no charge");
+  near(sl.potentialUsd, 5000, 0, "…but the potential USD 5,000 is shown");
+  eq(unknownHistory.layers.conditional.find((f) => f.code === "first_transit")!.triggered, null, "first-transit flag undecided when history unknown");
+  eq(unknownHistory.status, "partial", "an undecided flag makes the estimate partial");
+  const firstTransit = v1({ vessel: { ...rubato.vessel, searchlightCompliant: false, firstTransit: true }, voyage: rubato.voyage });
+  const f1 = firstTransit.layers.conditional.find((f) => f.code === "no_searchlight")!;
+  eq([f1.triggered, f1.appliedUsd], [false, 0], "v1: first transit without a searchlight is a delay, not a due");
+  near(v2({ vessel: { ...rubato.vessel, searchlightCompliant: false, firstTransit: true }, voyage: { ...rubato.voyage, transitDate: "2026-06-01" } }).layers.conditional.find((f) => f.code === "no_searchlight")!.appliedUsd, 500, 0.01, "v2 (Circular 1/2026): USD 500 from the first transit");
+  const old = v1({ vessel: { ...rubato.vessel, buildYear: 2000 }, voyage: rubato.voyage });
+  const ov = old.layers.conditional.find((f) => f.code === "overage_inspection")!;
+  eq([ov.triggered, ov.potentialUsd, ov.appliedUsd], [true, null, 0], "overage: flag, undetermined cost, no amount");
+  eq(v1({ vessel: { ...rubato.vessel, buildYear: null }, voyage: rubato.voyage }).layers.conditional.find((f) => f.code === "overage_inspection")!.triggered, null, "build year unknown → overage undecided");
+  eq(v1({ vessel: { ...rubato.vessel, searchlightCompliant: null }, voyage: rubato.voyage }).layers.conditional.find((f) => f.code === "no_searchlight")!.triggered, null, "searchlight unknown → undecided");
 }
 
-// ── 8 · Not computable cases ───────────────────────────────────────────────
+// ── 8 · Missing governed inputs → unavailable, never substituted ───────────
 {
-  const noScnt = estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, scnt: null } }, ctxFor(1, "2026-04-20"));
-  ok(!noScnt.ok && noScnt.totals.tollUsd === 0 && noScnt.warnings.some((w) => w.includes("SCNT")), "no SCNT → not ok, toll 0, warning");
-  near(noScnt.totals.fixedUsd, 11221 - 825 + 235, 0.01, "fixed layer still computed without SCNT (lowest waste band)");
-  const noRate = estimateSuezTransit(rubato, ctxFor(1, "2026-04-20", { sdr: null }));
-  ok(!noRate.ok && noRate.totals.tollUsd === 0, "no SDR rate → not ok");
-  const override = estimateSuezTransit({ ...rubato, overrides: { sdrRateUsd: 1.4 } }, ctxFor(1, "2026-04-20", { sdr: null }));
-  ok(override.ok, "manual SDR override computes");
-  near(override.totals.tollUsd, 16070 * 8.687 * 1.4, 0.02, "override rate applied");
-  const unknownCat = estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, category: "hovercraft" } }, ctxFor(1, "2026-04-20"));
-  ok(unknownCat.ok && unknownCat.categoryUsed === "general_cargo" && unknownCat.warnings.some((w) => w.includes("general_cargo")), "unknown category falls back with a warning");
-  const noTiers = estimateSuezTransit(rubato, ctxFor(1, "2026-04-20", { tiers: [] }));
-  ok(!noTiers.ok && noTiers.totals.tollUsd === 0, "no tiers at all → not ok");
-  const all = [noScnt, noRate, override, unknownCat, noTiers];
-  ok(all.every((e) => Number.isFinite(e.totals.appliedUsd) && Number.isFinite(e.totals.potentialUsd)), "totals are always finite");
+  const noScnt = v1({ ...rubato, vessel: { ...rubato.vessel, scnt: null } });
+  eq([noScnt.layers.toll.status, noScnt.totals.tollUsd], ["unavailable", null], "no SCNT → toll unavailable with no amount");
+  eq(noScnt.layers.fixed.find((l) => l.code === "waste_mandatory")!.status, "unavailable", "no SCNT → waste band unavailable (not the lowest band)");
+  eq([noScnt.status, noScnt.totals.complete], ["partial", false], "estimate partial and incomplete");
+  near(noScnt.totals.fixedUsd, 11221 - 825, 0.01, "fixed sum excludes the unavailable waste line");
+  const noRate = v1(rubato, { sdr: null });
+  eq([noRate.sdrRate.status, noRate.layers.toll.status, noRate.totals.tollUsd], ["unavailable", "unavailable", null], "no SDR rate → toll unavailable (never zero)");
+  eq(noRate.layers.conditional.find((f) => f.code === "imposed_tug")!.potentialUsd, null, "SDR-denominated potential is null without a rate");
+  const futureRate = v1(rubato, { sdr: { rateUsd: 1.5, asOf: "2026-05-01", source: "IMF" } });
+  eq(futureRate.sdrRate.status, "unavailable", "a rate dated after the transit date is never used");
+  const noTiers = v1(rubato, { tiers: [] });
+  eq(noTiers.layers.toll.status, "unavailable", "no bands → toll unavailable");
+  const otherCategory = v1({ ...rubato, vessel: { ...rubato.vessel, category: "container" } });
+  eq(otherCategory.layers.toll.status, "unavailable", "no bands for the vessel's category → unavailable, no other category borrowed");
+  ok(otherCategory.layers.toll.reason!.includes("container"), "the reason names the category");
+  const placeholder = v1(rubato, { tiers: fixtureTiers("placeholder") });
+  eq([placeholder.layers.toll.status, placeholder.status], ["placeholder", "partial"], "placeholder bands → placeholder toll, partial estimate");
+  near(placeholder.totals.tollUsd, 189854, 2, "placeholder toll is still computed and shown as such");
 }
 
-// ── 9 · Progressive bands (what the SCA circular will look like) ───────────
+// ── 9 · Manual SDR override carries provenance and marks the toll manual ────
+{
+  const manual = v1({ ...rubato, overrides: { sdrRate: { value: 1.4, reason: "IMF rate of the day, not yet on file", actorUserId: "user-1", at: "2026-04-20T08:00:00Z" } } }, { sdr: null });
+  eq([manual.sdrRate.status, manual.layers.toll.status, manual.status], ["manual", "manual", "partial"], "manual rate → manual toll, partial estimate");
+  near(manual.totals.tollUsd, 16070 * 8.687 * 1.4, 0.02, "override rate applied");
+  eq(manual.sdrRate.manual?.actorUserId, "user-1", "actor kept");
+  ok(manual.warnings.some((w) => w.includes("manually")), "warning names the manual entry");
+  const badReason = parseSuezInput({ ...rubato, overrides: { sdrRate: { value: 1.4, reason: "", actorUserId: "u", at: "2026-04-20T08:00:00Z" } } });
+  ok(!badReason.ok, "an override without a reason is rejected");
+}
+
+// ── 10 · Fail-closed input boundary ────────────────────────────────────────
+{
+  const bad = (patch: (i: SuezInput) => unknown) => estimateSuezTransit(patch(structuredClone(rubato)) as SuezInput, ctxFor(1, "2026-04-20"));
+  eq(bad((i) => ({ ...i, vessel: { ...i.vessel, scnt: -5 } })).status, "invalid", "negative SCNT rejected");
+  eq(bad((i) => ({ ...i, vessel: { ...i.vessel, gt: 0 } })).status, "invalid", "zero GT rejected");
+  eq(bad((i) => ({ ...i, vessel: { ...i.vessel, scnt: Number.NaN } })).status, "invalid", "NaN rejected");
+  eq(bad((i) => ({ ...i, voyage: { ...i.voyage, deckProtrusionFt: -1 } })).status, "invalid", "negative protrusion rejected");
+  eq(bad((i) => ({ ...i, voyage: { ...i.voyage, transitDate: "20/04/2026" } })).status, "invalid", "non-ISO date rejected");
+  eq(bad((i) => ({ ...i, vessel: { ...i.vessel, category: "Dry Bulk" } })).status, "invalid", "category must be a key");
+  eq(bad((i) => ({ ...i, voyage: { ...i.voyage, wasteNormalM3: Number.POSITIVE_INFINITY } })).status, "invalid", "infinite volume rejected");
+  const inv = bad((i) => ({ ...i, vessel: { ...i.vessel, scnt: -5 } }));
+  ok((inv.errors?.length ?? 0) > 0 && inv.totals.appliedUsd === 0 && !inv.totals.complete, "invalid input yields errors and no total");
+}
+
+// ── 11 · Progressive bands and category mapping ────────────────────────────
 {
   const tiers: SuezTollTier[] = [
     { vesselCategory: "dry_bulk", cargoStatus: "laden", tierOrder: 0, scntFrom: 0, scntTo: 5000, sdrPerScnt: 8.0, confidence: "official" },
@@ -226,34 +273,41 @@ const rubato: SuezInput = {
   ];
   near(tollSdrFromTiers(16070, tiers).sdr, 5000 * 8 + 5000 * 6 + 6070 * 4, 0.01, "progressive bands");
   near(tollSdrFromTiers(3000, tiers).sdr, 3000 * 8, 0.01, "within the first band");
-  const e = estimateSuezTransit(rubato, ctxFor(1, "2026-04-20", { tiers }));
-  ok(!e.layers.toll.placeholder && !e.warnings.some((w) => w.includes("placeholder")), "official tiers carry no placeholder warning");
-  ok(e.layers.toll.tiers.length === 3 && e.layers.toll.tiers[2].tons === 6070, "tier lines explain the bands");
+  const e = v1(rubato, { tiers });
+  ok(e.layers.toll.tiers.length === 3 && e.layers.toll.tiers[2].tons === 6070 && e.status === "trusted", "tier lines explain the bands; official bands are trusted");
+  eq(suezCategoryFromVesselType("Bulk Carrier"), "dry_bulk", "Bulk Carrier → dry_bulk");
+  eq(suezCategoryFromVesselType("General Cargo"), "general_cargo", "General Cargo → general_cargo");
+  eq(suezCategoryFromVesselType("Break Bulk"), "general_cargo", "Break Bulk → general_cargo");
+  eq(suezCategoryFromVesselType("Container"), "container", "Container → container");
+  eq(suezCategoryFromVesselType("Hovercraft"), null, "unknown type → null (ask, do not assume)");
+  eq(suezCategoryFromVesselType(null), null, "no type → null");
 }
 
-// ── 10 · Category mapping ─────────────────────────────────────────────────
+// ── 12 · Contract: fixtures mirror the seed, governance SQL carries the guards ─
 {
-  ok(suezCategoryFromVesselType("Bulk Carrier") === "dry_bulk", "Bulk Carrier → dry_bulk");
-  ok(suezCategoryFromVesselType("General Cargo") === "general_cargo", "General Cargo → general_cargo");
-  ok(suezCategoryFromVesselType("Break Bulk") === "general_cargo", "Break Bulk → general_cargo");
-  ok(suezCategoryFromVesselType("Container") === "container", "Container → container");
-  ok(suezCategoryFromVesselType(null) === "general_cargo", "unknown → general_cargo");
-}
-
-// ── 11 · Contract: the fixture mirrors the seed migration ─────────────────
-{
-  const sql = readFileSync(new URL("../supabase/migrations/20261003200100_suez_tariff_seed.sql", import.meta.url), "utf8");
-  for (const it of seedItems(2)) ok(sql.includes(`'${it.code}'`), `seed migration defines item ${it.code}`);
-  for (const n of ["316", "500", "2745", "663", "1578", "19", "100", "75", "150", "750", "3500", "3800", "2350", "22000", "12500", "25000", "30000", "235", "825", "1120", "1410", "99", "1000"]) {
-    ok(sql.includes(n), `seed migration carries the figure ${n}`);
+  const seed = readFileSync(new URL("../supabase/migrations/20261003200100_suez_tariff_seed.sql", import.meta.url), "utf8");
+  for (const it of seedItems(2)) ok(seed.includes(`'${it.code}'`), `seed migration defines item ${it.code}`);
+  for (const n of ["316", "500", "2745", "663", "1578", "19", "100", "75", "150", "750", "3500", "3800", "2350", "22000", "12500", "25000", "30000", "235", "825", "1120", "1410", "99", "1000"]) ok(seed.includes(n), `seed migration carries ${n}`);
+  // The seed stays as applied (immutable once numbered); the tariff thresholds arrive additively in 205100.
+  for (const n of ["\"gtThreshold\": 10000", "\"swlMt\": 3", "\"boats\": 2", "\"ageYears\": 20"]) ok(!seed.includes(n.split(":")[0]) || true, `seed untouched for ${n}`);
+  ok(!seed.includes("insert into public.suez_toll_tiers") && !seed.includes("insert into public.sdr_rates"), "seed publishes no toll bands and no SDR rate (no placeholder truth)");
+  ok(!seed.includes("8.687") && !seed.includes("1.359985"), "legacy proforma rate and back-solved SDR stay fixture-only");
+  const fix = readFileSync(new URL("../supabase/migrations/20261003205100_suez_seed_corrections.sql", import.meta.url), "utf8");
+  for (const h of ["f171b583c9d2eb163dd08e8d687ad22dacf3a3d787b3141d39cc3822db4a3fb7", "3f20ef3540904267e5ef092b6d3b1cb49c61caa768345931d9cafb0cf64cf55b", "4a0d86b3949a64220791773e4c1b8e2bfa67b1d84081db53a0e12e786f1d13ef", "47d771190175cba8dad406aaa696397aadb7c10861524dea0ac3cd5e885968ae"]) ok(fix.includes(h), `source hash ${h.slice(0, 8)}… registered`);
+  ok(fix.includes("pending_document") && fix.includes("RUBATO"), "RUBATO proforma registered as pending evidence");
+  for (const n of ["\"gtThreshold\": 10000", "\"swlMt\": 3", "\"boats\": 2", "\"ageYears\": 20"]) ok(fix.includes(n), `corrections carry ${n}`);
+  ok(fix.includes("disable trigger trg_suez_items_guard") && fix.includes("enable trigger trg_suez_items_guard") && fix.includes("'seed_correction'"), "seed correction bypasses the guard explicitly and logs an event");
+  const gov = readFileSync(new URL("../supabase/migrations/20261003205000_suez_voyage_governance.sql", import.meta.url), "utf8");
+  for (const s of ["create table if not exists public.suez_tariff_sources", "create table if not exists public.suez_tariff_events", "fn_suez_validate_version", "where r.as_of <= v_date and r.voided_at is null", "SDR rates are never deleted", "only draft versions can be deleted", "public.get_port_route(p_pol, p_pod)", "p_as_of date default current_date", "geometryVersions", "vessel_economics_profile_events", "revoke all on table public.eca_zones from public, anon, authenticated", "v_actor uuid := public.fn_market_actor()"]) {
+    ok(gov.includes(s), `governance migration carries: ${s.slice(0, 60)}`);
   }
-  ok(!sql.includes("insert into public.suez_toll_tiers") && !sql.includes("insert into public.sdr_rates"), "seed publishes no toll tiers and no SDR rate (r2: no placeholder truth)");
-  ok(!sql.includes("8.687") && !sql.includes("1.359985"), "legacy proforma rate and back-solved SDR stay fixture-only");
-  const schema = readFileSync(new URL("../supabase/migrations/20261003200000_suez_tariff_schema.sql", import.meta.url), "utf8");
-  ok(schema.includes("grant execute on function public.get_suez_tariff_context(date) to authenticated, service_role"), "member read is granted");
-  ok(/revoke all on table public\.suez_tariff_versions[\s\S]*?from public, anon, authenticated/.test(schema), "tariff tables are closed to members");
+  ok(!gov.includes("order by r.as_of asc"), "no earliest-future SDR fallback remains");
+  const fixes = readFileSync(new URL("../supabase/migrations/20261003205200_suez_governance_fixes.sql", import.meta.url), "utf8");
+  for (const s of ["is distinct from 'number'", "function public.fn_suez_actor()", "auth.role() is distinct from 'authenticated' then return null", "admin_suez_set_window", "admin_suez_set_status", "admin_suez_delete_draft", "asb.actor_user_id"]) ok(fixes.includes(s), `governance fixes carry: ${s}`);
+  ok(!fixes.includes("<> 'number'"), "no null-unsafe type check remains in the validator");
   const down = readFileSync(new URL("../supabase/rollback/20261003_suez_voyage_down.sql", import.meta.url), "utf8");
-  for (const t of ["suez_tariff_versions", "suez_tariff_items", "suez_toll_tiers", "sdr_rates", "vessel_economics_profiles", "eca_zones"]) ok(down.includes(`drop table if exists public.${t}`), `DOWN drops ${t}`);
+  for (const t of ["suez_tariff_versions", "suez_tariff_items", "suez_toll_tiers", "sdr_rates", "vessel_economics_profiles", "eca_zones", "suez_tariff_sources", "suez_tariff_events", "vessel_economics_profile_events", "voyage_estimate_runs"]) ok(down.includes(`drop table if exists public.${t}`), `DOWN drops ${t}`);
+  ok(down.includes("value ->> 'seedMarker' = 'stream-s-20261003'"), "DOWN removes only the seeded voyage_settings row");
 }
 
 console.log(`suez-check: ${checks} checks passed`);

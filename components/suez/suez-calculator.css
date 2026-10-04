@@ -27,3 +27,17 @@
 .sz-link { color: var(--asb-blue); font-weight: 600; text-decoration: none; }
 .sz-warnings { margin-top: 16px; background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200); border-left: 3px solid var(--asb-amber); border-radius: 6px; padding: 10px 12px; }
 .sz-warnings ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--asb-navy); line-height: 1.5; }
+
+/* ── v2 statuses ───────────────────────────────────────────────────────── */
+.sz-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px; border-radius: var(--asb-r, 8px); border: 1px solid var(--asb-border, #e3e8ef); font-size: 13px; }
+.sz-status--trusted { background: var(--asb-green-bg, #e8f5ec); }
+.sz-status--partial { background: var(--asb-amber-bg, #fff4dc); }
+.sz-status--unavailable, .sz-status--invalid { background: var(--asb-red-bg, #fdecec); }
+.sz-status__k { font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+.sz-flag.is-undecided { border-left: 3px solid var(--asb-amber-fg, #8a5a00); padding-left: 8px; }
+.sz-sources { margin: 12px 0 0; font-size: 12px; }
+.sz-sources li { margin: 2px 0; }
+.sz-sources code { font-size: 10px; }
+.sz-list { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
+.is-placeholder { color: var(--asb-red, #b3261e); }
+.is-manual { font-style: italic; }

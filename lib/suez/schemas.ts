@@ -13,7 +13,16 @@ export const SUEZ_CONDITION_KEYS = [
 const money = z.number().finite().min(0).max(10_000_000);
 const pct = z.number().finite().min(0).max(1000);
 
-const flatParams = z.object({ amount: money, fromSecondTransit: z.boolean().optional() }).strict();
+// Tariff-defined thresholds live in params (imposed tug: GT threshold, crane SWL,
+// boats to lift; overage: years), never in code.
+const flatParams = z.object({
+  amount: money,
+  fromSecondTransit: z.boolean().optional(),
+  gtThreshold: z.number().finite().positive().max(500000).optional(),
+  swlMt: z.number().finite().positive().max(100).optional(),
+  boats: z.number().int().min(1).max(4).optional(),
+}).strict();
+const flagParams = z.object({ ageYears: z.number().int().min(1).max(60).optional() }).strict();
 const pctParams = z.union([
   z.object({ pct: pct }).strict(),
   z.object({ pctPerUnit: pct, unit: z.string().min(1).max(20) }).strict(),
@@ -36,8 +45,8 @@ export function paramsSchemaFor(basis: (typeof SUEZ_BASES)[number]) {
     case "tier_by_scnt": return tierByScntParams;
     case "per_unit": return perUnitParams;
     case "gt_threshold": return gtThresholdParams;
+    case "flag_only": return flagParams;
     case "toll_tiered_scnt":
-    case "flag_only":
     default: return emptyParams;
   }
 }
@@ -71,6 +80,24 @@ export const suezVersionInputSchema = z.object({
   sourceRef: z.string().trim().min(2).max(500),
   sourceUrl: z.string().trim().url().max(500).optional().nullable().or(z.literal("")),
   notes: z.string().trim().max(2000).optional().nullable(),
+});
+
+// Governed source record (suez_tariff_sources): the circular / guide / proforma
+// a tariff version is built from. "on_file" needs the document's SHA-256.
+export const suezSourceInputSchema = z.object({
+  title: z.string().trim().min(2).max(300),
+  issuer: z.string().trim().min(2).max(120),
+  documentNo: z.string().trim().max(120).optional().nullable(),
+  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  authority: z.enum(["official", "agent", "reference", "owner"]),
+  evidenceStatus: z.enum(["on_file", "pending_document"]),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/, "64 hex characters").optional().nullable(),
+  sourceFilename: z.string().trim().max(200).optional().nullable(),
+  sourceUri: z.string().trim().max(500).optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+}).superRefine((v, ctx) => {
+  if (v.evidenceStatus === "on_file" && !v.sha256) ctx.addIssue({ code: "custom", path: ["sha256"], message: "a source on file needs the document's SHA-256" });
 });
 
 export const sdrRateInputSchema = z.object({
@@ -114,4 +141,62 @@ export function parseTierCsv(text: string): { rows: TierCsvRow[]; errors: string
     if (sorted.length && sorted[0].scntFrom !== 0) errors.push(`${k}: the first band must start at 0`);
   }
   return { rows, errors };
+}
+
+// ── Runtime input boundary for the engine (audit O2C-024 item 5) ────────────
+// Rejects negative, zero-where-positive, non-finite or out-of-range facts so
+// the engine never computes from poisoned input.
+
+const posInt = (max: number) => z.number().int().min(1).max(max);
+const nonNeg = (max: number) => z.number().finite().min(0).max(max);
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "ISO date (YYYY-MM-DD)");
+
+export const suezInputSchema = z.object({
+  vessel: z.object({
+    scnt: posInt(300000).nullable(),
+    scgt: posInt(300000).nullable().optional(),
+    gt: posInt(300000).nullable(),
+    category: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/),
+    buildYear: z.number().int().min(1900).max(2100).nullable().optional(),
+    craneCount: z.number().int().min(0).max(20).nullable().optional(),
+    craneSwlMt: nonNeg(1000).nullable().optional(),
+    mooringCranesOk: z.boolean().nullable().optional(),
+    searchlightCompliant: z.boolean().nullable().optional(),
+    firstTransit: z.boolean().nullable().optional(),
+  }).strict(),
+  voyage: z.object({
+    direction: z.enum(["SB", "NB"]),
+    cargoStatus: z.enum(["laden", "ballast"]),
+    transitDate: isoDate,
+    heavyLiftOver250t: z.boolean().optional(),
+    floatingUnitScgt300: z.boolean().optional(),
+    militaryCargo: z.boolean().optional(),
+    lateArrivalBand: z.enum(["none", "b1", "b2", "b3"]).optional(),
+    notReady: z.boolean().optional(),
+    deckProtrusionFt: nonNeg(200).optional(),
+    ladderNoncompliant: z.boolean().optional(),
+    relievingPilots: z.number().int().min(0).max(10).optional(),
+    wasteNormalM3: nonNeg(1000).optional(),
+    wasteHazardousM3: nonNeg(1000).optional(),
+    bagsM3: nonNeg(1000).optional(),
+    bargeHours: nonNeg(240).optional(),
+  }).strict(),
+  overrides: z.object({
+    sdrRate: z.object({
+      value: z.number().finite().min(0.5).max(5),
+      reason: z.string().trim().min(3).max(300),
+      actorUserId: z.string().min(1).max(64),
+      at: z.string().datetime({ offset: true }),
+    }).strict().optional(),
+    transitDays: nonNeg(10).optional(),
+    anchorageDays: nonNeg(30).optional(),
+  }).strict().optional(),
+}).strict();
+
+export type SuezInputParsed = z.infer<typeof suezInputSchema>;
+
+export function parseSuezInput(v: unknown): { ok: true; value: SuezInputParsed } | { ok: false; errors: string[] } {
+  const r = suezInputSchema.safeParse(v);
+  if (!r.success) return { ok: false, errors: r.error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`) };
+  return { ok: true, value: r.data };
 }

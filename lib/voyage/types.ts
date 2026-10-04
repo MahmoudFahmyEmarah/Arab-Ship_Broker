@@ -1,6 +1,9 @@
-// Voyage cost estimator — types (Voyage Economics, Stream S).
-// Contracts: PLAN-voyage-economics.md §4.1 (fuel index, consumed field
-// averageUsdMt), §4.2 (Suez estimate), §4.3 (voyage_settings), §4.5 (profile).
+// Voyage cost estimator — types (voyage-engine/2).
+// Contracts: PLAN-voyage-economics.md §4.1 (fuel index average), §4.2 (Suez
+// estimate), §4.3 (voyage_settings), §4.5 (profile); audit O2C-024.
+// Every component the engine prices carries a status; nothing is substituted
+// for a missing governed input.
+import type { FuelIndexSnapshot, ManualProvenance } from "./snapshots";
 
 export type OperatingState = "sea_laden" | "sea_ballast" | "port_working" | "port_idle" | "anchorage" | "eca_sea";
 export const OPERATING_STATES: OperatingState[] = ["sea_laden", "sea_ballast", "port_working", "port_idle", "anchorage", "eca_sea"];
@@ -8,29 +11,33 @@ export const OPERATING_STATES: OperatingState[] = ["sea_laden", "sea_ballast", "
 export interface StateConsumption { residual?: number | null; distillate?: number | null }
 export type ConsumptionMap = Partial<Record<OperatingState, StateConsumption>>;
 export type VesselClass = "A" | "B" | "C";
+export type Season = "winter" | "spring" | "summer" | "autumn";
 
-// What the engine needs to know about the ship (from vessel_economics_profiles,
-// vessel_availability or manual entry — the page decides; the engine only cares
-// about the numbers and says what it had to assume).
+/** trusted = governed data · fallback = admin fallback price (labelled) · manual = broker-supplied with provenance · unavailable = missing governed input · invalid = malformed */
+export type ComponentStatus = "trusted" | "fallback" | "manual" | "unavailable" | "invalid";
+export type VoyageStatus = "trusted" | "partial" | "unavailable" | "invalid";
+
 export interface VoyageVesselProfile {
   name?: string;
   speedLadenKn: number | null;
   speedBallastKn: number | null;
   consumption: ConsumptionMap;
-  hasScrubber: boolean;
+  /** true / false when known; null = unknown (priced as no scrubber, stated as an assumption) */
+  hasScrubber: boolean | null;
   vesselClass: VesselClass | null;
 }
 
 export interface VoyageSettings {
   speeds: { ladenKn: number; ballastKn: number };
-  seaMargin: { defaultPct: number; byLane?: Record<string, number>; bySeason?: Record<string, number> };
+  seaMargin: { defaultPct: number; byLane?: Record<string, number>; bySeason?: Partial<Record<Season, number>> };
   portTimeDays: { loadDefault: number; dischDefault: number; idleSharePct: number };
   anchorageDaysDefault: number;
   suez: { transitDays: number; anchorageDays: number; nm: number };
   opex: { crewUsdDay: number; maintenanceUsdDay: number };
   classMultipliers: Record<VesselClass, number>;
-  eca: { fuelProductKey: string };
+  eca: { fuelProductKey: string; distillateProductKey?: string };
   fuelFallback: Record<string, number>;
+  seedMarker?: string;
 }
 
 export const DEFAULT_VOYAGE_SETTINGS: VoyageSettings = {
@@ -41,66 +48,67 @@ export const DEFAULT_VOYAGE_SETTINGS: VoyageSettings = {
   suez: { transitDays: 1, anchorageDays: 0.5, nm: 100 },
   opex: { crewUsdDay: 1450, maintenanceUsdDay: 800 },
   classMultipliers: { A: 2.2, B: 1.5, C: 1.0 },
-  eca: { fuelProductKey: "LSMGO" },
+  eca: { fuelProductKey: "LSMGO", distillateProductKey: "LSMGO" },
   fuelFallback: { VLSFO: 585, LSMGO: 725, HSFO380: 450, MGO05: 700 },
 };
 
-// A price the engine will use for one product: from the fuel index (average)
-// or from the settings fallback — the source is carried into the output.
-export interface FuelPriceInput {
-  usdMt: number;
-  source: "index" | "fallback" | "manual";
-  asOf?: string | null;
-  port?: string | null;
-  scope?: "port" | "region" | "global" | null;
-  quoteCount?: number | null;
-}
-export type FuelPriceMap = Record<string, FuelPriceInput>;
+export type SettingsSource = "governed" | "defaults";
+
+// Engine revisions stamped on every estimate and snapshot (also re-exported by ./snapshots).
+export const VOYAGE_ALGORITHM_VERSION = "voyage-engine/2";
+export const ECA_SPLIT_ALGORITHM_VERSION = "fn_route_eca_split/2";
 
 export interface SeaLegInput {
   key: "ballast" | "laden";
   from: string | null;
   to: string | null;
-  nm: number | null; // null = unknown
-  ecaNm: number | null; // null = unknown share → zone rule or 0 with a warning
-  nmSource?: "measured" | "manual" | "estimate" | null;
+  nm: number | null; // null = unknown → the leg is unavailable
+  ecaNm: number | null; // null = share unknown → priced as non-ECA, leg partial
+  method: "waypoints" | "distance_only" | "manual" | "none";
+  routeSource?: string | null;
+  manual?: ManualProvenance; // required when method = manual
 }
 
 export interface CanalInput {
   required: boolean;
-  name?: string; // "Suez"
+  name: string; // "Suez"
+  status: ComponentStatus; // trusted | manual | unavailable (from the Suez estimate)
+  costUsd: number | null; // null when unavailable
   transitDays: number;
   anchorageDays: number;
-  anchorageInEca: boolean; // Port Said side is inside the Med ECA
-  costUsd: number; // Suez estimate totals.appliedUsd
-  nm?: number;
-  tariffVersionNo?: number | null;
-  ok?: boolean; // Suez estimate ok flag
+  anchorageInEca: boolean;
+  nm: number;
+  tariffVersionNo: number | null;
+  complete: boolean;
 }
 
 export interface PortCallInput {
   key: "load" | "disch";
   port: string | null;
   qtyMt: number;
-  rateMtDay: number | null; // null → settings default days
-  allowanceDays?: number; // turn time, notices, shifting
-  inEca?: boolean;
-  pdaUsd?: number | null; // from the PDA module or manual
-  pdaSource?: "tariff" | "manual" | "none";
+  rateMtDay: number | null; // null → settings default days (assumption)
+  allowanceDays: number;
+  inEca: boolean;
+  openLoopBan: boolean; // scrubber washwater banned in port → compliant fuel in port
+  euBerthOver2h: boolean; // EU berth beyond 2 h → 0.10 % in port
+  pda: { usd: number | null; source: "tariff" | "manual" | "none"; manual?: ManualProvenance };
 }
 
 export interface VoyageInput {
   vessel: VoyageVesselProfile;
-  legs: { ballast?: SeaLegInput | null; laden: SeaLegInput };
-  canal?: CanalInput | null;
+  legs: { ballast: SeaLegInput | null; laden: SeaLegInput };
+  canal: CanalInput | null;
   ports: { load: PortCallInput; disch: PortCallInput };
-  anchorageDays?: number | null;
-  anchorageInEca?: boolean;
-  seaMarginPct?: number | null; // null → settings default
-  prices: FuelPriceMap;
+  anchorageDays: number;
+  anchorageInEca: boolean;
+  seaMarginPct: number | null; // null → settings (default + lane + season)
+  lane: string | null; // "E.MED>AG" style key for settings.seaMargin.byLane
+  season: Season | null;
+  fuel: FuelIndexSnapshot;
   settings: VoyageSettings;
-  revenue?: { qtyMt: number; freightUsdMt: number | null; commissionPct: number } | null;
-  extras?: { insuranceUsd?: number; stevedoringUsd?: number; otherUsd?: number } | null;
+  settingsSource: SettingsSource;
+  revenue: { qtyMt: number; freightUsdMt: number; commissionPct: number } | null;
+  extras: { insuranceUsd: number; stevedoringUsd: number; otherUsd: number };
 }
 
 export interface FuelBurn { productKey: string; mt: number }
@@ -109,10 +117,12 @@ export interface VoyageLegResult {
   key: string;
   label: string;
   kind: "sea" | "canal" | "port" | "anchorage";
+  status: ComponentStatus;
   from: string | null;
   to: string | null;
   nm: number | null;
   ecaNm: number | null;
+  ecaShareKnown: boolean;
   days: number;
   ecaDays: number;
   burns: FuelBurn[];
@@ -122,31 +132,42 @@ export interface VoyageLegResult {
 export interface VoyageFuelLine {
   productKey: string;
   mt: number;
-  usdMt: number;
-  usd: number;
-  priceSource: FuelPriceInput["source"];
-  priceAsOf?: string | null;
-  pricePort?: string | null;
+  status: ComponentStatus; // trusted (index average) | fallback | unavailable
+  usdMt: number | null;
+  usd: number | null;
+  priceAsOf: string | null;
+  pricePort: string | null;
+  priceScope: string | null;
 }
 
 export interface VoyageEstimate {
-  ok: boolean; // false when a core figure is missing (distance, speed, consumption)
-  days: {
-    seaBallast: number;
-    seaLaden: number;
-    canalTransit: number;
-    canalAnchorage: number;
-    portLoad: number;
-    portDisch: number;
-    anchorage: number;
-    total: number;
-  };
+  status: VoyageStatus;
+  /** convenience: status === "trusted" */
+  ok: boolean;
+  algorithmVersion: string;
+  settingsSource: SettingsSource;
+  days: { seaBallast: number; seaLaden: number; canalTransit: number; canalAnchorage: number; portLoad: number; portDisch: number; anchorage: number; total: number };
   seaMarginPct: number;
+  seaMarginBasis: string;
   legs: VoyageLegResult[];
-  fuel: { lines: VoyageFuelLine[]; totalMt: number; totalUsd: number; ecaMt: number; residualProduct: string; ecaProduct: string };
-  opex: { baseUsdDay: number; multiplier: number; vesselClass: VesselClass; usdDay: number; usd: number };
-  costs: { fuelUsd: number; canalUsd: number; pdaLoadUsd: number; pdaDischUsd: number; extrasUsd: number; voyageCostsUsd: number; opexUsd: number; totalUsd: number };
+  fuel: { status: ComponentStatus; lines: VoyageFuelLine[]; totalMt: number; pricedMt: number; totalUsd: number; ecaMt: number; residualProduct: string; ecaProduct: string; distillateProduct: string; indexAsOf: string | null; indexScope: string | null };
+  opex: { baseUsdDay: number; multiplier: number; vesselClass: VesselClass; classAssumed: boolean; usdDay: number; usd: number };
+  costs: {
+    fuel: { usd: number; status: ComponentStatus };
+    canal: { usd: number | null; status: ComponentStatus; required: boolean };
+    pdaLoad: { usd: number | null; status: ComponentStatus };
+    pdaDisch: { usd: number | null; status: ComponentStatus };
+    extrasUsd: number;
+    /** sum of the computable voyage-cost parts (fuel + canal + DAs + extras) */
+    voyageCostsUsd: number;
+    opexUsd: number;
+    /** voyage costs + running cost; meaningful only with complete = true */
+    totalUsd: number;
+    complete: boolean;
+  };
   revenue: { grossFreightUsd: number; commissionUsd: number; netFreightUsd: number; tceUsdDay: number; resultAfterOpexUsd: number } | null;
-  assumptions: string[]; // what was defaulted
-  warnings: string[]; // what is missing or doubtful
+  unavailable: { code: string; reason: string }[];
+  assumptions: string[];
+  warnings: string[];
+  errors?: string[];
 }

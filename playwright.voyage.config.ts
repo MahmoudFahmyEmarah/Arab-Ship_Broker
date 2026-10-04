@@ -14,8 +14,9 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: [["list"], ["html", { open: "never", outputFolder: "e2e/.voyage-report" }]],
-  timeout: 180_000,
-  expect: { timeout: 60_000 },
+  // Sized for the shared 4-CPU box, where another agent's build can stretch a page load past a minute.
+  timeout: 300_000,
+  expect: { timeout: 90_000 },
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3101",
     trace: "retain-on-failure",

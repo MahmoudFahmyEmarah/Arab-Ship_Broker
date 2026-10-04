@@ -42,3 +42,13 @@
 .vd-item summary span { font-weight: 400; color: var(--adm-muted); font-size: 12px; }
 .vd-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 @media (max-width: 900px) { .vd-grid--2, .vd-form, .vd-form--3 { grid-template-columns: 1fr; } .vd-row { display: grid; } }
+
+/* ── governance: sources, events, voided rates ───────────────────────────── */
+.vd-chip--voided { background: var(--adm-red-bg); color: var(--adm-red); }
+.vd-chip--official { background: var(--adm-green-bg); color: var(--adm-green); }
+.vd-chip--pending { background: var(--adm-amber-bg); color: var(--adm-amber-fg); }
+.vd-struck { text-decoration: line-through; color: var(--adm-muted); }
+.vd-events { font-size: 12px; max-height: 420px; overflow: auto; }
+.vd-events td { white-space: nowrap; }
+.vd-events td.wrap { white-space: normal; word-break: break-word; }
+.vd-sha { font-family: var(--adm-font-mono); font-size: 10px; word-break: break-all; }

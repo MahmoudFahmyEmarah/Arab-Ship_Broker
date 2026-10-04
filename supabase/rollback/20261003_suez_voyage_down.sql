@@ -1,5 +1,29 @@
--- DOWN for Stream S (Voyage Economics): 20261003200000, 200100, 201000, 202000, 203000, 204000.
+-- DOWN for Stream S (Voyage Economics): 20261003200000, 200100, 201000, 202000, 203000, 204000, 205000, 205100.
 -- Returns the schema to 677613e. Order: dependents first.
+
+-- 205000 / 205100 governance
+drop trigger if exists trg_vep_events_append_only on public.vessel_economics_profile_events;
+drop table if exists public.vessel_economics_profile_events;
+-- 20261003205200 (governance fixes): admin RPCs and the service-role-safe actor resolver
+drop function if exists public.admin_suez_set_window(uuid, uuid, date, text);
+drop function if exists public.admin_suez_set_status(uuid, uuid, text);
+drop function if exists public.admin_suez_delete_draft(uuid, uuid);
+drop function if exists public.fn_suez_require_actor(uuid);
+drop function if exists public.fn_suez_actor();
+drop function if exists public.list_eca_zones(date);
+drop function if exists public.fn_route_eca_split(text, text, date);
+drop trigger if exists trg_sdr_rates_events on public.sdr_rates;
+drop trigger if exists trg_sdr_rates_guard on public.sdr_rates;
+drop function if exists public.fn_sdr_rates_events();
+drop function if exists public.fn_sdr_rates_guard();
+drop trigger if exists trg_suez_version_events on public.suez_tariff_versions;
+drop function if exists public.fn_suez_version_events();
+drop function if exists public.fn_suez_validate_version(uuid);
+drop trigger if exists trg_suez_events_append_only on public.suez_tariff_events;
+drop function if exists public.fn_suez_events_append_only();
+drop table if exists public.suez_tariff_version_sources;
+drop table if exists public.suez_tariff_events;
+drop table if exists public.suez_tariff_sources;
 
 drop function if exists public.list_my_voyage_estimates(integer);
 drop function if exists public.get_voyage_estimate(uuid);
@@ -35,4 +59,5 @@ drop table if exists public.suez_tariff_items;
 drop table if exists public.suez_tariff_versions;
 drop table if exists public.sdr_rates;
 
-delete from public.app_settings where key = 'voyage_settings';
+-- Only the seeded row goes; an admin-edited row (the save drops the marker) stays.
+delete from public.app_settings where key = 'voyage_settings' and value ->> 'seedMarker' = 'stream-s-20261003';

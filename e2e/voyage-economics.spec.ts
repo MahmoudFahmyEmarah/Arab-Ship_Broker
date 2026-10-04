@@ -39,10 +39,29 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  // Published versions, SDR rates and events are immutable by trigger (20261003205000); the disposable e2e rows are
+  // removed by the local superuser with the guards lifted for this statement batch only, then the previous version's open window is restored.
   psql(`
+alter table public.suez_tariff_versions disable trigger trg_suez_version_guard;
+alter table public.suez_tariff_versions disable trigger trg_suez_version_events;
+alter table public.suez_tariff_items disable trigger trg_suez_items_guard;
+alter table public.suez_toll_tiers disable trigger trg_suez_tiers_guard;
+alter table public.sdr_rates disable trigger trg_sdr_rates_guard;
+alter table public.suez_tariff_events disable trigger trg_suez_events_append_only;
+delete from public.suez_tariff_events where version_id in (select id from public.suez_tariff_versions where source_ref like 'e2e ${stamp}%');
+delete from public.suez_tariff_events where entity = 'sdr_rate' and entity_id in (select id from public.sdr_rates where source = 'e2e-${stamp}');
 delete from public.suez_tariff_versions where source_ref like 'e2e ${stamp}%';
 update public.suez_tariff_versions set effective_to = null where status = 'published' and effective_to = '${today}' and version_no = (select max(version_no) from public.suez_tariff_versions where status = 'published');
 delete from public.sdr_rates where source = 'e2e-${stamp}';
+alter table public.suez_tariff_versions enable trigger trg_suez_version_guard;
+alter table public.suez_tariff_versions enable trigger trg_suez_version_events;
+alter table public.suez_tariff_items enable trigger trg_suez_items_guard;
+alter table public.suez_toll_tiers enable trigger trg_suez_tiers_guard;
+alter table public.sdr_rates enable trigger trg_sdr_rates_guard;
+alter table public.suez_tariff_events enable trigger trg_suez_events_append_only;
+alter table public.vessel_economics_profile_events disable trigger trg_vep_events_append_only;
+delete from public.vessel_economics_profile_events where vessel_id = '${seed.vesselId}';
+alter table public.vessel_economics_profile_events enable trigger trg_vep_events_append_only;
 delete from public.vessel_economics_profiles where vessel_id = '${seed.vesselId}';
 `);
   cleanupFixture(seed);
@@ -65,9 +84,10 @@ test("admin records an SDR rate, loads toll bands into a draft and publishes it"
     await expect(page.locator(".vd-alert--success")).toContainText("SDR rate 1.36 USD recorded");
 
     await page.goto("/admin/voyage-data?tab=suez");
-    await page.locator('input[name="effectiveFrom"]').fill(tomorrow);
-    await page.locator('input[name="sourceRef"]').fill(`e2e ${stamp} SCA tolls circular (test)`);
-    await page.getByRole("button", { name: "Create draft" }).click();
+    const draftForm = page.locator(".vd-panel", { hasText: "New draft version" });
+    await draftForm.locator('input[name="effectiveFrom"]').fill(tomorrow);
+    await draftForm.locator('input[name="sourceRef"]').fill(`e2e ${stamp} SCA tolls circular (test)`);
+    await draftForm.getByRole("button", { name: "Create draft" }).click();
     await expect(page.locator(".vd-alert--success")).toContainText(/Draft version \d+ created with copied items and tiers/);
     versionId = new URL(page.url()).searchParams.get("version");
     expect(versionId).toBeTruthy();
@@ -77,13 +97,13 @@ test("admin records an SDR rate, loads toll bands into a draft and publishes it"
     await page.locator('textarea[name="csv"]').fill(BANDS);
     await page.getByRole("button", { name: /Replace bands of v\d+/ }).click();
     await expect(page.locator(".vd-alert--success")).toContainText("4 toll bands saved for 1 categories (official)");
-    await expect(page.locator(".vd-table")).toContainText("8.0000");
+    await expect(page.locator(".vd-panel", { hasText: /Toll bands of v\d+/ })).toContainText("8.0000");
 
     await page.goto(`/admin/voyage-data?tab=suez&version=${versionId}`);
     const row = page.locator(".vd-row", { hasText: `e2e ${stamp}` });
     await row.locator('input[name="confirm"]').fill("PUBLISH");
     await row.getByRole("button", { name: "Publish" }).click();
-    await expect(page.locator(".vd-alert--success")).toContainText(/Version \d+ published \(\d+ items, 4 toll bands\)/);
+    await expect(page.locator(".vd-alert--success")).toContainText(/Version \d+ published \(\d+ items, 4 toll bands, \d+ sources\)/);
     await expect(row.locator(".vd-chip--published")).toHaveCount(1);
   } finally {
     await context.close();
@@ -95,7 +115,7 @@ test("member calculator prices a transit from the published bands and saves the 
   try {
     await page.goto("/dashboard/suez-toll");
     await expect(page.getByText("Suez Canal Transit Cost", { exact: true })).toBeVisible();
-    const select = page.getByRole("combobox", { name: "Vessel" });
+    const select = page.getByRole("combobox", { name: "Vessel", exact: true }); // "SCA vessel category" is a combobox too
     const optionValue = await select.locator("option", { hasText: seed.vesselName }).first().getAttribute("value");
     expect(optionValue).toBeTruthy();
     await select.selectOption(optionValue!);
@@ -126,6 +146,9 @@ test("member calculator prices a transit from the published bands and saves the 
     const flags = page.locator(".ve-pl-card", { hasText: "risk flags" });
     await expect(flags.locator(".sz-flag.is-applied", { hasText: "Imposed tug" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Export estimate" })).toBeEnabled();
+    // Searchlight and first transit are unknown → undecided flags; the estimate says so instead of charging or waiving.
+    await expect(flags.locator(".sz-flag.is-undecided").first()).toBeVisible();
+    await expect(page.locator(".sz-status")).toContainText("partial");
 
     // Save the facts to the vessel economics profile through the member RPC, then they load as Record.
     await page.getByRole("button", { name: "Save facts to vessel profile" }).click();
@@ -134,6 +157,56 @@ test("member calculator prices a transit from the published bands and saves the 
     await select.selectOption(optionValue!);
     await expect(page.locator(".sz-fact", { hasText: "SCNT" }).first()).toContainText("16,070");
     await expect(page.locator(".ve-input-card__head", { hasText: "economics profile" })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("voyage estimator prices the seeded pairing and saves an immutable estimate run", async ({ browser, baseURL }) => {
+  const { page, context } = await asAdmin(browser, baseURL!);
+  try {
+    await page.goto("/dashboard/voyage-estimator");
+    await expect(page.getByText("Voyage Cost Estimator", { exact: true })).toBeVisible();
+    const vesselSelect = page.getByRole("combobox", { name: "Vessel", exact: true });
+    const vesselValue = await vesselSelect.locator("option", { hasText: seed.vesselName }).first().getAttribute("value");
+    expect(vesselValue).toBeTruthy();
+    await vesselSelect.selectOption(vesselValue!);
+    const cargoSelect = page.getByRole("combobox", { name: "Cargo" });
+    const cargoOptions = await cargoSelect.locator("option").allTextContents();
+    expect(cargoOptions.length).toBeGreaterThan(1);
+    await cargoSelect.selectOption({ index: 1 });
+
+    // The saved profile from the Suez test feeds the SCNT; speeds come from the profile or defaults.
+    await expect(page.locator(".vy-rail")).toBeVisible();
+    await page.getByLabel("Sea · laden residual").fill("20");
+    await page.getByLabel("Sea · laden distillate").fill("1");
+    await page.getByLabel("Port · working residual").fill("3");
+    await page.getByLabel("Port · working distillate").fill("1");
+    // Local routes cover four pairs only; force the laden leg to a manual distance.
+    const ladenLeg = page.locator(".vy-leg", { hasText: "Laden" });
+    await ladenLeg.getByRole("checkbox", { name: "Manual" }).check();
+    await ladenLeg.getByLabel("NM", { exact: true }).fill("1200");
+    await ladenLeg.getByLabel("of which ECA NM").fill("600");
+    // A manual distance is a manual value: it needs its reason (else the input is invalid, never silently accepted).
+    await expect(page.locator(".vy-status")).toContainText("invalid");
+    await ladenLeg.getByLabel("Reason").fill("owner distance table, e2e");
+    await expect(page.locator(".vy-status")).toContainText("partial");
+
+    const strip = page.locator(".ve-results");
+    await expect(strip).toContainText("Total voyage days");
+    await expect(strip).not.toContainText("$0");
+    await expect(page.locator(".ve-pl-card", { hasText: "Fuel by product" })).toContainText("LSMGO");
+    // hasText is a case-insensitive substring: "Total voyage cost" elsewhere also matches "Voyage costs" — pin the card by its exact title.
+    const costsCard = page.locator(".ve-pl-card", { has: page.locator(".ve-pl-card__title", { hasText: /^Voyage costs$/ }) });
+    await expect(costsCard).toContainText("Running cost");
+
+    // Statuses are visible: manual leg, fallback fuel (no live index), DAs not entered → unavailable, total incomplete.
+    await expect(page.locator(".vy-table")).toContainText("manual");
+    await expect(page.locator(".ve-pl-card", { hasText: "Fuel by product" })).toContainText("fallback");
+    await expect(costsCard).toContainText("not entered — unavailable");
+    await page.getByRole("button", { name: "Save estimate" }).click();
+    await expect(page.locator(".ve-head")).toContainText("Estimate saved");
+    await expect(page.locator(".ve-head")).toContainText("partial");
   } finally {
     await context.close();
   }

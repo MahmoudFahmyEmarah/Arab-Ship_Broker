@@ -36,3 +36,21 @@
 .vy-save { display: grid; gap: 4px; margin-top: 6px; }
 .vy-error { color: var(--asb-red); }
 .vy-muted { color: var(--asb-gray-500); font-size: 11px; }
+
+/* ── v2 statuses: every figure says where it came from ───────────────────── */
+.vy-badge--trusted { background: var(--asb-green-bg, #e8f5ec); color: var(--asb-green, #1f7a3a); }
+.vy-badge--partial { background: var(--asb-amber-bg, #fff4dc); color: var(--asb-amber-fg, #8a5a00); }
+.vy-badge--unavailable { background: var(--asb-red-bg, #fdecec); color: var(--asb-red, #b3261e); }
+.vy-badge--invalid { background: var(--asb-red-bg, #fdecec); color: var(--asb-red, #b3261e); }
+.vy-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px; border-radius: var(--asb-r, 8px); border: 1px solid var(--asb-border, #e3e8ef); font-size: 13px; }
+.vy-status--trusted { background: var(--asb-green-bg, #e8f5ec); }
+.vy-status--partial { background: var(--asb-amber-bg, #fff4dc); }
+.vy-status--unavailable, .vy-status--invalid { background: var(--asb-red-bg, #fdecec); }
+.vy-status__k { font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+.vy-reason { grid-column: 1 / -1; }
+.vy-reason input { width: 100%; }
+.vy-unavailable-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; }
+.vy-unavailable-list li { margin: 2px 0; }
+.is-unavailable { color: var(--asb-red, #b3261e); font-weight: 600; }
+.is-fallback { color: var(--asb-amber-fg, #8a5a00); }
+.is-manual { color: var(--asb-ink-2, #3b4a5a); font-style: italic; }

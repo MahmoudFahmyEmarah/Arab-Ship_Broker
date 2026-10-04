@@ -1,70 +1,78 @@
 // Cross-module snapshots stored with an immutable voyage estimate run
-// (PLAN-voyage-economics r2 item 3, r2.1 §4). Each snapshot says where its
-// figures came from (trusted | unavailable | manual), carries the versions and
-// as-of that produced them, and a SHA-256 of its canonical serialisation so a
-// saved estimate can be reproduced and audited after settings change.
-// Server-side only (node:crypto).
+// (PLAN-voyage-economics r2 item 3, r2.1 §4; FuelIndexSnapshot frozen by
+// C2O-033 item 3 / O2C-025). Each snapshot says where its figures came from
+// (trusted | unavailable | manual), carries the versions and as-of that
+// produced them, and a SHA-256 of its canonical serialisation so a saved
+// estimate can be reproduced and audited after settings change.
+// The hashing helpers are server-side (node:crypto); the types are shared.
 import { createHash } from "node:crypto";
 
 export type SnapshotStatus = "trusted" | "unavailable" | "manual";
 
 export interface ManualProvenance { actorUserId: string; reason: string; at: string }
 
+/** Frozen B→S contract (C2O-033 item 3). No supplier identity, ever. */
 export interface FuelIndexSnapshot {
   kind: "fuel_index";
   status: SnapshotStatus;
+  algorithmVersion: string; // e.g. "bunker-index/1"
   asOf: string | null;
-  port: string | null;
+  requestedPort: string | null;
   scope: "port" | "region" | "global" | null;
-  products: { key: string; usdMt: number; source: "index" | "fallback" | "manual"; quoteCount?: number | null }[];
+  actualPort: string | null; // null unless scope = port
+  region: string | null;
+  contributingPorts: string[];
+  stemMt: number | null;
+  products: { key: string; variant?: string | null; averageUsdMt: number; freshness: "current" | "stale"; validUntil?: string | null; latestQuoteAt: string | null }[];
+  noOffer: string[];
   warnings: string[];
   manual?: ManualProvenance;
-  hash?: string;
+  canonicalSha256?: string;
 }
 
 export interface RouteEcaClassification {
   kind: "route_eca";
   status: SnapshotStatus;
-  legs: { key: string; pol: string | null; pod: string | null; totalNm: number | null; ecaNm: number | null; method: "waypoints" | "distance_only" | "manual" | "none"; chokepoints?: string[] }[];
-  geometryVersion: string; // eca_zones snapshot, e.g. "MED@2025-05-01"
+  asOf: string | null;
+  legs: { key: string; pol: string | null; pod: string | null; totalNm: number | null; ecaNm: number | null; method: "waypoints" | "distance_only" | "manual" | "none"; chokepoints?: string[]; reversed?: boolean | null; source?: string | null; manual?: ManualProvenance }[];
+  geometryVersions: { code: string; geometryVersion: string }[];
   algorithmVersion: string; // fn_route_eca_split revision
   warnings: string[];
-  manual?: ManualProvenance;
-  hash?: string;
+  canonicalSha256?: string;
 }
 
 export interface SuezCostSnapshot {
   kind: "suez_cost";
   status: SnapshotStatus;
   required: boolean;
+  algorithmVersion: string | null;
   tariffVersionNo: number | null;
   tariffSourceRef: string | null;
   sdrRateUsd: number | null;
   sdrAsOf: string | null;
-  appliedUsd: number;
-  potentialUsd: number;
+  sdrStatus: string | null;
+  appliedUsd: number | null;
+  potentialUsd: number | null;
+  complete: boolean;
   transitDays: number;
   anchorageDays: number;
   warnings: string[];
   manual?: ManualProvenance;
-  hash?: string;
+  canonicalSha256?: string;
 }
 
 export interface PortCostSnapshot {
   kind: "port_cost";
   status: SnapshotStatus;
-  load: { port: string | null; usd: number | null; source: "tariff" | "manual" | "none"; estimateId?: string | null };
-  disch: { port: string | null; usd: number | null; source: "tariff" | "manual" | "none"; estimateId?: string | null };
+  load: { port: string | null; usd: number | null; source: "tariff" | "manual" | "none"; estimateId?: string | null; manual?: ManualProvenance };
+  disch: { port: string | null; usd: number | null; source: "tariff" | "manual" | "none"; estimateId?: string | null; manual?: ManualProvenance };
   warnings: string[];
-  manual?: ManualProvenance;
-  hash?: string;
+  canonicalSha256?: string;
 }
 
 export type VoyageSnapshot = FuelIndexSnapshot | RouteEcaClassification | SuezCostSnapshot | PortCostSnapshot;
 
-export const VOYAGE_ALGORITHM_VERSION = "voyage-engine/1";
-export const SUEZ_ALGORITHM_VERSION = "suez-engine/1";
-export const ECA_SPLIT_ALGORITHM_VERSION = "fn_route_eca_split/1";
+export { VOYAGE_ALGORITHM_VERSION, ECA_SPLIT_ALGORITHM_VERSION } from "./types";
 
 // Canonical JSON: sorted object keys at every level, no undefined, finite
 // numbers only, arrays kept in order. Two equal snapshots hash the same
@@ -97,11 +105,11 @@ export function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-// Returns the snapshot with its hash filled (computed over everything but `hash`).
-export function sealSnapshot<T extends { hash?: string }>(snapshot: T): T & { hash: string } {
-  const { hash: _ignored, ...rest } = snapshot;
+// Returns the snapshot with its hash filled (computed over everything but the hash field).
+export function sealSnapshot<T extends { canonicalSha256?: string }>(snapshot: T): T & { canonicalSha256: string } {
+  const { canonicalSha256: _ignored, ...rest } = snapshot;
   void _ignored;
-  return { ...snapshot, hash: sha256Hex(canonicalJson(rest)) } as T & { hash: string };
+  return { ...snapshot, canonicalSha256: sha256Hex(canonicalJson(rest)) } as T & { canonicalSha256: string };
 }
 
 export function hashSettings(settings: unknown): string {

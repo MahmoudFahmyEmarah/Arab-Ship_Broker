@@ -1,33 +1,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DEFAULT_VOYAGE_SETTINGS, type VoyageSettings } from "@/lib/voyage/types";
+import { DEFAULT_VOYAGE_SETTINGS, type SettingsSource, type VoyageSettings } from "@/lib/voyage/types";
+import { parseVoyageSettings } from "@/lib/voyage/schemas";
 
 // Voyage estimator settings live in app_settings.voyage_settings (members read,
-// admins write on /admin/voyage-data). Missing keys fall back to the defaults so
-// a partial admin edit never breaks the engine.
-export async function getVoyageSettings(supabase: SupabaseClient): Promise<VoyageSettings> {
+// admins write on /admin/voyage-data). The reader never hides a failure: a
+// missing row, a read error or a malformed value returns the compiled defaults
+// with status "defaults" and the reason, and every estimate built on them says
+// so (audit O2C-024 item 7).
+export interface VoyageSettingsLoad { settings: VoyageSettings; status: SettingsSource; error: string | null }
+
+export async function getVoyageSettings(supabase: SupabaseClient): Promise<VoyageSettingsLoad> {
   try {
     const { data, error } = await supabase.from("app_settings").select("value").eq("key", "voyage_settings").maybeSingle();
-    if (error || !data?.value) return DEFAULT_VOYAGE_SETTINGS;
-    return mergeVoyageSettings(data.value as Partial<VoyageSettings>);
-  } catch {
-    return DEFAULT_VOYAGE_SETTINGS;
+    if (error) return { settings: DEFAULT_VOYAGE_SETTINGS, status: "defaults", error: `voyage_settings read failed: ${error.message}` };
+    if (!data?.value) return { settings: DEFAULT_VOYAGE_SETTINGS, status: "defaults", error: "voyage_settings row is missing" };
+    const parsed = parseVoyageSettings(data.value);
+    if (!parsed.ok) return { settings: DEFAULT_VOYAGE_SETTINGS, status: "defaults", error: `voyage_settings is malformed: ${parsed.error}` };
+    return { settings: parsed.value, status: "governed", error: null };
+  } catch (e) {
+    return { settings: DEFAULT_VOYAGE_SETTINGS, status: "defaults", error: e instanceof Error ? e.message : "voyage_settings read failed" };
   }
-}
-
-export function mergeVoyageSettings(v: Partial<VoyageSettings> | null | undefined): VoyageSettings {
-  const d = DEFAULT_VOYAGE_SETTINGS;
-  if (!v) return d;
-  return {
-    speeds: { ...d.speeds, ...(v.speeds ?? {}) },
-    seaMargin: { ...d.seaMargin, ...(v.seaMargin ?? {}) },
-    portTimeDays: { ...d.portTimeDays, ...(v.portTimeDays ?? {}) },
-    anchorageDaysDefault: v.anchorageDaysDefault ?? d.anchorageDaysDefault,
-    suez: { ...d.suez, ...(v.suez ?? {}) },
-    opex: { ...d.opex, ...(v.opex ?? {}) },
-    classMultipliers: { ...d.classMultipliers, ...(v.classMultipliers ?? {}) },
-    eca: { ...d.eca, ...(v.eca ?? {}) },
-    fuelFallback: { ...d.fuelFallback, ...(v.fuelFallback ?? {}) },
-  };
 }
 
 // ── Saved estimates (migration 20261003204000) ─────────────────────────────

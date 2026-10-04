@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getAppUserRow } from "@/lib/app-user";
 import { loadViewerContext, loadCargoViews } from "@/lib/portal/data";
 import { ComingSoon } from "@/components/portal/ComingSoon";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
@@ -8,7 +9,7 @@ import { CalculatorLocked } from "@/components/portal/calculators";
 import { VoyageEstimatorV2 } from "@/components/voyage/VoyageEstimatorV2";
 import { getSuezTariffContext } from "@/sdk/app/suez";
 import { getVoyageSettings } from "@/sdk/app/voyage";
-import { loadFuelPrices } from "@/lib/voyage/fuel-source";
+import { loadFuelIndex } from "@/lib/voyage/fuel-source";
 import { voyageOptionFromAdminRow, type AdminVoyageVesselRow, type VoyageVesselOption } from "@/lib/voyage/vessel-options";
 import type { SuezTariffContextResult } from "@/lib/suez/types";
 
@@ -49,18 +50,22 @@ export default async function VoyageEstimatorPage({ searchParams }: { searchPara
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
-  const [vessels, cargos, settings] = await Promise.all([loadAdminVoyageVessels(), loadCargoViews(), getVoyageSettings(supabase)]);
+  const [vessels, cargos, settingsLoad, viewer] = await Promise.all([loadAdminVoyageVessels(), loadCargoViews(), getVoyageSettings(supabase), getAppUserRow(supabase, user.id, "id")]);
   let suezContext: SuezTariffContextResult = { found: false, date: today };
   try { suezContext = await getSuezTariffContext(supabase, today); } catch { /* unavailable state */ }
-  const fuel = await loadFuelPrices(settings, null);
+  // The frozen B→S index snapshot (status unavailable until Stream B's index is wired → fallback prices, labelled).
+  const fuel = await loadFuelIndex(null);
 
   return (
     <VoyageEstimatorV2
       vessels={vessels}
       cargos={cargos.views}
-      settings={settings}
+      settings={settingsLoad.settings}
+      settingsSource={settingsLoad.status}
+      settingsError={settingsLoad.error}
       suezContext={suezContext}
       fuel={fuel}
+      viewerUserId={viewer?.id ?? null}
       initialVesselId={typeof params.vessel === "string" ? params.vessel : undefined}
       initialCargoId={typeof params.cargo === "string" ? params.cargo : undefined}
     />
