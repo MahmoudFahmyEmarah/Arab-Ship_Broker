@@ -8,7 +8,9 @@
 #   R1 identical command  -> exactly one quote; one session duplicate=false,
 #                            the other waits, then replays duplicate=true;
 #   R2 different content  -> one session succeeds, the other gets 23505;
-#   neither run surfaces a raw unique-index violation.
+#   neither run surfaces a raw unique-index violation;
+#   R3 an admin disables the supplier while a submission waits on the row
+#      lock -> the submission is refused after the lock and writes nothing.
 # Seed rows are committed (sessions must see each other) and removed at the end.
 set -uo pipefail
 DB="${1:-asb_bunker}"
@@ -85,5 +87,23 @@ if grep -q "^false " "$TMP/a" && grep -q "already used for a different quote" "$
    && ! grep -q "duplicate key value" "$TMP/a" "$TMP/b"; then
   echo "  ok   first wins; the second is refused with the clientRef message, not a raw index error"
 else echo "  FAIL R2 (rows=$n)"; fail=1; fi
+
+echo "── R3 · disable versus submit, concurrent"
+docker exec -i $C psql -U postgres -d "$DB" -qAt > "$TMP/d" 2>&1 <<SQL &
+begin;
+update public.bunker_suppliers set status = 'disabled' where id = '$SUP';
+select pg_sleep(3);
+commit;
+SQL
+pd=$!
+sleep 0.5
+session "$TMP/b" race-disabled 613
+wait $pd
+echo "  R3 disable:  $(tr '\n' ' ' < "$TMP/d")"
+echo "  R3 submit:   $(tr '\n' ' ' < "$TMP/b")"
+n=$($PSQL -c "select count(*) from public.bunker_quotes where supplier_id = '$SUP' and client_ref = 'race-disabled'")
+if grep -q "not open to you for submissions" "$TMP/b" && [ "$n" = 0 ]; then
+  echo "  ok   the submission waited for the disable and was refused; nothing written"
+else echo "  FAIL R3 (rows=$n)"; fail=1; fi
 
 [ $fail = 0 ] && echo "BUNKER RACE: OK" || { echo "BUNKER RACE: FAILED"; exit 1; }

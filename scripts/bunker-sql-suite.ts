@@ -159,17 +159,17 @@ do $t$ begin
 exception when unique_violation then null;
 end $t$;
 do $t$ begin
-  perform public.supplier_upsert_quotes(('[{"portLocode":"CYLCA","productKey":"VLSFO","priceUsdMt":599,"validUntil":"' || (now() + interval '10 days')::text || '"}]')::jsonb);
+  perform public.supplier_upsert_quotes(('[{"portLocode":"CYLCA","productKey":"VLSFO","priceUsdMt":599,"clientRef":"l4","validUntil":"' || (now() + interval '10 days')::text || '"}]')::jsonb);
   raise exception 'L4 FAILED: unregistered port accepted';
 exception when sqlstate '22023' then null;
 end $t$;
 do $t$ begin
-  perform public.supplier_upsert_quotes(('[{"portLocode":"GRPIR","productKey":"VLSFO","priceUsdMt":0,"validUntil":"' || (now() + interval '10 days')::text || '"}]')::jsonb);
+  perform public.supplier_upsert_quotes(('[{"portLocode":"GRPIR","productKey":"VLSFO","priceUsdMt":0,"clientRef":"l5","validUntil":"' || (now() + interval '10 days')::text || '"}]')::jsonb);
   raise exception 'L5 FAILED: zero price accepted';
 exception when sqlstate '22023' then null;
 end $t$;
 do $t$ begin
-  perform public.supplier_upsert_quotes(('[{"portLocode":"GRPIR","productKey":"VLSFO","priceUsdMt":600,"validUntil":"' || (now() - interval '1 hour')::text || '"}]')::jsonb);
+  perform public.supplier_upsert_quotes(('[{"portLocode":"GRPIR","productKey":"VLSFO","priceUsdMt":600,"clientRef":"l6","validUntil":"' || (now() - interval '1 hour')::text || '"}]')::jsonb);
   raise exception 'L6 FAILED: expired validity accepted';
 exception when sqlstate '22023' then null;
 end $t$;
@@ -267,7 +267,8 @@ begin
   end;
   -- C2B-002 hardening: a replaced pending quote is audited.
   perform public.supplier_upsert_quotes(jsonb_build_array(
-    jsonb_build_object('portLocode','GRPIR','productKey','LSMGO','priceUsdMt',805,'validUntil',(now() + interval '5 days')::text)));
+    jsonb_build_object('portLocode','GRPIR','productKey','LSMGO','priceUsdMt',805,'clientRef','l10',
+                       'validUntil',(now() + interval '5 days')::text)));
 end $t$;
 reset role;
 select set_config('request.jwt.claims', '', true);
@@ -292,6 +293,73 @@ begin
     raise exception 'L11 FAILED: platform port not registered'; end if;
 end $t$;
 select 'L11 ok: platform input registers its port';
+
+-- C2B-003 #1: a keyless supplier submission (and a repeated key in one batch) is refused.
+${as(MEMBER_SUB)}
+do $t$ begin
+  begin
+    perform public.supplier_upsert_quotes(jsonb_build_array(jsonb_build_object(
+      'portLocode','GRPIR','productKey','VLSFO','priceUsdMt',611,'validUntil',(now() + interval '5 days')::text)));
+    raise exception 'L12 FAILED: keyless submission accepted';
+  exception when sqlstate '22023' then
+    if sqlerrm not like '%clientRef%' then raise exception 'L12 FAILED: wrong error %', sqlerrm; end if;
+  end;
+  begin
+    perform public.supplier_upsert_quotes(jsonb_build_array(
+      jsonb_build_object('portLocode','GRPIR','productKey','VLSFO','priceUsdMt',611,'clientRef','dup','validUntil',(now() + interval '5 days')::text),
+      jsonb_build_object('portLocode','GRPIR','productKey','HSFO380','priceUsdMt',511,'clientRef','dup','validUntil',(now() + interval '5 days')::text)));
+    raise exception 'L12 FAILED: repeated key within a batch accepted';
+  exception when sqlstate '22023' then null;
+  end;
+end $t$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+select 'L12 ok: clientRef required and unique per batch';
+
+-- C2B-003 #4: at the 500/day boundary a replay still succeeds, a new key does not.
+insert into public.bunker_quote_events (supplier_id, port_locode, product_key, action, created_at)
+select '${A}', 'GRPIR', 'VLSFO', 'submit', now() from generate_series(1, 500);
+${as(MEMBER_SUB)}
+do $t$ declare r jsonb;
+  base jsonb := jsonb_build_object('portLocode','GRPIR','productKey','LSMGO','priceUsdMt',805,'clientRef','l10',
+                                   'validUntil',(now() + interval '5 days')::text);
+begin
+  r := public.supplier_upsert_quotes(jsonb_build_array(base));
+  if r->'results'->0->>'duplicate' <> 'true' then raise exception 'L13 FAILED: replay at the limit not a duplicate: %', r; end if;
+  begin
+    perform public.supplier_upsert_quotes(jsonb_build_array(base || jsonb_build_object('clientRef', 'brand-new')));
+    raise exception 'L13 FAILED: new key accepted past the daily limit';
+  exception when sqlstate '54000' then null;
+  end;
+end $t$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+set session_replication_role = replica;  -- remove the synthetic rate rows (events are append-only)
+delete from public.bunker_quote_events where supplier_id = '${A}' and quote_id is null and action = 'submit';
+set session_replication_role = origin;
+select 'L13 ok: replays exempt from the daily limit';
+
+-- C2B-003 #3: a row keyed before 105000 (no command hash) replays on identical terms.
+insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, delivery_mode, min_qty_mt,
+  barge_fee_usd, mandatory_charges_usd, valid_from, valid_until, source, status, client_ref, command_sha256, submitted_at)
+values ('${A}', 'GRPIR', 'ULSFO', 700, 'barge', 300, 1000, 0, now() - interval '1 hour',
+        date_trunc('hour', now()) + interval '6 days', 'supplier', 'submitted', 'legacy-1', null, now() - interval '1 hour');
+${as(MEMBER_SUB)}
+do $t$ declare r jsonb;
+  base jsonb := jsonb_build_object('portLocode','GRPIR','productKey','ULSFO','priceUsdMt',700,'minQtyMt',300,
+                 'bargeFeeUsd',1000,'clientRef','legacy-1','validUntil',(date_trunc('hour', now()) + interval '6 days')::text);
+begin
+  r := public.supplier_upsert_quotes(jsonb_build_array(base));
+  if r->'results'->0->>'duplicate' <> 'true' then raise exception 'L14 FAILED: legacy keyed row did not replay: %', r; end if;
+  begin
+    perform public.supplier_upsert_quotes(jsonb_build_array(base || jsonb_build_object('priceUsdMt', 701)));
+    raise exception 'L14 FAILED: legacy key reused with another price';
+  exception when unique_violation then null;
+  end;
+end $t$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+select 'L14 ok: pre-105000 keyed rows replay by their stored terms';
 
 -- Inactive accounts cannot open the portal state.
 update public.users set is_active = false where id = '${VIEWER_SUB}';
@@ -335,6 +403,25 @@ begin
     raise exception 'T3 FAILED: zero price on ticker'; end if;
 end $t$;
 select 'T1-T4 ok: ticker direction, per-product validity, no platform/disabled/ids, never zero';
+do $t$ declare v_live uuid; v_new jsonb; t jsonb;
+begin
+  -- as the member: find the live quote through the portal RPC, withdraw it, republish higher
+  select (q->>'id')::uuid into v_live
+    from jsonb_array_elements((public.supplier_list_my_quotes())->'suppliers'->0->'quotes') q
+   where q->>'portLocode' = 'GRPIR' and q->>'productKey' = 'VLSFO' and q->>'status' = 'approved';
+  perform public.supplier_withdraw_quote(v_live, 'wrong price');
+  v_new := public.supplier_upsert_quotes(jsonb_build_array(jsonb_build_object(
+    'portLocode','GRPIR','productKey','VLSFO','priceUsdMt',650,'clientRef','t5','validUntil',(now() + interval '5 days')::text)));
+  reset role;
+  if (select superseded_at from public.bunker_quotes where id = v_live) is null then
+    raise exception 'T5 FAILED: withdrawing a live quote left superseded_at empty'; end if;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', (v_new->'results'->0->>'quoteId')::uuid, 'approve', null);
+  t := public.get_bunker_ticker();
+  if (select p->>'direction' from jsonb_array_elements(t->'sponsors') x, jsonb_array_elements(x->'prices') p
+       where x->>'name' = 'src:bunker-e2e A' and x->>'portLocode' = 'GRPIR' and p->>'productKey' = 'VLSFO') <> 'up' then
+    raise exception 'T5 FAILED: withdraw (598) then republish (650) should read up: %', t; end if;
+end $t$;
+select 'T5 ok: a withdrawn live price stays the previous price';
 reset role;
 select set_config('request.jwt.claims', '', true);
 `);

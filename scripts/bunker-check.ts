@@ -13,6 +13,7 @@ import {
   getFuelPriceIndex, sealFuelIndexSnapshot,
 } from "../sdk/app/bunker";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { attemptFor } from "../lib/bunker/supplier";
 
 let passed = 0;
 let failed = 0;
@@ -177,6 +178,21 @@ const goodTicker = {
     }
     assert.match(a.warnings[0], /not deployed/);
     assert.match(b.warnings[0], /unexpected shape/);
+  });
+  check("a retry with unchanged inputs resends the identical command (C2B-003 #2)", () => {
+    let builds = 0;
+    const build = () => {
+      builds++;
+      return [{ portLocode: "GRPIR", productKey: "VLSFO" as const, priceUsdMt: 600,
+                validUntil: new Date(Date.now() + builds).toISOString(), clientRef: `ref-${builds}:GRPIR:VLSFO` }];
+    };
+    const first = attemptFor(null, "fp-1", build);
+    const retry = attemptFor(first, "fp-1", build);
+    assert.equal(retry, first, "same attempt object");
+    assert.equal(JSON.stringify(retry.payload), JSON.stringify(first.payload), "byte-identical payload");
+    assert.equal(builds, 1, "built once");
+    const edited = attemptFor(first, "fp-2", build);
+    assert.notEqual(edited.payload[0].clientRef, first.payload[0].clientRef, "changed inputs get new keys");
   });
   check("canonical JSON refuses NaN and undefined, sorts keys", () => {
     assert.throws(() => canonicalJson({ a: Number.NaN }), RangeError);

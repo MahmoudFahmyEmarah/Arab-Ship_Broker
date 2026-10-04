@@ -5,7 +5,7 @@ first-hand physical bunker suppliers publish their price tables; the platform
 shows each sponsor on a ticker (their exposure) and computes an index whose
 **average** feeds the Voyage estimator.
 
-## Data model (migrations `20261003100000`–`106000`)
+## Data model (migrations `20261003100000`–`107000`)
 
 | Table | Purpose | Member access |
 |---|---|---|
@@ -52,9 +52,14 @@ product. Approving a quote supersedes the previous live one.
   `supplier_list_my_quotes`): actor from the session; editor of an enabled
   supplier; registered port; 0 < price < 10 000; validity starts within a day,
   ends in the future, lasts ≤ 60 days; ≤ 100 quotes per call, ≤ 500 per day;
-  atomic; replaying a `clientRef` returns the same quote. Verified suppliers are
-  approved on submission; others wait for an admin. Suppliers cannot approve,
-  nor change ports or members.
+  atomic; every quote carries a `clientRef` (unique within the batch) and
+  replaying it returns the same quote; replays never count towards the daily
+  limit; the supplier row is locked and its enabled status and the caller's
+  editor role re-checked before anything is written. The portal resends the
+  identical command when a response is lost. Verified suppliers are approved on
+  submission; others wait for an admin. Suppliers cannot approve, nor change
+  ports or members. Withdrawing a live quote keeps it as the previous price
+  for the ticker's direction.
 - **Admin** (`admin_bunker_*`, service role + `p_actor`, re-checked: active admin,
   super tier or `admin_perms.bunker`): suppliers and ports, member links,
   overrides (or staff input under the platform supplier, approved at once, reason
@@ -76,12 +81,12 @@ in production); a token-based feed, if wanted later, should use Vault like Data 
 ## Proof
 
 ```
-node --import tsx scripts/bunker-check.ts                       # 65 pure + SDK + snapshot assertions
+node --import tsx scripts/bunker-check.ts                       # 66 pure + SDK + snapshot + retry assertions
 node --import tsx scripts/bunker-sql-suite.ts | docker exec -i supabase_db_arab-ship-broker \
   psql -U postgres -d <db> -v ON_ERROR_STOP=1 -q                  # rolled-back SQL suite, same fixtures
 HARNESS_PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_bunker" \
   bash scripts/migration-harness.sh --chain supabase/migrations/2026100310*.sql \
   --smokes <generated suite file> --downs supabase/rollback/20261003_bunker_down.sql
-bash scripts/bunker-race.sh asb_bunker                           # two-session idempotency (isolated DB only)
+bash scripts/bunker-race.sh asb_bunker                           # idempotency + disable-vs-submit races (isolated DB only)
 E2E_BASE_URL=http://127.0.0.1:3102 npx playwright test --config=playwright.bunker.config.ts
 ```

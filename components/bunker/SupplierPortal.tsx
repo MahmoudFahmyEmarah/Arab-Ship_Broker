@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { publishQuotes, withdrawQuote } from "@/app/(dashboard)/dashboard/bunker-supplier/actions";
 import { DAY_MS, freshnessFromAgeMs } from "@/lib/bunker/freshness";
 import {
+  attemptFor,
   slotsForPort,
+  type SubmissionAttempt,
   type SupplierPortalQuote,
   type SupplierPortalState,
   type SupplierPortalSupplier,
@@ -69,8 +71,10 @@ function SupplierTable({ supplier, products, now }: {
   const [validDays, setValidDays] = React.useState("14");
   const [busy, setBusy] = React.useState(false);
   const [notice, setNotice] = React.useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  // One client reference per attempt, so a double click or a retry replays instead of duplicating.
-  const attempt = React.useRef<string | null>(null);
+  // The exact command of the pending attempt: a retry (double click, lost
+  // response) resends it byte-for-byte, so the server replays instead of
+  // duplicating or conflicting. Cleared on success.
+  const attempt = React.useRef<SubmissionAttempt | null>(null);
 
   const live = (locode: string, key: string) =>
     supplier.quotes.find((q) => q.portLocode === locode && q.productKey === key && q.status === "approved");
@@ -78,7 +82,7 @@ function SupplierTable({ supplier, products, now }: {
     supplier.quotes.find((q) => q.portLocode === locode && q.productKey === key && q.status === "submitted");
 
   function build(prices: { locode: string; key: string; price: number }[]): SupplierQuoteInput[] {
-    attempt.current ??= crypto.randomUUID();
+    const ref = crypto.randomUUID();
     const until = new Date(Date.now() + Number(validDays) * DAY_MS).toISOString();
     return prices.map(({ locode, key, price }) => {
       const t = terms[locode];
@@ -91,7 +95,7 @@ function SupplierTable({ supplier, products, now }: {
         minQtyMt: t.minQtyMt ? Number(t.minQtyMt) : null,
         bargeFeeUsd: t.bargeFeeUsd ? Number(t.bargeFeeUsd) : 0,
         mandatoryChargesUsd: t.mandatoryChargesUsd ? Number(t.mandatoryChargesUsd) : 0,
-        clientRef: `${attempt.current}:${locode}:${key}`,
+        clientRef: `${ref}:${locode}:${key}`,
       };
     });
   }
@@ -100,8 +104,19 @@ function SupplierTable({ supplier, products, now }: {
     setNotice(null);
     if (prices.length === 0) return setNotice({ kind: "error", text: "Enter at least one price." });
     if (prices.some((p) => !(p.price > 0))) return setNotice({ kind: "error", text: "Prices must be above zero." });
+    const fingerprint = JSON.stringify({ prices, terms, validDays });
+    attempt.current = attemptFor(attempt.current, fingerprint, () => build(prices));
     setBusy(true);
-    const r = await publishQuotes(supplier.id, build(prices));
+    let r: Awaited<ReturnType<typeof publishQuotes>>;
+    try {
+      r = await publishQuotes(supplier.id, attempt.current.payload);
+    } catch {
+      setBusy(false);
+      return setNotice({
+        kind: "error",
+        text: "The connection dropped before we heard back. Press the same button again: your prices will not be duplicated.",
+      });
+    }
     setBusy(false);
     if (!r.ok) return setNotice({ kind: "error", text: r.error });
     attempt.current = null;

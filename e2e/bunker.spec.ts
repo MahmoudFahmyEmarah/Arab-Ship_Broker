@@ -120,7 +120,8 @@ test("outsider gets the invitation page and cannot submit through the API", asyn
 
   const api = await apiClientAs(s.outsider.email);
   const { error } = await api.rpc("supplier_upsert_quotes", {
-    p_quotes: [{ portLocode: PORT, productKey: "VLSFO", priceUsdMt: 1, validUntil: new Date(Date.now() + 864e5).toISOString() }],
+    p_quotes: [{ portLocode: PORT, productKey: "VLSFO", priceUsdMt: 1, clientRef: "outsider-1",
+                 validUntil: new Date(Date.now() + 864e5).toISOString() }],
     p_supplier_id: s.supplierId,
   });
   expect(error?.code).toBe("42501");
@@ -221,4 +222,33 @@ test("supplier portal fits a phone screen", async ({ browser }, info) => {
   expect(overflow).toBeLessThanOrEqual(1);
   await expect(page.getByLabel(new RegExp(`New VLSFO price at ${PORT}`))).toBeVisible();
   await context.close();
+});
+
+test("a retry after a lost response replays instead of duplicating (C2B-003 #2)", async ({ browser }, info) => {
+  const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
+  await page.goto("/dashboard/bunker-supplier");
+  await expect(page.getByRole("heading", { name: s.supplierName })).toBeVisible();
+  // Let the first server action reach the server, then drop its response.
+  let dropped = false;
+  await page.route("**/dashboard/bunker-supplier", async (route) => {
+    if (route.request().method() === "POST" && !dropped) {
+      dropped = true;
+      await route.fetch();
+      await route.abort("connectionreset");
+      return;
+    }
+    await route.continue();
+  });
+  await page.getByLabel(new RegExp(`New HSFO 380 price at ${PORT}`)).fill("533");
+  await page.getByRole("button", { name: "Publish new prices" }).click();
+  await expect(page.locator(".bks-notice--error")).toContainText("will not be duplicated");
+  await page.getByRole("button", { name: "Publish new prices" }).click();
+  await expect(page.getByRole("status")).toContainText("go live after Arab ShipBroker approves");
+  await context.close();
+
+  const { url, service } = localKeys();
+  const db = createClient(url, service, { auth: { persistSession: false } });
+  const { count } = await db.from("bunker_quotes").select("id", { count: "exact", head: true })
+    .eq("supplier_id", s.supplierId).eq("product_key", "HSFO380").eq("price", 533);
+  expect(count).toBe(1);
 });

@@ -79,3 +79,23 @@ export function slotsForPort(
   const quoted = new Set(quotes.filter((q) => q.portLocode === port.locode).map((q) => q.productKey));
   return products.filter((p) => p.coreSlot || (p.ecaSlot && port.eca) || quoted.has(p.key));
 }
+
+/** One submission attempt: the exact command sent, reused byte-for-byte on a retry. */
+export interface SubmissionAttempt {
+  fingerprint: string;
+  payload: SupplierQuoteInput[];
+}
+
+/**
+ * Reuse the pending attempt while the inputs are unchanged (a retry after a
+ * lost response must replay the identical command, validity included); any
+ * change of inputs is a new command with new keys.
+ */
+export function attemptFor(
+  pending: SubmissionAttempt | null,
+  fingerprint: string,
+  build: () => SupplierQuoteInput[],
+): SubmissionAttempt {
+  if (pending && pending.fingerprint === fingerprint) return pending;
+  return { fingerprint, payload: build() };
+}
