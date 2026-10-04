@@ -82,14 +82,17 @@ export async function loadFuelPrices(portLocode?: string | null): Promise<{
     return fallback;
   }
   if (snapshot.status !== "trusted") return { ...fallback, snapshot };
-  const price = (k: string) => snapshot.products.find((p) => p.key === k)!;
+  // Partial snapshots are normal (O2B-007): a product in noOffer keeps its
+  // fallback value and its live flag stays false.
+  const vlsfo = snapshot.products.find((p) => p.key === "VLSFO");
+  const lsmgo = snapshot.products.find((p) => p.key === "LSMGO");
   const latest = snapshot.products.map((p) => p.latestQuoteAt).sort().pop()!;
   return {
-    vlsfo: price("VLSFO").averageUsdMt,
-    lsmgo: price("LSMGO").averageUsdMt,
+    vlsfo: vlsfo?.averageUsdMt ?? fallback.vlsfo,
+    lsmgo: lsmgo?.averageUsdMt ?? fallback.lsmgo,
     port: snapshot.actualPort ?? (snapshot.region ? `${snapshot.region} average` : "Platform index (all ports)"),
     updated: new Date(latest).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-    live: { vlsfo: true, lsmgo: true },
+    live: { vlsfo: !!vlsfo, lsmgo: !!lsmgo },
     snapshot,
   };
 }

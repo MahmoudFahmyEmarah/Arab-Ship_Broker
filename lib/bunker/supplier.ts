@@ -67,7 +67,8 @@ export interface SupplierQuoteInput {
   minQtyMt?: number | null;
   bargeFeeUsd?: number;
   mandatoryChargesUsd?: number;
-  clientRef?: string;
+  /** Required: the database refuses a supplier submission without it (107000). */
+  clientRef: string;
 }
 
 /** Products a port shows: the three core slots, ULSFO at ECA ports, plus anything already quoted there. */

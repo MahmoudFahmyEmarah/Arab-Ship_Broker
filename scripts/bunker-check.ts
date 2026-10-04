@@ -14,6 +14,57 @@ import {
 } from "../sdk/app/bunker";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { attemptFor } from "../lib/bunker/supplier";
+import { createHash } from "node:crypto";
+
+// Verbatim copy of Stream S lib/voyage/snapshots.ts#canonicalJson + sealSnapshot
+// at e4da2e0 (O2B-007 item 4): our seal must produce the same bytes and hash.
+function streamSNormalise(v: unknown): unknown {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") {
+    if (!Number.isFinite(v)) throw new Error("canonicalJson: non-finite number");
+    return Object.is(v, -0) ? 0 : v;
+  }
+  if (typeof v === "string" || typeof v === "boolean") return v;
+  if (Array.isArray(v)) return v.map((x) => streamSNormalise(x));
+  if (typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+      const x = (v as Record<string, unknown>)[k];
+      if (x === undefined) continue;
+      out[k] = streamSNormalise(x);
+    }
+    return out;
+  }
+  throw new Error(`canonicalJson: unsupported value ${typeof v}`);
+}
+const streamSCanonicalJson = (v: unknown) => JSON.stringify(streamSNormalise(v));
+
+// Compile-time: our snapshot is assignable to Stream S's FuelIndexSnapshot as
+// declared in lib/voyage/snapshots.ts at e4da2e0, so the composer's one-line
+// swap in fuel-source.ts type-checks.
+interface StreamSFuelIndexSnapshot {
+  kind: "fuel_index";
+  status: "trusted" | "unavailable" | "manual";
+  algorithmVersion: string;
+  asOf: string | null;
+  requestedPort: string | null;
+  scope: "port" | "region" | "global" | null;
+  actualPort: string | null;
+  region: string | null;
+  contributingPorts: string[];
+  stemMt: number | null;
+  products: { key: string; variant?: string | null; averageUsdMt: number; freshness: "current" | "stale"; validUntil?: string | null; latestQuoteAt: string | null }[];
+  noOffer: string[];
+  warnings: string[];
+  manual?: { actorUserId: string; reason: string; at: string };
+  canonicalSha256?: string;
+}
+export const _streamSCompatible: (s: Awaited<ReturnType<typeof getFuelIndexSnapshot>>) => StreamSFuelIndexSnapshot = (s) => s;
+const streamSSeal = <T extends { canonicalSha256?: string }>(snap: T) => {
+  const { canonicalSha256: _ignored, ...rest } = snap;
+  void _ignored;
+  return createHash("sha256").update(streamSCanonicalJson(rest), "utf8").digest("hex");
+};
 
 let passed = 0;
 let failed = 0;
@@ -153,6 +204,8 @@ const goodTicker = {
   await checkAsync("snapshot: trusted when every requested product has a live price", async () => {
     const snap = await getFuelIndexSnapshot(fake(goodIndex).client, { portLocode: "GRPIR", productKeys: ["VLSFO", "HSFO380"] });
     assert.equal(snap.status, "trusted");
+    assert.equal(snap.kind, "fuel_index");
+    assert.deepEqual(snap.noOffer, []);
     assert.equal(snap.actualPort, "GRPIR");
     assert.deepEqual(snap.products.map((p) => [p.key, p.averageUsdMt]), [["HSFO380", 520], ["VLSFO", 620]]);
     assert.match(snap.canonicalSha256, /^[0-9a-f]{64}$/);
@@ -162,11 +215,27 @@ const goodTicker = {
     assert.equal((await sealFuelIndexSnapshot(reordered)).canonicalSha256, canonicalSha256, "key order irrelevant");
     assert.ok(!/src:bunker-e2e|00000000-0000-4000-b000/.test(JSON.stringify(snap)), "no supplier identity");
   });
-  await checkAsync("snapshot: unavailable (no prices) when a requested product has no offer", async () => {
+  await checkAsync("snapshot: a partial answer stays trusted; live averages kept, missing named (O2B-007)", async () => {
     const snap = await getFuelIndexSnapshot(fake(goodIndex).client, { portLocode: "GRPIR", productKeys: ["VLSFO", "LSMGO"] });
-    assert.equal(snap.status, "unavailable");
-    assert.deepEqual(snap.products, []);
+    assert.equal(snap.status, "trusted");
+    assert.deepEqual(snap.products.map((p) => [p.key, p.averageUsdMt]), [["VLSFO", 620]]);
     assert.deepEqual(snap.noOffer, ["LSMGO"]);
+    assert.ok(snap.warnings.includes("no current offer for LSMGO"));
+  });
+  await checkAsync("snapshot: unavailable (no prices) when no requested product has an offer", async () => {
+    const snap = await getFuelIndexSnapshot(fake(goodIndex).client, { portLocode: "GRPIR", productKeys: ["LSMGO", "ULSFO"] });
+    assert.equal(snap.status, "unavailable");
+    assert.equal(snap.kind, "fuel_index");
+    assert.deepEqual(snap.products, []);
+    assert.deepEqual(snap.noOffer, ["LSMGO", "ULSFO"]);
+  });
+  await checkAsync("snapshot hash equals Stream S sealSnapshot over the same snapshot (O2B-007 #4)", async () => {
+    for (const keys of [["VLSFO", "HSFO380"], ["VLSFO", "LSMGO"], ["LSMGO"]] as const) {
+      const snap = await getFuelIndexSnapshot(fake(goodIndex).client, { portLocode: "GRPIR", productKeys: [...keys] });
+      assert.equal(streamSSeal(snap), snap.canonicalSha256, `hash parity for ${keys.join("+")}`);
+    }
+    const odd = { b: 1, a: { z: -0, y: undefined, x: [1, undefined, "s"] } };
+    assert.equal(canonicalJson(odd), streamSCanonicalJson(odd), "undefined skipped, -0 as 0, sorted keys");
   });
   await checkAsync("snapshot: unavailable when the index is not deployed or malformed", async () => {
     const a = await getFuelIndexSnapshot(fake(null, { code: "PGRST202", message: "x" }).client, { productKeys: ["VLSFO"] });
@@ -194,9 +263,9 @@ const goodTicker = {
     const edited = attemptFor(first, "fp-2", build);
     assert.notEqual(edited.payload[0].clientRef, first.payload[0].clientRef, "changed inputs get new keys");
   });
-  check("canonical JSON refuses NaN and undefined, sorts keys", () => {
+  check("canonical JSON refuses non-finite numbers, skips undefined members, sorts keys", () => {
     assert.throws(() => canonicalJson({ a: Number.NaN }), RangeError);
-    assert.throws(() => canonicalJson({ a: undefined }), RangeError);
+    assert.equal(canonicalJson({ a: undefined, b: 1 }), '{"b":1}');
     assert.equal(canonicalJson({ b: 1, a: [true, null, "x"] }), '{"a":[true,null,"x"],"b":1}');
   });
 

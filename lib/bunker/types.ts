@@ -113,11 +113,16 @@ export interface FuelIndexSnapshotProduct {
 }
 
 /**
- * Immutable, hashed view of the index for the Voyage estimator. `trusted` only
- * when every requested product has a live price; otherwise `unavailable` with
- * no prices invented. `manual` is produced by Stream S, never by this module.
+ * Immutable, hashed view of the index for the Voyage estimator (C2O-033 item 3,
+ * ruling O2B-007). `status` describes provenance: `trusted` whenever the
+ * governed index answered for at least one requested product, `unavailable`
+ * when it answered for none or is not deployed. Completeness is per product:
+ * live products are in `products`, every requested key without a live cohort
+ * is in `noOffer`, and no price is ever invented for it. `manual` is produced
+ * by Stream S only, never by this module.
  */
 export interface FuelIndexSnapshot {
+  kind: "fuel_index";
   status: "trusted" | "unavailable" | "manual";
   algorithmVersion: string;
   asOf: string;
@@ -131,7 +136,7 @@ export interface FuelIndexSnapshot {
   noOffer: FuelProductKey[];
   warnings: string[];
   /** Manual snapshots only (Stream S). */
-  manual?: { actor: string; reason: string; timestamp: string };
+  manual?: { actorUserId: string; reason: string; at: string };
   /** SHA-256 (hex) of the sorted-key JSON of every other field. */
   canonicalSha256: string;
 }

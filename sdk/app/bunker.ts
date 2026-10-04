@@ -162,22 +162,33 @@ export async function getBunkerPortFlags(supabase: SupabaseClient, locodes?: str
 
 export const FUEL_INDEX_ALGORITHM = "bunker-index/1";
 
-/** Sorted-key JSON; refuses undefined and non-finite numbers. */
+/**
+ * Sorted-key JSON, byte-compatible with Stream S `lib/voyage/snapshots.ts#canonicalJson`
+ * (O2B-007): object keys sorted at every level, undefined members skipped
+ * (undefined elsewhere becomes null), -0 written as 0, non-finite numbers refused.
+ */
 export function canonicalJson(value: unknown): string {
-  if (value === null) return "null";
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new RangeError("canonical JSON: non-finite number");
-    return JSON.stringify(value);
+  return JSON.stringify(normaliseForHash(value));
+}
+
+function normaliseForHash(v: unknown): unknown {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") {
+    if (!Number.isFinite(v)) throw new RangeError("canonical JSON: non-finite number");
+    return Object.is(v, -0) ? 0 : v;
   }
-  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.some(([, v]) => v === undefined)) throw new RangeError("canonical JSON: undefined value");
-    return `{${entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
+  if (typeof v === "string" || typeof v === "boolean") return v;
+  if (Array.isArray(v)) return v.map((x) => normaliseForHash(x));
+  if (typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+      const x = (v as Record<string, unknown>)[k];
+      if (x === undefined) continue;
+      out[k] = normaliseForHash(x);
+    }
+    return out;
   }
-  throw new RangeError(`canonical JSON: unsupported ${typeof value}`);
+  throw new RangeError(`canonical JSON: unsupported ${typeof v}`);
 }
 
 async function sha256Hex(text: string): Promise<string> {
@@ -192,9 +203,11 @@ export async function sealFuelIndexSnapshot(body: Omit<FuelIndexSnapshot, "canon
 
 /**
  * The index as an immutable, hashed snapshot for the Voyage estimator. It never
- * invents a price: when the index is not deployed, malformed, failing, or has
- * no live offer for a requested product, the snapshot is `unavailable` with no
- * products, and the caller decides what to show (never "live").
+ * invents a price. `trusted` when the index answered for at least one requested
+ * product: the live ones are listed and the rest are named in `noOffer` with a
+ * warning. `unavailable` (no products) when nothing could be answered or the
+ * index is not deployed, malformed or failing. The engine prices `noOffer`
+ * keys from its admin fallback and labels them so (ruling D2), never "live".
  */
 export async function getFuelIndexSnapshot(
   supabase: SupabaseClient,
@@ -203,7 +216,7 @@ export async function getFuelIndexSnapshot(
   const requestedPort = params.portLocode?.trim().toUpperCase() || null;
   const unavailable = (warning: string, noOffer: FuelProductKey[] = params.productKeys) =>
     sealFuelIndexSnapshot({
-      status: "unavailable", algorithmVersion: FUEL_INDEX_ALGORITHM, asOf: params.asOf ?? new Date().toISOString(),
+      kind: "fuel_index", status: "unavailable", algorithmVersion: FUEL_INDEX_ALGORITHM, asOf: params.asOf ?? new Date().toISOString(),
       requestedPort, scope: null, actualPort: null, region: null, contributingPorts: [],
       stemMt: params.stemMt ?? null, products: [], noOffer, warnings: [warning],
     });
@@ -217,15 +230,17 @@ export async function getFuelIndexSnapshot(
       : e instanceof RangeError ? `invalid request: ${e.message}` : "fuel index unavailable");
   }
 
-  const missing = params.productKeys.filter((k) => !index.products.some((p) => p.key === k));
-  if (missing.length) return unavailable(`no live offer for ${missing.join(", ")}`, missing);
+  const live = index.products.filter((p) => params.productKeys.includes(p.key));
+  const missing = params.productKeys.filter((k) => !live.some((p) => p.key === k));
+  if (live.length === 0) return unavailable(`no current offer for ${missing.join(", ")}`, missing);
 
-  const warnings: string[] = [];
+  const warnings: string[] = missing.map((k) => `no current offer for ${k}`);
   if (index.scope === "region") warnings.push(`no live quote at ${requestedPort}; averaged over ${index.region}`);
   if (index.scope === "global" && requestedPort) warnings.push(`no live quote at ${requestedPort} or its zone; global average`);
   for (const p of index.products) if (p.freshness === "stale") warnings.push(`${p.key} price is stale (8-14 days)`);
 
   return sealFuelIndexSnapshot({
+    kind: "fuel_index",
     status: "trusted",
     algorithmVersion: FUEL_INDEX_ALGORITHM,
     asOf: index.asOf,
@@ -235,10 +250,10 @@ export async function getFuelIndexSnapshot(
     region: index.region,
     contributingPorts: index.contributingPorts,
     stemMt: index.stemMt,
-    products: index.products
-      .filter((p) => params.productKeys.includes(p.key))
-      .map((p) => ({ key: p.key, averageUsdMt: p.averageUsdMt, freshness: p.freshness, latestQuoteAt: p.latestQuoteAt })),
-    noOffer: [],
+    products: live.map((p) => ({
+      key: p.key, averageUsdMt: p.averageUsdMt, freshness: p.freshness, latestQuoteAt: p.latestQuoteAt,
+    })),
+    noOffer: missing,
     warnings,
   });
 }
