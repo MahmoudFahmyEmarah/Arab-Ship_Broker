@@ -9,7 +9,7 @@
  *
  * Seeds are tagged `src:bunker-e2e` and removed in afterAll (local stack only).
  */
-import { test, expect, type Browser } from "@playwright/test";
+import { test, expect, type Browser, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
 import { PASSWORD, apiClientAs, signInAs } from "./fixture-room.helpers";
@@ -110,9 +110,22 @@ async function signedIn(browser: Browser, baseURL: string, email: string) {
   return signInAs(browser, baseURL, email);
 }
 
+// The login transition can still push /dashboard after we navigate away
+// (see fixture-room.helpers signInAs); retry until the requested URL sticks.
+async function gotoStable(page: Page, path: string) {
+  for (let i = 0; i < 3; i++) {
+    await page.goto(path);
+    if (await page.waitForURL((u) => u.pathname === path, { timeout: 10_000 }).then(() => true).catch(() => false)) {
+      await page.waitForTimeout(500);
+      if (new URL(page.url()).pathname === path) return;
+    }
+  }
+  await expect(page).toHaveURL(new RegExp(`${path.replace(/[/]/g, "\/")}$`));
+}
+
 test("outsider gets the invitation page and cannot submit through the API", async ({ browser }, info) => {
   const { context, page } = await signedIn(browser, base(info.project.use), s.outsider.email);
-  await page.goto("/dashboard/bunker-supplier");
+  await gotoStable(page, "/dashboard/bunker-supplier");
   await expect(page.getByRole("heading", { name: "Bunker prices" })).toBeVisible();
   await expect(page.getByText("Supplier access is by invitation")).toBeVisible();
   await expect(page.getByRole("link", { name: "Contact us to join" })).toBeVisible();
@@ -129,7 +142,7 @@ test("outsider gets the invitation page and cannot submit through the API", asyn
 
 test("supplier publishes; the quote waits for approval and stays out of the index", async ({ browser }, info) => {
   const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
-  await page.goto("/dashboard/bunker-supplier");
+  await gotoStable(page, "/dashboard/bunker-supplier");
   await expect(page.getByRole("heading", { name: s.supplierName })).toBeVisible();
   await expect(page.getByText("Prices are reviewed before going live")).toBeVisible();
   await page.getByLabel(new RegExp(`New VLSFO price at ${PORT}`)).fill(String(PRICE));
@@ -146,7 +159,7 @@ test("supplier publishes; the quote waits for approval and stays out of the inde
 
 test("admin approves in /admin/bunker; the price goes live", async ({ browser }, info) => {
   const { context, page } = await signedIn(browser, base(info.project.use), s.admin.email);
-  await page.goto("/admin/bunker");
+  await gotoStable(page, "/admin/bunker");
   await expect(page.getByText("Awaiting approval").first()).toBeVisible();
   const row = page.getByRole("row").filter({ hasText: s.supplierName });
   await row.getByRole("button", { name: "Approve" }).click();
@@ -213,7 +226,7 @@ test("ticker: one focusable copy, pauses on keyboard focus, static under reduced
 test("supplier portal fits a phone screen", async ({ browser }, info) => {
   const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
   await page.setViewportSize({ width: 375, height: 780 });
-  await page.goto("/dashboard/bunker-supplier");
+  await gotoStable(page, "/dashboard/bunker-supplier");
   await expect(page.getByRole("heading", { name: s.supplierName })).toBeVisible();
   const overflow = await page.evaluate(() => {
     const main = document.querySelector(".bks") as HTMLElement;
@@ -226,7 +239,7 @@ test("supplier portal fits a phone screen", async ({ browser }, info) => {
 
 test("a retry after a lost response replays instead of duplicating (C2B-003 #2)", async ({ browser }, info) => {
   const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
-  await page.goto("/dashboard/bunker-supplier");
+  await gotoStable(page, "/dashboard/bunker-supplier");
   await expect(page.getByRole("heading", { name: s.supplierName })).toBeVisible();
   // Let the first server action reach the server, then drop its response.
   let dropped = false;
