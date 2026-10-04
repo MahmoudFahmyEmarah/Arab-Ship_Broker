@@ -45,9 +45,19 @@ product. Approving a quote supersedes the previous live one.
   once-live quote; no ids or contacts. The strip distinguishes "no current offer"
   from "temporarily unavailable", pauses on hover/focus, keeps a single
   focusable copy and is static under reduced motion.
-- **Snapshot** (`getFuelIndexSnapshot`, frozen B→S contract C2O-033): `trusted`
-  only when every requested product has a live price, else `unavailable` with no
-  prices; never a fallback of its own; `canonicalSha256` over sorted-key JSON.
+- **Snapshot** (`getFuelIndexSnapshot`, frozen B→S contract C2O-033, ruling
+  O2B-007): `kind: "fuel_index"`. `status` describes provenance: `trusted`
+  whenever the index answered for **at least one** requested product, so live
+  products are in `products` and every requested key without a live cohort is in
+  `noOffer` with a "no current offer for X" warning (`noOffer.length > 0` is the
+  partial signal). `unavailable`, with no products, only when no requested
+  product is live or the index is not deployed, malformed or failing. Never a
+  fallback of its own: the Voyage engine prices `noOffer` keys from its admin
+  fallback and labels them `fallback`. A UI must therefore not show "Live" for a
+  trusted-but-partial snapshot: Live only when every product is live, Partial for
+  trusted with `noOffer`, Fallback/Unavailable otherwise (`loadFuelPrices().live`
+  gives the per-product truth). `canonicalSha256` is the SHA-256 of sorted-key
+  JSON, byte-compatible with Stream S `sealSnapshot`.
 - **Supplier writes** (`supplier_upsert_quotes`, `supplier_withdraw_quote`,
   `supplier_list_my_quotes`): actor from the session; editor of an enabled
   supplier; registered port; 0 < price < 10 000; validity starts within a day,
@@ -105,7 +115,7 @@ in production); a token-based feed, if wanted later, should use Vault like Data 
 ## Proof
 
 ```
-node --import tsx scripts/bunker-check.ts                       # 66 pure + SDK + snapshot + retry assertions
+node --import tsx scripts/bunker-check.ts                       # 68 pure + SDK + snapshot + retry + Stream S parity assertions
 node --import tsx scripts/bunker-sql-suite.ts | docker exec -i supabase_db_arab-ship-broker \
   psql -U postgres -d <db> -v ON_ERROR_STOP=1 -q                  # rolled-back SQL suite, same fixtures
 HARNESS_PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_bunker" \
