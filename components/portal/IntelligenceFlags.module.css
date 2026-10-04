@@ -1,0 +1,108 @@
+.flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.signal {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  font: 700 9px/1 var(--asb-font);
+  letter-spacing: 0.04em;
+  cursor: help;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--asb-blue);
+  outline-offset: 2px;
+}
+
+.warning {
+  background: var(--asb-amber-bg);
+  color: var(--asb-amber);
+}
+
+.danger {
+  background: var(--asb-red-bg);
+  color: var(--asb-red);
+}
+
+.info {
+  background: var(--asb-blue-light);
+  color: var(--asb-blue);
+}
+
+.good {
+  background: var(--asb-green-bg);
+  color: var(--asb-green);
+}
+
+.tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip, 1000);
+  display: flex;
+  width: max-content;
+  max-width: min(260px, 80vw);
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  background: var(--asb-navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 5px 18px rgb(13 37 69 / 24%);
+  pointer-events: none;
+}
+
+.tooltipPending {
+  visibility: hidden;
+}
+
+.tooltip strong {
+  font-size: 11px;
+}
+
+.tooltip small {
+  color: rgb(255 255 255 / 72%);
+  font-size: 9px;
+}
+
+.unavailable {
+  width: fit-content;
+  margin: 4px 0 7px;
+  padding: 3px 7px;
+  border: 1px solid var(--asb-amber, #946200);
+  border-radius: 4px;
+  background: var(--asb-amber-bg, #fff7e0);
+  color: var(--asb-amber, #754c00);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

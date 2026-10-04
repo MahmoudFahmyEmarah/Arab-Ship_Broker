@@ -3,6 +3,32 @@
 // Supabase shapes directly — adapters (./adapters.ts) translate between them.
 
 import type { RouteLeg } from "./route-legs";
+import type { IntelligenceField, IntelligenceSeverity } from "@/lib/intelligence";
+import type { CargoMatchFacts, VesselMatchFacts } from "@/lib/matching-rules";
+
+/** Serializable projection of a matched, governed Intelligence rule. */
+export interface IntelligenceSignalView {
+  ruleCode: string;
+  field: IntelligenceField;
+  severity: IntelligenceSeverity;
+  tag: string;
+  message: string;
+  value: number | null;
+}
+
+export type IntelligenceSignalsView =
+  | {
+      status: "available";
+      version: number;
+      effectiveContentHash: string;
+      signals: readonly IntelligenceSignalView[];
+    }
+  | {
+      status: "unavailable";
+      version: null;
+      effectiveContentHash: null;
+      signals: readonly [];
+    };
 
 export type CargoScope = "in" | "partial" | "out" | "fixed";
 
@@ -92,6 +118,10 @@ export interface CargoView extends GovernedListingAccess {
   maxDraft?: number | null;
   isGrain?: boolean;
   isDg?: boolean;
+  /** Exact governed matcher inputs captured at the row-to-view boundary. */
+  matchingFacts?: CargoMatchFacts;
+  /** Advisory only; never used for discovery, ranking, filtering or map state. */
+  intelligence?: IntelligenceSignalsView;
 }
 
 export type VesselStatusView = "open" | "review" | "fixed";
@@ -159,4 +189,8 @@ export interface VesselView extends GovernedListingAccess {
   openDateRangeDays?: number | null;
   lastCargo?: string | null;
   acceptsPartCargo?: boolean | null;
+  /** Exact governed matcher inputs captured at the row-to-view boundary. */
+  matchingFacts?: VesselMatchFacts;
+  /** Advisory only; never used for discovery, ranking, filtering or map state. */
+  intelligence?: IntelligenceSignalsView;
 }

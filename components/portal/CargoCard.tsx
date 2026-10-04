@@ -1,9 +1,8 @@
 "use client";
 
 // CargoCard — ported from the Claude design (asb/cards.jsx) to TS.
-// The 13-field minimum-display card. (Rules-engine hover tooltips and the
-// market-partner tag from the original are deferred to a later phase; the
-// visual structure and classes are otherwise identical.)
+// The 13-field minimum-display card. Governed Intelligence signals remain
+// advisory field tooltips; they never alter the card's data or placement.
 import * as React from "react";
 import Link from "next/link";
 import { CargoView, VesselView } from "@/lib/portal/types";
@@ -21,6 +20,10 @@ import { legMarker, routeLegs, type RouteLeg } from "@/lib/portal/route-legs";
 import { MarketPartnerTag } from "./MarketPartnerPanel";
 import { PosterLine } from "./PosterLine";
 import { RouteEstimateLine } from "./RouteEstimate";
+import {
+  IntelligenceAvailabilityNotice,
+  IntelligenceFieldFlags,
+} from "./IntelligenceFlags";
 
 // LOCODE → port name → zone (owner's cascade) so a circular's "Egypt Med"
 // shows as text instead of an empty pair of codes.
@@ -69,14 +72,12 @@ export function CargoCard({
   const legs = routeLegs(c);
   const laycanStr = formatLaycanRange(c.laycanFrom, c.laycanTo);
   const isSpot = !!c.spot;
-  const isOverdue = c.laycanDays != null && c.laycanDays < 0;
   const ld = ldRateRender(c);
   const isGroupA = c.imsbcGroup === "A";
   const isDG = c.imsbcGroup === "DG";
   const typeLabel = cargoTypeLabel(c);
   const typeVariant = cargoTypeBadgeVariant(typeLabel);
   const sfText = c.sf != null ? `${c.sf} ${c.volUnit ? `${c.volUnit}/t` : "m³/t"}` : "—";
-  const sfDense = c.sf != null && c.sf < 0.5;
   const matches = c.matches || 0;
 
   return (
@@ -94,6 +95,7 @@ export function CargoCard({
           <span className="mono" style={{ fontSize: 10, color: "var(--asb-gray-500)", marginLeft: "auto" }} title={postedAgeLabel(c.postedAt) === "<1d" ? "Posted today" : `Posted ${postedAgeLabel(c.postedAt)?.replace("d", " day(s)")} ago`}>{postedAgeLabel(c.postedAt)}</span>
         )}
       </div>
+      <IntelligenceAvailabilityNotice intelligence={c.intelligence} />
 
       <div className="cc-line2">
         <div className="cc-route-line">
@@ -134,13 +136,14 @@ export function CargoCard({
           </CCField>
 
           <CCField label="LAYCAN">
-            {isSpot ? (
-              <span className="cc-spot">SPOT</span>
-            ) : (
-              <span style={isOverdue ? { color: "#A32D2D" } : undefined}>
-                {laycanStr}
-              </span>
-            )}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {isSpot ? (
+                <span className="cc-spot">SPOT</span>
+              ) : (
+                <span>{laycanStr}</span>
+              )}
+              <IntelligenceFieldFlags intelligence={c.intelligence} field="laycan_days_remaining" />
+            </span>
           </CCField>
 
           {!compact && (<>
@@ -149,26 +152,27 @@ export function CargoCard({
           </CCField>
 
           <CCField label="SF">
-            {c.sf != null ? (
-              <span style={sfDense ? { color: "#854F0B" } : undefined}>
-                {sfDense && <span style={{ marginRight: 3 }}>⚠</span>}
-                {sfText}
-              </span>
-            ) : (
-              <span className="cc-tbd">
-                Not declared <span style={{ color: "#854F0B" }}>⚠</span>
-              </span>
-            )}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {c.sf != null ? (
+                <span>{sfText}</span>
+              ) : (
+                <span className="cc-tbd">Not declared</span>
+              )}
+              <IntelligenceFieldFlags intelligence={c.intelligence} field="stowage_sf" />
+            </span>
           </CCField>
 
           <CCField label="L/D RATE">
-            {ld.kind === "value" && <span>{ld.text}</span>}
-            {ld.kind === "badge" && (
-              <span className="cc-cat cc-cat--dryish" style={{ fontSize: 9 }}>
-                {ld.label}
-              </span>
-            )}
-            {ld.kind === "tbd" && <span className="cc-tbd">Rate TBD</span>}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {ld.kind === "value" && <span>{ld.text}</span>}
+              {ld.kind === "badge" && (
+                <span className="cc-cat cc-cat--dryish" style={{ fontSize: 9 }}>
+                  {ld.label}
+                </span>
+              )}
+              {ld.kind === "tbd" && <span className="cc-tbd">Rate TBD</span>}
+              <IntelligenceFieldFlags intelligence={c.intelligence} field="load_rate_mt_day" />
+            </span>
           </CCField>
 
           <CCField label="IMSBC">
@@ -199,6 +203,8 @@ export function CargoCard({
               <>
                 ${c.freightIdea ?? "—"}/MT
                 {c.commission != null && <span> · {c.commission}% comm</span>}
+                <IntelligenceFieldFlags intelligence={c.intelligence} field="freight_idea_usd_mt" />
+                <IntelligenceFieldFlags intelligence={c.intelligence} field="commission_pct" />
               </>
             )}
           </div>

@@ -1,7 +1,8 @@
 "use client";
 
 // VesselCard — ported from the Claude design (asb/cards.jsx) to TS.
-// (Rules-engine tooltips + voyage deep-link deferred; structure/classes intact.)
+// Governed Intelligence signals are advisory field tooltips. Voyage deep-link
+// wiring remains separate from this card.
 import * as React from "react";
 import Link from "next/link";
 import { VesselView, CargoView } from "@/lib/portal/types";
@@ -9,8 +10,12 @@ import { MatchesPopover } from "./MatchesPopover";
 import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
 import { flagCode } from "@/lib/portal/flags";
 import "flag-icons/css/flag-icons.min.css";
-import { FieldRow, urgencyDot } from "./ui";
+import { FieldRow } from "./ui";
 import { PosterLine } from "./PosterLine";
+import {
+  IntelligenceAvailabilityNotice,
+  IntelligenceFieldFlags,
+} from "./IntelligenceFlags";
 
 export function VesselCard({
   data,
@@ -74,10 +79,21 @@ export function VesselCard({
           </div>
         </div>
       </div>
+      <IntelligenceAvailabilityNotice intelligence={v.intelligence} />
 
       <div className="grid-2" style={{ marginBottom: compact ? 0 : 8 }}>
         <FieldRow label="DWT" value={`${v.dwt} MT`} valueClass="blue" />
-        {!compact && <FieldRow label="Built / age" value={v.built ? `${v.built} (${v.age} yrs)` : "—"} />}
+        {!compact && (
+          <FieldRow
+            label="Built / age"
+            value={
+              <>
+                {v.built ? `${v.built} (${v.age} yrs)` : "—"}
+                <IntelligenceFieldFlags intelligence={v.intelligence} field="age_years" />
+              </>
+            }
+          />
+        )}
         {!compact && <FieldRow label="Grain cap" value={`${v.grainCap} m³`} />}
         <FieldRow
           label="Open port"
@@ -91,7 +107,8 @@ export function VesselCard({
           label="Open date"
           value={
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              {urgencyDot(v.openDateUrgency)} {v.openDate}
+              {v.openDate}
+              <IntelligenceFieldFlags intelligence={v.intelligence} field="open_days_delta" />
             </span>
           }
         />
@@ -102,9 +119,9 @@ export function VesselCard({
         <div style={{ background: "var(--asb-gray-50)", borderRadius: "var(--r-chip)", padding: "6px 10px", marginBottom: 8 }}>
           <div className="eyebrow" style={{ marginBottom: 4 }}>Fuel consumption</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "4px 8px" }}>
-            <FieldRow label="M/E sea" value={fuelStr(v.fuel.vlsfoSea)} />
+            <FieldRow label="M/E sea" value={<>{fuelStr(v.fuel.vlsfoSea)} <IntelligenceFieldFlags intelligence={v.intelligence} field="vlsfo_sea_mt_day" /></>} />
             <FieldRow label="M/E port" value={fuelStr(v.fuel.vlsfoPort)} />
-            <FieldRow label="Aux sea" value={fuelStr(v.fuel.lsmgoSea)} />
+            <FieldRow label="Aux sea" value={<>{fuelStr(v.fuel.lsmgoSea)} <IntelligenceFieldFlags intelligence={v.intelligence} field="lsmgo_sea_mt_day" /></>} />
             <FieldRow label="Aux port" value={fuelStr(v.fuel.lsmgoPort)} />
           </div>
         </div>

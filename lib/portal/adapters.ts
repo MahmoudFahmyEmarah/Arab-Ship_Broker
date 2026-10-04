@@ -50,11 +50,31 @@ function portList(
   return rows.length ? rows : undefined;
 }
 
-function daysFromNow(dateStr: string | null): number | null {
+export function daysFromNow(dateStr: string | null, now: Date = new Date()): number | null {
+  const targetDay = civilDayOrdinal(dateStr);
+  if (targetDay == null || Number.isNaN(now.getTime())) return null;
+  const today = Math.trunc(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86_400_000,
+  );
+  return targetDay - today;
+}
+
+/** UTC civil-day ordinal used by both the SQL and TypeScript matchers. */
+function civilDayOrdinal(dateStr: string | null): number | null {
   if (!dateStr) return null;
-  const d = new Date(dateStr).getTime();
-  if (Number.isNaN(d)) return null;
-  return Math.round((d - Date.now()) / 86_400_000);
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const value = Date.UTC(year, month - 1, day);
+  const parsed = new Date(value);
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) return null;
+  return Math.trunc(value / 86_400_000);
 }
 
 function scopeFromStatus(status: CargoListingRow["status"]): CargoScope {
@@ -160,6 +180,25 @@ export function toCargoView(
     maxDraft: row.max_draft_m,
     isGrain: row.is_grain_cargo,
     isDg: row.is_dg_cargo,
+    matchingFacts: {
+      cargoId: publicId,
+      reviewStatus: row.review_status,
+      status: row.status,
+      qtyMinMt: row.qty_min_mt,
+      qtyMaxMt: row.qty_max_mt,
+      cargoType: row.cargo_type,
+      isSpot: row.is_spot,
+      laycanFromDay: civilDayOrdinal(row.laycan_from),
+      requiresGeared: row.requires_geared,
+      isGrainCargo: row.is_grain_cargo,
+      isDgCargo: row.is_dg_cargo,
+      maxVesselAgeYr: row.max_vessel_age_yr,
+      maxDraftM: row.max_draft_m,
+      maxLoaM: row.max_loa_m,
+      loadZone: row.load_zone,
+      dischZone: row.disch_zone,
+      freightIdeaUsdMt: row.freight_idea_usd_mt,
+    },
     poster: posterView(market?.poster),
   };
 }
@@ -173,7 +212,10 @@ function urgencyFromDays(days: number | null): "red" | "amber" | "green" {
   return "green";
 }
 
-const YEAR = new Date().getFullYear();
+export function vesselAge(buildYear: number | null, now: Date = new Date()): number | null {
+  if (buildYear == null || Number.isNaN(now.getTime())) return null;
+  return now.getUTCFullYear() - buildYear;
+}
 
 export function vesselFromAvailability(
   row: VesselAvailabilityWithVessel | MarketVesselRow,
@@ -220,7 +262,7 @@ export function vesselFromAvailability(
     dwt: v.dwt_grain != null ? numFmt.format(v.dwt_grain) : "—",
     grainCap: v.grain_cbm != null ? numFmt.format(v.grain_cbm) : "—",
     built: v.build_year,
-    age: v.build_year ? YEAR - v.build_year : null,
+    age: vesselAge(v.build_year),
     geared: v.is_geared,
     grainCertified: v.grain_certified,
     dgCertified: v.dg_certified,
@@ -248,6 +290,29 @@ export function vesselFromAvailability(
     openDateRangeDays: row.open_date_range_days,
     lastCargo: row.last_cargo,
     acceptsPartCargo: row.accepts_part_cargo,
+    matchingFacts: {
+      availabilityId: publicId,
+      availabilityStatus: row.status,
+      availabilityReviewStatus: row.review_status,
+      // Governed market rows are emitted only after the SQL sanctions gate.
+      // Owner rows carry the stored boolean; a malformed/missing value is
+      // treated as blocked. Neither path guesses from the public risk label.
+      isSanctioned: market
+        ? false
+        : (v as { is_sanctioned?: boolean }).is_sanctioned !== false,
+      dwtGrainMt: v.dwt_grain,
+      vesselType: v.vessel_type,
+      openZone: row.open_zone,
+      openDateDay: civilDayOrdinal(row.open_date),
+      acceptsPartCargo: row.accepts_part_cargo,
+      isGeared: v.is_geared,
+      grainCertified: v.grain_certified,
+      dgCertified: v.dg_certified,
+      buildYear: v.build_year,
+      maxDraftM: v.max_draft_m,
+      maxLoaM: vv.max_loa_m ?? null,
+      freightIdeaUsdMt: row.freight_idea_usd_mt,
+    },
   };
 }
 
@@ -275,7 +340,7 @@ export function vesselFromMyVessel(row: MyVesselRow): VesselView {
     dwt: row.dwt_grain != null ? numFmt.format(row.dwt_grain) : "—",
     grainCap: row.grain_cbm != null ? numFmt.format(row.grain_cbm) : "—",
     built: row.build_year,
-    age: row.build_year ? YEAR - row.build_year : null,
+    age: vesselAge(row.build_year),
     geared: row.is_geared,
     grainCertified: row.grain_certified,
     dgCertified: row.dg_certified,
