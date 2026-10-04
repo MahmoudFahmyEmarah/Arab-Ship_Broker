@@ -8,6 +8,11 @@ import {
 } from "../lib/bunker/freshness";
 import { computeFuelPriceIndex, FuelIndexInputError } from "../lib/bunker/index";
 import { INDEX_CASES, indexQuotes, PORTS, PRODUCTS } from "./bunker-fixtures";
+import {
+  BunkerContractError, BunkerNotDeployedError, canonicalJson, getBunkerTicker, getFuelIndexSnapshot,
+  getFuelPriceIndex, sealFuelIndexSnapshot,
+} from "../sdk/app/bunker";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 let passed = 0;
 let failed = 0;
@@ -91,5 +96,94 @@ for (const c of INDEX_CASES) {
   });
 }
 
-console.log(`bunker-check: ${passed} passed, ${failed} failed`);
-if (failed) process.exit(1);
+// ── SDK boundary: runtime parsing and argument rules (fake client) ─────────
+async function checkAsync(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
+    passed++;
+  } catch (e) {
+    failed++;
+    console.error(`FAIL ${name}\n  ${(e as Error).message}`);
+  }
+}
+const fake = (data: unknown, error: { code?: string; message: string } | null = null) => {
+  const calls: unknown[] = [];
+  const client = { rpc: async (_fn: string, args?: unknown) => { calls.push(args); return { data, error }; } };
+  return { client: client as unknown as SupabaseClient, calls };
+};
+const goodIndex = computeFuelPriceIndex(input, INDEX_CASES[0].params);
+const goodTicker = {
+  asOf: "2026-10-03T12:00:00Z",
+  sponsors: [{ name: "S", url: null, port: "Piraeus", portLocode: "GRPIR", freshness: "current", ageDays: 0,
+    latestQuoteAt: "2026-10-03T11:00:00Z", prices: [{ productKey: "VLSFO", label: "VLSFO", usdMt: 600, direction: "flat" }] }],
+};
+
+(async () => {
+  await checkAsync("SDK accepts the contract shape", async () => {
+    assert.deepEqual(await getFuelPriceIndex(fake(goodIndex).client, { portLocode: "GRPIR" }), goodIndex);
+    assert.deepEqual(await getBunkerTicker(fake(goodTicker).client), goodTicker);
+  });
+  await checkAsync("SDK rejects a zero price from the database", async () => {
+    const bad = { ...goodIndex, products: [{ ...goodIndex.products[0], averageUsdMt: 0 }] };
+    await assert.rejects(getFuelPriceIndex(fake(bad).client), BunkerContractError);
+  });
+  await checkAsync("SDK rejects a malformed ticker", async () => {
+    await assert.rejects(getBunkerTicker(fake({ sponsors: "x" }).client), BunkerContractError);
+    const noPrices = { ...goodTicker, sponsors: [{ ...goodTicker.sponsors[0], prices: [] }] };
+    await assert.rejects(getBunkerTicker(fake(noPrices).client), BunkerContractError);
+  });
+  await checkAsync("SDK refuses an empty product list and a non-positive stem", async () => {
+    const f = fake(goodIndex);
+    await assert.rejects(getFuelPriceIndex(f.client, { productKeys: [] }), RangeError);
+    await assert.rejects(getFuelPriceIndex(f.client, { stemMt: 0 }), RangeError);
+    await assert.rejects(getFuelPriceIndex(f.client, { stemMt: Number.NaN }), RangeError);
+    assert.equal(f.calls.length, 0, "no RPC call on a refused argument");
+  });
+  await checkAsync("SDK forwards stem and keys exactly", async () => {
+    const f = fake(goodIndex);
+    await getFuelPriceIndex(f.client, { portLocode: "GRPIR", productKeys: ["VLSFO"], stemMt: 1000 });
+    assert.deepEqual(f.calls[0], { p_port_locode: "GRPIR", p_product_keys: ["VLSFO"], p_stem_mt: 1000 });
+  });
+  await checkAsync("SDK reports a missing RPC distinctly", async () => {
+    await assert.rejects(getBunkerTicker(fake(null, { code: "PGRST202", message: "x" }).client), BunkerNotDeployedError);
+  });
+
+  // ── B→S snapshot (C2O-033 item 3) ──────────────────────────────────────
+  await checkAsync("snapshot: trusted when every requested product has a live price", async () => {
+    const snap = await getFuelIndexSnapshot(fake(goodIndex).client, { portLocode: "GRPIR", productKeys: ["VLSFO", "HSFO380"] });
+    assert.equal(snap.status, "trusted");
+    assert.equal(snap.actualPort, "GRPIR");
+    assert.deepEqual(snap.products.map((p) => [p.key, p.averageUsdMt]), [["HSFO380", 520], ["VLSFO", 620]]);
+    assert.match(snap.canonicalSha256, /^[0-9a-f]{64}$/);
+    const { canonicalSha256, ...body } = snap;
+    assert.equal((await sealFuelIndexSnapshot(body)).canonicalSha256, canonicalSha256, "hash recomputes");
+    const reordered = Object.fromEntries(Object.entries(body).reverse()) as typeof body;
+    assert.equal((await sealFuelIndexSnapshot(reordered)).canonicalSha256, canonicalSha256, "key order irrelevant");
+    assert.ok(!/src:bunker-e2e|00000000-0000-4000-b000/.test(JSON.stringify(snap)), "no supplier identity");
+  });
+  await checkAsync("snapshot: unavailable (no prices) when a requested product has no offer", async () => {
+    const snap = await getFuelIndexSnapshot(fake(goodIndex).client, { portLocode: "GRPIR", productKeys: ["VLSFO", "LSMGO"] });
+    assert.equal(snap.status, "unavailable");
+    assert.deepEqual(snap.products, []);
+    assert.deepEqual(snap.noOffer, ["LSMGO"]);
+  });
+  await checkAsync("snapshot: unavailable when the index is not deployed or malformed", async () => {
+    const a = await getFuelIndexSnapshot(fake(null, { code: "PGRST202", message: "x" }).client, { productKeys: ["VLSFO"] });
+    const b = await getFuelIndexSnapshot(fake({ nope: 1 }).client, { productKeys: ["VLSFO"] });
+    for (const snap of [a, b]) {
+      assert.equal(snap.status, "unavailable");
+      assert.deepEqual(snap.products, []);
+      assert.match(snap.canonicalSha256, /^[0-9a-f]{64}$/);
+    }
+    assert.match(a.warnings[0], /not deployed/);
+    assert.match(b.warnings[0], /unexpected shape/);
+  });
+  check("canonical JSON refuses NaN and undefined, sorts keys", () => {
+    assert.throws(() => canonicalJson({ a: Number.NaN }), RangeError);
+    assert.throws(() => canonicalJson({ a: undefined }), RangeError);
+    assert.equal(canonicalJson({ b: 1, a: [true, null, "x"] }), '{"a":[true,null,"x"],"b":1}');
+  });
+
+  console.log(`bunker-check: ${passed} passed, ${failed} failed`);
+  if (failed) process.exit(1);
+})();

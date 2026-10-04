@@ -5,12 +5,12 @@ first-hand physical bunker suppliers publish their price tables; the platform
 shows each sponsor on a ticker (their exposure) and computes an index whose
 **average** feeds the Voyage estimator.
 
-## Data model (migrations `20261003100000`–`104000`)
+## Data model (migrations `20261003100000`–`106000`)
 
 | Table | Purpose | Member access |
 |---|---|---|
 | `fuel_products` | Catalogue. Key = family + sulphur class + ISO 8217 grade (`HSFO380`, `VLSFO`, `ULSFO`, `LSMGO`, `MGO05`, `MDO`); `market_label` is display only; IMO CO₂ factor by grade; `core_slot` (HSFO 380, VLSFO, LSMGO) and `eca_slot` (ULSFO). | read |
-| `bunker_port_flags` | ECA zone, EU at-berth rule, open-loop scrubber ban per port (`ports` is not altered). | read |
+| `bunker_port_flags` | ECA zone, EU at-berth rule, open-loop scrubber ban per port (`ports` is not altered). | facts only, via `get_bunker_port_flags()` |
 | `bunker_suppliers` | Supplier, verified flag, trust score, status, private contacts. `is_platform` marks the single internal "Platform (manual)" supplier. | none |
 | `bunker_supplier_ports` | Normalised supplier ports (one primary). | none |
 | `bunker_supplier_members` | Member accounts linked to a supplier (`editor` publishes, `viewer` reads). No new `users.role`. | none |
@@ -18,7 +18,10 @@ shows each sponsor on a ticker (their exposure) and computes an index whose
 | `bunker_quote_events` | Audit trail (submit, approve, reject, withdraw, override, import). | none |
 
 Content of a quote never changes (trigger): only the status decision and
-`superseded_at` (once). One live and one pending quote per supplier × port ×
+`superseded_at` (once). `client_ref` is bound to `command_sha256`, the hash of
+every submitted term; submissions are serialised per supplier (and per
+supplier + reference), so a concurrent or repeated first use replays the same
+quote and a reused reference with any different term is refused (23505). One live and one pending quote per supplier × port ×
 product. Approving a quote supersedes the previous live one.
 
 ## Rules
@@ -32,10 +35,19 @@ product. Approving a quote supersedes the previous live one.
   the estimator consumes; never zero (no live quote → `noOffer`); fallback port →
   same `ports.zone` (not `Unknown`) → global, as a whole request; no supplier
   identity; members see min/median/max only from 3 suppliers
-  (`cohortSuppressed`); `latestQuoteAt` floored to the hour.
-- **Ticker** (`get_bunker_ticker()`): enabled, non-platform sponsors; one row per
+  (`cohortSuppressed`); `latestQuoteAt` floored to the hour. `port` is the port
+  actually used and is set only for scope `port`; a region or global answer
+  returns `port: null`, `requestedPort`, `region` (region scope) and the sorted
+  `contributingPorts` (architect ruling C2O-033). An empty product list is refused.
+- **Ticker** (`get_bunker_ticker()`): enabled, non-platform sponsors; only quotes
+  valid now (`valid_from ≤ now ≤ valid_until`), judged per product; one row per
   sponsor × port with their own prices and direction against the previous
-  once-live quote; no ids or contacts.
+  once-live quote; no ids or contacts. The strip distinguishes "no current offer"
+  from "temporarily unavailable", pauses on hover/focus, keeps a single
+  focusable copy and is static under reduced motion.
+- **Snapshot** (`getFuelIndexSnapshot`, frozen B→S contract C2O-033): `trusted`
+  only when every requested product has a live price, else `unavailable` with no
+  prices; never a fallback of its own; `canonicalSha256` over sorted-key JSON.
 - **Supplier writes** (`supplier_upsert_quotes`, `supplier_withdraw_quote`,
   `supplier_list_my_quotes`): actor from the session; editor of an enabled
   supplier; registered port; 0 < price < 10 000; validity starts within a day,
@@ -64,11 +76,12 @@ in production); a token-based feed, if wanted later, should use Vault like Data 
 ## Proof
 
 ```
-node --import tsx scripts/bunker-check.ts                       # 54 pure assertions
+node --import tsx scripts/bunker-check.ts                       # 65 pure + SDK + snapshot assertions
 node --import tsx scripts/bunker-sql-suite.ts | docker exec -i supabase_db_arab-ship-broker \
   psql -U postgres -d <db> -v ON_ERROR_STOP=1 -q                  # rolled-back SQL suite, same fixtures
 HARNESS_PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_bunker" \
   bash scripts/migration-harness.sh --chain supabase/migrations/2026100310*.sql \
   --smokes <generated suite file> --downs supabase/rollback/20261003_bunker_down.sql
+bash scripts/bunker-race.sh asb_bunker                           # two-session idempotency (isolated DB only)
 E2E_BASE_URL=http://127.0.0.1:3102 npx playwright test --config=playwright.bunker.config.ts
 ```

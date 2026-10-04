@@ -171,8 +171,10 @@ test("the sponsor appears on the dashboard ticker; the index averages without na
   const api = await apiClientAs(s.outsider.email);
   const { data, error } = await api.rpc("get_fuel_price_index", { p_port_locode: PORT, p_product_keys: ["VLSFO"] });
   expect(error).toBeNull();
-  const idx = data as { scope: string; products: { key: string; averageUsdMt: number; quoteCount: number; cohortSuppressed: boolean; minUsdMt: number | null }[] };
+  const idx = data as { scope: string; port: string | null; contributingPorts: string[]; products: { key: string; averageUsdMt: number; quoteCount: number; cohortSuppressed: boolean; minUsdMt: number | null }[] };
   expect(idx.scope).toBe("port");
+  expect(idx.port).toBe(PORT); // C2O-033: a port scope names only a port that supplied the result
+  expect(idx.contributingPorts).toContain(PORT);
   const vlsfo = idx.products.find((p) => p.key === "VLSFO")!;
   expect(vlsfo.averageUsdMt).toBeGreaterThan(0);
   if (vlsfo.quoteCount === 1) expect(vlsfo.averageUsdMt).toBe(PRICE);
@@ -182,4 +184,41 @@ test("the sponsor appears on the dashboard ticker; the index averages without na
   }
   expect(JSON.stringify(data)).not.toContain(s.supplierName);
   expect(JSON.stringify(data)).not.toContain(s.supplierId);
+});
+
+test("an unavailable feed says so instead of 'no offer'", async ({ browser }, info) => {
+  const { context, page } = await signedIn(browser, base(info.project.use), s.outsider.email);
+  await page.route("**/rest/v1/rpc/get_bunker_ticker", (r) => r.fulfill({ status: 500, body: "{}" }));
+  await page.reload();
+  const ticker = page.getByRole("region", { name: "Bunker prices ticker" });
+  await expect(ticker).toContainText("Bunker prices are temporarily unavailable");
+  await expect(ticker).not.toContainText("No current bunker offer");
+  await context.close();
+});
+
+test("ticker: one focusable copy, pauses on keyboard focus, static under reduced motion", async ({ browser }, info) => {
+  const { context, page } = await signedIn(browser, base(info.project.use), s.outsider.email);
+  const ticker = page.getByRole("region", { name: "Bunker prices ticker" });
+  await expect(ticker.getByRole("link", { name: new RegExp(s.supplierName) })).toHaveCount(1);
+  await expect(ticker.getByRole("link", { name: /Contact us to join/ })).toHaveCount(1);
+  await ticker.getByRole("link", { name: new RegExp(s.supplierName) }).focus();
+  await expect(ticker.locator(".bt-track")).toHaveCSS("animation-play-state", "paused");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(ticker.locator(".bt-track")).toHaveCSS("animation-name", "none");
+  await expect(ticker.locator(".bt-copy--dup")).toBeHidden();
+  await context.close();
+});
+
+test("supplier portal fits a phone screen", async ({ browser }, info) => {
+  const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
+  await page.setViewportSize({ width: 375, height: 780 });
+  await page.goto("/dashboard/bunker-supplier");
+  await expect(page.getByRole("heading", { name: s.supplierName })).toBeVisible();
+  const overflow = await page.evaluate(() => {
+    const main = document.querySelector(".bks") as HTMLElement;
+    return main.scrollWidth - main.clientWidth;
+  });
+  expect(overflow).toBeLessThanOrEqual(1);
+  await expect(page.getByLabel(new RegExp(`New VLSFO price at ${PORT}`))).toBeVisible();
+  await context.close();
 });

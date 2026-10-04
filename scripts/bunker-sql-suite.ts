@@ -240,6 +240,83 @@ exception when insufficient_privilege then null;
 end $t$;
 select 'L7-L8 ok: approval supersedes, only admins decide';
 
+-- C2B-002 #1: per-product validity on the ticker (A at GRPIR keeps a live VLSFO).
+insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+values ('${A}', 'GRPIR', 'MGO05', 777, now() - interval '3 days', now() - interval '1 hour', 'admin_input', 'approved', now() - interval '3 days'),
+       ('${A}', 'GRPIR', 'HSFO380', 444, now() + interval '1 day', now() + interval '9 days', 'admin_input', 'approved', now() - interval '1 hour');
+
+-- C2B-002 #3: idempotency covers every term (validFrom omitted on both sides).
+${as(MEMBER_SUB)}
+do $t$ declare r jsonb; ref text := 'full-' || txid_current();
+  base jsonb := jsonb_build_object('portLocode','GRPIR','productKey','LSMGO','priceUsdMt',801,
+                 'validUntil',(now() + interval '5 days')::text,'bargeFeeUsd',100,'minQtyMt',200,'clientRef',ref);
+begin
+  r := public.supplier_upsert_quotes(jsonb_build_array(base));
+  if r->'results'->0->>'duplicate' <> 'false' then raise exception 'L9 FAILED: first use reported duplicate'; end if;
+  r := public.supplier_upsert_quotes(jsonb_build_array(base || jsonb_build_object('priceUsdMt', 801.00)));
+  if r->'results'->0->>'duplicate' <> 'true' then raise exception 'L9 FAILED: identical replay (801 vs 801.00) not a duplicate'; end if;
+  begin
+    perform public.supplier_upsert_quotes(jsonb_build_array(base || jsonb_build_object('bargeFeeUsd', 150)));
+    raise exception 'L9 FAILED: reused clientRef with a different barge fee accepted';
+  exception when unique_violation then null;
+  end;
+  begin
+    perform public.supplier_upsert_quotes(jsonb_build_array(base || jsonb_build_object('deliveryMode', 'truck')));
+    raise exception 'L9 FAILED: reused clientRef with a different delivery mode accepted';
+  exception when unique_violation then null;
+  end;
+  -- C2B-002 hardening: a replaced pending quote is audited.
+  perform public.supplier_upsert_quotes(jsonb_build_array(
+    jsonb_build_object('portLocode','GRPIR','productKey','LSMGO','priceUsdMt',805,'validUntil',(now() + interval '5 days')::text)));
+end $t$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+do $t$ begin
+  if not exists (select 1 from public.bunker_quote_events e join public.bunker_quotes q on q.id = e.quote_id
+                  where e.action = 'withdraw' and q.supplier_id = '${A}' and q.price = 801
+                    and e.reason = 'replaced by a newer submission') then
+    raise exception 'L10 FAILED: replaced pending quote left no withdraw event'; end if;
+  if (select count(*) from public.bunker_quotes where supplier_id = '${A}' and port_locode = 'GRPIR'
+        and product_key = 'LSMGO' and status = 'submitted') <> 1 then
+    raise exception 'L10 FAILED: not exactly one pending quote'; end if;
+end $t$;
+select 'L9-L10 ok: idempotency binds every term; replaced pending quote audited';
+
+-- Staff input under the platform supplier registers an unregistered port.
+do $t$ declare v_platform uuid := (select id from public.bunker_suppliers where is_platform);
+begin
+  perform public.admin_bunker_override_quote('${ADMIN_ID}', v_platform,
+    jsonb_build_object('portLocode','CYLCA','productKey','MDO','priceUsdMt',900,'validUntil',(now() + interval '3 days')::text),
+    'phoned price');
+  if not exists (select 1 from public.bunker_supplier_ports where supplier_id = v_platform and port_locode = 'CYLCA') then
+    raise exception 'L11 FAILED: platform port not registered'; end if;
+end $t$;
+select 'L11 ok: platform input registers its port';
+
+-- Inactive accounts cannot open the portal state.
+update public.users set is_active = false where id = '${VIEWER_SUB}';
+${as(VIEWER_SUB)}
+do $t$ begin
+  perform public.supplier_list_my_quotes();
+  raise exception 'M8 FAILED: inactive member read the portal state';
+exception when insufficient_privilege then null;
+end $t$;
+-- Port flags: facts through the RPC, no direct table read, no identity or notes.
+do $t$ declare f jsonb := public.get_bunker_port_flags(array['TRMER']);
+begin
+  if f->0->>'ecaZone' is distinct from 'MED' then raise exception 'P1 FAILED: flags RPC wrong: %', f; end if;
+  if f::text ~ '(updated|notes|By)' then raise exception 'P1 FAILED: flags RPC leaks identity/notes: %', f; end if;
+  begin
+    perform 1 from public.bunker_port_flags;
+    raise exception 'P1 FAILED: member read bunker_port_flags directly';
+  exception when insufficient_privilege then null;
+  end;
+end $t$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+update public.users set is_active = true where id = '${VIEWER_SUB}';
+select 'M8, P1 ok: inactive member refused; port flags private except the facts';
+
 ${as(MEMBER_SUB)}
 do $t$ declare t jsonb := public.get_bunker_ticker(); row jsonb;
 begin
@@ -248,13 +325,16 @@ begin
   if row is null then raise exception 'T1 FAILED: sponsor A missing: %', t; end if;
   if (select p->>'direction' from jsonb_array_elements(row->'prices') p where p->>'productKey' = 'VLSFO') <> 'down' then
     raise exception 'T1 FAILED: 600 -> 598 should be down: %', row; end if;
+  if exists (select 1 from jsonb_array_elements(row->'prices') p where p->>'productKey' in ('MGO05', 'HSFO380')) then
+    raise exception 'T4 FAILED: lapsed or future-effective quote on the ticker: %', row; end if;
+  if row->>'freshness' <> 'current' then raise exception 'T4 FAILED: row freshness %', row->>'freshness'; end if;
   if t::text ~ '(Platform|src:bunker-e2e D|supplierId|contact|00000000-0000-4000-b000)' then
     raise exception 'T2 FAILED: platform, disabled supplier or ids in ticker: %', t; end if;
   if exists (select 1 from jsonb_array_elements(t->'sponsors') x, jsonb_array_elements(x->'prices') p
               where (p->>'usdMt')::numeric <= 0) then
     raise exception 'T3 FAILED: zero price on ticker'; end if;
 end $t$;
-select 'T1-T3 ok: ticker direction, no platform/disabled/ids, never zero';
+select 'T1-T4 ok: ticker direction, per-product validity, no platform/disabled/ids, never zero';
 reset role;
 select set_config('request.jwt.claims', '', true);
 `);
@@ -271,11 +351,10 @@ begin
    where n.nspname = 'public' and (p.proname like '%bunker%' or p.proname = 'get_fuel_price_index')
      and has_function_privilege('authenticated', p.oid, 'execute')
      and p.proname not in ('get_fuel_price_index', 'get_bunker_ticker', 'supplier_upsert_quotes',
-                           'supplier_withdraw_quote', 'supplier_list_my_quotes');
+                           'supplier_withdraw_quote', 'supplier_list_my_quotes', 'get_bunker_port_flags');
   if bad is not null then raise exception 'G2 FAILED: members can execute %', bad; end if;
   select string_agg(c.relname, ', ') into bad from pg_class c join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public' and c.relname like 'bunker%' and c.relkind = 'r'
-     and c.relname <> 'bunker_port_flags'
      and (has_table_privilege('authenticated', c.oid, 'select') or has_table_privilege('anon', c.oid, 'select'));
   if bad is not null then raise exception 'G3 FAILED: members can read %', bad; end if;
 end $t$;

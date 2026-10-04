@@ -44,9 +44,15 @@ export interface FuelIndexProduct {
 
 export interface FuelPriceIndex {
   asOf: string;
-  /** The port actually used: the requested one, else the fallback's reference. */
+  /** The port actually used (C2O-033): set only when scope is 'port'. */
   port: string | null;
+  /** The port the caller asked for, normalised; null when none was given. */
+  requestedPort: string | null;
   scope: FuelIndexScope;
+  /** The trading zone aggregated, for scope 'region' only. */
+  region: string | null;
+  /** Sorted ports whose quotes were counted (never a supplier identity). */
+  contributingPorts: string[];
   /** Stem (MT) the fixed delivery charges were spread over. */
   stemMt: number;
   products: FuelIndexProduct[];
@@ -92,4 +98,40 @@ export interface BunkerTickerSponsor {
 export interface BunkerTicker {
   asOf: string;
   sponsors: BunkerTickerSponsor[];
+}
+
+// ── B→S snapshot (frozen by the architect, C2O-033 item 3) ─────────────────
+
+export interface FuelIndexSnapshotProduct {
+  key: FuelProductKey;
+  /** Exact ISO grade / CO2 variant when governed; out of v1 scope. */
+  variant?: string;
+  averageUsdMt: number;
+  freshness: Extract<QuoteFreshness, "current" | "stale">;
+  validUntil?: string;
+  latestQuoteAt: string;
+}
+
+/**
+ * Immutable, hashed view of the index for the Voyage estimator. `trusted` only
+ * when every requested product has a live price; otherwise `unavailable` with
+ * no prices invented. `manual` is produced by Stream S, never by this module.
+ */
+export interface FuelIndexSnapshot {
+  status: "trusted" | "unavailable" | "manual";
+  algorithmVersion: string;
+  asOf: string;
+  requestedPort: string | null;
+  scope: FuelIndexScope | null;
+  actualPort: string | null;
+  region: string | null;
+  contributingPorts: string[];
+  stemMt: number | null;
+  products: FuelIndexSnapshotProduct[];
+  noOffer: FuelProductKey[];
+  warnings: string[];
+  /** Manual snapshots only (Stream S). */
+  manual?: { actor: string; reason: string; timestamp: string };
+  /** SHA-256 (hex) of the sorted-key JSON of every other field. */
+  canonicalSha256: string;
 }

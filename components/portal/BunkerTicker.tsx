@@ -5,9 +5,16 @@
 // port with its own published prices: the name is the supplier's exposure.
 // Freshness is decided by the database (≤ 7 d current, 8–14 d stale with a
 // flat arrow and "·Nd", 15–21 d "Outdated", older rows never arrive). There is
-// no demo data: with no live sponsor the strip says so and keeps the JOIN CTA.
+// no demo data: with no live sponsor the strip says so and keeps the JOIN CTA,
+// and a failed or malformed feed says the prices are unavailable (never "no
+// offer"). The marquee pauses on hover and keyboard focus; the second copy
+// that makes the loop seamless is inert and hidden from assistive technology;
+// with reduced motion the strip is static and scrolls by hand.
 import * as React from "react";
 import type { BunkerTicker as TickerData, BunkerTickerSponsor, PriceDirection } from "@/lib/bunker/types";
+import "./bunker-ticker.css";
+
+type Feed = { kind: "loading" } | { kind: "ready"; data: TickerData } | { kind: "unavailable" };
 
 const CONTACT_HREF = "/contact";
 
@@ -52,10 +59,10 @@ function BTSegment({ s }: { s: BunkerTickerSponsor }) {
   );
 }
 
-function BTEmpty() {
+function BTNotice({ text }: { text: string }) {
   return (
     <span className="bt-seg is-stale">
-      <span className="bt-port">No current bunker offer</span>
+      <span className="bt-port">{text}</span>
       <span className="bt-seg__sep" aria-hidden />
     </span>
   );
@@ -87,7 +94,7 @@ function updatedLabel(sponsors: BunkerTickerSponsor[]): string | null {
 }
 
 export function BunkerTicker() {
-  const [data, setData] = React.useState<TickerData | null>(null);
+  const [feed, setFeed] = React.useState<Feed>({ kind: "loading" });
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -97,9 +104,9 @@ export function BunkerTicker() {
           import("@/sdk/app/bunker"),
         ]);
         const t = await getBunkerTicker(getSupabaseBrowserClient());
-        if (!cancelled) setData(t);
+        if (!cancelled) setFeed({ kind: "ready", data: t });
       } catch {
-        if (!cancelled) setData({ asOf: new Date().toISOString(), sponsors: [] });
+        if (!cancelled) setFeed({ kind: "unavailable" });
       }
     })();
     return () => {
@@ -108,8 +115,8 @@ export function BunkerTicker() {
   }, []);
 
   const sponsors = React.useMemo(
-    () => (data?.sponsors ?? []).filter((s) => s.prices.length > 0),
-    [data],
+    () => (feed.kind === "ready" ? feed.data.sponsors : []).filter((s) => s.prices.length > 0),
+    [feed],
   );
   const trackRef = React.useRef<HTMLDivElement>(null);
 
@@ -118,12 +125,13 @@ export function BunkerTicker() {
     if (!el) return;
     const half = el.scrollWidth / 2;
     el.style.setProperty("--bt-duration", Math.max(20, half / 60).toFixed(1) + "s");
-  }, [sponsors, data]);
+  }, [sponsors, feed]);
 
   const updated = updatedLabel(sponsors);
   const copy = (prefix: string) => (
     <>
-      {data && sponsors.length === 0 && <BTEmpty key={`${prefix}-empty`} />}
+      {feed.kind === "unavailable" && <BTNotice key={`${prefix}-na`} text="Bunker prices are temporarily unavailable" />}
+      {feed.kind === "ready" && sponsors.length === 0 && <BTNotice key={`${prefix}-empty`} text="No current bunker offer" />}
       {sponsors.map((s) => (
         <BTSegment key={`${prefix}-${s.name}-${s.portLocode}`} s={s} />
       ))}
@@ -132,11 +140,12 @@ export function BunkerTicker() {
   );
 
   return (
-    <div className="bunker-ticker" role="region" aria-label="Bunker prices ticker" aria-busy={data === null}>
+    <div className="bunker-ticker" role="region" aria-label="Bunker prices ticker" aria-busy={feed.kind === "loading"}>
       <div className="bt-track-wrap">
         <div className="bt-track" ref={trackRef}>
-          {copy("a")}
-          {copy("b")}
+          <span className="bt-copy">{copy("a")}</span>
+          {/* Visual loop only: not focusable, not announced. */}
+          <span className="bt-copy bt-copy--dup" aria-hidden="true" inert>{copy("b")}</span>
         </div>
       </div>
       {updated && (

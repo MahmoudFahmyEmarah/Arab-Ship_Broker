@@ -1,9 +1,13 @@
--- DOWN for the Fuel Bar block 20261003100000 … 20261003104000 (Stream B).
+-- DOWN for the Fuel Bar block 20261003100000 … 20261003106000 (Stream B).
 -- Drops every bunker object in reverse dependency order and restores the
 -- legacy fuel_prices comment. public.fuel_prices itself was never altered, so
 -- its rows are intact. Run only on an isolated database or with the owner's
 -- explicit approval. Runs as one transaction (psql -1 / the migration harness).
 
+
+-- 105000 (functions it replaced are dropped below with their 102000/103000 originals)
+drop function if exists public.get_bunker_port_flags(text[]);
+drop function if exists public.fn_bunker_command_sha256(jsonb);
 
 -- 104000
 comment on table public.fuel_prices is null;
@@ -43,5 +47,5 @@ drop table if exists public.bunker_port_flags;
 drop table if exists public.fuel_products;
 
 delete from supabase_migrations.schema_migrations
- where version in ('20261003100000', '20261003101000', '20261003102000', '20261003103000', '20261003104000');
+ where version in ('20261003100000', '20261003101000', '20261003102000', '20261003103000', '20261003104000', '20261003105000', '20261003106000');
 

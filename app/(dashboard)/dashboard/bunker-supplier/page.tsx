@@ -18,7 +18,24 @@ export default async function BunkerSupplierPage() {
   const { data, error } = await supabase.rpc("supplier_list_my_quotes");
   const state = data as SupplierPortalState | null;
 
-  if (error || !state || state.suppliers.length === 0) {
+  // A failed read is not the same as "not a supplier": say which it is.
+  if (error || !state) {
+    const refused = error?.code === "42501";
+    return (
+      <div className="bks">
+        <header className="bks__head"><h1 className="bks__title">Bunker prices</h1></header>
+        <section className="bks-card" role="alert">
+          <p>
+            {refused
+              ? "Your account is not active, so the supplier price table cannot be opened. Contact Arab ShipBroker."
+              : "The supplier price table is temporarily unavailable. Nothing was changed; please try again shortly."}
+          </p>
+        </section>
+      </div>
+    );
+  }
+
+  if (state.suppliers.length === 0) {
     return (
       <div className="bks">
         <header className="bks__head">

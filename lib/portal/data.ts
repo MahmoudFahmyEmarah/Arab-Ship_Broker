@@ -8,7 +8,7 @@
 import { getAppUserRow } from "@/lib/app-user";
 import { getSpotActiveDays, getVesselActiveDays } from "@/lib/app-settings";
 import { getMyCargoListings } from "@/sdk/app/cargos";
-import { BunkerNotDeployedError, getFuelPriceIndex } from "@/sdk/app/bunker";
+import { getFuelIndexSnapshot, type FuelIndexSnapshot } from "@/sdk/app/bunker";
 import {
   getMyVesselAvailability,
 } from "@/sdk/app/vessels";
@@ -57,37 +57,41 @@ function isSupabaseConfigured(): boolean {
   return !!url && !url.includes("placeholder");
 }
 
-// Live bunker prices for the calculators — the SAME admin-managed fuel_prices
-// table the bunker ticker reads. Falls back to the econ defaults if unset.
-// Fuel prices for the voyage estimator: the platform index average
-// (sdk/app/bunker.ts, plan r2 §4.1). When the index is not deployed or has no
-// live quote for a product, that product keeps the fallback value and `live`
-// says so, so the page can show its "no live index" banner.
-export async function loadFuelPrices(): Promise<{
-  vlsfo: number; lsmgo: number; port: string; updated: string; live: { vlsfo: boolean; lsmgo: boolean };
+// Fuel prices for the voyage estimator, through the governed snapshot
+// (sdk/app/bunker.ts#getFuelIndexSnapshot, C2O-033). `snapshot.status` is the
+// truth: only "trusted" prices are live. The numeric fields keep the legacy
+// calculator rendering and carry the fallback values when the snapshot is
+// unavailable; a caller must never label them live unless `live` says so.
+// The Voyage engine consumes the snapshot itself for the bunkering port.
+export async function loadFuelPrices(portLocode?: string | null): Promise<{
+  vlsfo: number; lsmgo: number; port: string; updated: string;
+  live: { vlsfo: boolean; lsmgo: boolean };
+  snapshot: FuelIndexSnapshot | null;
 }> {
-  const fallback = { vlsfo: 585, lsmgo: 725, port: "Fallback values", updated: "", live: { vlsfo: false, lsmgo: false } };
+  const fallback = {
+    vlsfo: 585, lsmgo: 725, port: "Fallback values (no live index)", updated: "",
+    live: { vlsfo: false, lsmgo: false }, snapshot: null,
+  };
   if (!isSupabaseConfigured()) return fallback;
+  let snapshot: FuelIndexSnapshot;
   try {
     const supabase = await getSupabaseServerClient();
-    const index = await getFuelPriceIndex(supabase, { productKeys: ["VLSFO", "LSMGO"] });
-    const vlsfo = index.products.find((p) => p.key === "VLSFO");
-    const lsmgo = index.products.find((p) => p.key === "LSMGO");
-    if (!vlsfo && !lsmgo) return fallback;
-    const latest = [vlsfo?.latestQuoteAt, lsmgo?.latestQuoteAt].filter(Boolean).sort().pop();
-    return {
-      vlsfo: vlsfo?.averageUsdMt ?? fallback.vlsfo,
-      lsmgo: lsmgo?.averageUsdMt ?? fallback.lsmgo,
-      port: index.port ?? "Platform index (all ports)",
-      updated: latest
-        ? new Date(latest).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-        : "",
-      live: { vlsfo: !!vlsfo, lsmgo: !!lsmgo },
-    };
+    snapshot = await getFuelIndexSnapshot(supabase, { portLocode: portLocode ?? undefined, productKeys: ["VLSFO", "LSMGO"] });
   } catch (err) {
-    if (!(err instanceof BunkerNotDeployedError)) console.error("[portal] fuel index load failed:", err);
+    console.error("[portal] fuel index snapshot failed:", err);
     return fallback;
   }
+  if (snapshot.status !== "trusted") return { ...fallback, snapshot };
+  const price = (k: string) => snapshot.products.find((p) => p.key === k)!;
+  const latest = snapshot.products.map((p) => p.latestQuoteAt).sort().pop()!;
+  return {
+    vlsfo: price("VLSFO").averageUsdMt,
+    lsmgo: price("LSMGO").averageUsdMt,
+    port: snapshot.actualPort ?? (snapshot.region ? `${snapshot.region} average` : "Platform index (all ports)"),
+    updated: new Date(latest).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+    live: { vlsfo: true, lsmgo: true },
+    snapshot,
+  };
 }
 
 // Port names for the route legs: locode → trade name and normalised name →

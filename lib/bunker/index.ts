@@ -111,6 +111,9 @@ export function computeFuelPriceIndex(
   const byKey = new Map(products.map((p) => [p.key as string, p]));
   const ports = new Map(input.ports.map((p) => [p.locode, p]));
 
+  if (params.productKeys && params.productKeys.length === 0) {
+    throw new FuelIndexInputError("BUNKER_PRODUCT: the product list is empty; pass null for the default products");
+  }
   for (const k of params.productKeys ?? []) {
     if (!byKey.has(k)) throw new FuelIndexInputError(`BUNKER_PRODUCT: unknown fuel product ${k}`);
   }
@@ -171,10 +174,15 @@ export function computeFuelPriceIndex(
   const spread = (a: string, b: string) =>
     avg.has(a) && avg.has(b) ? round2(avg.get(a)! - avg.get(b)!) : null;
 
+  const contributingPorts = [...new Set([...perSupplier.values()].map((l) => l.portLocode))].sort();
+
   return {
     asOf: iso(asOfMs),
-    port: scope === "global" ? null : portCode,
+    port: scope === "port" ? portCode : null,
+    requestedPort: portCode,
     scope,
+    region: scope === "region" ? port!.zone : null,
+    contributingPorts,
     stemMt,
     products: out,
     spreads: { hsfoVlsfo: spread("HSFO380", "VLSFO"), vlsfoLsmgo: spread("LSMGO", "VLSFO") },

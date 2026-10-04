@@ -108,7 +108,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I1", title: "port scope: best of three normalised, stale quote counts, expired/old/disabled/superseded do not",
     params: { portLocode: "GRPIR", asOf: AS_OF, viewer: "member" },
     expected: {
-      asOf: AS_OF, port: "GRPIR", scope: "port", stemMt: 500,
+      asOf: AS_OF, port: "GRPIR", scope: "port", stemMt: 500, requestedPort: "GRPIR", region: null, contributingPorts: ["GRPIR"],
       products: [hsfo(true), vlsfoGrpir],
       spreads: { hsfoVlsfo: -100, vlsfoLsmgo: null },
       noOffer: ["LSMGO"],
@@ -118,7 +118,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I2", title: "admins see full stats below the cohort threshold",
     params: { portLocode: "grpir ", asOf: AS_OF, viewer: "admin" },
     expected: {
-      asOf: AS_OF, port: "GRPIR", scope: "port", stemMt: 500,
+      asOf: AS_OF, port: "GRPIR", scope: "port", stemMt: 500, requestedPort: "GRPIR", region: null, contributingPorts: ["GRPIR"],
       products: [hsfo(false), vlsfoGrpir],
       spreads: { hsfoVlsfo: -100, vlsfoLsmgo: null },
       noOffer: ["LSMGO"],
@@ -128,7 +128,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I3", title: "region fallback (future-dated port quote ignored); ECA port expects ULSFO",
     params: { portLocode: "TRMER", asOf: AS_OF, viewer: "member" },
     expected: {
-      asOf: AS_OF, port: "TRMER", scope: "region", stemMt: 500,
+      asOf: AS_OF, port: null, scope: "region", stemMt: 500, requestedPort: "TRMER", region: "E.MED", contributingPorts: ["CYLCA", "GRPIR"],
       products: [
         hsfo(true), vlsfoGrpir,
         { key: "LSMGO", label: "LSMGO", family: "distillate", sulphurClass: "ULS",
@@ -143,7 +143,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I4", title: "global fallback: one quote per supplier, the latest wins across ports",
     params: { portLocode: "SAJED", asOf: AS_OF, viewer: "member" },
     expected: {
-      asOf: AS_OF, port: null, scope: "global", stemMt: 500, products: [...globalProducts],
+      asOf: AS_OF, port: null, scope: "global", stemMt: 500, requestedPort: "SAJED", region: null, contributingPorts: ["CYLCA", "GRPIR", "NLRTM"], products: [...globalProducts],
       spreads: { hsfoVlsfo: -131.67, vlsfoLsmgo: 198.33 }, noOffer: [],
     },
   },
@@ -151,7 +151,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I5", title: "zone Unknown skips the region step",
     params: { portLocode: "ARROS", asOf: AS_OF, viewer: "member" },
     expected: {
-      asOf: AS_OF, port: null, scope: "global", stemMt: 500, products: [...globalProducts],
+      asOf: AS_OF, port: null, scope: "global", stemMt: 500, requestedPort: "ARROS", region: null, contributingPorts: ["CYLCA", "GRPIR", "NLRTM"], products: [...globalProducts],
       spreads: { hsfoVlsfo: -131.67, vlsfoLsmgo: 198.33 }, noOffer: [],
     },
   },
@@ -159,7 +159,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I6", title: "no live quote anywhere: noOffer, never zero",
     params: { portLocode: "GRPIR", productKeys: ["ULSFO"], asOf: AS_OF, viewer: "member" },
     expected: {
-      asOf: AS_OF, port: null, scope: "global", stemMt: 500, products: [],
+      asOf: AS_OF, port: null, scope: "global", stemMt: 500, requestedPort: "GRPIR", region: null, contributingPorts: [], products: [],
       spreads: { hsfoVlsfo: null, vlsfoLsmgo: null }, noOffer: ["ULSFO"],
     },
   },
@@ -167,7 +167,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I7", title: "5 days later: the 10-day quote is now 15 days old and drops out",
     params: { portLocode: "GRPIR", productKeys: ["VLSFO"], asOf: at(120), viewer: "member" },
     expected: {
-      asOf: at(120), port: "GRPIR", scope: "port", stemMt: 500,
+      asOf: at(120), port: "GRPIR", scope: "port", stemMt: 500, requestedPort: "GRPIR", region: null, contributingPorts: ["GRPIR"],
       products: [{ key: "VLSFO", label: "VLSFO", family: "residual", sulphurClass: "VLS",
         averageUsdMt: 610, minUsdMt: null, medianUsdMt: null, maxUsdMt: null,
         quoteCount: 2, cohortSuppressed: true, freshness: "current", latestQuoteAt: at(-24), normalised: true }],
@@ -178,7 +178,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I8", title: "9 days later: newest counted quote is 10 days old, so the product is stale",
     params: { portLocode: "GRPIR", productKeys: ["VLSFO"], asOf: at(216), viewer: "member" },
     expected: {
-      asOf: at(216), port: "GRPIR", scope: "port", stemMt: 500,
+      asOf: at(216), port: "GRPIR", scope: "port", stemMt: 500, requestedPort: "GRPIR", region: null, contributingPorts: ["GRPIR"],
       products: [{ key: "VLSFO", label: "VLSFO", family: "residual", sulphurClass: "VLS",
         averageUsdMt: 610, minUsdMt: null, medianUsdMt: null, maxUsdMt: null,
         quoteCount: 2, cohortSuppressed: true, freshness: "stale", latestQuoteAt: at(-24), normalised: true }],
@@ -189,7 +189,7 @@ export const INDEX_CASES: IndexCase[] = [
     id: "I11", title: "a 1000 MT stem spreads fees thinner and admits the 1000 MT minimum quote",
     params: { portLocode: "GRPIR", productKeys: ["VLSFO"], asOf: AS_OF, stemMt: 1000, viewer: "member" },
     expected: {
-      asOf: AS_OF, port: "GRPIR", scope: "port", stemMt: 1000,
+      asOf: AS_OF, port: "GRPIR", scope: "port", stemMt: 1000, requestedPort: "GRPIR", region: null, contributingPorts: ["GRPIR"],
       products: [{ key: "VLSFO", label: "VLSFO", family: "residual", sulphurClass: "VLS",
         averageUsdMt: 621.5, minUsdMt: 602.5, medianUsdMt: 621.75, maxUsdMt: 640,
         quoteCount: 4, cohortSuppressed: false, freshness: "current", latestQuoteAt: at(-6), normalised: true }],
@@ -198,6 +198,8 @@ export const INDEX_CASES: IndexCase[] = [
   },
   { id: "I12", title: "a non-positive stem is refused", params: { portLocode: "GRPIR", asOf: AS_OF, stemMt: 0, viewer: "member" },
     expected: { error: "BUNKER_STEM" } },
+  { id: "I13", title: "an empty product list is refused", params: { portLocode: "GRPIR", productKeys: [], asOf: AS_OF, viewer: "member" },
+    expected: { error: "BUNKER_PRODUCT" } },
   { id: "I9", title: "unknown port is refused", params: { portLocode: "XXXXX", asOf: AS_OF, viewer: "member" },
     expected: { error: "BUNKER_PORT" } },
   { id: "I10", title: "unknown product is refused", params: { productKeys: ["FOO"], asOf: AS_OF, viewer: "member" },
