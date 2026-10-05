@@ -5,10 +5,10 @@
 .sz-rail { display: grid; gap: 12px; }
 .sz-main { min-width: 0; }
 .sz-version { font-size: 11px; color: var(--asb-gray-500); margin-right: 8px; align-self: center; }
-.sz-tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--asb-green-bg, #e8f5ec); color: var(--asb-green); font-size: 9px; letter-spacing: 0.04em; }
+.sz-tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--asb-green-bg); color: var(--asb-green); font-size: 9px; letter-spacing: 0.04em; }
 .sz-field { display: grid; gap: 3px; font-size: 11px; color: var(--asb-gray-500); }
 .sz-field > span { font-weight: 600; }
-.sz-field input, .sz-field select { border: 1px solid var(--asb-gray-200); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12px; color: var(--asb-navy); background: var(--asb-white, #fff); }
+.sz-field input, .sz-field select { border: 1px solid var(--asb-gray-200); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12px; color: var(--asb-navy); background: var(--asb-white); }
 .sz-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--asb-navy); line-height: 1.35; }
 .sz-check input { margin-top: 2px; }
 .sz-fact { display: grid; gap: 4px; padding: 4px 0; border-top: 0.5px solid var(--asb-gray-200); }
@@ -17,27 +17,27 @@
 .sz-fact__value { font-size: 13px; font-weight: 600; color: var(--asb-green); font-variant-numeric: tabular-nums; }
 .sz-fact__value.is-missing, .is-missing { color: var(--asb-amber); font-weight: 600; }
 .sz-save { display: grid; gap: 4px; margin-top: 6px; }
-.sz-error { color: var(--asb-red, #b3261e); }
-.sz-unavailable { background: var(--asb-amber-bg, #fff6e5); border: 1px solid var(--asb-amber); color: var(--asb-navy); border-radius: 6px; padding: 10px 12px; font-size: 12px; margin-bottom: 12px; line-height: 1.45; }
+.sz-error { color: var(--asb-red); }
+.sz-unavailable { background: var(--asb-amber-bg); border: 1px solid var(--asb-amber); color: var(--asb-navy); border-radius: 6px; padding: 10px 12px; font-size: 12px; margin-bottom: 12px; line-height: 1.45; }
 .sz-results { margin-top: 0; }
 .sz-cards { margin-top: 16px; }
 .sz-muted { color: var(--asb-gray-500); font-weight: 400; font-size: 11px; display: block; }
 .sz-flag small.sz-muted { display: block; }
 .sz-flag.is-applied > span:first-child b { color: var(--asb-amber); margin-right: 4px; font-size: 10px; letter-spacing: 0.05em; }
 .sz-link { color: var(--asb-blue); font-weight: 600; text-decoration: none; }
-.sz-warnings { margin-top: 16px; background: var(--asb-white, #fff); border: 0.5px solid var(--asb-gray-200); border-left: 3px solid var(--asb-amber); border-radius: 6px; padding: 10px 12px; }
+.sz-warnings { margin-top: 16px; background: var(--asb-white); border: 0.5px solid var(--asb-gray-200); border-left: 3px solid var(--asb-amber); border-radius: 6px; padding: 10px 12px; }
 .sz-warnings ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--asb-navy); line-height: 1.5; }
 
 /* ── v2 statuses ───────────────────────────────────────────────────────── */
-.sz-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px; border-radius: var(--asb-r, 8px); border: 1px solid var(--asb-border, #e3e8ef); font-size: 13px; }
-.sz-status--trusted { background: var(--asb-green-bg, #e8f5ec); }
-.sz-status--partial { background: var(--asb-amber-bg, #fff4dc); }
-.sz-status--unavailable, .sz-status--invalid { background: var(--asb-red-bg, #fdecec); }
+.sz-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px; border-radius: var(--asb-r, 8px); border: 1px solid var(--asb-line); font-size: 13px; }
+.sz-status--trusted { background: var(--asb-green-bg); }
+.sz-status--partial { background: var(--asb-amber-bg); }
+.sz-status--unavailable, .sz-status--invalid { background: var(--asb-red-bg); }
 .sz-status__k { font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
-.sz-flag.is-undecided { border-left: 3px solid var(--asb-amber-fg, #8a5a00); padding-left: 8px; }
+.sz-flag.is-undecided { border-left: 3px solid var(--asb-amber); padding-left: 8px; }
 .sz-sources { margin: 12px 0 0; font-size: 12px; }
 .sz-sources li { margin: 2px 0; }
 .sz-sources code { font-size: 10px; }
 .sz-list { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
-.is-placeholder { color: var(--asb-red, #b3261e); }
+.is-placeholder { color: var(--asb-red); }
 .is-manual { font-style: italic; }

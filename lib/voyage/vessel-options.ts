@@ -2,6 +2,7 @@
 // Suez tonnages, the open port (ballast leg origin) and whatever consumption
 // the listing already declares (the economics profile wins when it exists).
 import type { SuezVesselOption } from "@/lib/suez/vessel-options";
+import type { VesselView } from "@/lib/portal/types";
 import type { ConsumptionMap } from "./types";
 
 export interface VoyageVesselOption extends SuezVesselOption {
@@ -66,5 +67,15 @@ export function voyageOptionFromAdminRow(r: AdminVoyageVesselRow): VoyageVesselO
     serviceSpeedKn: n(r.service_speed_kn),
     listingConsumption: consumptionFromListing(r),
     scrubberFitted: r.scrubber_fitted,
+  };
+}
+
+// A member's own position from the governed member read: the listing id is real for an owned row, the raw vessel id
+// is present only for vessels the member manages. Consumption comes from the economics profile, not the view.
+export function voyageOptionFromView(v: VesselView): VoyageVesselOption {
+  return {
+    id: v.id, vesselId: v.vesselId, name: v.name, imo: v.imo, type: v.type, dwt: v.dwt, built: v.built, gt: v.gt ?? null, scnrt: v.scnrt ?? null,
+    openPortLocode: v.openPortLocode ?? null, openPortName: v.openPort || null, openZone: v.openPortZone || null,
+    serviceSpeedKn: null, listingConsumption: {}, scrubberFitted: null,
   };
 }

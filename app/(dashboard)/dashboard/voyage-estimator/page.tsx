@@ -1,16 +1,14 @@
 import { redirect } from "next/navigation";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getAppUserRow } from "@/lib/app-user";
-import { loadViewerContext, loadCargoViews } from "@/lib/portal/data";
+import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
 import { ComingSoon } from "@/components/portal/ComingSoon";
-import { isCalculatorLocked } from "@/lib/portal/tier-gate";
+import { resolveCalculatorAccess } from "@/lib/voyage/calculator-access";
 import { CalculatorLocked } from "@/components/portal/calculators";
 import { VoyageEstimatorV2 } from "@/components/voyage/VoyageEstimatorV2";
-import { getSuezTariffContext } from "@/sdk/app/suez";
+import { getPointEcaZones, getSuezTariffContext, listEcaZones } from "@/sdk/app/suez";
 import { getVoyageSettings } from "@/sdk/app/voyage";
 import { loadFuelIndex } from "@/lib/voyage/fuel-source";
-import { voyageOptionFromAdminRow, type AdminVoyageVesselRow, type VoyageVesselOption } from "@/lib/voyage/vessel-options";
+import { voyageOptionFromAdminRow, voyageOptionFromView, type AdminVoyageVesselRow, type VoyageVesselOption } from "@/lib/voyage/vessel-options";
 import type { SuezTariffContextResult } from "@/lib/suez/types";
 
 export const metadata = { title: "Voyage Cost Estimator Arab ShipBroker" };
@@ -37,20 +35,41 @@ async function loadAdminVoyageVessels(): Promise<VoyageVesselOption[]> {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export default async function VoyageEstimatorPage({ searchParams }: { searchParams: Promise<{ vessel?: string | string[]; cargo?: string | string[] }> }) {
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
+// The organisations the actor may file an estimate under: current, active seats.
+async function loadOwnerOrgs(actorId: string): Promise<{ id: string; name: string }[]> {
+  const db = getSupabaseAdminClient();
+  const { data } = await db.from("organization_members").select("org_id, org:organizations(id, name)").eq("user_id", actorId).eq("is_current", true).eq("status", "active");
+  type Row = { org_id: string; org: { id: string; name: string | null } | { id: string; name: string | null }[] | null };
+  return ((data ?? []) as unknown as Row[]).map((r) => { const o = Array.isArray(r.org) ? r.org[0] : r.org; return { id: r.org_id, name: o?.name ?? "Organisation" }; });
+}
 
-  const { tier, role } = await loadViewerContext();
-  // Admin-only until a published Suez tariff and a live fuel index exist in
-  // production (PLAN-voyage-economics §5); then T3+ through the tier gate.
-  if (role !== "admin") return <ComingSoon variant="radar" />;
-  if (isCalculatorLocked(tier)) return <CalculatorLocked title="Voyage Cost Estimator" />;
+export default async function VoyageEstimatorPage({ searchParams }: { searchParams: Promise<{ vessel?: string | string[]; cargo?: string | string[] }> }) {
+  // One entitlement rule for this page and every calculator action (lib/voyage/calculator-policy.ts).
+  const { access, supabase } = await resolveCalculatorAccess();
+  if (!access.allowed) {
+    if (access.reason === "signed_out" || access.reason === "no_profile" || access.reason === "inactive") redirect("/auth/login");
+    if (access.reason === "tier_locked") return <CalculatorLocked title="Voyage Cost Estimator" />;
+    return <ComingSoon variant="radar" />;
+  }
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
-  const [vessels, cargos, settingsLoad, viewer] = await Promise.all([loadAdminVoyageVessels(), loadCargoViews(), getVoyageSettings(supabase), getAppUserRow(supabase, user.id, "id")]);
+  // Admins: every current position through the service role. Members: their own positions through the governed
+  // member read, the same visibility-safe loader the Suez page uses (C2O-043 #13, Opus B PR-03 d).
+  const [vessels, cargos, settingsLoad, ownerOrgs] = await Promise.all([
+    access.kind === "admin" ? loadAdminVoyageVessels() : loadVesselViews({ mine: true }).then((r) => r.views.map(voyageOptionFromView)),
+    loadCargoViews(), getVoyageSettings(supabase), loadOwnerOrgs(access.actorId),
+  ]);
+  // The convoy anchorage per direction, tested against the ECA zones in force today (the save re-tests on the transit date).
+  const anchorages = settingsLoad.settings.suez.anchorages ?? {};
+  const anchorageEca: { SB?: boolean | null; NB?: boolean | null } = {};
+  for (const d of ["SB", "NB"] as const) {
+    const pt = anchorages[d];
+    const zones = pt ? await getPointEcaZones(supabase, pt[0], pt[1], today) : null;
+    anchorageEca[d] = zones == null ? null : zones.length > 0;
+  }
+  const zonesInForce = await listEcaZones(supabase, today).catch(() => []);
+  const anchorageEcaConfidence: "official" | "coarse" = zonesInForce.length > 0 && zonesInForce.every((z) => z.confidence === "official") ? "official" : "coarse";
   let suezContext: SuezTariffContextResult = { found: false, date: today };
   try { suezContext = await getSuezTariffContext(supabase, today); } catch { /* unavailable state */ }
   // The frozen B→S index snapshot (status unavailable until Stream B's index is wired → fallback prices, labelled).
@@ -65,7 +84,10 @@ export default async function VoyageEstimatorPage({ searchParams }: { searchPara
       settingsError={settingsLoad.error}
       suezContext={suezContext}
       fuel={fuel}
-      viewerUserId={viewer?.id ?? null}
+      viewerUserId={access.actorId}
+      ownerOrgs={ownerOrgs}
+      anchorageEca={anchorageEca}
+      anchorageEcaConfidence={anchorageEcaConfidence}
       initialVesselId={typeof params.vessel === "string" ? params.vessel : undefined}
       initialCargoId={typeof params.cargo === "string" ? params.cargo : undefined}
     />

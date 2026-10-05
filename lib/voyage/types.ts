@@ -32,13 +32,27 @@ export interface VoyageSettings {
   seaMargin: { defaultPct: number; byLane?: Record<string, number>; bySeason?: Partial<Record<Season, number>> };
   portTimeDays: { loadDefault: number; dischDefault: number; idleSharePct: number };
   anchorageDaysDefault: number;
-  suez: { transitDays: number; anchorageDays: number; nm: number };
+  /** anchorages: [lat, lon] of the convoy anchorage per direction (governed points the ECA test uses) */
+  suez: { transitDays: number; anchorageDays: number; nm: number; anchorages?: { SB?: [number, number]; NB?: [number, number] } };
   opex: { crewUsdDay: number; maintenanceUsdDay: number };
   classMultipliers: Record<VesselClass, number>;
   eca: { fuelProductKey: string; distillateProductKey?: string };
   fuelFallback: Record<string, number>;
   seedMarker?: string;
+  /** keys of PLATFORM_CONSTANTS the owner has confirmed with a source; every other one is shown as "platform assumption" */
+  confirmed?: string[];
 }
+
+/** The settings constants that are platform assumptions until the owner confirms them (owner ruling B2O-010 §1). */
+export const PLATFORM_CONSTANTS: { key: string; label: (s: VoyageSettings) => string }[] = [
+  { key: "opex.crewUsdDay", label: (s) => `crew USD ${s.opex.crewUsdDay.toLocaleString("en-US")}/day` },
+  { key: "opex.maintenanceUsdDay", label: (s) => `maintenance USD ${s.opex.maintenanceUsdDay.toLocaleString("en-US")}/day` },
+  { key: "classMultipliers", label: (s) => `class multipliers A ${s.classMultipliers.A} / B ${s.classMultipliers.B} / C ${s.classMultipliers.C}` },
+  { key: "seaMargin.defaultPct", label: (s) => `sea margin ${s.seaMargin.defaultPct} %` },
+  { key: "speeds", label: (s) => `default speeds ${s.speeds.ladenKn} kn laden / ${s.speeds.ballastKn} kn ballast` },
+  { key: "portTimeDays", label: (s) => `default port time ${s.portTimeDays.loadDefault} / ${s.portTimeDays.dischDefault} days, idle share ${s.portTimeDays.idleSharePct} %` },
+  { key: "suez.days", label: (s) => `Suez transit ${s.suez.transitDays} day + anchorage ${s.suez.anchorageDays} day, ${s.suez.nm} NM` },
+];
 
 export const DEFAULT_VOYAGE_SETTINGS: VoyageSettings = {
   speeds: { ladenKn: 12.5, ballastKn: 13.0 },
@@ -56,7 +70,7 @@ export type SettingsSource = "governed" | "defaults";
 
 // Engine revisions stamped on every estimate and snapshot (also re-exported by ./snapshots).
 export const VOYAGE_ALGORITHM_VERSION = "voyage-engine/2";
-export const ECA_SPLIT_ALGORITHM_VERSION = "fn_route_eca_split/2";
+export const ECA_SPLIT_ALGORITHM_VERSION = "fn_route_eca_split/3";
 
 export interface SeaLegInput {
   key: "ballast" | "laden";
@@ -66,20 +80,32 @@ export interface SeaLegInput {
   ecaNm: number | null; // null = share unknown → priced as non-ECA, leg partial
   method: "waypoints" | "distance_only" | "manual" | "none";
   routeSource?: string | null;
+  /** false = the measured track is an unverified import: the leg is fallback, never trusted */
+  routeVerified?: boolean | null;
+  /** canal miles contained in the measured track; deducted when this leg's canal transit is priced as its own leg */
+  canalNm?: number | null;
+  /** coarse = the ECA share comes from a coarse ring (a fallback, never trusted) */
+  ecaConfidence?: "official" | "coarse" | null;
   manual?: ManualProvenance; // required when method = manual
 }
 
 export interface CanalInput {
   required: boolean;
   name: string; // "Suez"
-  status: ComponentStatus; // trusted | manual | unavailable (from the Suez estimate)
+  /** which sea leg transits the canal (default laden) */
+  leg?: "laden" | "ballast";
+  status: ComponentStatus; // trusted | manual | fallback | unavailable (from the Suez estimate)
   costUsd: number | null; // null when unavailable
   transitDays: number;
   anchorageDays: number;
   anchorageInEca: boolean;
+  /** governed = point-in-zone of the settings anchorage; manual = asserted by the broker (estimate partial) */
+  anchorageInEcaSource?: "governed" | "coarse" | "manual";
   nm: number;
   tariffVersionNo: number | null;
   complete: boolean;
+  /** broker-supplied canal cost used only when the Suez estimate is incomplete */
+  manual?: ManualProvenance;
 }
 
 export interface PortCallInput {
@@ -91,6 +117,8 @@ export interface PortCallInput {
   inEca: boolean;
   openLoopBan: boolean; // scrubber washwater banned in port → compliant fuel in port
   euBerthOver2h: boolean; // EU berth beyond 2 h → 0.10 % in port
+  /** governed = from the route's start/end zones; manual = asserted by the broker (estimate partial) */
+  inEcaSource?: "governed" | "coarse" | "manual";
   pda: { usd: number | null; source: "tariff" | "manual" | "none"; manual?: ManualProvenance };
 }
 
@@ -98,6 +126,10 @@ export interface VoyageInput {
   vessel: VoyageVesselProfile;
   legs: { ballast: SeaLegInput | null; laden: SeaLegInput };
   canal: CanalInput | null;
+  /** a second transit on the ballast leg (e.g. open in the Red Sea, loading in the Med) */
+  ballastCanal?: CanalInput | null;
+  /** profile = the vessel's governed economics profile; manual = facts typed for this estimate (estimate partial) */
+  vesselSource?: "profile" | "manual";
   ports: { load: PortCallInput; disch: PortCallInput };
   anchorageDays: number;
   anchorageInEca: boolean;
@@ -168,6 +200,8 @@ export interface VoyageEstimate {
   revenue: { grossFreightUsd: number; commissionUsd: number; netFreightUsd: number; tceUsdDay: number; resultAfterOpexUsd: number } | null;
   unavailable: { code: string; reason: string }[];
   assumptions: string[];
+  /** settings constants used by this estimate that the owner has not confirmed (shown "platform assumption") */
+  platformAssumptions: { key: string; label: string }[];
   warnings: string[];
   errors?: string[];
 }

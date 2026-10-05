@@ -1,4 +1,4 @@
-// Suez Canal transit cost engine — pure, deterministic, no I/O (suez-engine/2).
+// Suez Canal transit cost engine — pure, deterministic, no I/O (suez-engine/3).
 //
 // estimateSuezTransit(input, ctx) prices one transit against the published
 // tariff version in force on the transit date: (1) the progressive SCNT toll
@@ -11,6 +11,12 @@
 //   · no toll bands for the vessel's category → toll `unavailable` (no other
 //     category is borrowed);
 //   · placeholder bands → toll `placeholder`, estimate `partial`;
+//   · SCNT above the last published band → toll `unavailable` (never charged at
+//     the ceiling; publication also requires an open-ended last band);
+//   · category surcharges (suez-engine/3, audit C2O-039): a version whose
+//     surcharge regime is `unknown` cannot price a trusted toll (surcharge
+//     `unavailable`); `modelled` needs an item scoped to the vessel category
+//     (else `unavailable`); a `reported` item is `placeholder`, never trusted;
 //   · unknown GT → GT-banded line `unavailable`, GT-gated flag undecided;
 //   · unknown transit history / searchlight / cranes → flag undecided (null),
 //     never a charge;
@@ -31,6 +37,7 @@ import {
   type SuezFlag,
   type SuezInput,
   type SuezLine,
+  type SuezSurchargeRegime,
   type SuezTariffContext,
   type SuezTariffItem,
   type SuezTollTier,
@@ -41,14 +48,17 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2)); // deterministic, locale-free
 
-function inScope(item: SuezTariffItem, direction: SuezDirection, cargoStatus: SuezCargoStatus): boolean {
+function inScope(item: SuezTariffItem, direction: SuezDirection, cargoStatus: SuezCargoStatus, category: string): boolean {
   if (item.directionScope !== "any" && item.directionScope !== direction) return false;
   if (item.cargoStatusScope !== "any" && item.cargoStatusScope !== cargoStatus) return false;
+  if (Array.isArray(item.categoryScope) && item.categoryScope.length > 0 && !item.categoryScope.includes(category)) return false;
   return true;
 }
 
-// Progressive bands: tons in each band × its SDR rate.
-export function tollSdrFromTiers(scnt: number, tiers: SuezTollTier[]): { sdr: number; lines: SuezTollTierLine[] } {
+// Progressive bands: tons in each band × its SDR rate. `ceiling` is set when the
+// highest band is finite and the SCNT lies above it (those tons are not charged:
+// the caller must treat the toll as unavailable).
+export function tollSdrFromTiers(scnt: number, tiers: SuezTollTier[]): { sdr: number; lines: SuezTollTierLine[]; ceiling: number | null } {
   const sorted = [...tiers].sort((a, b) => a.tierOrder - b.tierOrder);
   const lines: SuezTollTierLine[] = [];
   let sdr = 0;
@@ -60,7 +70,9 @@ export function tollSdrFromTiers(scnt: number, tiers: SuezTollTier[]): { sdr: nu
     lines.push({ tierOrder: t.tierOrder, scntFrom: lo, scntTo: t.scntTo, tons, sdrPerScnt: t.sdrPerScnt, sdr: round2(amount) });
     sdr += amount;
   }
-  return { sdr, lines };
+  const last = sorted[sorted.length - 1];
+  const ceiling = last && last.scntTo != null && scnt > last.scntTo ? last.scntTo : null;
+  return { sdr, lines, ceiling };
 }
 
 interface WasteTier { from: number; to: number | null; amount: number; includedUnits: number }
@@ -92,9 +104,9 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
       cargoStatus: (rawInput?.voyage?.cargoStatus as SuezCargoStatus) ?? "laden",
       direction: (rawInput?.voyage?.direction as SuezDirection) ?? "SB",
       transitDate: String(rawInput?.voyage?.transitDate ?? ctx.date),
-      layers: { toll: { status: "unavailable", sdr: null, usd: null, tiers: [], reason: "invalid input" }, fixed: [], conditional: [], waste: [] },
+      layers: { toll: { status: "unavailable", sdr: null, usd: null, tiers: [], reason: "invalid input" }, surcharge: { status: "unavailable", regime: ctx.version.surchargeRegime ?? "unknown", lines: [], reason: "invalid input" }, fixed: [], conditional: [], waste: [] },
       wasteIncludedM3: null,
-      totals: { tollUsd: null, fixedUsd: 0, conditionalAppliedUsd: 0, wasteUsd: 0, appliedUsd: 0, potentialUsd: 0, complete: false },
+      totals: { tollUsd: null, surchargeUsd: 0, fixedUsd: 0, conditionalAppliedUsd: 0, wasteUsd: 0, appliedUsd: 0, potentialUsd: 0, complete: false },
       unavailable: [], invalid: [], transitDays: 0, anchorageDays: 0,
       warnings: [], errors: parsed.errors,
     };
@@ -124,7 +136,7 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
     warnings.push("No SDR→USD rate is on file on or before the transit date; SDR amounts cannot be converted.");
   }
   const toUsd = (sdr: number): number | null => (conv.rate == null ? null : sdr * conv.rate);
-  const items = ctx.items.filter((i) => inScope(i, direction, cargoStatus));
+  const items = ctx.items.filter((i) => inScope(i, direction, cargoStatus, vessel.category));
 
   // ── Layer 1 · toll ───────────────────────────────────────────────────────
   const scnt = vessel.scnt;
@@ -136,10 +148,12 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
     toll.status = "unavailable"; toll.reason = `No SCA toll bands for category "${vessel.category}" (${cargoStatus}) in tariff v${ctx.version.versionNo}; the SCA tolls circular has not been loaded for it.`;
   } else {
     const r = tollSdrFromTiers(scnt, tiers);
-    toll.sdr = round2(r.sdr); toll.tiers = r.lines;
+    toll.tiers = r.lines;
     const usd = toUsd(r.sdr);
-    if (usd == null) { toll.status = "unavailable"; toll.reason = "SDR rate unavailable."; }
+    if (r.ceiling != null) { toll.status = "unavailable"; toll.reason = `SCNT ${fmt(scnt)} lies above the highest published band (${fmt(r.ceiling)} SCNT); the toll is not charged at the ceiling.`; }
+    else if (usd == null) { toll.sdr = round2(r.sdr); toll.status = "unavailable"; toll.reason = "SDR rate unavailable."; }
     else {
+      toll.sdr = round2(r.sdr);
       toll.usd = round2(usd);
       toll.status = tiers.some((t) => t.confidence === "placeholder") ? "placeholder" : conv.status;
       if (toll.status === "placeholder") toll.reason = "Toll bands are placeholders, not the official SCA circular.";
@@ -147,6 +161,44 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
   }
   if (toll.status === "unavailable") unavailable.push({ code: "transit_toll", reason: toll.reason ?? "unavailable" });
   if (toll.status === "placeholder") warnings.push("The toll bands in force are placeholders; the toll figure is not official.");
+
+  // ── Layer 1b · category surcharges on the toll ─────────────────────────
+  const regime: SuezSurchargeRegime = ctx.version.surchargeRegime ?? "unknown";
+  const surcharge: SuezEstimate["layers"]["surcharge"] = { status: "trusted", regime, lines: [], reason: null };
+  const surchargeItems = items.filter((i) => i.layer === "surcharge");
+  if (toll.sdr == null) {
+    surcharge.status = "unavailable"; surcharge.reason = "The toll is not computable, so its surcharge is not either.";
+  } else if (regime === "none") {
+    surcharge.reason = `No category surcharge was in force for tariff v${ctx.version.versionNo}.`;
+    if (surchargeItems.length > 0) { surcharge.status = "invalid"; surcharge.reason = "The version says no surcharge is in force but carries surcharge items."; invalid.push({ code: "category_surcharge", reason: surcharge.reason }); }
+  } else if (regime === "unknown") {
+    surcharge.status = "unavailable";
+    surcharge.reason = `Tariff v${ctx.version.versionNo} does not model the SCA category surcharges (temporary surcharges in force since 15 Jul 2026); the base dues alone are not the transit cost.`;
+    unavailable.push({ code: "category_surcharge", reason: surcharge.reason });
+  } else if (surchargeItems.length === 0) {
+    surcharge.status = "unavailable";
+    surcharge.reason = `Tariff v${ctx.version.versionNo} models surcharges but none covers "${vessel.category}" (${cargoStatus}, ${direction}).`;
+    unavailable.push({ code: "category_surcharge", reason: surcharge.reason });
+  } else {
+    for (const item of surchargeItems) {
+      const pct = item.params?.pct;
+      if (!isNum(pct) || pct < 0 || pct > 1000) {
+        const l = baseLine(item, "invalid", null, null, "params.pct must be a number between 0 and 1000");
+        surcharge.lines.push(l); invalid.push({ code: l.code, reason: l.explanation }); continue;
+      }
+      const native = (toll.sdr * pct) / 100;
+      const usd = toUsd(native);
+      const reported = item.confidence === "reported";
+      const st: LineStatus = usd == null ? "unavailable" : reported || toll.status === "placeholder" ? "placeholder" : conv.status === "manual" || toll.status === "manual" ? "manual" : "trusted";
+      const l: SuezLine = { ...baseLine(item, st, native, usd, `${fmt(pct)}% of the toll (SDR ${fmt(round2(toll.sdr))})${reported ? " · reported rate, instrument not on file" : ""}${item.notes ? ` · ${item.notes}` : ""}.`), currency: "SDR" };
+      surcharge.lines.push(l);
+      if (st === "unavailable") unavailable.push({ code: l.code, reason: "SDR rate unavailable." });
+    }
+    const rank: Record<LineStatus, number> = { trusted: 0, manual: 1, placeholder: 2, unavailable: 3, invalid: 4 };
+    surcharge.status = surcharge.lines.reduce<LineStatus>((w, l) => (rank[l.status] > rank[w] ? l.status : w), "trusted");
+    if (surcharge.lines.some((l) => l.status === "placeholder")) warnings.push("The category surcharge rate is reported, not taken from an SCA instrument on file; the toll is not trusted.");
+  }
+  const surchargeUsd = round2(surcharge.lines.reduce((a, l) => a + (l.amountUsd ?? 0), 0));
 
   // ── Layer 2 · fixed ──────────────────────────────────────────────────────
   const fixed: SuezLine[] = [];
@@ -265,14 +317,22 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
   const wasteUsd = round2(waste.reduce((a, l) => a + (l.amountUsd ?? 0), 0));
 
   // ── Totals and status ──────────────────────────────────────────────────
-  const appliedUsd = round2((toll.usd ?? 0) + fixedUsd + conditionalAppliedUsd + wasteUsd);
+  const appliedUsd = round2((toll.usd ?? 0) + surchargeUsd + fixedUsd + conditionalAppliedUsd + wasteUsd);
   const complete = unavailable.length === 0 && invalid.length === 0 && toll.usd != null;
-  const transitDays = input.overrides?.transitDays ?? (isNum(ctx.suezDays?.transitDays) ? ctx.suezDays.transitDays! : 1);
-  const anchorageDays = input.overrides?.anchorageDays ?? (isNum(ctx.suezDays?.anchorageDays) ? ctx.suezDays.anchorageDays! : 0.5);
+  const daysManual = !!(input.overrides?.transitDays || input.overrides?.anchorageDays);
+  // Official figures stand on an official instrument whose file is on record; otherwise the estimate is partial.
+  const evidenceOnFile = (ctx.sources ?? []).some((src) => src.authority === "official" && src.evidenceStatus === "on_file");
+  if (!evidenceOnFile) warnings.push("No official SCA instrument with its file on record is cited by this tariff version; the figures are not trusted.");
+  if (input.overrides?.transitDays) warnings.push(`Transit days ${fmt(input.overrides.transitDays.value)} entered manually (${input.overrides.transitDays.reason}).`);
+  if (input.overrides?.anchorageDays) warnings.push(`Anchorage days ${fmt(input.overrides.anchorageDays.value)} entered manually (${input.overrides.anchorageDays.reason}).`);
+  const daysGoverned = isNum(ctx.suezDays?.transitDays) && isNum(ctx.suezDays?.anchorageDays);
+  if (!daysGoverned && !daysManual) warnings.push("Suez transit/anchorage days are not in the voyage settings; 1 and 0.5 days were assumed.");
+  const transitDays = input.overrides?.transitDays?.value ?? (isNum(ctx.suezDays?.transitDays) ? ctx.suezDays.transitDays! : 1);
+  const anchorageDays = input.overrides?.anchorageDays?.value ?? (isNum(ctx.suezDays?.anchorageDays) ? ctx.suezDays.anchorageDays! : 0.5);
   let status: EstimateStatus;
   if (invalid.length > 0) status = "invalid";
   else if (toll.status === "unavailable" && fixed.every((l) => l.status === "unavailable")) status = "unavailable";
-  else if (!complete || toll.status === "placeholder" || toll.status === "manual" || conditional.some((f) => f.triggered === null) || fixed.some((l) => l.status !== "trusted")) status = "partial";
+  else if (!complete || !evidenceOnFile || daysManual || !daysGoverned || toll.status === "placeholder" || toll.status === "manual" || surcharge.status !== "trusted" || conditional.some((f) => f.triggered === null) || fixed.some((l) => l.status !== "trusted")) status = "partial";
   else status = "trusted";
 
   return {
@@ -285,9 +345,9 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
     cargoStatus,
     direction,
     transitDate: voyage.transitDate,
-    layers: { toll, fixed, conditional, waste },
+    layers: { toll, surcharge, fixed, conditional, waste },
     wasteIncludedM3,
-    totals: { tollUsd: toll.usd, fixedUsd, conditionalAppliedUsd, wasteUsd, appliedUsd, potentialUsd: round2(appliedUsd + potentialExtra), complete },
+    totals: { tollUsd: toll.usd, surchargeUsd, fixedUsd, conditionalAppliedUsd, wasteUsd, appliedUsd, potentialUsd: round2(appliedUsd + potentialExtra), complete },
     unavailable,
     invalid,
     transitDays,

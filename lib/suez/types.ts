@@ -8,7 +8,7 @@
 
 export type SuezDirection = "SB" | "NB";
 export type SuezCargoStatus = "laden" | "ballast";
-export type SuezLayer = "toll" | "fixed" | "conditional" | "waste";
+export type SuezLayer = "toll" | "fixed" | "conditional" | "waste" | "surcharge";
 export type SuezBasis =
   | "toll_tiered_scnt"
   | "flat"
@@ -25,7 +25,10 @@ export type SuezLateBand = "none" | "b1" | "b2" | "b3";
 export type LineStatus = "trusted" | "placeholder" | "manual" | "unavailable" | "invalid";
 export type EstimateStatus = "trusted" | "partial" | "unavailable" | "invalid";
 
-export const SUEZ_ALGORITHM_VERSION = "suez-engine/2";
+export const SUEZ_ALGORITHM_VERSION = "suez-engine/3";
+
+/** unknown = the version has not modelled the category surcharges (toll never trusted) · none = no surcharge in force for the window · modelled = surcharge items carry them */
+export type SuezSurchargeRegime = "unknown" | "none" | "modelled";
 
 export interface SuezTariffItem {
   code: string;
@@ -37,6 +40,10 @@ export interface SuezTariffItem {
   params: Record<string, unknown>;
   directionScope: "any" | SuezDirection;
   cargoStatusScope: "any" | SuezCargoStatus;
+  /** SCA vessel categories the item applies to; null/absent = every category */
+  categoryScope?: string[] | null;
+  /** official = instrument on file · reported = relayed/press report (never trusted) */
+  confidence?: "official" | "reported";
   conditionKey: string | null;
   payerParty: SuezPayer;
   sortOrder: number;
@@ -81,6 +88,8 @@ export interface SuezTariffVersion {
   sourceUrl?: string | null;
   notes?: string | null;
   publishedAt?: string | null;
+  /** absent on contexts older than suez-engine/3 = unknown */
+  surchargeRegime?: SuezSurchargeRegime;
 }
 
 export interface SuezTariffContext {
@@ -101,6 +110,7 @@ export type SuezTariffContextResult = SuezTariffContext | { found: false; date: 
 // reports it, never guesses. mooringCranesOk may be derived from the cranes
 // against the tariff's own SWL / boat-count parameters.
 export interface SuezVesselFacts {
+  /** SCNT may carry decimals (SCA charges fractional tons) */
   scnt: number | null;
   scgt?: number | null;
   gt: number | null;
@@ -142,8 +152,9 @@ export interface ManualValue<T> {
 
 export interface SuezOverrides {
   sdrRate?: ManualValue<number>;
-  transitDays?: number;
-  anchorageDays?: number;
+  /** a broker figure replacing the governed Suez days: always with who, why and when; the estimate is partial */
+  transitDays?: ManualValue<number>;
+  anchorageDays?: ManualValue<number>;
 }
 
 export interface SuezInput {
@@ -201,6 +212,8 @@ export interface SuezEstimate {
   transitDate: string;
   layers: {
     toll: { status: LineStatus; sdr: number | null; usd: number | null; tiers: SuezTollTierLine[]; reason: string | null };
+    /** category surcharges on the toll (temporary SCA surcharges); status says whether the version covers the category */
+    surcharge: { status: LineStatus; regime: SuezSurchargeRegime; lines: SuezLine[]; reason: string | null };
     fixed: SuezLine[];
     conditional: SuezFlag[];
     waste: SuezLine[];
@@ -208,6 +221,7 @@ export interface SuezEstimate {
   wasteIncludedM3: number | null;
   totals: {
     tollUsd: number | null;
+    surchargeUsd: number;
     fixedUsd: number; // sum of the computable fixed lines
     conditionalAppliedUsd: number;
     wasteUsd: number;
@@ -239,7 +253,8 @@ export const SUEZ_VESSEL_CATEGORIES: { key: string; label: string }[] = [
   { key: "roro", label: "Ro-Ro" },
   { key: "car_carrier", label: "Car carrier" },
   { key: "passenger", label: "Passenger / cruise" },
-  { key: "other", label: "Other / floating unit" },
+  { key: "floating_unit", label: "Floating unit (dock, rig, crane barge)" },
+  { key: "other", label: "Other" },
 ];
 
 // Best-effort mapping from the platform's vessel_type vocabulary. Unknown →

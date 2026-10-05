@@ -5,10 +5,10 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { canAccess } from "@/lib/admin/sections";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { SUEZ_BASES, SUEZ_CONDITION_KEYS, SUEZ_LAYERS } from "@/lib/suez/schemas";
+import { SUEZ_BASES, SUEZ_CONDITION_KEYS, SUEZ_LAYERS, SUEZ_SURCHARGE_REGIMES } from "@/lib/suez/schemas";
 import { SUEZ_VESSEL_CATEGORIES } from "@/lib/suez/types";
 import { parseVoyageSettings } from "@/lib/voyage/schemas";
-import { DEFAULT_VOYAGE_SETTINGS, type SettingsSource, type VoyageSettings } from "@/lib/voyage/types";
+import { DEFAULT_VOYAGE_SETTINGS, PLATFORM_CONSTANTS, type SettingsSource, type VoyageSettings } from "@/lib/voyage/types";
 
 import {
   addSdrRate, citeSource, createVersion, deleteDraftVersion, deleteItem, publishVersion, registerSource, replaceTiers,
@@ -30,8 +30,8 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-type VersionRow = { id: string; versionNo: number; status: string; effectiveFrom: string; effectiveTo: string | null; sourceRef: string; sourceUrl: string | null; notes: string | null; createdAt: string; publishedAt: string | null; itemCount: number; tierCount: number };
-type ItemRow = { id: string; code: string; label_en: string; label_ar: string | null; layer: string; basis: string; currency: string; params: Record<string, unknown>; direction_scope: string; cargo_status_scope: string; condition_key: string | null; payer_party: string; sort_order: number; is_active: boolean; notes: string | null };
+type VersionRow = { id: string; versionNo: number; status: string; effectiveFrom: string; effectiveTo: string | null; sourceRef: string; sourceUrl: string | null; notes: string | null; createdAt: string; publishedAt: string | null; itemCount: number; tierCount: number ; surchargeRegime?: string; surchargeCount?: number; sourceCount?: number };
+type ItemRow = { id: string; code: string; label_en: string; label_ar: string | null; layer: string; basis: string; currency: string; params: Record<string, unknown>; direction_scope: string; cargo_status_scope: string; condition_key: string | null; payer_party: string; sort_order: number; is_active: boolean; notes: string | null ; category_scope?: string[] | null; confidence?: string };
 type TierRow = { id: string; vessel_category: string; cargo_status: string; tier_order: number; scnt_from: number; scnt_to: number | null; sdr_per_scnt: number; confidence: string };
 type SdrRow = { id: string; rate_usd: number; as_of: string; source: string; notes: string | null; created_at: string; voided_at: string | null; void_reason: string | null };
 type EcaRow = { code: string; name: string; polygon: unknown[]; sulphur_limit_pct: number; effective_from: string; effective_to: string | null; is_active: boolean; notes: string | null; geometry_version: string; confidence: string; source_ref: string | null; source_url: string | null; sha256: string | null };
@@ -124,7 +124,7 @@ function SuezTab({ versions, selected, items, sources, citedIds, canEdit, hrefFo
               <div key={v.id} className="vd-row">
                 <div className="vd-row__main">
                   <div className="vd-row__title"><Link href={hrefFor("suez", v.id)} className="adm-link">v{v.versionNo}</Link> <StatusChip status={v.status} /> {selected?.id === v.id && <span className="vd-chip vd-chip--other">selected</span>}</div>
-                  <div className="vd-row__meta">{v.effectiveFrom} → {v.effectiveTo ?? "open"} · {v.itemCount} items · {v.tierCount} toll bands{v.tierCount === 0 ? " (toll layer unavailable)" : ""}</div>
+                  <div className="vd-row__meta">{v.effectiveFrom} → {v.effectiveTo ?? "open"} · {v.itemCount} items · {v.tierCount} toll bands{v.tierCount === 0 ? " (toll layer unavailable)" : ""} · surcharges {v.surchargeRegime ?? "unknown"}{v.surchargeRegime === "modelled" ? ` (${v.surchargeCount ?? 0})` : v.surchargeRegime === "unknown" || !v.surchargeRegime ? " (every toll partial)" : ""}</div>
                   <div className="vd-row__meta">{v.sourceRef}{v.notes ? ` — ${v.notes}` : ""}</div>
                 </div>
                 {canEdit && (
@@ -157,6 +157,7 @@ function SuezTab({ versions, selected, items, sources, citedIds, canEdit, hrefFo
               <label className="vd-span">Source URL (optional)<input name="sourceUrl" placeholder="https://www.suezcanal.gov.eg/…" /></label>
               <label>Copy items, bands and citations from<select name="copyFromVersionId" defaultValue={versions.find((v) => v.status === "published")?.id ?? ""}><option value="">— empty draft —</option>{versions.map((v) => <option key={v.id} value={v.id}>v{v.versionNo} · {v.status} · {v.effectiveFrom}</option>)}</select></label>
               <label>Notes<input name="notes" placeholder="What changed and why" /></label>
+              <label className="vd-span">Category surcharges<select name="surchargeRegime" defaultValue="unknown">{SUEZ_SURCHARGE_REGIMES.map((r) => <option key={r} value={r}>{r === "unknown" ? "unknown — not modelled (every toll partial)" : r === "none" ? "none — no surcharge in force for this window" : "modelled — surcharge items carry them"}</option>)}</select></label>
               <div className="vd-span"><button type="submit">Create draft</button></div>
             </form>
           ) : <p className="vd-muted">View only.</p>}
@@ -205,7 +206,7 @@ function SuezTab({ versions, selected, items, sources, citedIds, canEdit, hrefFo
         </Panel>
       </div>
 
-      <Panel title={selected ? `Items of v${selected.versionNo} (${selected.status})` : "Items"} help="Layer: toll (the SCNT toll), fixed (every transit), conditional (risk flags, applied only when the condition holds), waste (extras). Basis decides how params are read: flat {amount, …thresholds}; pct_of_toll {pct} | {bands:[{key,pct,capSdr}]} | {pctPerUnit,unit}; tier_by_scnt {tiers:[{from,to,amount,includedUnits}]}; per_unit {rate,unit,freeUnits}; gt_threshold {threshold,below,atOrAbove}; flag_only {ageYears?}. Thresholds live here, never in code.">
+      <Panel title={selected ? `Items of v${selected.versionNo} (${selected.status})` : "Items"} help="Layer: toll (the SCNT toll), surcharge (temporary SCA category surcharge: pct_of_toll {pct}, scoped to vessel categories, laden/ballast and direction; reported = instrument not on file, never trusted), fixed (every transit), conditional (risk flags, applied only when the condition holds), waste (extras). Basis decides how params are read: flat {amount, …thresholds}; pct_of_toll {pct} | {bands:[{key,pct,capSdr}]} | {pctPerUnit,unit}; tier_by_scnt {tiers:[{from,to,amount,includedUnits}]}; per_unit {rate,unit,freeUnits}; gt_threshold {threshold,below,atOrAbove}; flag_only {ageYears?}. Thresholds live here, never in code.">
         {!selected && <p className="vd-muted">Select a version.</p>}
         {selected && items.length === 0 && <p className="vd-muted">No items.</p>}
         {selected && items.map((it) => (
@@ -218,7 +219,7 @@ function SuezTab({ versions, selected, items, sources, citedIds, canEdit, hrefFo
               </>
             ) : (
               <div className="vd-row__meta" style={{ marginTop: 6 }}>
-                <div>{it.label_en}{it.label_ar ? ` · ${it.label_ar}` : ""} · scope {it.direction_scope}/{it.cargo_status_scope}{it.condition_key ? ` · condition ${it.condition_key}` : ""} · payer {it.payer_party} · sort {it.sort_order}</div>
+                <div>{it.label_en}{it.label_ar ? ` · ${it.label_ar}` : ""} · scope {it.direction_scope}/{it.cargo_status_scope}{it.category_scope?.length ? ` · categories ${it.category_scope.join(", ")}` : ""}{it.confidence === "reported" ? " · reported" : ""}{it.condition_key ? ` · condition ${it.condition_key}` : ""} · payer {it.payer_party} · sort {it.sort_order}</div>
                 <pre style={{ margin: "6px 0 0", fontSize: 11, whiteSpace: "pre-wrap" }}>{JSON.stringify(it.params)}</pre>
                 {it.notes && <div>{it.notes}</div>}
                 {!draftSelected && <div style={{ marginTop: 4 }}>Published versions are immutable; create a draft to change this item.</div>}
@@ -247,6 +248,8 @@ function ItemForm({ versionId, item }: { versionId: string; item: ItemRow | null
       <label>Currency<select name="currency" defaultValue={item?.currency ?? "USD"}><option>USD</option><option>SDR</option></select></label>
       <label>Direction scope<select name="directionScope" defaultValue={item?.direction_scope ?? "any"}><option value="any">any</option><option value="SB">SB</option><option value="NB">NB</option></select></label>
       <label>Cargo status scope<select name="cargoStatusScope" defaultValue={item?.cargo_status_scope ?? "any"}><option value="any">any</option><option value="laden">laden</option><option value="ballast">ballast</option></select></label>
+      <label>Vessel categories (none = all)<select name="categoryScope" multiple defaultValue={item?.category_scope ?? []} size={4}>{SUEZ_VESSEL_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select></label>
+      <label>Confidence<select name="confidence" defaultValue={item?.confidence ?? "official"}><option value="official">official (instrument on file)</option><option value="reported">reported (relay / press, not trusted)</option></select></label>
       <label>Condition key<select name="conditionKey" defaultValue={item?.condition_key ?? ""}><option value="">— none —</option>{SUEZ_CONDITION_KEYS.map((k) => <option key={k} value={k}>{k}</option>)}</select></label>
       <label>Payer<select name="payerParty" defaultValue={item?.payer_party ?? "owner"}><option value="owner">owner</option><option value="charterer">charterer</option><option value="either">either</option></select></label>
       <label>Sort order<input type="number" name="sortOrder" defaultValue={item?.sort_order ?? 100} /></label>
@@ -281,7 +284,7 @@ function TiersTab({ versions, selected, tiers, canEdit, hrefFor }: { versions: V
           </div>
         ))}
       </Panel>
-      <Panel title="Replace all bands (CSV paste)" help="One line per band: category, cargo_status, band_no, scnt_from, scnt_to (blank = open), sdr_per_scnt. Categories: dry_bulk, general_cargo, container, tanker_crude, tanker_product, chemical_tanker, lpg, lng, roro, car_carrier, passenger, other. Bands of one category must start at 0 and be contiguous. Only a draft version accepts bands.">
+      <Panel title="Replace all bands (CSV paste)" help="One line per band: category, cargo_status, band_no, scnt_from, scnt_to (blank = open), sdr_per_scnt. Categories: dry_bulk, general_cargo, container, tanker_crude, tanker_product, chemical_tanker, lpg, lng, roro, car_carrier, passenger, floating_unit, other. Bands of one category must start at 0, be contiguous and end with an open band (blank scnt_to): a finite last band would stop charging above its ceiling. Only a draft version accepts bands.">
         {canEdit && selected && draftSelected ? (
           <form action={replaceTiers} className="vd-form">
             <input type="hidden" name="versionId" value={selected.id} />
@@ -345,6 +348,8 @@ function ConstantsTab({ settings, status, problem, canEdit }: { settings: Voyage
           <label>Class A multiplier<input type="number" step="0.1" name="classA" defaultValue={s.classMultipliers.A} /></label>
           <label>Class B multiplier<input type="number" step="0.1" name="classB" defaultValue={s.classMultipliers.B} /></label>
           <label>Class C multiplier<input type="number" step="0.1" name="classC" defaultValue={s.classMultipliers.C} /></label>
+          <label className="vd-span">Suez convoy anchorages ([lat, lon] per direction; tested against the ECA zones)<input name="suezAnchorages" defaultValue={JSON.stringify(s.suez.anchorages ?? {})} placeholder='{"SB":[31.35,32.36],"NB":[29.88,32.55]}' /></label>
+          <label className="vd-span">Owner-confirmed constants (others show “platform assumption” wherever they are used)<select name="confirmed" multiple defaultValue={s.confirmed ?? []} size={7}>{PLATFORM_CONSTANTS.map((c) => <option key={c.key} value={c.key}>{c.label(s)}</option>)}</select></label>
           <label>ECA main-engine product (0.10 %)<select name="ecaFuelProductKey" defaultValue={s.eca.fuelProductKey}><option>LSMGO</option><option>ULSFO</option><option>MGO05</option><option>MDO</option></select></label>
           <label>Auxiliary distillate product<select name="ecaDistillateProductKey" defaultValue={s.eca.distillateProductKey ?? "LSMGO"}><option>LSMGO</option><option>MGO05</option><option>MDO</option></select></label>
           <label className="vd-span">Sea margin by lane (JSON, e.g. {"{"}&quot;E.MED&gt;AG&quot;: 7{"}"})<textarea name="byLane" defaultValue={JSON.stringify(s.seaMargin.byLane ?? {}, null, 2)} style={{ minHeight: 60 }} /></label>
