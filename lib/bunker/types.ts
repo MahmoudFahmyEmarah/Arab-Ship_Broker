@@ -63,7 +63,8 @@ export interface FuelPriceIndex {
 }
 
 export interface FuelPriceIndexParams {
-  portLocode?: string;
+  /** null or absent = no port (global); the Voyage seam passes null (PR-02). */
+  portLocode?: string | null;
   productKeys?: FuelProductKey[];
   asOf?: string;
   /** Stem in MT for normalising fixed charges; the database defaults to 500. */

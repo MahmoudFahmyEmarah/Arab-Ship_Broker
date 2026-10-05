@@ -13,6 +13,7 @@
 // product has an offer, never a fallback of its own.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FuelIndexSnapshot } from "./snapshots";
+import { getFuelIndexSnapshot } from "@/sdk/app/bunker";
 
 export interface FuelIndexRequest {
   portLocode: string | null;
@@ -23,8 +24,8 @@ export interface FuelIndexRequest {
 
 export type FuelIndexProvider = (supabase: SupabaseClient, params: { portLocode: string | null; productKeys: never[]; asOf?: string; stemMt?: number }) => Promise<FuelIndexSnapshot>;
 
-// Stream B is wired here at composition (see above). Until then: no index.
-const FUEL_INDEX_PROVIDER: FuelIndexProvider | null = null;
+// Stream B, wired at composition (compose/voyage-economics-rc1).
+const FUEL_INDEX_PROVIDER: FuelIndexProvider | null = getFuelIndexSnapshot;
 
 export const NO_INDEX_SNAPSHOT = (requestedPort: string | null): FuelIndexSnapshot => ({
   kind: "fuel_index",

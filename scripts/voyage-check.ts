@@ -400,7 +400,10 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(actSrc.includes('const ACTOR_REF = "run-actor"') && !actSrc.includes("actorUserId: actorId"), "snapshots carry the run-actor reference, never a user id");
   // PR-02 · the fuel seam asks for the bunkering port, the products burnt, the date; one provider slot for the composer
   const fs = readFileSync(new URL("../lib/voyage/fuel-source.ts", import.meta.url), "utf8");
-  ok(fs.includes("const FUEL_INDEX_PROVIDER: FuelIndexProvider | null = null;") && fs.includes("export async function loadFuelIndex(supabase: SupabaseClient, req: FuelIndexRequest)"), "one provider slot; the composer swaps in getFuelIndexSnapshot");
+  // Composed (compose/voyage-economics-rc1): the slot holds Stream B's provider; on the stream branch it is null.
+  ok((fs.includes("const FUEL_INDEX_PROVIDER: FuelIndexProvider | null = getFuelIndexSnapshot;") && fs.includes('import { getFuelIndexSnapshot } from "@/sdk/app/bunker";'))
+     || fs.includes("const FUEL_INDEX_PROVIDER: FuelIndexProvider | null = null;"), "one provider slot: null on the stream branch, getFuelIndexSnapshot when composed");
+  ok(fs.includes("export async function loadFuelIndex(supabase: SupabaseClient, req: FuelIndexRequest)"), "the seam takes the client and the request");
   ok(actSrc.includes("portLocode: ladenLeg.leg.from") && actSrc.includes("productKeys: voyageFuelProducts("), "the save asks the index for the load port and the voyage's products");
   eq(voyageFuelProducts("LSMGO", "LSMGO", true), ["HSFO380", "LSMGO"], "a scrubber ship burns HSFO 380 and the 0.10 % product");
   eq(voyageFuelProducts("ULSFO", "MGO05", null), ["VLSFO", "ULSFO", "MGO05"], "unknown scrubber → VLSFO plus the ECA and distillate products");
