@@ -6,8 +6,8 @@
 // exact shape `pda_replace_tariff_rules` accepts, and proves it with the real
 // engine (lib/pda/calculate.ts) on two sample calls. Nothing is loaded into
 // any database: an admin registers the source, creates a DRAFT version, pastes
-// these rules, and publishes through the PDA maker/checker flow, after
-// confirming the current rates (see README: these are 2015/2016 base values).
+// these rules, and publishes through the PDA maker/checker flow, labelled as
+// 2015/2016 base rates until the owner supplies current ones (README).
 //
 //   node --import tsx scripts/pda-egypt-488-package.ts          # check only
 //   node --import tsx scripts/pda-egypt-488-package.ts --write  # (re)write the JSON

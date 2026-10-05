@@ -22,14 +22,18 @@ engine, `lib/pda/calculate.ts`). Regenerate with `--write`.
 The JSON carries the placeholder source id `00000000-0000-4000-9000-000000000488`;
 replace it with the registered `tariff_sources.id` before pasting.
 
-## Before publishing — the values are base-year, not current
+## Before publishing — the values are base-year face values
 
-- **Escalation.** 488/2015 raises its rates **5 % a year** (capped at 5× the Law
-  24/1983 rates). 416/2019 suspended that for 3 years from 8 Sep 2019. Whether it
-  resumed after Sep 2022 is not in the owner's files. 800/2016 adds **+7 %/yr on
-  EGP and +3 %/yr on USD** rates. The JSON holds the **face values**; confirm the
-  rates in force with the port authority or a current agent proforma, and set
-  `effective_from` accordingly. Do **not** publish the face values as current.
+- **Owner ruling (5 Oct 2026): publish the 2015/2016 face values until fresh
+  data is provided.** The version must say so where members see it: name the
+  version along the lines of "Decree 488/2015 + 800/2016 base rates (not
+  escalated)". When the owner supplies a current proforma or circular, publish a
+  new version with the rates in force; the face-value version is then closed.
+- **Escalation (why the face values are low).** 488/2015 raises its rates
+  **5 % a year** (capped at 5× the Law 24/1983 rates). 416/2019 suspended that
+  for 3 years from 8 Sep 2019. Whether it resumed after Sep 2022 is not in the
+  owner's files. 800/2016 adds **+7 %/yr on EGP and +3 %/yr on USD** rates. The
+  JSON holds the **face values** and no escalation is applied.
 - **One tariff set per port.** Decree 488 is national; create one set per port
   (EGALY, EGDAM, EGPSD, EGSOK, …) with the same rules. Minimum towage/mooring
   hours differ by port (see the `towage` instructions).
