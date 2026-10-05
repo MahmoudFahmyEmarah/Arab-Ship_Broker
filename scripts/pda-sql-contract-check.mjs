@@ -7,7 +7,8 @@ const estimates = await readFile("supabase/migrations/20260923102000_pda_estimat
 const ingestion = await readFile("supabase/migrations/20260923103000_pda_admin_ingestion.sql", "utf8");
 const rollback = await readFile("supabase/rollback/20260923_pda_down.sql", "utf8");
 const actions = await readFile("app/(dashboard)/dashboard/ports-da/actions.ts", "utf8");
-const estimator = await readFile("components/pda/PdaEstimator.tsx", "utf8");
+// The live Ports DA page renders PdaRouteEstimator; the old single-port PdaEstimator was dead code (PR-09).
+const estimator = await readFile("components/pda/PdaRouteEstimator.tsx", "utf8");
 
 for (const table of [
   "port_terminals", "tariff_publishers", "tariff_sources", "tariff_import_batches", "tariff_staged_rules",
@@ -68,6 +69,6 @@ assert.match(ingestion, /Stages untrusted PDF\/spreadsheet extraction only/i);
 assert.doesNotMatch(ingestion, /insert into public\.port_tariff_versions/i);
 assert.doesNotMatch(ingestion, /update public\.port_tariff_versions/i);
 assert.match(actions, /is_market_partner[\s\S]+appUser\.is_market_partner === true/i);
-assert.match(estimator, /React\.useEffect\(\(\) => \{[\s\S]+setResult\(null\)[\s\S]+manualLines/i);
+assert.match(estimator, /React\.useEffect\(\(\) => \{[\s\S]+setResult\(null\)[\s\S]+loadManualLines[\s\S]+dischargeManualLines|React\.useEffect\(\(\) => \{[\s\S]+setResult\(null\)[\s\S]+dischargeManualLines[\s\S]+loadManualLines/i);
 
 console.log("PDA SQL CONTRACT: ALL ASSERTIONS PASSED");

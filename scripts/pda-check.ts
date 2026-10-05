@@ -250,4 +250,46 @@ assert.deepEqual(
   { ...deterministicB, generatedAt: "ignored" },
 );
 
+// ── PR-09 robustness (B2O-012) ──────────────────────────────────────────────
+// A gap in a published table is a missing line with a warning, not a crash.
+const gapped = calculatePda(request, {
+  ...version,
+  rules: [
+    version.rules[0]!,
+    { id: ids.progressive, code: "pilotage", label: "Pilotage", basis: "tiered_flat", unit: "gt", priority: 30, source,
+      bands: [{ order: 1, lowerBound: 0, upperBound: 9999, flatAmount: 100 }, { order: 2, lowerBound: 15000, upperBound: null, flatAmount: 300 }] },
+  ],
+});
+assert.equal(gapped.lines.some((l) => l.ruleCode === "pilotage"), false, "gap: no priced pilotage line");
+assert.equal(gapped.warnings.some((w) => w.code === "TARIFF_GAP" && w.ruleCode === "pilotage"), true, "gap: TARIFF_GAP warning");
+assert.equal(gapped.coverage, "partial", "gap: the estimate is partial, not failed");
+assert.equal(gapped.totals.native, 100, "gap: the rest of the tariff is still priced");
+
+// A condition on a fact the call did not supply warns; it is never silently skipped.
+const noGt = calculatePda(
+  { ...request, vessel: { dwt: 18000, vesselType: "Bulk Carrier" } },
+  { ...version, rules: [{ ...version.rules[0]!, applicability: { minGt: 500 } }] },
+);
+assert.equal(noGt.lines.length, 0);
+assert.equal(noGt.warnings.some((w) => w.code === "MISSING_INPUT" && /GT/.test(w.message)), true, "missing GT: MISSING_INPUT");
+assert.equal(noGt.coverage, "manual_required");
+const noCargoType = calculatePda(
+  request,
+  { ...version, rules: [{ ...version.rules[0]!, applicability: { cargoTypes: ["clean_bulk"] } }] },
+);
+assert.equal(noCargoType.warnings.some((w) => w.code === "MISSING_INPUT" && /cargo type/.test(w.message)), true, "missing cargo type: MISSING_INPUT");
+// A rule excluded by its requested services stays simply not applicable.
+const notRequested = calculatePda(
+  { ...request, vessel: { dwt: 18000 } },
+  { ...version, rules: [{ ...version.rules[0]!, applicability: { requestedServices: ["pilotage"], minGt: 500 } }] },
+);
+assert.equal(notRequested.warnings.some((w) => w.code === "MISSING_INPUT"), false, "not requested: no missing-input noise");
+
+// A percentage of a base that does not apply to this call counts that base as zero.
+const pctReq = calculatePda({ ...request, call: { ...request.call, voyageScope: "international" } }, {
+  ...version, rules: [version.rules[0]!, { ...version.rules[1]!, applicability: { voyageScopes: ["domestic"] } }, version.rules[3]!],
+});
+assert.equal(pctReq.lines.find((l) => l.ruleCode === "vat")?.amount, 10, "VAT on port dues only: berth does not apply");
+assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
+
 console.log("PDA CHECK: ALL ASSERTIONS PASSED");

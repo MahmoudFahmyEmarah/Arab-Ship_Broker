@@ -39,6 +39,37 @@ function inRange(value: number | null | undefined, min?: number, max?: number): 
   return (min == null || value >= min) && (max == null || value <= max);
 }
 
+// Facts a rule's conditions need but the call did not supply (PR-09): such a
+// rule is neither applied nor silently skipped; it raises MISSING_INPUT.
+function missingFacts(rule: PdaTariffRule, request: PdaRequest): string[] {
+  const a: PdaApplicability = rule.applicability ?? {};
+  const out: string[] = [];
+  const list = (name: string, value: string | null | undefined, allowed?: string[]) => {
+    if (allowed?.length && !value) out.push(name);
+  };
+  const range = (name: string, value: number | null | undefined, min?: number, max?: number) => {
+    if ((min != null || max != null) && value == null) out.push(name);
+  };
+  list("vessel type", request.vessel.vesselType, a.vesselTypes);
+  list("cargo type", request.call.cargoType, a.cargoTypes);
+  list("cargo status", request.call.cargoStatus, a.cargoStatuses);
+  list("voyage scope", request.call.voyageScope, a.voyageScopes);
+  list("location", request.call.location, a.locations);
+  range("GT", request.vessel.gt, a.minGt, a.maxGt);
+  range("NT", request.vessel.nt, a.minNt, a.maxNt);
+  range("SCNRT", request.vessel.scnrt, a.minScnrt, a.maxScnrt);
+  range("DWT", request.vessel.dwt, a.minDwt, a.maxDwt);
+  range("LOA", request.vessel.loaM, a.minLoaM, a.maxLoaM);
+  range("draft", request.vessel.draftM, a.minDraftM, a.maxDraftM);
+  range("cargo quantity", request.call.cargoQuantityMt, a.minCargoQuantityMt, a.maxCargoQuantityMt);
+  return out;
+}
+
+function requestedServiceExcludes(rule: PdaTariffRule, request: PdaRequest): boolean {
+  const wanted = rule.applicability?.requestedServices;
+  return !!wanted?.length && !wanted.some((s) => request.call.requestedServices.includes(s));
+}
+
 function applies(rule: PdaTariffRule, request: PdaRequest): boolean {
   const a: PdaApplicability = rule.applicability ?? {};
   if (a.requestedServices?.length && !a.requestedServices.some((s) => request.call.requestedServices.includes(s))) return false;
@@ -86,7 +117,8 @@ function findBand(rule: PdaTariffRule, quantity: number): PdaTariffBand {
   const band = sortedBands(rule).find(
     (candidate) => quantity >= candidate.lowerBound && (candidate.upperBound == null || quantity <= candidate.upperBound),
   );
-  if (!band) throw new Error(`INVALID_TARIFF:no band covers ${quantity}`);
+  // A gap in a published table is a missing line, not a failed estimate (PR-09).
+  if (!band) throw new Error(`TARIFF_GAP:no band covers ${quantity}`);
   return band;
 }
 
@@ -101,7 +133,7 @@ function progressiveAmount(rule: PdaTariffRule, quantity: number): number {
   return total;
 }
 
-function automaticAmount(rule: PdaTariffRule, request: PdaRequest, prior: Map<string, number>) {
+function automaticAmount(rule: PdaTariffRule, request: PdaRequest, prior: Map<string, number>, notApplicable: Set<string>) {
   const included = rule.includedUnits ?? 0;
   switch (rule.basis) {
     case "flat":
@@ -148,7 +180,12 @@ function automaticAmount(rule: PdaTariffRule, request: PdaRequest, prior: Map<st
       const codes = rule.applicability?.percentageBaseCodes ?? [];
       if (!codes.length) throw new Error("INVALID_TARIFF:percentageBaseCodes required");
       const quantity = codes.reduce((sum, code) => {
-        if (!prior.has(code)) throw new Error(`MISSING_INPUT:calculated percentage base ${code}`);
+        // A base rule that does not apply to this call contributes nothing (PR-09);
+        // one that applies but could not be priced still blocks the line.
+        if (!prior.has(code)) {
+          if (notApplicable.has(code)) return sum;
+          throw new Error(`MISSING_INPUT:calculated percentage base ${code}`);
+        }
         return sum + prior.get(code)!;
       }, 0);
       const rate = requireNumber(rule.rate, "percentage rate");
@@ -306,6 +343,7 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
   const manualQuotes = indexManualRuleQuotes(manualLines);
   const manualByRule = manualQuotes.byRule;
   const applicableManualRuleCodes = new Set<string>();
+  const notApplicable = new Set<string>();
   for (const code of manualQuotes.duplicateRuleCodes) {
     warnings.push(warning(
       "MANUAL_QUOTE_DUPLICATE",
@@ -315,7 +353,13 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
   }
 
   for (const rule of [...version.rules].sort((a, b) => a.priority - b.priority || a.code.localeCompare(b.code))) {
-    if (!applies(rule, request)) continue;
+    if (requestedServiceExcludes(rule, request)) { notApplicable.add(rule.code); continue; }
+    const missing = missingFacts(rule, request);
+    if (missing.length) {
+      warnings.push(warning("MISSING_INPUT", `${rule.label} requires ${missing.join(", ")} to decide whether it applies.`, rule.code));
+      continue;
+    }
+    if (!applies(rule, request)) { notApplicable.add(rule.code); continue; }
     const manual = manualByRule.get(rule.code);
     if (rule.basis === "manual_quote") {
       applicableManualRuleCodes.add(rule.code);
@@ -353,7 +397,7 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
     }
 
     try {
-      const calculated = automaticAmount(rule, request, byCode);
+      const calculated = automaticAmount(rule, request, byCode, notApplicable);
       let beforeTax = calculated.amount;
       if (rule.minimumAmount != null) beforeTax = Math.max(beforeTax, rule.minimumAmount);
       if (rule.maximumAmount != null) beforeTax = Math.min(beforeTax, rule.maximumAmount);
@@ -381,6 +425,10 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith("TARIFF_GAP:")) {
+        warnings.push(warning("TARIFF_GAP", `${rule.label}: the published table has no band for ${message.slice("TARIFF_GAP:no band covers ".length)}; the line is not priced.`, rule.code));
+        continue;
+      }
       if (message.startsWith("MISSING_INPUT:")) {
         warnings.push(warning("MISSING_INPUT", `${rule.label} requires ${message.slice("MISSING_INPUT:".length)}.`, rule.code));
         continue;
@@ -429,6 +477,7 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
     : undefined;
   const incomplete = warnings.some((item) => (
     item.code === "MISSING_INPUT"
+    || item.code === "TARIFF_GAP"
     || item.code === "MANUAL_QUOTE_REQUIRED"
     || item.code === "MANUAL_QUOTE_DUPLICATE"
     || item.code === "MANUAL_QUOTE_UNMATCHED"
