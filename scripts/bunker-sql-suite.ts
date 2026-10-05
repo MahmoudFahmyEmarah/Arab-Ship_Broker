@@ -538,6 +538,92 @@ begin
     raise exception 'R6 FAILED: the admin/service view changed: %', r; end if;
 end $t$;
 select 'R6 ok: members get the index as of now at a standard stem; admins unchanged';
+${asMember}
+do $t$ declare pin record;
+begin
+  -- O2B-010 P2-6: the stem tie rule, pinned (a tie goes to the larger stem).
+  for pin in select * from (values (50, 100), (175, 250), (1500, 2000), (7500, 10000), (20000, 10000)) v(asked, used) loop
+    if (public.get_fuel_price_index('GRPIR', array['VLSFO'], null, pin.asked)->>'stemMt')::numeric <> pin.used then
+      raise exception 'R6 FAILED: stem % should snap to %', pin.asked, pin.used; end if;
+  end loop;
+end $t$;
+${asOwner}
+select 'R6 ok: stem tie rule pinned';
+
+-- O2B-010 corrections (110000).
+do $t$ declare v_a uuid; v_b uuid; d jsonb;
+begin
+  -- R7 (P1): a live price whose replacement is scheduled can still be withdrawn.
+  select id into v_a from public.bunker_quotes
+   where supplier_id = '${A}' and port_locode = 'GRPIR' and product_key = 'VLSFO' and status = 'approved' and superseded_at is null;
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+  values ('${A}', 'GRPIR', 'VLSFO', 670, now() + interval '2 days', now() + interval '9 days', 'admin_input', 'submitted', now())
+  returning id into v_b;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_b, 'approve', null);
+  d := public.admin_bunker_dashboard('${ADMIN_ID}');
+  if (select count(*) from jsonb_array_elements(d->'quotes') x where x->>'id' in (v_a::text, v_b::text)) <> 2 then
+    raise exception 'R7 FAILED: the console does not list both the live and the scheduled quote'; end if;
+  if (select (x->>'liveNow')::boolean from jsonb_array_elements(d->'quotes') x where x->>'id' = v_b::text) then
+    raise exception 'R7 FAILED: the scheduled quote is reported live'; end if;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_a, 'withdraw', 'withdrawn early');
+  if (select status from public.bunker_quotes where id = v_a) <> 'withdrawn' then
+    raise exception 'R7 FAILED: the live quote could not be withdrawn'; end if;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_b, 'withdraw', 'tidy up');
+end $t$;
+select 'R7 ok: a live price with a scheduled replacement can be withdrawn; console lists both';
+
+do $t$ declare v_a uuid; v_b uuid; v_c uuid; v_b2 uuid; s3 timestamptz := date_trunc('second', now()) + interval '3 days';
+  p numeric;
+  live_at constant text := 'select l.normalised_usd_mt from public.fn_bunker_live_prices($1, 500) l where l.supplier_id = ''${B}'' and l.port_locode = ''CYLCA'' and l.product_key = ''VLSFO''';
+begin
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+  values ('${B}', 'CYLCA', 'VLSFO', 600, now() - interval '1 hour', now() + interval '10 days', 'admin_input', 'submitted', now() - interval '1 hour')
+  returning id into v_a;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_a, 'approve', null);
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+  values ('${B}', 'CYLCA', 'VLSFO', 610, s3, s3 + interval '7 days', 'admin_input', 'submitted', now())
+  returning id into v_b;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_b, 'approve', null);
+
+  -- R8 (P2-3): a scheduled supersession cannot be moved into the past.
+  begin
+    update public.bunker_quotes set superseded_at = now() - interval '1 hour' where id = v_a;
+    raise exception 'R8 FAILED: a supersession was backdated';
+  exception when sqlstate '55000' then
+    if sqlerrm not like '%backdated%' then raise exception 'R8 FAILED: wrong error %', sqlerrm; end if;
+  end;
+
+  -- R9 (P2-4): C starting before B ends the whole chain at C's start; cancelling C restores exactly.
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+  values ('${B}', 'CYLCA', 'VLSFO', 620, s3 - interval '2 days', s3 + interval '5 days', 'admin_input', 'submitted', now())
+  returning id into v_c;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_c, 'approve', null);
+  execute live_at into p using s3 - interval '1 day';
+  if p is distinct from 620 then raise exception 'R9 FAILED: between C and B starts expected 620, got %', p; end if;
+  execute live_at into p using s3 + interval '1 day';
+  if p is distinct from 620 then raise exception 'R9 FAILED: after B start C should still win (B superseded before starting), got %', p; end if;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_c, 'withdraw', 'scheduled in error');
+  if (select superseded_at from public.bunker_quotes where id = v_a) is distinct from s3
+     or (select superseded_at from public.bunker_quotes where id = v_b) is not null then
+    raise exception 'R9 FAILED: cancelling C did not restore A to B''s start and B to open'; end if;
+  execute live_at into p using s3 - interval '1 day';
+  if p is distinct from 600 then raise exception 'R9 FAILED: A should be live before B starts, got %', p; end if;
+  execute live_at into p using s3 + interval '1 day';
+  if p is distinct from 610 then raise exception 'R9 FAILED: B should be live after its start, got %', p; end if;
+
+  -- R10 (P2-5): a second replacement with the same start; cancelling it restores only B.
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+  values ('${B}', 'CYLCA', 'VLSFO', 630, s3, s3 + interval '7 days', 'admin_input', 'submitted', now())
+  returning id into v_b2;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_b2, 'approve', null);
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_b2, 'withdraw', 'duplicate');
+  if (select superseded_at from public.bunker_quotes where id = v_b) is not null
+     or (select superseded_at from public.bunker_quotes where id = v_a) is distinct from s3 then
+    raise exception 'R10 FAILED: equal-start cancel did not restore exactly'; end if;
+  execute live_at into p using s3 + interval '1 day';
+  if p is distinct from 610 then raise exception 'R10 FAILED: B should be live again, got %', p; end if;
+end $t$;
+select 'R8-R10 ok: no backdating; a chain ends at the new start; a cancel restores exactly, equal starts included';
 `);
 
 // Grants: anon reaches nothing; members only the five member RPCs.

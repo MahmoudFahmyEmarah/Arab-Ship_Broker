@@ -82,8 +82,11 @@ function SupplierTable({ supplier, products, now }: {
   // duplicating or conflicting. Cleared on success.
   const attempt = React.useRef<SubmissionAttempt | null>(null);
 
-  const live = (locode: string, key: string) =>
-    supplier.quotes.find((q) => q.portLocode === locode && q.productKey === key && q.status === "approved");
+  // The price live now wins over a scheduled replacement (110000); otherwise the scheduled one.
+  const live = (locode: string, key: string) => {
+    const approved = supplier.quotes.filter((q) => q.portLocode === locode && q.productKey === key && q.status === "approved");
+    return approved.find((q) => q.liveNow) ?? approved[0];
+  };
   const pending = (locode: string, key: string) =>
     supplier.quotes.find((q) => q.portLocode === locode && q.productKey === key && q.status === "submitted");
 
@@ -144,9 +147,10 @@ function SupplierTable({ supplier, products, now }: {
         return { locode, key, price: Number(v) };
       });
 
+  // One price per port × product: the one live now (a scheduled replacement is not republished).
   const republish = () =>
     supplier.quotes
-      .filter((q) => q.status === "approved")
+      .filter((q) => q.status === "approved" && q.liveNow !== false)
       .map((q) => ({ locode: q.portLocode, key: q.productKey, price: q.priceUsdMt }));
 
   return (

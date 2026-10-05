@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ComingSoon, type ComingSoonVariant } from "./ComingSoon";
 import type { ComingSoonDesign } from "@/lib/app-settings";
 import "./beta-gate.css";
+import { isBetaOpenPath } from "@/lib/portal/beta-open";
 
 // Page order used to rotate the overlay designs (radar / beacon / compass) so
 // each consecutive locked page gets the next look. Most-specific paths first so
@@ -63,7 +64,7 @@ export function BetaGate({
   // No lock when: the flag is off, the viewer is an admin, or we're on the
   // Dashboard root (the one page members keep, fully interactive).
   const isDashboardRoot = pathname === "/dashboard" || pathname === "/dashboard/";
-  if (!betaMode || isAdmin || isDashboardRoot) {
+  if (!betaMode || isAdmin || isDashboardRoot || isBetaOpenPath(pathname)) {
     return <>{children}</>;
   }
 

@@ -45,6 +45,8 @@ export interface AdminBunkerQuote {
   submittedAt: string;
   freshness: QuoteFreshness;
   validNow: boolean;
+  /** Approved, started and not yet superseded (110000). */
+  liveNow?: boolean;
 }
 
 export interface AdminBunkerEvent {

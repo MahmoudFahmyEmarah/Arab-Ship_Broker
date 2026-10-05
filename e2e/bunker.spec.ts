@@ -12,7 +12,7 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PASSWORD, apiClientAs, signInAs } from "./fixture-room.helpers";
@@ -41,16 +41,34 @@ function localKeys() {
     url = out.match(/^API_URL="?([^"\n]+)"?/m)?.[1] ?? url;
   }
   if (!service) throw new Error("No local service key");
-  if (/rezfejaxbmdzkslrrefr/.test(url)) throw new Error("Refusing to seed bunker data against production");
-  // Hosted staging only when named explicitly (owner instruction, 5 Oct 2026).
-  const staging = STAGING_REF !== "" && url.includes(STAGING_REF);
-  if (!staging && !/127\.0\.0\.1|localhost/.test(url)) throw new Error(`Refusing to seed bunker data against ${url}`);
+  assertTarget(url);
   return { url, service };
 }
 
-// E2E_STAGING_REF=sidcsytgqalqacsgyguz allows the staging project; cleanup then
-// runs through `supabase db query --linked` from E2E_STAGING_WORKDIR.
-const STAGING_REF = process.env.E2E_STAGING_REF === "sidcsytgqalqacsgyguz" ? process.env.E2E_STAGING_REF : "";
+// Target guard (O2B-010 P0). Local by default; hosted staging only when
+// E2E_STAGING_REF names it, the API host is exactly that project, and the
+// cleanup workdir is linked to it. Production is refused by ref everywhere.
+const PROD_REF = "rezfejaxbmdzkslrrefr";
+const STAGING_PROJECT = "sidcsytgqalqacsgyguz";
+const STAGING_REF = process.env.E2E_STAGING_REF === STAGING_PROJECT ? STAGING_PROJECT : "";
+
+function linkedRef(dir: string): string {
+  try { return readFileSync(path.join(dir, "supabase", ".temp", "project-ref"), "utf8").trim(); } catch { return ""; }
+}
+
+function assertTarget(url: string) {
+  const host = new URL(url).hostname;
+  if (url.includes(PROD_REF)) throw new Error("Refusing to seed bunker data against production");
+  if (!STAGING_REF) {
+    if (host !== "127.0.0.1" && host !== "localhost") throw new Error(`Refusing to seed bunker data against ${host}`);
+    return;
+  }
+  if (host !== `${STAGING_REF}.supabase.co`) throw new Error(`E2E_STAGING_REF is set but the API host is ${host}`);
+  const dir = process.env.E2E_STAGING_WORKDIR ?? "";
+  const ref = dir ? linkedRef(dir) : "";
+  if (ref === PROD_REF) throw new Error("The cleanup workdir is linked to production");
+  if (ref !== STAGING_REF) throw new Error(`The cleanup workdir must be linked to ${STAGING_REF} (found "${ref}")`);
+}
 
 async function seed(): Promise<Seed> {
   const { url, service } = localKeys();
@@ -93,6 +111,8 @@ function cleanup(s: Seed) {
   // Quotes and events are append-only by trigger; replica mode bypasses it for test teardown.
   const sql = `
 set session_replication_role = replica;
+delete from public.bunker_quote_supersessions where approved_quote_id in (select id from public.bunker_quotes where supplier_id = '${s.supplierId}')
+   or superseded_quote_id in (select id from public.bunker_quotes where supplier_id = '${s.supplierId}');
 delete from public.bunker_quote_events where supplier_id = '${s.supplierId}';
 delete from public.bunker_quotes where supplier_id = '${s.supplierId}';
 delete from public.bunker_supplier_members where supplier_id = '${s.supplierId}';
@@ -104,11 +124,15 @@ delete from auth.users where id in (${ids});
 `;
   if (STAGING_REF) {
     // Hosted staging: one linked query; a failure must be visible, not swallowed.
-    const dir = process.env.E2E_STAGING_WORKDIR;
-    if (!dir) throw new Error("E2E_STAGING_WORKDIR is required to clean staging");
+    const dir = process.env.E2E_STAGING_WORKDIR ?? "";
+    if (linkedRef(dir) !== STAGING_REF) throw new Error("Refusing to clean: the workdir is not linked to staging");
     const file = path.join(os.tmpdir(), `bunker-e2e-cleanup-${s.stamp}.sql`);
     writeFileSync(file, `begin;\n${sql}\ncommit;\n`);
-    execSync(`supabase db query --linked --workdir "${dir}" --file "${file}"`, { stdio: ["ignore", "ignore", "inherit"] });
+    try {
+      execSync(`supabase db query --linked --workdir "${dir}" --file "${file}"`, { stdio: ["ignore", "ignore", "inherit"] });
+    } finally {
+      rmSync(file, { force: true });
+    }
     return;
   }
   try {
