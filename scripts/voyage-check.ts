@@ -13,6 +13,7 @@ import { canonicalJson, sealSnapshot, type FuelIndexSnapshot } from "../lib/voya
 import { DEFAULT_VOYAGE_SETTINGS, type VoyageInput, type VoyageSettings } from "../lib/voyage/types";
 import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage/calculator-policy";
 import { canalFromSuez, suezTransitDate } from "../lib/voyage/canal";
+import { voyageFuelProducts } from "../lib/voyage/fuel-source";
 import { estimateSuezTransit } from "../lib/suez/engine";
 import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
 
@@ -397,6 +398,13 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(!vy.includes("Every figure comes from governed data"), "the page no longer claims every figure is governed");
   const actSrc = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
   ok(actSrc.includes('const ACTOR_REF = "run-actor"') && !actSrc.includes("actorUserId: actorId"), "snapshots carry the run-actor reference, never a user id");
+  // PR-02 · the fuel seam asks for the bunkering port, the products burnt, the date; one provider slot for the composer
+  const fs = readFileSync(new URL("../lib/voyage/fuel-source.ts", import.meta.url), "utf8");
+  ok(fs.includes("const FUEL_INDEX_PROVIDER: FuelIndexProvider | null = null;") && fs.includes("export async function loadFuelIndex(supabase: SupabaseClient, req: FuelIndexRequest)"), "one provider slot; the composer swaps in getFuelIndexSnapshot");
+  ok(actSrc.includes("portLocode: ladenLeg.leg.from") && actSrc.includes("productKeys: voyageFuelProducts("), "the save asks the index for the load port and the voyage's products");
+  eq(voyageFuelProducts("LSMGO", "LSMGO", true), ["HSFO380", "LSMGO"], "a scrubber ship burns HSFO 380 and the 0.10 % product");
+  eq(voyageFuelProducts("ULSFO", "MGO05", null), ["VLSFO", "ULSFO", "MGO05"], "unknown scrubber → VLSFO plus the ECA and distillate products");
+  ok(!/585|725/.test(fs), "no fallback price is hard-coded in the seam");
   // contract: server-side derivations
   const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
   for (const needle of ["rl.route!.chokepoints.includes(\"SUEZ\")", "suezDirection", "getPointEcaZones(supabase, point[0], point[1], date)", "portEca(ladenRoute?.startZones", "saved without the cargo link", "saved without the position link", "vesselSource = sameFacts(", "suezTransitDate(startDate, offset)", "cargoStatus: which", "routeVerified: r.verified"]) ok(act.includes(needle), `save derives on the server: ${needle.slice(0, 50)}`);

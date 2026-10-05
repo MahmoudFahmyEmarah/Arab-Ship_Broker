@@ -350,6 +350,51 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   eq(reportedFixed.success, false, "only a surcharge item may be reported");
 }
 
+// ── 15 · Escort tugs and contingent charges (Clarksons SB guide §8, §26; owner ruling O2B-009 §5) ─
+{
+  const RULES = [
+    { status: "laden", scntBelow: 70000, draftFtOver: 47, excludeCategories: ["container"], tugs: 1 },
+    { status: "laden", scntMin: 70000, scntBelow: 90000, excludeCategories: ["container"], tugs: 1 },
+    { status: "laden", scntMin: 90000, excludeCategories: ["container"], tugs: 2 },
+    { status: "ballast", scntMin: 130000, excludeCategories: ["container"], tugs: 1 },
+    { categories: ["lpg", "lng"], scntMin: 40000, scntBelow: 90000, tugs: 1 },
+    { categories: ["lpg", "lng"], scntMin: 90000, tugs: 2 },
+    { status: "ballast", beamFtOver: 218, beamFtMax: 233, excludeCategories: ["container"], tugs: 1 },
+    { status: "ballast", beamFtOver: 233, excludeCategories: ["container"], tugs: 2 },
+    { categories: ["container"], scntMin: 170000, tugs: 2 },
+    { status: "laden", categories: ["tanker_crude", "tanker_product", "chemical_tanker", "dry_bulk"], scntBelow: 70000, doubleBottom: false, tugs: 1 },
+  ];
+  const escort = item({ code: "escort_tugs", labelEn: "Escort tug(s)", layer: "conditional", basis: "flag_only", params: { rules: RULES }, conditionKey: "escort_tugs", sortOrder: 205 });
+  const cancel = item({ code: "cancel_small", labelEn: "Booking cancellation (small ships, 12 h)", layer: "conditional", basis: "flag_only", params: { amount: 1000, currency: "USD" }, conditionKey: "contingent", notes: "Booking cancelled within 12 hours", sortOrder: 600 });
+  const ctx = (extra: SuezTariffItem[]) => ({ ...ctxFor(1, "2026-04-20"), items: [...seedItems(1), ...extra] });
+  const run = (v: Partial<SuezInput["vessel"]>, cargoStatus: "laden" | "ballast" = "laden") =>
+    estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, ...v }, voyage: { ...rubato.voyage, cargoStatus } }, ctx([escort, cancel]));
+  const flag = (e: ReturnType<typeof run>) => e.layers.conditional.find((f) => f.code === "escort_tugs")!;
+
+  const big = run({ scnt: 95000, draftFt: 50, beamFt: 150, doubleBottom: true });
+  eq([flag(big).triggered, flag(big).quantity], [true, 2], "laden over 90,000 SCNT → two escort tugs");
+  ok(flag(big).status === "unavailable" && !big.totals.complete && big.status === "partial" && big.unavailable.some((u) => u.code === "escort_tugs"), "a required escort has no published rate: the total is incomplete, never silently zero");
+  eq(flag(run({ scnt: 80000, draftFt: 40, beamFt: 150, doubleBottom: true })).quantity, 1, "laden 70,000–90,000 → one tug");
+  const deep = run({ scnt: 16070, draftFt: 48, beamFt: 100, doubleBottom: true });
+  eq([flag(deep).triggered, flag(deep).quantity], [true, 1], "laden < 70,000 with draft over 47 ft → one tug");
+  eq(flag(run({ scnt: 16070, draftFt: 40, beamFt: 100, doubleBottom: true })).triggered, false, "a small laden bulker with double bottom and normal draft needs none");
+  const unknown = run({ scnt: 16070, draftFt: null, beamFt: 100, doubleBottom: true });
+  ok(flag(unknown).triggered === null && flag(unknown).reason.includes("arrival draft"), "an unknown draft leaves the rule undecided and names the missing fact");
+  eq(flag(run({ scnt: 16070, draftFt: 40, beamFt: 100, doubleBottom: false })).quantity, 1, "a laden bulker without double-bottom tanks → one tug");
+  eq(flag(run({ scnt: 140000, draftFt: 30, beamFt: 150, doubleBottom: true }, "ballast")).quantity, 1, "ballast over 130,000 SCNT → one tug");
+  eq(flag(run({ scnt: 50000, draftFt: 30, beamFt: 240, doubleBottom: true }, "ballast")).quantity, 2, "ballast beam over 233 ft → two tugs");
+  const box = estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, category: "container", scnt: 150000, draftFt: 50, beamFt: 200, doubleBottom: true } }, ctx([escort, cancel]));
+  eq(flag(box).triggered, false, "container ships under 170,000 SCNT are exempt");
+  const lng = estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, category: "lng", scnt: 95000, draftFt: 30, beamFt: 150, doubleBottom: true }, voyage: { ...rubato.voyage, cargoStatus: "ballast" } }, ctx([escort, cancel]));
+  eq(flag(lng).quantity, 2, "LNG over 90,000 SCNT, laden or ballast → two tugs");
+  const c = big.layers.conditional.find((f) => f.code === "cancel_small")!;
+  ok(c.contingent === true && c.triggered === false && c.appliedUsd === 0 && c.reason.includes("USD 1000"), "a contingent fee is listed with its amount and never applied");
+  near(run({ scnt: 16070, draftFt: 40, beamFt: 100, doubleBottom: true }).totals.potentialUsd, run({ scnt: 16070, draftFt: 40, beamFt: 100, doubleBottom: true }).totals.appliedUsd + run({ scnt: 16070, draftFt: 40, beamFt: 100, doubleBottom: true }).layers.conditional.filter((f) => f.triggered !== true && f.potentialUsd != null).reduce((a, f) => a + (f.potentialUsd ?? 0), 0), 0.01, "contingent fees are not added to the exposure");
+  const bad = estimateSuezTransit(rubato, ctx([{ ...escort, params: {} }]));
+  eq(bad.status, "invalid", "escort rules missing from the item params → invalid tariff data");
+  eq(parseSuezInput({ ...rubato, vessel: { ...rubato.vessel, draftFt: -1 } }).ok, false, "a negative draft is refused");
+}
+
 // ── 12 · Contract: fixtures mirror the seed, governance SQL carries the guards ─
 {
   const seed = readFileSync(new URL("../supabase/migrations/20261003200100_suez_tariff_seed.sql", import.meta.url), "utf8");

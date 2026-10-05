@@ -280,10 +280,46 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
         else if (vessel.firstTransit === false) reason = "Not a first transit.";
         else { triggered = null; reason = "Transit history unknown: confirm whether this is the vessel's first Suez transit."; }
         break;
+      case "escort_tugs": {
+        // Rules are data; an unknown fact a rule needs makes it undecided, never a charge or a waiver.
+        const rules = Array.isArray(p.rules) ? (p.rules as Record<string, unknown>[]) : null;
+        if (!rules || rules.length === 0) { paramError = "params.rules must list the escort triggers"; break; }
+        let tugs = 0; let undecidedTugs = 0; const hits: string[] = []; const unknowns = new Set<string>();
+        for (const r of rules) {
+          const t = isNum(r.tugs) ? r.tugs : 0;
+          if (r.status && r.status !== cargoStatus) continue;
+          if (Array.isArray(r.categories) && !(r.categories as string[]).includes(vessel.category)) continue;
+          if (Array.isArray(r.excludeCategories) && (r.excludeCategories as string[]).includes(vessel.category)) continue;
+          let verdict: boolean | null = true;
+          const need = (known: boolean, ok: boolean, fact: string) => { if (!known) { unknowns.add(fact); if (verdict !== false) verdict = null; } else if (!ok) verdict = false; };
+          if (isNum(r.scntMin) || isNum(r.scntBelow)) need(vessel.scnt != null, vessel.scnt != null && (!isNum(r.scntMin) || vessel.scnt > (r.scntMin as number)) && (!isNum(r.scntBelow) || vessel.scnt < (r.scntBelow as number)), "SCNT");
+          if (isNum(r.draftFtOver)) need(vessel.draftFt != null, vessel.draftFt != null && vessel.draftFt > (r.draftFtOver as number), "arrival draft");
+          if (isNum(r.beamFtOver) || isNum(r.beamFtMax)) need(vessel.beamFt != null, vessel.beamFt != null && (!isNum(r.beamFtOver) || vessel.beamFt > (r.beamFtOver as number)) && (!isNum(r.beamFtMax) || vessel.beamFt <= (r.beamFtMax as number)), "beam");
+          if (r.doubleBottom === false) need(vessel.doubleBottom != null, vessel.doubleBottom === false, "double-bottom tanks");
+          if (verdict === true && t > tugs) { tugs = t; hits.push(`${t} tug(s)`); }
+          if (verdict === null && t > undecidedTugs) undecidedTugs = t;
+        }
+        if (tugs > 0) { triggered = true; quantity = tugs; reason = `${tugs} escort tug(s) required by the SCA escort rules for this ${cargoStatus} ${vessel.category} transit.`; }
+        else if (undecidedTugs > 0) { triggered = null; reason = `Escort tugs may be required (up to ${undecidedTugs}); not sourced: ${[...unknowns].join(", ")}.`; }
+        else reason = "No escort tug required by the SCA escort rules.";
+        break;
+      }
+      case "contingent": {
+        const amt = isNum(p.amount) ? p.amount : null;
+        triggered = false;
+        reason = `${amt != null ? `${typeof p.currency === "string" ? p.currency : item.currency} ${fmt(amt)}` : "Charge"} only if it happens: ${item.notes ?? item.labelEn}.`;
+        break;
+      }
       default:
         triggered = null; reason = `Unknown condition "${key}".`; paramError = `unknown condition key "${key}"`;
     }
     const flag = evalConditional(item, { key, triggered, reason, quantity, tollSdr: toll.sdr, toUsd, lateBand: voyage.lateArrivalBand ?? "none", convStatus: conv.status, paramError });
+    if (key === "contingent") flag.contingent = true;
+    // A required escort has no published rate: the SCA invoices it, so the transit total is not complete without it.
+    if (key === "escort_tugs" && flag.triggered === true && flag.status !== "invalid") {
+      flag.status = "unavailable";
+      flag.explanation = `${flag.reason} No published rate: the SCA charges escort tugs on its invoice.`;
+    }
     conditional.push(flag);
     if (flag.status === "invalid") invalid.push({ code: flag.code, reason: flag.explanation });
     if (flag.triggered === null) warnings.push(`${flag.label}: ${flag.reason}`);
