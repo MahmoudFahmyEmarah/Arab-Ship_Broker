@@ -10,6 +10,7 @@ export const SUEZ_BASES = ["toll_tiered_scnt", "flat", "pct_of_toll", "tier_by_s
 export const SUEZ_CONDITION_KEYS = [
   "no_mooring_cranes", "late_arrival", "no_searchlight", "not_ready", "heavy_lift", "floating_unit",
   "military", "deck_protrusion", "ladder_noncompliant", "relieving_pilots", "overage", "first_transit",
+  "escort_tugs", "contingent",
 ] as const;
 
 const money = z.number().finite().min(0).max(10_000_000);
@@ -24,7 +25,26 @@ const flatParams = z.object({
   swlMt: z.number().finite().positive().max(100).optional(),
   boats: z.number().int().min(1).max(4).optional(),
 }).strict();
-const flagParams = z.object({ ageYears: z.number().int().min(1).max(60).optional() }).strict();
+// Escort-tug triggers are data (Rules of Navigation via the agent guide): each rule names the cargo status,
+// categories, SCNT window, draft/beam thresholds or a missing double bottom, and the tugs it imposes.
+const escortRule = z.object({
+  status: z.enum(["laden", "ballast"]).optional(),
+  categories: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,40}$/)).min(1).max(20).optional(),
+  excludeCategories: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,40}$/)).min(1).max(20).optional(),
+  scntMin: z.number().finite().min(0).optional(),
+  scntBelow: z.number().finite().positive().optional(),
+  draftFtOver: z.number().finite().positive().optional(),
+  beamFtOver: z.number().finite().positive().optional(),
+  beamFtMax: z.number().finite().positive().optional(),
+  doubleBottom: z.literal(false).optional(),
+  tugs: z.number().int().min(1).max(4),
+}).strict();
+const flagParams = z.object({
+  ageYears: z.number().int().min(1).max(60).optional(),
+  rules: z.array(escortRule).min(1).max(30).optional(),
+  amount: money.optional(),
+  currency: z.enum(["USD", "SDR"]).optional(),
+}).strict();
 const pctParams = z.union([
   z.object({ pct: pct }).strict(),
   z.object({ pctPerUnit: pct, unit: z.string().min(1).max(20) }).strict(),
@@ -178,6 +198,9 @@ export const suezInputSchema = z.object({
     mooringCranesOk: z.boolean().nullable().optional(),
     searchlightCompliant: z.boolean().nullable().optional(),
     firstTransit: z.boolean().nullable().optional(),
+    draftFt: nonNeg(80).nullable().optional(),
+    beamFt: nonNeg(300).nullable().optional(),
+    doubleBottom: z.boolean().nullable().optional(),
   }).strict(),
   voyage: z.object({
     direction: z.enum(["SB", "NB"]),

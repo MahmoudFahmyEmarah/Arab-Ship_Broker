@@ -26,7 +26,7 @@ import { getPointEcaZones, getRouteEcaSplit, getSuezTariffContext, getVesselEcon
 import { getVoyageSettings, saveVoyageEstimate } from "@/sdk/app/voyage";
 import { estimateVoyage } from "@/lib/voyage/engine";
 import { parseVoyageInput } from "@/lib/voyage/schemas";
-import { loadFuelIndex } from "@/lib/voyage/fuel-source";
+import { loadFuelIndex, voyageFuelProducts } from "@/lib/voyage/fuel-source";
 import { canalFromSuez, suezTransitDate } from "@/lib/voyage/canal";
 import { resolveCalculatorAccess } from "@/lib/voyage/calculator-access";
 import { calculatorDenialMessage } from "@/lib/voyage/calculator-policy";
@@ -154,8 +154,6 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     // ── server truth: settings, fuel index ────────────────────────────────
     const settingsLoad = await getVoyageSettings(supabase);
     const settings: VoyageSettings = settingsLoad.settings;
-    const requestedPort = typeof client.fuel?.requestedPort === "string" ? client.fuel.requestedPort : null;
-    const fuel = await loadFuelIndex(requestedPort);
 
     // ── legs: re-resolved here; manual only with its reason ───────────────
     const geometry = new Map<string, string>();
@@ -189,6 +187,14 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     };
     const [ballastLeg, ladenLeg] = await Promise.all([resolveLeg(client.legs.ballast ?? null, "ballast"), resolveLeg(client.legs.laden, "laden")]);
     if (!ladenLeg) return { ok: false, error: "The laden leg is missing." };
+
+    // ── fuel: the index at the bunkering (load) port for the products this voyage burns (PR-02) ──
+    const fuel = await loadFuelIndex(supabase, {
+      portLocode: ladenLeg.leg.from,
+      productKeys: voyageFuelProducts(settings.eca.fuelProductKey, settings.eca.distillateProductKey, client.vessel?.hasScrubber ?? null),
+      asOf: now,
+      stemMt: null,
+    });
 
     // ── port DAs: manual with provenance, or none ─────────────────────────
     for (const p of [client.ports.load, client.ports.disch]) {

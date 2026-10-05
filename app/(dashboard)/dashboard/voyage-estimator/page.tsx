@@ -7,7 +7,7 @@ import { CalculatorLocked } from "@/components/portal/calculators";
 import { VoyageEstimatorV2 } from "@/components/voyage/VoyageEstimatorV2";
 import { getPointEcaZones, getSuezTariffContext, listEcaZones } from "@/sdk/app/suez";
 import { getVoyageSettings } from "@/sdk/app/voyage";
-import { loadFuelIndex } from "@/lib/voyage/fuel-source";
+import { loadFuelIndex, voyageFuelProducts } from "@/lib/voyage/fuel-source";
 import { voyageOptionFromAdminRow, voyageOptionFromView, type AdminVoyageVesselRow, type VoyageVesselOption } from "@/lib/voyage/vessel-options";
 import type { SuezTariffContextResult } from "@/lib/suez/types";
 
@@ -73,7 +73,8 @@ export default async function VoyageEstimatorPage({ searchParams }: { searchPara
   let suezContext: SuezTariffContextResult = { found: false, date: today };
   try { suezContext = await getSuezTariffContext(supabase, today); } catch { /* unavailable state */ }
   // The frozen B→S index snapshot (status unavailable until Stream B's index is wired → fallback prices, labelled).
-  const fuel = await loadFuelIndex(null);
+  // The page preview has no voyage yet: the index without a port (the save asks again for the load port).
+  const fuel = await loadFuelIndex(supabase, { portLocode: null, productKeys: voyageFuelProducts(settingsLoad.settings.eca.fuelProductKey, settingsLoad.settings.eca.distillateProductKey, null) });
 
   return (
     <VoyageEstimatorV2

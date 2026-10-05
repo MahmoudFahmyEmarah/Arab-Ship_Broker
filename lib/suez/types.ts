@@ -122,6 +122,10 @@ export interface SuezVesselFacts {
   searchlightCompliant?: boolean | null;
   /** true / false when the transit history is known; null = unknown (manual review, never a charge) */
   firstTransit?: boolean | null;
+  /** arrival draft and beam in feet, double-bottom tanks — the escort-tug triggers; null = unknown (undecided) */
+  draftFt?: number | null;
+  beamFt?: number | null;
+  doubleBottom?: boolean | null;
 }
 
 export interface SuezVoyageFacts {
@@ -186,6 +190,8 @@ export interface SuezFlag extends SuezLine {
   potentialUsd: number | null; // what it would cost if it applied (null = undetermined)
   appliedUsd: number; // 0 unless triggered === true
   reason: string;
+  /** a charge that applies only if something happens later (cancellation, wrong declaration): listed, never summed */
+  contingent?: boolean;
 }
 
 export interface SuezTollTierLine {

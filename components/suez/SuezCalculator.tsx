@@ -44,6 +44,7 @@ const STATUS_LABEL: Record<LineStatus, string> = { trusted: "trusted", placehold
 interface VesselFacts {
   scnt: FactField; scgt: FactField; gt: FactField; category: string | null; buildYear: FactField;
   mooringCranesOk: Tri; searchlight: Tri; firstTransit: Tri;
+  draftFt: string; beamFt: string; doubleBottom: Tri;
 }
 interface VoyageFacts {
   direction: SuezDirection; cargoStatus: SuezCargoStatus; transitDate: string; lateArrivalBand: SuezLateBand;
@@ -61,6 +62,7 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
   const [facts, setFacts] = React.useState<VesselFacts>(() => ({
     scnt: field(), scgt: field(), gt: field(), category: suezCategoryFromVesselType(vessel?.type), buildYear: field(),
     mooringCranesOk: "unknown", searchlight: "unknown", firstTransit: "unknown",
+    draftFt: "", beamFt: "", doubleBottom: "unknown",
   }));
   const [voyage, setVoyage] = React.useState<VoyageFacts>({
     direction: "SB", cargoStatus: "laden", transitDate: today(), lateArrivalBand: "none", notReady: false, heavyLift: false,
@@ -74,7 +76,7 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
   // Vessel change: reset manual facts, load the economics profile when the raw vessel id is known.
   React.useEffect(() => {
     setProfile(null);
-    setFacts((f) => ({ ...f, scnt: field(), scgt: field(), gt: field(), buildYear: field(), category: suezCategoryFromVesselType(vessel?.type), mooringCranesOk: "unknown", searchlight: "unknown", firstTransit: "unknown" }));
+    setFacts((f) => ({ ...f, scnt: field(), scgt: field(), gt: field(), buildYear: field(), category: suezCategoryFromVesselType(vessel?.type), mooringCranesOk: "unknown", searchlight: "unknown", firstTransit: "unknown", draftFt: "", beamFt: "", doubleBottom: "unknown" }));
     if (!vessel?.vesselId) return;
     let alive = true;
     loadVesselEconomicsAction(vessel.vesselId).then((r) => {
@@ -131,6 +133,7 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
         mooringCranesOk: triToBool(facts.mooringCranesOk),
         searchlightCompliant: triToBool(facts.searchlight),
         firstTransit: triToBool(facts.firstTransit),
+        draftFt: num(facts.draftFt), beamFt: num(facts.beamFt), doubleBottom: triToBool(facts.doubleBottom),
       },
       voyage: {
         direction: voyage.direction, cargoStatus: voyage.cargoStatus, transitDate: voyage.transitDate,
@@ -244,6 +247,9 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
                     <TriState label="Cranes lift the mooring boats (tariff SWL / count)" value={facts.mooringCranesOk} onChange={(v) => setFacts({ ...facts, mooringCranesOk: v })} />
                     <TriState label="Compliant searchlight (art. 28)" value={facts.searchlight} onChange={(v) => setFacts({ ...facts, searchlight: v })} />
                     <TriState label="First Suez transit (measurement on arrival)" value={facts.firstTransit} onChange={(v) => setFacts({ ...facts, firstTransit: v })} />
+                    <label className="sz-field"><span>Arrival draft (ft) · escort-tug rules</span><input type="number" min="0" step="0.1" value={facts.draftFt} onChange={(e) => setFacts({ ...facts, draftFt: e.target.value })} placeholder="not sourced" /></label>
+                    <label className="sz-field"><span>Beam (ft) · escort-tug rules</span><input type="number" min="0" step="0.1" value={facts.beamFt} onChange={(e) => setFacts({ ...facts, beamFt: e.target.value })} placeholder="not sourced" /></label>
+                    <TriState label="Double-bottom tanks fitted" value={facts.doubleBottom} onChange={(v) => setFacts({ ...facts, doubleBottom: v })} />
                     {canSave && (
                       <div className="sz-save">
                         <button type="button" className="ve-btn" onClick={saveFacts} disabled={saveState.busy || pending}>{saveState.busy ? "Saving…" : "Save facts to vessel profile"}</button>
@@ -363,7 +369,8 @@ function Results({ estimate, vessel }: { estimate: SuezEstimate; vessel: SuezVes
   const t = estimate.totals;
   const applied = estimate.layers.conditional.filter((f) => f.triggered === true);
   const undecided = estimate.layers.conditional.filter((f) => f.triggered === null);
-  const notApplied = estimate.layers.conditional.filter((f) => f.triggered === false);
+  const notApplied = estimate.layers.conditional.filter((f) => f.triggered === false && !f.contingent);
+  const contingent = estimate.layers.conditional.filter((f) => f.contingent);
   const head = headline(estimate);
   const flagRow = (f: SuezFlag, cls: string) => (
     <div key={f.code} className={`ve-pl-row ve-pl-row--linked sz-flag ${cls}`}>
@@ -407,6 +414,8 @@ function Results({ estimate, vessel }: { estimate: SuezEstimate; vessel: SuezVes
           {applied.map((f) => flagRow(f, "is-applied"))}
           {undecided.map((f) => flagRow(f, "is-undecided"))}
           {notApplied.map((f) => flagRow(f, ""))}
+          {contingent.length > 0 && <div className="ve-pl-row is-subtotal"><span>Contingent charges · only if they happen (listed, never added)</span><span /></div>}
+          {contingent.map((f) => <div key={f.code} className="ve-pl-row"><span>{f.label}<small className="sz-muted">{f.reason}</small></span><span className="sz-muted">—</span></div>)}
           <div className="ve-pl-row is-subtotal"><span>Applied</span><span>{fmtUSD2(estimate.totals.conditionalAppliedUsd)}</span></div>
           {undecided.length > 0 && <div className="ve-note-sub">Undecided flags need a fact (cranes, searchlight, transit history, build year); they are counted in the exposure, never in the applied total.</div>}
         </div>
