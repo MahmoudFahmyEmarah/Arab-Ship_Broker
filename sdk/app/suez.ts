@@ -68,6 +68,23 @@ export interface RouteEcaSplit {
   method?: "waypoints" | "distance_only";
   algorithmVersion?: string;
   waypointCount?: number;
+  /** fn_route_eca_split/3: ECA zones containing the first / last waypoint (the ports), and the track's verified flag */
+  startZones?: string[] | null;
+  endZones?: string[] | null;
+  verified?: boolean;
+  /** coarse when any ECA ring in force is a coarse digitisation (never a trusted ECA fact) */
+  geometryConfidence?: "official" | "coarse";
+}
+
+// fn_point_eca_zones: ECA zones in force on the date that contain the point (empty = outside every zone; null = lookup failed).
+export async function getPointEcaZones(supabase: SupabaseClient, lat: number, lon: number, asOf?: string): Promise<string[] | null> {
+  try {
+    const { data, error } = await supabase.rpc("fn_point_eca_zones", { p_lat: lat, p_lon: lon, p_as_of: asOf ?? null });
+    if (error || !Array.isArray(data)) return null;
+    return data.map(String);
+  } catch {
+    return null;
+  }
 }
 
 // Never throws: an ECA split failure must not stop an estimate — the leg is

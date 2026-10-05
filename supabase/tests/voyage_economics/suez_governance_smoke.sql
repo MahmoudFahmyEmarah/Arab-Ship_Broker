@@ -163,8 +163,8 @@ begin
   end if;
   s := public.fn_route_eca_split('XXAAA', 'XXBBB', current_date);
   if (s ->> 'found')::boolean then raise exception 'S6: a split was found for a non-existent route'; end if;
-  if s ->> 'algorithmVersion' <> 'fn_route_eca_split/2' then raise exception 'S6: split algorithmVersion is %', s ->> 'algorithmVersion'; end if;
-  raise notice 'S6 ok: eca_zones closed to members; list_eca_zones + fn_route_eca_split/2 versioned';
+  if s ->> 'algorithmVersion' <> 'fn_route_eca_split/3' then raise exception 'S6: split algorithmVersion is %', s ->> 'algorithmVersion'; end if;
+  raise notice 'S6 ok: eca_zones closed to members; list_eca_zones + fn_route_eca_split/3 versioned';
 end $$;
 
 -- ── S7 · settings and events: governed row patched; the trail is append-only ─
@@ -216,8 +216,11 @@ begin
   perform public.admin_suez_save_item(v_id, v_admin, null, '{"code":"smoke_flat","labelEn":"Smoke flat","layer":"fixed","basis":"flat","currency":"USD","params":{"amount":1}}'::jsonb);
 
   v_err := null; begin perform public.admin_suez_publish(v_id, v_admin, 'PUBLISH'); exception when others then v_err := sqlerrm; end;
-  if v_err is null or v_err not like '%cites no source%' then raise exception 'S9: publication without a cited source was not refused (%)', v_err; end if;
+  if v_err is null or (v_err not like '%cites no source%' and v_err not like '%official source on file%') then raise exception 'S9: publication without a cited source was not refused (%)', v_err; end if;
   perform public.admin_suez_register_source(v_admin, '{"title":"Smoke source","issuer":"Smoke","authority":"reference","evidenceStatus":"pending_document"}'::jsonb, v_id);
+  v_err := null; begin perform public.admin_suez_publish(v_id, v_admin, 'PUBLISH'); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like '%official source on file%' then raise exception 'S9: official figures published on a pending reference only (%)', v_err; end if;
+  perform public.admin_suez_register_source(v_admin, jsonb_build_object('title','Smoke official instrument','issuer','Suez Canal Authority','authority','official','evidenceStatus','on_file','sha256',repeat('a',64)), v_id);
 
   v_err := null; begin perform public.admin_suez_publish(v_id, v_admin, 'publish'); exception when others then v_err := sqlerrm; end;
   if v_err is null or v_err not like 'SUEZ_CONFIRM:%' then raise exception 'S9: publication without the typed PUBLISH was not refused (%)', v_err; end if;
@@ -319,8 +322,8 @@ begin
   v_err := null; begin delete from public.voyage_estimate_lines where run_id = v_run; exception when others then v_err := sqlerrm; end;
   if v_err is null or v_err not like 'VOYAGE_IMMUTABLE:%' then raise exception 'S11: a saved line was deleted (%)', v_err; end if;
   if has_table_privilege('service_role', 'public.voyage_estimate_runs', 'DELETE') or has_table_privilege('service_role', 'public.voyage_estimate_runs', 'UPDATE')
-     or has_table_privilege('service_role', 'public.voyage_estimate_lines', 'DELETE') or not has_table_privilege('service_role', 'public.voyage_estimate_runs', 'INSERT') then
-    raise exception 'S11: service-role grants on saved runs are not select/insert only';
+     or has_table_privilege('service_role', 'public.voyage_estimate_lines', 'DELETE') or not has_table_privilege('service_role', 'public.voyage_estimate_runs', 'SELECT') then
+    raise exception 'S11: service-role grants on saved runs are not read-only (writes go through save_voyage_estimate)';
   end if;
 
   -- Deleting the user anonymises the run; the economics stay. The S9 admin (published a version, wrote events) goes too.
@@ -335,7 +338,7 @@ begin
      or exists (select 1 from public.suez_tariff_versions where created_by = v_s9 or published_by = v_s9) then
     raise exception 'S11: deleting the admin left references to it (events or versions)';
   end if;
-  raise notice 'S11 ok: runs immutable, statused lines, object/owner checks, select/insert only, anonymised on user deletion';
+  raise notice 'S11 ok: runs immutable, statused lines, object/owner checks, service role read-only, anonymised on user deletion';
 end $$;
 
 -- ── S12 · 205400: ECA geometry versions are append-only ─────────────────────
@@ -359,9 +362,91 @@ begin
   raise notice 'S12 ok: geometry versions append-only; a new geometry appends, an old one never changes';
 end $$;
 
+-- ── S13 · 205500: reported only for surcharges, acting-admin attribution, durable origin, run guards, ECA facts ─
+do $$
+declare
+  v_a uuid; v_b uuid; v_id uuid; r jsonb; v_err text; n int; v_actor uuid; v_pt jsonb; v_split jsonb; v_pair record;
+begin
+  perform set_config('asb.actor_user_id', '', true);
+  insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s13a@arabshipbroker.test') returning id into v_a;
+  insert into public.users (id, supabase_user_id, role, full_name, is_active) values (v_a, v_a, 'admin', 'smoke S13 publisher', true)
+    on conflict (id) do update set supabase_user_id = excluded.supabase_user_id, role = excluded.role, full_name = excluded.full_name, is_active = true;
+  insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s13b@arabshipbroker.test') returning id into v_b;
+  insert into public.users (id, supabase_user_id, role, full_name, is_active) values (v_b, v_b, 'admin', 'smoke S13 withdrawer', true)
+    on conflict (id) do update set supabase_user_id = excluded.supabase_user_id, role = excluded.role, full_name = excluded.full_name, is_active = true;
+
+  r := public.admin_suez_create_version(v_a, jsonb_build_object('effectiveFrom', '2020-09-01', 'effectiveTo', '2020-09-30', 'sourceRef', 'smoke S13 (rolled back)'), null);
+  v_id := (r ->> 'id')::uuid;
+  v_err := null;
+  begin perform public.admin_suez_save_item(v_id, v_a, null, '{"code":"smoke_rep","labelEn":"Smoke reported fixed","layer":"fixed","basis":"flat","currency":"USD","confidence":"reported","params":{"amount":1}}'::jsonb);
+  exception when others then v_err := sqlerrm; end;
+  if v_err is null then raise exception 'S13: a reported confidence was accepted on a fixed item'; end if;
+  perform public.admin_suez_save_item(v_id, v_a, null, '{"code":"smoke_flat","labelEn":"Smoke flat","layer":"fixed","basis":"flat","currency":"USD","params":{"amount":1}}'::jsonb);
+  perform public.admin_suez_register_source(v_a, jsonb_build_object('title','Smoke S13 instrument','issuer','Suez Canal Authority','authority','official','evidenceStatus','on_file','sha256',repeat('b',64)), v_id);
+  perform public.admin_suez_publish(v_id, v_a, 'PUBLISH');
+  perform public.admin_suez_set_window(v_id, v_b, date '2020-09-30', 'smoke note');
+  perform public.admin_suez_set_status(v_id, v_b, 'withdrawn');
+  select actor_user_id into v_actor from public.suez_tariff_events where version_id = v_id and action = 'withdrawn';
+  if v_actor is distinct from v_b then raise exception 'S13: the withdrawal is attributed to % instead of the acting admin', v_actor; end if;
+  select actor_user_id into v_actor from public.suez_tariff_events where version_id = v_id and action = 'published';
+  if v_actor is distinct from v_a then raise exception 'S13: the publication is not attributed to the publisher'; end if;
+  if not exists (select 1 from public.suez_tariff_events where version_id = v_id and action = 'notes_changed' and actor_user_id = v_b) then
+    raise exception 'S13: a notes change left no event';
+  end if;
+  if exists (select 1 from public.suez_tariff_events where version_id = v_id and origin <> 'command') then
+    raise exception 'S13: an admin command event is not marked origin=command';
+  end if;
+  delete from public.users where id = v_a;
+  if exists (select 1 from public.suez_tariff_events where version_id = v_id and origin <> 'command') then
+    raise exception 'S13: anonymising the actor changed the event origin';
+  end if;
+
+  v_err := null;
+  begin perform public.save_voyage_estimate(v_b, jsonb_build_object('algorithmVersion', 'voyage-engine/2', 'settingsHash', repeat('c', 64), 'input', '{}'::jsonb, 'result', '{}'::jsonb, 'totals', '{}'::jsonb,
+    'availabilityId', (select id from public.vessel_availability limit 1)));
+  exception when others then v_err := sqlerrm; end;
+  if exists (select 1 from public.vessel_availability) and (v_err is null or v_err not like 'VOYAGE_INVALID:%without its vessel%') then
+    raise exception 'S13: a position was linked without its vessel (%)', v_err;
+  end if;
+  if has_table_privilege('service_role', 'public.voyage_estimate_runs', 'INSERT') or has_table_privilege('service_role', 'public.voyage_estimate_lines', 'INSERT') then
+    raise exception 'S13: the service role can insert runs/lines directly';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'voyage_estimate_lines' and column_name = 'status' and is_nullable = 'YES') then
+    raise exception 'S13: line status is still nullable';
+  end if;
+
+  -- governed ECA facts: the route split reports its end zones; the settings anchorage is a point lookup
+  select pol_locode a, pod_locode b into v_pair from public.port_routes limit 1;
+  if found then
+    v_split := public.fn_route_eca_split(v_pair.a, v_pair.b, current_date);
+    if v_split ->> 'algorithmVersion' <> 'fn_route_eca_split/3' or not (v_split ? 'verified') then raise exception 'S13: split v3 shape missing (%)', v_split; end if;
+  end if;
+  select value -> 'suez' -> 'anchorages' -> 'SB' into v_pt from public.app_settings where key = 'voyage_settings';
+  if v_pt is null then raise exception 'S13: the settings carry no Suez anchorage point'; end if;
+  if public.fn_point_eca_zones((v_pt ->> 0)::numeric, (v_pt ->> 1)::numeric, current_date) is null then raise exception 'S13: anchorage lookup failed'; end if;
+  -- dual-key regression: public.users.id ≠ supabase_user_id; the claim is keyed by the Auth id
+  declare v_x uuid; v_y uuid; v_vessel uuid;
+  begin
+    select id into v_vessel from public.vessels limit 1;
+    if v_vessel is not null then
+      insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s13x@arabshipbroker.test') returning id into v_x;
+      insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s13y@arabshipbroker.test') returning id into v_y;
+      insert into public.users (id, supabase_user_id, role, full_name, is_active) values (v_x, v_y, 'Broker', 'smoke S13 dual key', true)
+        on conflict (id) do update set supabase_user_id = excluded.supabase_user_id, role = excluded.role, is_active = true;
+      insert into public.vessel_claims (vessel_id, user_id) values (v_vessel, v_y);
+      if not public.fn_voyage_may_reference(v_x, 'vessel', v_vessel) then raise exception 'S13: a claim keyed by the Auth id did not authorise the member'; end if;
+      if public.fn_voyage_may_reference(v_y, 'vessel', v_vessel) then raise exception 'S13: an id that is not the member''s public id was authorised'; end if;
+    end if;
+  end;
+  if (select confdeltype from pg_constraint where conname = 'vessel_economics_profile_events_vessel_id_fkey') <> 'n' then
+    raise exception 'S13: deleting a vessel still cascades into the append-only profile events';
+  end if;
+  raise notice 'S13 ok: reported only on surcharges, acting-admin attribution, notes audited, durable origin, run guards, split v3 + anchorage lookup';
+end $$;
+
 -- In linked mode (one rolled-back harness transaction) the rows above stay until the final ROLLBACK; they are
 -- smoke rows, not governed records, so the DOWN's used-state guard is told so for this transaction only.
-select set_config('asb.stream_s_down', 'export-taken', true);
+select set_config('asb.stream_s_down', 'export-taken:smoke rows of this rolled-back transaction', true);
 
 do $$ begin raise notice 'SUEZ GOVERNANCE SMOKE: ALL ASSERTIONS PASSED'; end $$;
 

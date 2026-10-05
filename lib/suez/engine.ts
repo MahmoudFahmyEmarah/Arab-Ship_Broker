@@ -319,12 +319,20 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
   // ── Totals and status ──────────────────────────────────────────────────
   const appliedUsd = round2((toll.usd ?? 0) + surchargeUsd + fixedUsd + conditionalAppliedUsd + wasteUsd);
   const complete = unavailable.length === 0 && invalid.length === 0 && toll.usd != null;
-  const transitDays = input.overrides?.transitDays ?? (isNum(ctx.suezDays?.transitDays) ? ctx.suezDays.transitDays! : 1);
-  const anchorageDays = input.overrides?.anchorageDays ?? (isNum(ctx.suezDays?.anchorageDays) ? ctx.suezDays.anchorageDays! : 0.5);
+  const daysManual = !!(input.overrides?.transitDays || input.overrides?.anchorageDays);
+  // Official figures stand on an official instrument whose file is on record; otherwise the estimate is partial.
+  const evidenceOnFile = (ctx.sources ?? []).some((src) => src.authority === "official" && src.evidenceStatus === "on_file");
+  if (!evidenceOnFile) warnings.push("No official SCA instrument with its file on record is cited by this tariff version; the figures are not trusted.");
+  if (input.overrides?.transitDays) warnings.push(`Transit days ${fmt(input.overrides.transitDays.value)} entered manually (${input.overrides.transitDays.reason}).`);
+  if (input.overrides?.anchorageDays) warnings.push(`Anchorage days ${fmt(input.overrides.anchorageDays.value)} entered manually (${input.overrides.anchorageDays.reason}).`);
+  const daysGoverned = isNum(ctx.suezDays?.transitDays) && isNum(ctx.suezDays?.anchorageDays);
+  if (!daysGoverned && !daysManual) warnings.push("Suez transit/anchorage days are not in the voyage settings; 1 and 0.5 days were assumed.");
+  const transitDays = input.overrides?.transitDays?.value ?? (isNum(ctx.suezDays?.transitDays) ? ctx.suezDays.transitDays! : 1);
+  const anchorageDays = input.overrides?.anchorageDays?.value ?? (isNum(ctx.suezDays?.anchorageDays) ? ctx.suezDays.anchorageDays! : 0.5);
   let status: EstimateStatus;
   if (invalid.length > 0) status = "invalid";
   else if (toll.status === "unavailable" && fixed.every((l) => l.status === "unavailable")) status = "unavailable";
-  else if (!complete || toll.status === "placeholder" || toll.status === "manual" || surcharge.status !== "trusted" || conditional.some((f) => f.triggered === null) || fixed.some((l) => l.status !== "trusted")) status = "partial";
+  else if (!complete || !evidenceOnFile || daysManual || !daysGoverned || toll.status === "placeholder" || toll.status === "manual" || surcharge.status !== "trusted" || conditional.some((f) => f.triggered === null) || fixed.some((l) => l.status !== "trusted")) status = "partial";
   else status = "trusted";
 
   return {

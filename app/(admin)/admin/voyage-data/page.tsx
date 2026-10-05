@@ -8,7 +8,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { SUEZ_BASES, SUEZ_CONDITION_KEYS, SUEZ_LAYERS, SUEZ_SURCHARGE_REGIMES } from "@/lib/suez/schemas";
 import { SUEZ_VESSEL_CATEGORIES } from "@/lib/suez/types";
 import { parseVoyageSettings } from "@/lib/voyage/schemas";
-import { DEFAULT_VOYAGE_SETTINGS, type SettingsSource, type VoyageSettings } from "@/lib/voyage/types";
+import { DEFAULT_VOYAGE_SETTINGS, PLATFORM_CONSTANTS, type SettingsSource, type VoyageSettings } from "@/lib/voyage/types";
 
 import {
   addSdrRate, citeSource, createVersion, deleteDraftVersion, deleteItem, publishVersion, registerSource, replaceTiers,
@@ -348,6 +348,8 @@ function ConstantsTab({ settings, status, problem, canEdit }: { settings: Voyage
           <label>Class A multiplier<input type="number" step="0.1" name="classA" defaultValue={s.classMultipliers.A} /></label>
           <label>Class B multiplier<input type="number" step="0.1" name="classB" defaultValue={s.classMultipliers.B} /></label>
           <label>Class C multiplier<input type="number" step="0.1" name="classC" defaultValue={s.classMultipliers.C} /></label>
+          <label className="vd-span">Suez convoy anchorages ([lat, lon] per direction; tested against the ECA zones)<input name="suezAnchorages" defaultValue={JSON.stringify(s.suez.anchorages ?? {})} placeholder='{"SB":[31.35,32.36],"NB":[29.88,32.55]}' /></label>
+          <label className="vd-span">Owner-confirmed constants (others show “platform assumption” wherever they are used)<select name="confirmed" multiple defaultValue={s.confirmed ?? []} size={7}>{PLATFORM_CONSTANTS.map((c) => <option key={c.key} value={c.key}>{c.label(s)}</option>)}</select></label>
           <label>ECA main-engine product (0.10 %)<select name="ecaFuelProductKey" defaultValue={s.eca.fuelProductKey}><option>LSMGO</option><option>ULSFO</option><option>MGO05</option><option>MDO</option></select></label>
           <label>Auxiliary distillate product<select name="ecaDistillateProductKey" defaultValue={s.eca.distillateProductKey ?? "LSMGO"}><option>LSMGO</option><option>MGO05</option><option>MDO</option></select></label>
           <label className="vd-span">Sea margin by lane (JSON, e.g. {"{"}&quot;E.MED&gt;AG&quot;: 7{"}"})<textarea name="byLane" defaultValue={JSON.stringify(s.seaMargin.byLane ?? {}, null, 2)} style={{ minHeight: 60 }} /></label>

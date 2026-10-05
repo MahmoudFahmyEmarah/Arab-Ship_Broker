@@ -32,7 +32,7 @@ import type {
   VoyageSettings,
   VoyageStatus,
 } from "./types";
-import { VOYAGE_ALGORITHM_VERSION } from "./types";
+import { PLATFORM_CONSTANTS, VOYAGE_ALGORITHM_VERSION } from "./types";
 
 const round1 = (n: number) => Math.round((n + Number.EPSILON) * 10) / 10;
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -76,8 +76,8 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
 
   // ── speeds, margin, class, scrubber ────────────────────────────────────
   if (input.settingsSource === "defaults") warnings.push("Voyage settings could not be read from the platform; compiled defaults were used.");
-  const speedLaden = input.vessel.speedLadenKn ?? (assumptions.push(`Laden speed not declared; default ${fmt(s.speeds.ladenKn)} kn.`), s.speeds.ladenKn);
-  const speedBallast = input.vessel.speedBallastKn ?? (assumptions.push(`Ballast speed not declared; default ${fmt(s.speeds.ballastKn)} kn.`), s.speeds.ballastKn);
+  const speedLaden = input.vessel.speedLadenKn ?? (assumptions.push(`Laden speed not declared; platform default ${fmt(s.speeds.ladenKn)} kn.`), s.speeds.ladenKn);
+  const speedBallast = input.vessel.speedBallastKn ?? (assumptions.push(`Ballast speed not declared; platform default ${fmt(s.speeds.ballastKn)} kn.`), s.speeds.ballastKn);
   const margin = input.seaMarginPct != null ? { pct: input.seaMarginPct, basis: `entered ${fmt(input.seaMarginPct)}%` } : seaMarginFor(s, input.lane, input.season);
   const classAssumed = input.vessel.vesselClass == null;
   const vesselClass: VesselClass = input.vessel.vesselClass ?? "C";
@@ -135,6 +135,8 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   };
 
   // ── sea legs ─────────────────────────────────────────────────────────
+  const transits = [input.canal, input.ballastCanal].filter((c): c is NonNullable<VoyageInput["canal"]> => !!c?.required);
+  const transitFor = (key: string) => transits.find((c) => (c.leg ?? "laden") === key) ?? null;
   let anyLegUnavailable = false;
   const seaLeg = (leg: NonNullable<VoyageInput["legs"]["ballast"]>, state: "sea_laden" | "sea_ballast", speed: number): number => {
     const label = state === "sea_laden" ? "Laden passage" : "Ballast passage";
@@ -145,42 +147,65 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
       legs.push({ key: leg.key, label, kind: "sea", status: "unavailable", from: leg.from, to: leg.to, nm: null, ecaNm: null, ecaShareKnown: false, days: 0, ecaDays: 0, burns, note: "Distance not sourced." });
       return 0;
     }
-    const days = seaDays(leg.nm, speed, margin.pct);
+    // A measured track through the canal already contains its miles; the transit is priced as its own leg (days at
+    // canal speed + anchorage), so those miles are taken off the sea passage instead of being sailed twice.
+    const transit = transitFor(leg.key);
+    const canalNm = transit && leg.method !== "manual" && leg.canalNm ? Math.min(leg.canalNm, leg.nm) : 0;
+    const seaNm = leg.nm - canalNm;
+    const days = seaDays(seaNm, speed, margin.pct);
     const ecaKnown = leg.ecaNm != null;
-    const ecaNm = leg.ecaNm ?? 0;
-    const ecaDays = days * Math.min(ecaNm, leg.nm) / leg.nm;
+    const ecaNm = Math.min(leg.ecaNm ?? 0, seaNm);
+    const ecaDays = seaNm > 0 ? days * ecaNm / seaNm : 0;
     const priced = burnState(burns, state, days, ecaDays);
     let status: ComponentStatus = leg.method === "manual" ? "manual" : "trusted";
     if (!priced) { status = "unavailable"; unavailable.push({ code: `${leg.key}_fuel`, reason: `${label}: no ${state.replace("_", " ")} consumption declared; its fuel cannot be priced.` }); }
     else if (!ecaKnown) { warnings.push(`${label}: ECA share unknown (route without waypoints); priced as non-ECA.`); }
+    const unverified = leg.method !== "manual" && leg.routeVerified === false;
+    if (priced && unverified) warnings.push(`${label}: the measured track is an unverified import; the distance is a fallback.`);
+    const coarseEca = leg.method === "waypoints" && leg.ecaConfidence === "coarse";
+    if (priced && coarseEca) warnings.push(`${label}: the ECA share comes from a coarse ECA ring, not the regulatory boundary; it is a fallback.`);
     legs.push({
-      key: leg.key, label, kind: "sea", status: status === "trusted" && !ecaKnown ? "fallback" : status,
+      key: leg.key, label, kind: "sea", status: status === "trusted" && (!ecaKnown || unverified || coarseEca) ? "fallback" : status,
       from: leg.from, to: leg.to, nm: leg.nm, ecaNm: ecaKnown ? round1(ecaNm) : null, ecaShareKnown: ecaKnown, days: round2(days), ecaDays: round2(ecaDays), burns,
-      note: `${fmt(Math.round(leg.nm))} NM / (${fmt(speed)} kn × 24) × (1 + ${fmt(margin.pct)}%)` + (leg.method === "manual" ? ` · manual distance (${leg.manual?.reason ?? ""})` : leg.method === "waypoints" ? " · measured route with ECA split" : " · measured distance, ECA share unknown") + (ecaKnown && ecaNm > 0 ? ` · ${fmt(Math.round(ecaNm))} NM in ECA` : ""),
+      note: `${canalNm > 0 ? `${fmt(Math.round(leg.nm))} NM − ${fmt(Math.round(canalNm))} NM canal (own leg) = ` : ""}${fmt(Math.round(seaNm))} NM / (${fmt(speed)} kn × 24) × (1 + ${fmt(margin.pct)}%)` + (leg.method === "manual" ? ` · manual distance (${leg.manual?.reason ?? ""})` : leg.method === "waypoints" ? " · measured route with ECA split" : " · measured distance, ECA share unknown") + (ecaKnown && ecaNm > 0 ? ` · ${fmt(Math.round(ecaNm))} NM in ECA` : ""),
     });
     return days;
   };
   const dSeaBallast = input.legs.ballast ? seaLeg(input.legs.ballast, "sea_ballast", speedBallast) : 0;
   const dSeaLaden = seaLeg(input.legs.laden, "sea_laden", speedLaden);
 
-  // ── canal ───────────────────────────────────────────────────────────
+  // ── canal(s): laden transit and, if any, a ballast transit ─────────────
   let dCanalTransit = 0, dCanalAnch = 0;
   let canal: VoyageEstimate["costs"]["canal"] = { usd: null, status: "unavailable", required: false };
-  if (input.canal?.required) {
-    const c = input.canal;
-    dCanalTransit = c.transitDays; dCanalAnch = c.anchorageDays;
-    if (c.costUsd != null && c.complete && (c.status === "trusted" || c.status === "manual" || c.status === "fallback")) {
-      canal = { usd: c.costUsd, status: c.status, required: true };
-      if (c.status === "fallback") warnings.push(`${c.name} cost is a labelled fallback: the canal estimate is partial (reported surcharge, undecided flags or placeholder bands).`);
-    } else { canal = { usd: null, status: "unavailable", required: true }; unavailable.push({ code: "canal", reason: `${c.name} transit cost unavailable (the Suez estimate is ${c.status}${c.complete ? "" : ", incomplete"}).` }); }
+  const rank: Record<ComponentStatus, number> = { trusted: 0, fallback: 1, manual: 2, unavailable: 3, invalid: 4 };
+  for (const c of transits) {
+    const ballastTransit = (c.leg ?? "laden") === "ballast";
+    const key = ballastTransit ? "canal_ballast" : "canal";
+    const name = `${c.name}${ballastTransit ? " (ballast)" : ""}`;
+    dCanalTransit += c.transitDays; dCanalAnch += c.anchorageDays;
+    const manualCost = c.status === "manual" && !!c.manual && c.costUsd != null;
+    let part: { usd: number | null; status: ComponentStatus };
+    if (c.costUsd != null && (c.complete || manualCost) && (c.status === "trusted" || c.status === "manual" || c.status === "fallback")) {
+      part = { usd: c.costUsd, status: c.status };
+      if (c.status === "fallback") warnings.push(`${name} cost is a labelled fallback: the canal estimate is partial (reported surcharge, undecided flags or placeholder bands).`);
+      if (manualCost && !c.complete) warnings.push(`${name} cost USD ${fmt(c.costUsd)} entered manually (${c.manual?.reason ?? ""}): the Suez estimate is incomplete.`);
+    } else {
+      part = { usd: null, status: "unavailable" };
+      unavailable.push({ code: key, reason: `${name} transit cost unavailable (the Suez estimate is ${c.status}${c.complete ? "" : ", incomplete"}).` });
+    }
+    // Two transits combine: the cost exists only when both do; the status is the worse of the two.
+    canal = !canal.required
+      ? { usd: part.usd, status: part.status, required: true }
+      : { usd: canal.usd == null || part.usd == null ? null : canal.usd + part.usd, status: rank[part.status] > rank[canal.status] ? part.status : canal.status, required: true };
+    if (c.anchorageInEcaSource === "manual") assumptions.push(`${name}: anchorage ECA status asserted by the broker (${c.anchorageInEca ? "inside" : "outside"} an ECA), not derived from governed geometry.`);
     const burns: FuelBurn[] = [];
     const aBurns: FuelBurn[] = [];
-    const okT = burnState(burns, "sea_laden", dCanalTransit, 0);
-    const okA = burnState(aBurns, "anchorage", dCanalAnch, c.anchorageInEca ? dCanalAnch : 0, c.anchorageInEca);
-    if (!okT) unavailable.push({ code: "canal_fuel", reason: `${c.name} transit: no sea consumption declared.` });
-    if (!okA) unavailable.push({ code: "canal_anchorage_fuel", reason: `${c.name} anchorage: no anchorage consumption declared.` });
-    legs.push({ key: "canal", label: `${c.name} transit`, kind: "canal", status: okT ? canal.status : "unavailable", from: null, to: null, nm: c.nm, ecaNm: 0, ecaShareKnown: true, days: round2(dCanalTransit), ecaDays: 0, burns, note: `${fmt(dCanalTransit)} day(s) at sea consumption${c.tariffVersionNo ? ` · tariff v${c.tariffVersionNo}` : ""}` });
-    legs.push({ key: "canal_anchorage", label: `${c.name} anchorage / convoy wait`, kind: "anchorage", status: okA ? "trusted" : "unavailable", from: null, to: null, nm: 0, ecaNm: 0, ecaShareKnown: true, days: round2(dCanalAnch), ecaDays: round2(c.anchorageInEca ? dCanalAnch : 0), burns: aBurns, note: `${fmt(dCanalAnch)} day(s) at anchorage consumption${c.anchorageInEca ? " (inside the Med ECA)" : ""}` });
+    const okT = burnState(burns, ballastTransit ? "sea_ballast" : "sea_laden", c.transitDays, 0);
+    const okA = burnState(aBurns, "anchorage", c.anchorageDays, c.anchorageInEca ? c.anchorageDays : 0, c.anchorageInEca);
+    if (!okT) unavailable.push({ code: `${key}_fuel`, reason: `${name} transit: no sea consumption declared.` });
+    if (!okA) unavailable.push({ code: `${key}_anchorage_fuel`, reason: `${name} anchorage: no anchorage consumption declared.` });
+    legs.push({ key, label: `${name} transit`, kind: "canal", status: okT ? part.status : "unavailable", from: null, to: null, nm: c.nm, ecaNm: 0, ecaShareKnown: true, days: round2(c.transitDays), ecaDays: 0, burns, note: `${fmt(c.transitDays)} day(s) at sea consumption${c.tariffVersionNo ? ` · tariff v${c.tariffVersionNo}` : ""}` });
+    legs.push({ key: `${key}_anchorage`, label: `${name} anchorage / convoy wait`, kind: "anchorage", status: okA ? (c.anchorageInEcaSource === "manual" ? "manual" : "trusted") : "unavailable", from: null, to: null, nm: 0, ecaNm: 0, ecaShareKnown: true, days: round2(c.anchorageDays), ecaDays: round2(c.anchorageInEca ? c.anchorageDays : 0), burns: aBurns, note: `${fmt(c.anchorageDays)} day(s) at anchorage${c.anchorageInEca ? " inside an ECA (compliant fuel)" : ""}` });
   }
 
   // ── port calls ──────────────────────────────────────────────────────
@@ -214,6 +239,38 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
     legs.push({ key: "anchorage", label: "Waiting at anchorage", kind: "anchorage", status: okA ? "trusted" : "unavailable", from: null, to: null, nm: 0, ecaNm: 0, ecaShareKnown: true, days: round2(dAnch), ecaDays: round2(input.anchorageInEca ? dAnch : 0), burns, note: "Broker estimate" });
   }
   const totalDays = dSeaBallast + dSeaLaden + dCanalTransit + dCanalAnch + dLoad + dDisch + dAnch;
+
+  // ── facts asserted by the broker, not governed (they keep the estimate partial) ──
+  const asserted: string[] = [];
+  if (input.vesselSource === "manual") asserted.push("vessel speeds/consumption typed for this estimate (not the vessel's economics profile)");
+  for (const p of [input.ports.load, input.ports.disch]) {
+    const which = p.key === "load" ? "load port" : "discharge port";
+    if (p.inEcaSource === "manual") asserted.push(`${which} ECA status (${p.inEca ? "inside" : "outside"})`);
+    if (p.inEcaSource === "coarse") asserted.push(`${which} ECA status from a coarse ECA ring`);
+    if (p.openLoopBan) asserted.push(`${which} open-loop scrubber ban`);
+    if (p.euBerthOver2h) asserted.push(`${which} EU berth beyond 2 h`);
+  }
+  if (transits.some((c) => c.anchorageInEcaSource === "manual")) asserted.push("canal anchorage ECA status");
+  if (transits.some((c) => c.anchorageInEcaSource === "coarse")) asserted.push("canal anchorage ECA status from a coarse ECA ring");
+  if (asserted.length) assumptions.push(`Not governed: ${asserted.join("; ")}.`);
+  // Broker inputs: legitimate deal figures, but not governed data — the estimate says so (C2O-044 #5).
+  const brokerInputs: string[] = [];
+  if (input.seaMarginPct != null) brokerInputs.push(`sea margin ${fmt(input.seaMarginPct)} %`);
+  if (input.ports.load.allowanceDays > 0 || input.ports.disch.allowanceDays > 0) brokerInputs.push("port allowance days");
+  if (input.anchorageDays !== s.anchorageDaysDefault) brokerInputs.push(`${fmt(input.anchorageDays)} days waiting at anchorage`);
+  if (input.extras.insuranceUsd + input.extras.stevedoringUsd + input.extras.otherUsd > 0) brokerInputs.push("insurance/stevedoring/other costs");
+  if (input.revenue) brokerInputs.push("freight and commission");
+  if (brokerInputs.length) assumptions.push(`Broker inputs (not governed data): ${brokerInputs.join("; ")}.`);
+
+  // ── platform constants not yet confirmed by the owner (B2O-010 §1: label, keep editable) ──
+  const confirmed = new Set(s.confirmed ?? []);
+  const usedKeys = new Set<string>(["opex.crewUsdDay", "opex.maintenanceUsdDay", "classMultipliers"]);
+  if (input.seaMarginPct == null) usedKeys.add("seaMargin.defaultPct");
+  if (input.vessel.speedLadenKn == null || input.vessel.speedBallastKn == null) usedKeys.add("speeds");
+  if (input.ports.load.rateMtDay == null || input.ports.disch.rateMtDay == null || s.portTimeDays.idleSharePct > 0) usedKeys.add("portTimeDays");
+  if (transits.length) usedKeys.add("suez.days");
+  const platformAssumptions = PLATFORM_CONSTANTS.filter((c) => usedKeys.has(c.key) && !confirmed.has(c.key)).map((c) => ({ key: c.key, label: c.label(s) }));
+  if (platformAssumptions.length) assumptions.push(`Platform assumption (not yet confirmed by the owner): ${platformAssumptions.map((p) => p.label).join("; ")}.`);
 
   // ── fuel pricing from the index snapshot (average) or the admin fallback ──
   const lines: VoyageFuelLine[] = [];
@@ -273,7 +330,7 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   // ── status ──────────────────────────────────────────────────────────
   let status: VoyageStatus;
   if (anyLegUnavailable && legs.filter((l) => l.kind === "sea").every((l) => l.status === "unavailable")) status = "unavailable";
-  else if (!complete || fuelStatus !== "trusted" || canal.status === "manual" || canal.status === "fallback" || classAssumed || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
+  else if (!complete || fuelStatus !== "trusted" || canal.status === "manual" || canal.status === "fallback" || classAssumed || asserted.length > 0 || brokerInputs.length > 0 || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
   else status = "trusted";
 
   return {
@@ -291,6 +348,7 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
     revenue,
     unavailable,
     assumptions,
+    platformAssumptions,
     warnings,
   };
 }
@@ -303,6 +361,6 @@ function invalidEstimate(errors: string[], settingsSource: VoyageEstimate["setti
     fuel: { status: "invalid", lines: [], totalMt: 0, pricedMt: 0, totalUsd: 0, ecaMt: 0, residualProduct: "", ecaProduct: "", distillateProduct: "", indexAsOf: null, indexScope: null },
     opex: { baseUsdDay: 0, multiplier: 0, vesselClass: "C", classAssumed: true, usdDay: 0, usd: 0 },
     costs: { fuel: { usd: 0, status: "invalid" }, canal: { usd: null, status: "invalid", required: false }, pdaLoad: { usd: null, status: "invalid" }, pdaDisch: { usd: null, status: "invalid" }, extrasUsd: 0, voyageCostsUsd: 0, opexUsd: 0, totalUsd: 0, complete: false },
-    revenue: null, unavailable: [], assumptions: [], warnings: [], errors,
+    revenue: null, unavailable: [], assumptions: [], platformAssumptions: [], warnings: [], errors,
   };
 }

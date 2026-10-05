@@ -16,12 +16,16 @@ export const voyageSettingsSchema = z.object({
   }).strict(),
   portTimeDays: z.object({ loadDefault: days, dischDefault: days, idleSharePct: pctSmall }).strict(),
   anchorageDaysDefault: days,
-  suez: z.object({ transitDays: days, anchorageDays: days, nm: z.number().finite().min(0).max(500) }).strict(),
+  suez: z.object({
+    transitDays: days, anchorageDays: days, nm: z.number().finite().min(0).max(500),
+    anchorages: z.object({ SB: z.tuple([z.number().min(-90).max(90), z.number().min(-180).max(180)]).optional(), NB: z.tuple([z.number().min(-90).max(90), z.number().min(-180).max(180)]).optional() }).strict().optional(),
+  }).strict(),
   opex: z.object({ crewUsdDay: z.number().finite().min(0).max(100000), maintenanceUsdDay: z.number().finite().min(0).max(100000) }).strict(),
   classMultipliers: z.object({ A: z.number().finite().min(0.1).max(10), B: z.number().finite().min(0.1).max(10), C: z.number().finite().min(0.1).max(10) }).strict(),
   eca: z.object({ fuelProductKey: z.enum(["LSMGO", "ULSFO", "MGO05", "MDO"]), distillateProductKey: z.enum(["LSMGO", "MGO05", "MDO"]).optional() }).strict(),
   fuelFallback: z.record(productKey, z.number().finite().min(1).max(10000)),
   seedMarker: z.string().max(60).optional(),
+  confirmed: z.array(z.enum(["opex.crewUsdDay", "opex.maintenanceUsdDay", "classMultipliers", "seaMargin.defaultPct", "speeds", "portTimeDays", "suez.days"])).max(20).optional(),
 }).strict();
 
 export function parseVoyageSettings(v: unknown): { ok: true; value: VoyageSettings } | { ok: false; error: string } {
@@ -43,6 +47,9 @@ const seaLeg = z.object({
   ecaNm: nonNeg(30000).nullable(),
   method: z.enum(["waypoints", "distance_only", "manual", "none"]),
   routeSource: z.string().max(80).nullable().optional(),
+  routeVerified: z.boolean().nullable().optional(),
+  canalNm: nonNeg(500).nullable().optional(),
+  ecaConfidence: z.enum(["official", "coarse"]).nullable().optional(),
   manual: manual.optional(),
 }).strict().superRefine((l, ctx) => {
   if (l.ecaNm != null && l.nm != null && l.ecaNm > l.nm) ctx.addIssue({ code: "custom", path: ["ecaNm"], message: "ECA miles cannot exceed the leg distance" });
@@ -58,6 +65,7 @@ const portCall = z.object({
   inEca: z.boolean(),
   openLoopBan: z.boolean(),
   euBerthOver2h: z.boolean(),
+  inEcaSource: z.enum(["governed", "coarse", "manual"]).optional(),
   pda: z.object({ usd: nonNeg(5_000_000).nullable(), source: z.enum(["tariff", "manual", "none"]), manual: manual.optional() }).strict().superRefine((p, ctx) => {
     if (p.source === "manual" && !p.manual) ctx.addIssue({ code: "custom", path: ["manual"], message: "a manual DA needs actor, reason and time" });
     if (p.source !== "none" && p.usd == null) ctx.addIssue({ code: "custom", path: ["usd"], message: "a sourced DA needs an amount" });
@@ -81,6 +89,20 @@ const fuelSnapshot = z.object({
   canonicalSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 
+const canalSchema = z.object({
+  required: z.boolean(), name: z.string().min(1).max(40),
+  leg: z.enum(["laden", "ballast"]).optional(),
+  status: z.enum(["trusted", "fallback", "manual", "unavailable", "invalid"]),
+  costUsd: nonNeg(10_000_000).nullable(),
+  transitDays: days, anchorageDays: days, anchorageInEca: z.boolean(),
+  anchorageInEcaSource: z.enum(["governed", "coarse", "manual"]).optional(),
+  nm: nonNeg(500),
+  tariffVersionNo: z.number().int().positive().nullable(), complete: z.boolean(),
+  manual: manual.optional(),
+}).strict().superRefine((c, ctx) => {
+  if (c.status === "manual" && !c.manual && c.costUsd != null && !c.complete) ctx.addIssue({ code: "custom", path: ["manual"], message: "a manual canal cost needs actor, reason and time" });
+});
+
 export const voyageInputSchema = z.object({
   vessel: z.object({
     name: z.string().max(120).optional(),
@@ -91,13 +113,9 @@ export const voyageInputSchema = z.object({
     vesselClass: z.enum(["A", "B", "C"]).nullable(),
   }).strict(),
   legs: z.object({ ballast: seaLeg.nullable(), laden: seaLeg }).strict(),
-  canal: z.object({
-    required: z.boolean(), name: z.string().min(1).max(40),
-    status: z.enum(["trusted", "fallback", "manual", "unavailable", "invalid"]),
-    costUsd: nonNeg(10_000_000).nullable(),
-    transitDays: days, anchorageDays: days, anchorageInEca: z.boolean(), nm: nonNeg(500),
-    tariffVersionNo: z.number().int().positive().nullable(), complete: z.boolean(),
-  }).strict().nullable(),
+  canal: canalSchema.nullable(),
+  ballastCanal: canalSchema.nullable().optional(),
+  vesselSource: z.enum(["profile", "manual"]).optional(),
   ports: z.object({ load: portCall, disch: portCall }).strict(),
   anchorageDays: days,
   anchorageInEca: z.boolean(),

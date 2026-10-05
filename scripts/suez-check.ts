@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { estimateSuezTransit, tollSdrFromTiers } from "../lib/suez/engine";
-import { parseSuezInput, parseTierCsv } from "../lib/suez/schemas";
+import { parseSuezInput, parseTierCsv, suezItemInputSchema } from "../lib/suez/schemas";
 import type { SuezInput, SuezTariffContext, SuezTariffItem, SuezTollTier } from "../lib/suez/types";
 import { SUEZ_VESSEL_CATEGORIES, suezCategoryFromVesselType } from "../lib/suez/types";
 
@@ -80,7 +80,10 @@ function ctxFor(versionNo: 1 | 2, date: string, extra: Partial<SuezTariffContext
       // The fixture rate 8.687 is back-solved all-in from the proforma, so these fixture versions declare no separate surcharge.
       ? { id: "v1", versionNo: 1, effectiveFrom: "2026-04-15", effectiveTo: "2026-05-14", sourceRef: "seed v1", surchargeRegime: "none" }
       : { id: "v2", versionNo: 2, effectiveFrom: "2026-05-15", effectiveTo: null, sourceRef: "seed v2", surchargeRegime: "none" },
-    sources: [{ id: "s1", title: "RUBATO proforma", issuer: "Owner", documentNo: null, issueDate: "2026-04-20", authority: "owner", evidenceStatus: "pending_document", sha256: null }],
+    sources: [
+      { id: "s0", title: "SCA Transit Dues Rates Schedules (fixture)", issuer: "Suez Canal Authority", documentNo: "english72023.pdf", issueDate: "2023-10-17", authority: "official", evidenceStatus: "on_file", sha256: "1e98fa11b6183c4beefa21b6a21c7a199eb7bd17b9e2c082b7f6e951ca54c35f" },
+      { id: "s1", title: "RUBATO proforma", issuer: "Owner", documentNo: null, issueDate: "2026-04-20", authority: "owner", evidenceStatus: "pending_document", sha256: null },
+    ],
     items: seedItems(versionNo),
     tiers: fixtureTiers(),
     sdr: { rateUsd: RATE, asOf: "2026-04-01", source: "proforma" },
@@ -112,7 +115,7 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   near(e.layers.toll.sdr, 16070 * 8.687, 0.01, "toll SDR = SCNT × rate");
   eq(e.algorithmVersion, "suez-engine/3", "algorithm version stamped");
   eq(e.sdrRate.status, "trusted", "SDR rate from the dated file");
-  eq(e.sources.length, 1, "sources passed through");
+  eq(e.sources.length, 2, "sources passed through");
 }
 
 // ── 2 · v2 (from 15 May 2026): mooring by GT threshold; unknown GT is unavailable ─
@@ -332,6 +335,19 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   eq(parseSuezInput({ ...rub, vessel: { ...rub.vessel, scnt: 15836.283 } }).ok, false, "SCNT with three decimals refused");
   eq(parseSuezInput(rub).ok, true, "SCNT with two decimals accepted");
   ok(SUEZ_VESSEL_CATEGORIES.some((c) => c.key === "floating_unit"), "floating_unit is a selectable SCA category");
+}
+
+// ── 14 · C2O-043 #1/#2: Suez day overrides are stamped manual values; `reported` is for surcharges only ─
+{
+  const days = estimateSuezTransit({ ...rubato, overrides: { transitDays: { value: 2, reason: "convoy delay advised", actorUserId: "u-1", at: "2026-04-20T08:00:00Z" } } }, ctxFor(1, "2026-04-20"));
+  ok(days.transitDays === 2 && days.status === "partial" && days.warnings.some((w) => w.includes("entered manually")), "a manual transit-day figure is used, explained and makes the estimate partial");
+  eq(parseSuezInput({ ...rubato, overrides: { transitDays: 2 } }).ok, false, "a bare number cannot override the Suez days");
+  const noDays = estimateSuezTransit(rubato, { ...ctxFor(1, "2026-04-20"), suezDays: {} });
+  eq(noDays.status, "partial", "Suez days missing from the settings → partial, never silently 1 + 0.5");
+  const noEvidence = estimateSuezTransit(rubato, { ...ctxFor(1, "2026-04-20"), sources: [{ id: "s1", title: "RUBATO proforma", issuer: "Owner", documentNo: null, issueDate: "2026-04-20", authority: "owner", evidenceStatus: "pending_document", sha256: null }] });
+  ok(noEvidence.status === "partial" && noEvidence.warnings.some((w) => w.includes("No official SCA instrument")), "without an official source on file the figures are never trusted (C2O-044 #6)");
+  const reportedFixed = suezItemInputSchema.safeParse({ code: "pilotage", labelEn: "Pilotage", layer: "fixed", basis: "flat", currency: "USD", params: { amount: 1 }, confidence: "reported" });
+  eq(reportedFixed.success, false, "only a surcharge item may be reported");
 }
 
 // ── 12 · Contract: fixtures mirror the seed, governance SQL carries the guards ─

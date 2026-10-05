@@ -152,8 +152,9 @@ export interface ManualValue<T> {
 
 export interface SuezOverrides {
   sdrRate?: ManualValue<number>;
-  transitDays?: number;
-  anchorageDays?: number;
+  /** a broker figure replacing the governed Suez days: always with who, why and when; the estimate is partial */
+  transitDays?: ManualValue<number>;
+  anchorageDays?: ManualValue<number>;
 }
 
 export interface SuezInput {

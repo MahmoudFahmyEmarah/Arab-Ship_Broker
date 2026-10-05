@@ -75,6 +75,8 @@ export const suezItemInputSchema = z.object({
   if (!r.success) ctx.addIssue({ code: "custom", path: ["params"], message: `params for basis ${v.basis}: ${r.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}` });
   if (v.layer === "conditional" && !v.conditionKey) ctx.addIssue({ code: "custom", path: ["conditionKey"], message: "a conditional item needs a condition key" });
   if (v.layer === "toll" && v.basis !== "toll_tiered_scnt") ctx.addIssue({ code: "custom", path: ["basis"], message: "the toll layer uses toll_tiered_scnt" });
+  // `reported` is evidence for a surcharge rate only (DB: suez_tariff_items_reported_ck, C2O-043 #2).
+  if (v.confidence === "reported" && v.layer !== "surcharge") ctx.addIssue({ code: "custom", path: ["confidence"], message: "only a surcharge item may be reported; other items need the instrument on file" });
   if (v.layer === "surcharge") {
     if (!v.categoryScope?.length) ctx.addIssue({ code: "custom", path: ["categoryScope"], message: "a surcharge names the vessel categories it applies to" });
     if (v.basis !== "pct_of_toll" || typeof (v.params as { pct?: unknown }).pct !== "number") ctx.addIssue({ code: "custom", path: ["params"], message: "a surcharge is pct_of_toll with params {pct}" });
@@ -201,8 +203,8 @@ export const suezInputSchema = z.object({
       actorUserId: z.string().min(1).max(64),
       at: z.string().datetime({ offset: true }),
     }).strict().optional(),
-    transitDays: nonNeg(10).optional(),
-    anchorageDays: nonNeg(30).optional(),
+    transitDays: z.object({ value: nonNeg(10), reason: z.string().trim().min(3).max(300), actorUserId: z.string().min(1).max(64), at: z.string().datetime({ offset: true }) }).strict().optional(),
+    anchorageDays: z.object({ value: nonNeg(30), reason: z.string().trim().min(3).max(300), actorUserId: z.string().min(1).max(64), at: z.string().datetime({ offset: true }) }).strict().optional(),
   }).strict().optional(),
 }).strict();
 

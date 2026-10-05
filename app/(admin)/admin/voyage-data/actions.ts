@@ -228,11 +228,12 @@ export async function saveVoyageSettings(form: FormData) {
     seaMargin: { defaultPct: number(form, "seaMarginPct"), byLane, bySeason },
     portTimeDays: { loadDefault: number(form, "loadDefault"), dischDefault: number(form, "dischDefault"), idleSharePct: number(form, "idleSharePct") },
     anchorageDaysDefault: number(form, "anchorageDaysDefault"),
-    suez: { transitDays: number(form, "suezTransitDays"), anchorageDays: number(form, "suezAnchorageDays"), nm: number(form, "suezNm") },
+    suez: { transitDays: number(form, "suezTransitDays"), anchorageDays: number(form, "suezAnchorageDays"), nm: number(form, "suezNm"), anchorages: parseJson(value(form, "suezAnchorages") || "{}", "Suez anchorages", "constants") },
     opex: { crewUsdDay: number(form, "crewUsdDay"), maintenanceUsdDay: number(form, "maintenanceUsdDay") },
     classMultipliers: { A: number(form, "classA"), B: number(form, "classB"), C: number(form, "classC") },
     eca: { fuelProductKey: value(form, "ecaFuelProductKey") || DEFAULT_VOYAGE_SETTINGS.eca.fuelProductKey, distillateProductKey: value(form, "ecaDistillateProductKey") || DEFAULT_VOYAGE_SETTINGS.eca.distillateProductKey },
     fuelFallback,
+    confirmed: form.getAll("confirmed").map(String),
   };
   const parsed = parseVoyageSettings(candidate);
   if (!parsed.ok) finish(parsed.error, { error: true, tab: "constants" });

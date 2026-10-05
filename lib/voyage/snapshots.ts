@@ -32,9 +32,10 @@ export interface FuelIndexSnapshot {
 
 export interface RouteEcaClassification {
   kind: "route_eca";
-  status: SnapshotStatus;
+  /** fallback = a leg rests on an unverified track */
+  status: SnapshotStatus | "fallback";
   asOf: string | null;
-  legs: { key: string; pol: string | null; pod: string | null; totalNm: number | null; ecaNm: number | null; method: "waypoints" | "distance_only" | "manual" | "none"; chokepoints?: string[]; reversed?: boolean | null; source?: string | null; manual?: ManualProvenance }[];
+  legs: { key: string; pol: string | null; pod: string | null; totalNm: number | null; ecaNm: number | null; method: "waypoints" | "distance_only" | "manual" | "none"; chokepoints?: string[]; reversed?: boolean | null; source?: string | null; verified?: boolean | null; ecaConfidence?: "official" | "coarse" | null; manual?: ManualProvenance }[];
   geometryVersions: { code: string; geometryVersion: string }[];
   algorithmVersion: string; // fn_route_eca_split revision
   warnings: string[];
@@ -61,6 +62,11 @@ export interface SuezCostSnapshot {
   anchorageDays: number;
   warnings: string[];
   manual?: ManualProvenance;
+  /** the transit date the tariff and SDR rate were taken on, and how it was derived */
+  transitDate?: string | null;
+  transitDateBasis?: string | null;
+  /** a second transit on the ballast leg, same fields */
+  ballastTransit?: Omit<SuezCostSnapshot, "kind" | "canonicalSha256" | "ballastTransit"> | null;
   canonicalSha256?: string;
 }
 

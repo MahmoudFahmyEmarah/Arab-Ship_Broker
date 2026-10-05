@@ -12,7 +12,7 @@ import { parseVoyageInput, parseVoyageSettings } from "../lib/voyage/schemas";
 import { canonicalJson, sealSnapshot, type FuelIndexSnapshot } from "../lib/voyage/snapshots";
 import { DEFAULT_VOYAGE_SETTINGS, type VoyageInput, type VoyageSettings } from "../lib/voyage/types";
 import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage/calculator-policy";
-import { canalFromSuez } from "../lib/voyage/canal";
+import { canalFromSuez, suezTransitDate } from "../lib/voyage/canal";
 import { estimateSuezTransit } from "../lib/suez/engine";
 import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
 
@@ -22,6 +22,7 @@ const eq = (a: unknown, b: unknown, msg: string) => { assert.deepStrictEqual(a, 
 const near = (a: number | null | undefined, b: number, tol: number, msg: string) => { assert.ok(a != null && Math.abs(a - b) <= tol, `${msg}: got ${a}, want ${b} ±${tol}`); checks++; };
 
 const S: VoyageSettings = structuredClone(DEFAULT_VOYAGE_SETTINGS);
+S.seaMargin.defaultPct = 0; // fixtures sail on the governed margin (an entered margin is a broker input since C2O-044 #5)
 const MANUAL = { actorUserId: "user-1", reason: "agent quote 3 Oct", at: "2026-10-03T10:00:00Z" };
 const index = (products: Record<string, number>, extra: Partial<FuelIndexSnapshot> = {}): FuelIndexSnapshot => ({
   kind: "fuel_index", status: "trusted", algorithmVersion: "bunker-index/1", asOf: "2026-10-03T06:00:00Z", requestedPort: "AEFJR", scope: "port", actualPort: "AEFJR", region: null,
@@ -34,7 +35,7 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   legs: { ballast: null, laden: { key: "laden", from: "EGALY", to: "SAJED", nm: 1500, ecaNm: 0, method: "waypoints" } },
   canal: null,
   ports: { load: port("load"), disch: port("disch") },
-  anchorageDays: 0, anchorageInEca: false, seaMarginPct: 0, lane: null, season: null,
+  anchorageDays: 0, anchorageInEca: false, seaMarginPct: null, lane: null, season: null,
   fuel: index({ VLSFO: 844.5, LSMGO: 1601, HSFO380: 450 }),
   settings: S, settingsSource: "governed", revenue: null,
   extras: { insuranceUsd: 0, stevedoringUsd: 0, otherUsd: 0 },
@@ -275,21 +276,22 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
     found: true, date: "2026-10-05", version: { id: "v", versionNo: 4, effectiveFrom: "2026-10-01", effectiveTo: null, sourceRef: "fixture", surchargeRegime: regime },
     items: [sItem("transit_toll", "toll", "toll_tiered_scnt", {}), sItem("pilotage", "fixed", "flat", { amount: 316 }, { currency: "USD" }), ...items],
     tiers: [{ vesselCategory: "dry_bulk", cargoStatus: "laden", tierOrder: 0, scntFrom: 0, scntTo: null, sdrPerScnt: 5, confidence: "official" }],
-    sdr: { rateUsd: 1.35, asOf: "2026-10-01", source: "IMF" }, suezDays: { transitDays: 1, anchorageDays: 0.5, nm: 100 },
+    sdr: { rateUsd: 1.35, asOf: "2026-10-01", source: "IMF" }, suezDays: { transitDays: 1, anchorageDays: 0.5, nm: 100 }, sources: [{ id: "src", title: "SCA schedule (fixture)", issuer: "Suez Canal Authority", documentNo: null, issueDate: "2023-10-17", authority: "official", evidenceStatus: "on_file", sha256: "1e98fa11b6183c4beefa21b6a21c7a199eb7bd17b9e2c082b7f6e951ca54c35f" }],
   });
   const sIn: SuezInput = { vessel: { scnt: 10000, gt: 12000, category: "dry_bulk", buildYear: 2015, searchlightCompliant: true, firstTransit: false }, voyage: { direction: "SB", cargoStatus: "laden", transitDate: "2026-10-05" } };
   const sur = (confidence: "official" | "reported") => sItem("surcharge_dry_bulk", "surcharge", "pct_of_toll", { pct: 22 }, { categoryScope: ["dry_bulk"], confidence });
+  const G = { anchorageInEca: true, anchorageInEcaSource: "governed" as const };
   const trustedSuez = estimateSuezTransit(sIn, sCtx("modelled", [sur("official")]));
   eq(trustedSuez.status, "trusted", "fixture Suez estimate is trusted");
-  eq(canalFromSuez(trustedSuez, S, true).status, "trusted", "trusted Suez → trusted canal");
+  eq(canalFromSuez(trustedSuez, S, G).status, "trusted", "trusted Suez → trusted canal");
   const reportedSuez = estimateSuezTransit(sIn, sCtx("modelled", [sur("reported")]));
-  const fb = canalFromSuez(reportedSuez, S, true);
+  const fb = canalFromSuez(reportedSuez, S, G);
   ok(fb.status === "fallback" && fb.costUsd === reportedSuez.totals.appliedUsd, "a partial-but-complete Suez estimate → fallback canal with its labelled figure");
-  const unk = canalFromSuez(estimateSuezTransit(sIn, sCtx("unknown")), S, true);
+  const unk = canalFromSuez(estimateSuezTransit(sIn, sCtx("unknown")), S, G);
   ok(unk.status === "unavailable" && unk.costUsd == null, "base dues without the surcharge → canal unavailable, no figure");
   const manualSuez = estimateSuezTransit({ ...sIn, overrides: { sdrRate: { value: 1.4, reason: "bank rate today", actorUserId: "u-1", at: "2026-10-05T08:00:00Z" } } }, sCtx("modelled", [sur("official")]));
-  eq(canalFromSuez(manualSuez, S, true).status, "manual", "only the stamped SDR override departs from trusted → manual canal");
-  eq(canalFromSuez(null, S, true).status, "unavailable", "no Suez estimate → unavailable");
+  eq(canalFromSuez(manualSuez, S, G).status, "manual", "only the stamped SDR override departs from trusted → manual canal");
+  eq(canalFromSuez(null, S, G).status, "unavailable", "no Suez estimate → unavailable");
   const v = { ...base().vessel, consumption: { ...base().vessel.consumption, anchorage: { residual: 2, distillate: 0.5 } } };
   const ve = estimateVoyage(base({ vessel: v, canal: fb }));
   ok(ve.costs.canal.status === "fallback" && ve.costs.canal.usd === fb.costUsd && ve.status === "partial", "a fallback canal is costed, labelled, and keeps the voyage partial");
@@ -303,7 +305,7 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok((act.match(/await resolveCalculatorAccess\(\)/g) ?? []).length >= 2, "both voyage actions pass the entitlement guard");
   ok(act.includes("lookupLeg(supabase, from, to, today)") && !act.includes("payload.routeLegs") && !act.includes("payload.routeMeta"), "legs and route metadata are resolved on the server, never taken from the browser");
   ok(act.includes('p?.pda?.source === "tariff"'), "a browser-asserted tariff DA is refused");
-  ok(act.includes("canalFromSuez(suez, settingsLoad.settings"), "the canal status is derived on the server");
+  ok(act.includes("canalFromSuez(suez, settings, { leg: which"), "the canal status is derived on the server");
   ok(/status: l\.status/.test(act) && /status: f\.status/.test(act), "every saved line carries its governed status");
   const sz = readFileSync(new URL("../app/(dashboard)/dashboard/suez-toll/actions.ts", import.meta.url), "utf8");
   eq((sz.match(/await resolveCalculatorAccess\(\)/g) ?? []).length, 3, "all three Suez actions pass the entitlement guard");
@@ -311,6 +313,101 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
     const src = readFileSync(new URL(`../app/(dashboard)/dashboard/${page}/page.tsx`, import.meta.url), "utf8");
     ok(src.includes("resolveCalculatorAccess()") && !src.includes("loadViewerContext"), `${page} page uses the same guard as its actions`);
   }
+}
+
+// ── 14 · Opus B PR-03 / PR-04 and Codex C2O-043 ─────────────────────────────
+{
+  const v = { ...base().vessel, consumption: { ...base().vessel.consumption, sea_ballast: { residual: 6, distillate: 0.8 }, anchorage: { residual: 2, distillate: 0.5 } } };
+  const G = { anchorageInEca: true, anchorageInEcaSource: "governed" as const };
+  const sIn: SuezInput = { vessel: { scnt: 10000, gt: 12000, category: "dry_bulk", buildYear: 2015, searchlightCompliant: true, firstTransit: false }, voyage: { direction: "SB", cargoStatus: "laden", transitDate: "2026-10-05" } };
+  const ctx: SuezTariffContext = {
+    found: true, date: "2026-10-05", version: { id: "v", versionNo: 4, effectiveFrom: "2026-10-01", effectiveTo: null, sourceRef: "fixture", surchargeRegime: "none" },
+    items: [{ code: "transit_toll", labelEn: "toll", layer: "toll", basis: "toll_tiered_scnt", currency: "SDR", params: {}, directionScope: "any", cargoStatusScope: "any", conditionKey: null, payerParty: "owner", sortOrder: 1 }],
+    tiers: [{ vesselCategory: "dry_bulk", cargoStatus: "laden", tierOrder: 0, scntFrom: 0, scntTo: null, sdrPerScnt: 5, confidence: "official" }, { vesselCategory: "dry_bulk", cargoStatus: "ballast", tierOrder: 0, scntFrom: 0, scntTo: null, sdrPerScnt: 4, confidence: "official" }],
+    sdr: { rateUsd: 1.35, asOf: "2026-10-01", source: "IMF" }, suezDays: { transitDays: 1, anchorageDays: 0.5, nm: 100 }, sources: [{ id: "src", title: "SCA schedule (fixture)", issuer: "Suez Canal Authority", documentNo: null, issueDate: "2023-10-17", authority: "official", evidenceStatus: "on_file", sha256: "1e98fa11b6183c4beefa21b6a21c7a199eb7bd17b9e2c082b7f6e951ca54c35f" }],
+  };
+  const laden = canalFromSuez(estimateSuezTransit(sIn, ctx), S, { leg: "laden", ...G });
+  eq(laden.status, "trusted", "fixture canal is trusted");
+
+  // (a) no open port: the ballast leg is reported unavailable, never dropped
+  const noOpen = estimateVoyage(base({ legs: { ballast: { key: "ballast", from: null, to: "EGALY", nm: null, ecaNm: null, method: "none" }, laden: base().legs.laden } }));
+  ok(noOpen.legs.some((l) => l.key === "ballast" && l.status === "unavailable") && noOpen.status === "partial" && !noOpen.costs.complete, "a ballast leg without an open port is unavailable and the estimate partial");
+  const vy = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
+  ok(vy.includes("const hasBallast = !!vessel && (openCode == null || openCode !== polCode)"), "the page keeps a ballast leg when the open port is unknown");
+
+  // (b) the canal miles inside a measured track are not sailed twice
+  const leg = { key: "laden" as const, from: "GRPIR", to: "SAJED", nm: 1304.2, ecaNm: 0, method: "waypoints" as const, routeVerified: true, canalNm: 100 };
+  const withCanal = estimateVoyage(base({ vessel: v, legs: { ballast: null, laden: leg }, canal: laden }));
+  near(withCanal.days.seaLaden, (1304.2 - 100) / (12.5 * 24), 0.01, "sea days exclude the canal miles when the transit is its own leg");
+  near(withCanal.days.canalTransit, 1, 0.001, "the transit itself is the settings' canal day");
+  near(estimateVoyage(base({ vessel: v, legs: { ballast: null, laden: leg } })).days.seaLaden, 1304.2 / (12.5 * 24), 0.01, "without a priced transit the full track is sailed");
+
+  // (c) a ballast transit is its own toll (ballast bands), date and leg
+  const ballastCanal = canalFromSuez(estimateSuezTransit({ ...sIn, voyage: { ...sIn.voyage, cargoStatus: "ballast", direction: "NB" } }, ctx), S, { leg: "ballast", ...G });
+  const both = estimateVoyage(base({ vessel: v, legs: { ballast: { key: "ballast", from: "SAJED", to: "EGALY", nm: 900, ecaNm: 0, method: "waypoints", routeVerified: true, canalNm: 100 }, laden: leg }, canal: laden, ballastCanal }));
+  near(both.costs.canal.usd, (laden.costUsd ?? 0) + (ballastCanal.costUsd ?? 0), 0.01, "two transits → both canal costs");
+  ok(both.legs.some((l) => l.key === "canal_ballast") && both.legs.some((l) => l.key === "canal"), "each transit is its own leg");
+  ok((ballastCanal.costUsd ?? 0) < (laden.costUsd ?? 0), "the ballast transit is priced on the ballast bands");
+  eq(suezTransitDate("2026-10-10", 3.6), "2026-10-14", "transit date = start + rounded days");
+  eq(suezTransitDate("2026-10-10", -2.4), "2026-10-08", "a ballast transit precedes the laycan");
+
+  // (e) manual canal cost when the Suez estimate is incomplete
+  const incomplete = estimateSuezTransit({ ...sIn, vessel: { ...sIn.vessel, scnt: null } }, ctx);
+  const manualCanal = canalFromSuez(incomplete, S, { leg: "laden", ...G, manualCost: { usd: 210000, manual: MANUAL } });
+  ok(manualCanal.status === "manual" && manualCanal.costUsd === 210000 && !manualCanal.complete, "an incomplete Suez estimate takes the broker's stamped canal cost as manual");
+  eq(canalFromSuez(incomplete, S, { leg: "laden", ...G, manualCost: { usd: 1, manual: { ...MANUAL, reason: "" } } }).status, "unavailable", "a canal cost without a reason is refused");
+  const mv = estimateVoyage(base({ vessel: v, canal: manualCanal }));
+  ok(mv.costs.canal.usd === 210000 && mv.costs.canal.status === "manual" && mv.status === "partial" && mv.warnings.some((w) => w.includes("entered manually")), "the manual canal cost is costed, labelled and keeps the voyage partial");
+
+  // C2O-043 #9 · an unverified track is a fallback
+  const unv = estimateVoyage(base({ legs: { ballast: null, laden: { ...base().legs.laden, routeVerified: false } } }));
+  ok(unv.legs[0].status === "fallback" && unv.status === "partial" && unv.warnings.some((w) => w.includes("unverified")), "an unverified measured track is fallback, never trusted");
+
+  // C2O-043 #11 · asserted port/anchorage facts and typed vessel facts keep the estimate partial
+  eq(estimateVoyage(base({ ports: { load: port("load", { openLoopBan: true }), disch: port("disch") } })).status, "partial", "an asserted open-loop ban is a manual fact");
+  eq(estimateVoyage(base({ ports: { load: port("load", { inEcaSource: "manual" }), disch: port("disch") } })).status, "partial", "an asserted port ECA status is a manual fact");
+  eq(estimateVoyage(base({ ports: { load: port("load", { inEcaSource: "governed" }), disch: port("disch", { inEcaSource: "governed" }) } })).status, "trusted", "a governed port ECA status keeps it trusted");
+  eq(estimateVoyage(base({ vesselSource: "manual" })).status, "partial", "vessel facts typed for this estimate are manual");
+  eq(estimateVoyage(base({ vesselSource: "profile" })).status, "trusted", "the vessel's profile facts are governed");
+  eq(estimateVoyage(base({ vessel: v, canal: { ...laden, anchorageInEcaSource: "manual" } })).status, "partial", "an asserted anchorage ECA status is a manual fact");
+
+  // PR-04 · platform assumptions are labelled until the owner confirms them
+  const pa = estimateVoyage(base());
+  ok(pa.platformAssumptions.some((p) => p.key === "opex.crewUsdDay" && p.label.includes("1,450")) && pa.assumptions.some((a) => a.startsWith("Platform assumption")), "unconfirmed constants are labelled platform assumption");
+  const conf = estimateVoyage(base({ settings: { ...S, confirmed: ["opex.crewUsdDay", "opex.maintenanceUsdDay", "classMultipliers", "seaMargin.defaultPct", "speeds", "portTimeDays", "suez.days"] } }));
+  eq(conf.platformAssumptions, [], "confirmed constants carry no label");
+  ok(vy.includes("platform assumption"), "the page shows the label beside the running cost");
+  ok(parseVoyageSettings({ ...S, confirmed: ["not.a.key"] }).ok === false, "only known constants can be confirmed");
+  ok(parseVoyageSettings({ ...S, suez: { ...S.suez, anchorages: { SB: [31.35, 32.36] } } }).ok, "settings carry the anchorage points");
+
+  // C2O-044 #3/#5 · coarse ECA geometry and broker inputs never yield a trusted estimate
+  const coarseLeg = estimateVoyage(base({ legs: { ballast: null, laden: { ...base().legs.laden, ecaConfidence: "coarse" } } }));
+  ok(coarseLeg.legs[0].status === "fallback" && coarseLeg.status === "partial", "an ECA share from a coarse ring is a fallback");
+  eq(estimateVoyage(base({ ports: { load: port("load", { inEcaSource: "coarse" }), disch: port("disch") } })).status, "partial", "a port ECA status from a coarse ring is not trusted");
+  for (const [what, over] of [
+    ["an entered sea margin", { seaMarginPct: 4 }],
+    ["port allowance days", { ports: { load: port("load", { allowanceDays: 0.5 }), disch: port("disch") } }],
+    ["waiting days at anchorage", { anchorageDays: 1 }],
+    ["broker cost extras", { extras: { insuranceUsd: 1000, stevedoringUsd: 0, otherUsd: 0 } }],
+    ["freight and commission", { revenue: { qtyMt: 30000, freightUsdMt: 25, commissionPct: 2.5 } }],
+  ] as const) {
+    const e = estimateVoyage(base(over as Partial<VoyageInput>));
+    ok(e.status === "partial" && e.assumptions.some((a) => a.startsWith("Broker inputs")), `${what} is a broker input: the estimate is partial and says so`);
+  }
+  ok(!vy.includes("Every figure comes from governed data"), "the page no longer claims every figure is governed");
+  const actSrc = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
+  ok(actSrc.includes('const ACTOR_REF = "run-actor"') && !actSrc.includes("actorUserId: actorId"), "snapshots carry the run-actor reference, never a user id");
+  // contract: server-side derivations
+  const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
+  for (const needle of ["rl.route!.chokepoints.includes(\"SUEZ\")", "suezDirection", "getPointEcaZones(supabase, point[0], point[1], date)", "portEca(ladenRoute?.startZones", "saved without the cargo link", "saved without the position link", "vesselSource = sameFacts(", "suezTransitDate(startDate, offset)", "cargoStatus: which", "routeVerified: r.verified"]) ok(act.includes(needle), `save derives on the server: ${needle.slice(0, 50)}`);
+  ok(!act.includes("client.canal.required") || act.includes("measured ? rl.route!.chokepoints"), "the browser's canal flag counts only for a manual leg");
+  const page = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/page.tsx", import.meta.url), "utf8");
+  ok(page.includes("loadVesselViews({ mine: true }).then((r) => r.views.map(voyageOptionFromView))") && page.includes("loadOwnerOrgs(access.actorId)"), "members get their own vessels and the owner organisations");
+  ok(vy.includes("ownerOrgId: ownerOrgId || null") && vy.includes("Estimate owned by"), "a multi-seat member chooses the owning organisation");
+  const mig = readFileSync(new URL("../supabase/migrations/20261003205500_suez_voyage_review_fixes.sql", import.meta.url), "utf8");
+  for (const needle of ["suez_tariff_items_reported_ck", "when new.status = 'published' then coalesce(new.published_by, v_actor) else v_actor end", "'notes_changed'", "vc.user_id = coalesce(u.supabase_user_id, u.id)", "a position is linked without its vessel", "must be owned by that organisation", "origin in ('system','command')", "for share", "alter column status set not null", "revoke insert on table public.voyage_estimate_runs, public.voyage_estimate_lines from service_role", "'startZones'", "fn_point_eca_zones", "'verified'"]) ok(mig.includes(needle), `205500 carries: ${needle.slice(0, 50)}`);
+  const down = readFileSync(new URL("../supabase/rollback/20261003_suez_voyage_down.sql", import.meta.url), "utf8");
+  ok(down.includes("savepoint stream_s_down_requires_a_transaction") && down.includes("where origin = 'command'") && down.includes("perform set_config('asb.stream_s_down', '', false)") && down.includes("export-taken:(.{3,200})"), "the DOWN needs one transaction, reads durable origin and spends the confirmation");
 }
 
 console.log(`voyage-check: ${checks} checks passed`);
