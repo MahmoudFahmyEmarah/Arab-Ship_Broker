@@ -43,7 +43,10 @@ export interface RouteEcaClassification {
 
 export interface SuezCostSnapshot {
   kind: "suez_cost";
-  status: SnapshotStatus;
+  /** the canal status the voyage used (fallback = a partial Suez estimate, labelled) */
+  status: SnapshotStatus | "fallback";
+  /** the Suez estimate's own status (trusted | partial | unavailable | invalid) */
+  suezStatus: string | null;
   required: boolean;
   algorithmVersion: string | null;
   tariffVersionNo: number | null;

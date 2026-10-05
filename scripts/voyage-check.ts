@@ -11,6 +11,10 @@ import { estimateVoyage, seaDays, seaMarginFor, seasonOf } from "../lib/voyage/e
 import { parseVoyageInput, parseVoyageSettings } from "../lib/voyage/schemas";
 import { canonicalJson, sealSnapshot, type FuelIndexSnapshot } from "../lib/voyage/snapshots";
 import { DEFAULT_VOYAGE_SETTINGS, type VoyageInput, type VoyageSettings } from "../lib/voyage/types";
+import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage/calculator-policy";
+import { canalFromSuez } from "../lib/voyage/canal";
+import { estimateSuezTransit } from "../lib/suez/engine";
+import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
 
 let checks = 0;
 const ok = (cond: boolean, msg: string) => { assert.ok(cond, msg); checks++; };
@@ -247,6 +251,66 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(orgFix.includes("order by om.added_at asc nulls last"), "save_voyage_estimate orders memberships by organization_members.added_at");
   ok(!orgFix.includes("om.created_at"), "the misnamed membership column is gone from the save function");
   for (const s of ["create table if not exists public.voyage_estimate_runs", "fuel_index_snapshot", "route_eca_snapshot", "suez_cost_snapshot", "port_cost_snapshot", "settings_hash", "VOYAGE_IMMUTABLE", "grant execute on function public.save_voyage_estimate(uuid, jsonb) to service_role", "grant execute on function public.get_voyage_estimate(uuid) to authenticated, service_role"]) ok(runs.includes(s), `runs migration carries: ${s.slice(0, 50)}`);
+}
+
+// ── 13 · audit C2O-039: entitlement, canal status, assumed class, server-side provenance ─
+{
+  // P0-4 · one entitlement rule
+  const row = (over: Record<string, unknown> = {}) => ({ id: "u-1", role: "Broker", is_active: true, subscription_tier: "T3", is_market_partner: false, ...over });
+  eq(decideCalculatorAccess({ authenticated: false, row: null, claimRole: null }).allowed, false, "signed out → refused");
+  eq(decideCalculatorAccess({ authenticated: true, row: null, claimRole: null }), { allowed: false, reason: "no_profile", tier: null }, "no portal profile → refused");
+  eq(decideCalculatorAccess({ authenticated: true, row: row({ role: "admin", is_active: false }), claimRole: "admin" }), { allowed: false, reason: "inactive", tier: null }, "an inactive admin is refused");
+  eq(decideCalculatorAccess({ authenticated: true, row: row({ role: "admin" }), claimRole: "admin" }), { allowed: true, actorId: "u-1", kind: "admin", tier: "T3" }, "admin row + admin claim → allowed as admin");
+  eq(decideCalculatorAccess({ authenticated: true, row: row({ role: "admin" }), claimRole: null }).allowed, false, "admin row without the Auth claim is a member (rollout off → refused)");
+  eq(decideCalculatorAccess({ authenticated: true, row: row({ subscription_tier: "T2" }), claimRole: null }), { allowed: false, reason: "tier_locked", tier: "T2" }, "T2 member → locked");
+  eq(decideCalculatorAccess({ authenticated: true, row: row(), claimRole: null }), { allowed: false, reason: "rollout", tier: "T3" }, "T3 member while the rollout is off → refused");
+  eq(decideCalculatorAccess({ authenticated: true, row: row(), claimRole: null, memberRollout: true }), { allowed: true, actorId: "u-1", kind: "member", tier: "T3" }, "T3 member after the rollout → allowed");
+  eq(decideCalculatorAccess({ authenticated: true, row: row({ subscription_tier: "T1", is_market_partner: true }), claimRole: null, memberRollout: true }).allowed, true, "a market partner counts as T3");
+  ok(CALCULATOR_MEMBER_ROLLOUT === false, "member rollout stays off until the production data exists");
+
+  // P1-8 · the canal is trusted only from a trusted Suez estimate
+  const sItem = (code: string, layer: SuezTariffItem["layer"], basis: SuezTariffItem["basis"], params: Record<string, unknown>, extra: Partial<SuezTariffItem> = {}): SuezTariffItem =>
+    ({ code, labelEn: code, layer, basis, currency: "SDR", params, directionScope: "any", cargoStatusScope: "any", conditionKey: null, payerParty: "owner", sortOrder: 10, ...extra });
+  const sCtx = (regime: "unknown" | "none" | "modelled", items: SuezTariffItem[] = []): SuezTariffContext => ({
+    found: true, date: "2026-10-05", version: { id: "v", versionNo: 4, effectiveFrom: "2026-10-01", effectiveTo: null, sourceRef: "fixture", surchargeRegime: regime },
+    items: [sItem("transit_toll", "toll", "toll_tiered_scnt", {}), sItem("pilotage", "fixed", "flat", { amount: 316 }, { currency: "USD" }), ...items],
+    tiers: [{ vesselCategory: "dry_bulk", cargoStatus: "laden", tierOrder: 0, scntFrom: 0, scntTo: null, sdrPerScnt: 5, confidence: "official" }],
+    sdr: { rateUsd: 1.35, asOf: "2026-10-01", source: "IMF" }, suezDays: { transitDays: 1, anchorageDays: 0.5, nm: 100 },
+  });
+  const sIn: SuezInput = { vessel: { scnt: 10000, gt: 12000, category: "dry_bulk", buildYear: 2015, searchlightCompliant: true, firstTransit: false }, voyage: { direction: "SB", cargoStatus: "laden", transitDate: "2026-10-05" } };
+  const sur = (confidence: "official" | "reported") => sItem("surcharge_dry_bulk", "surcharge", "pct_of_toll", { pct: 22 }, { categoryScope: ["dry_bulk"], confidence });
+  const trustedSuez = estimateSuezTransit(sIn, sCtx("modelled", [sur("official")]));
+  eq(trustedSuez.status, "trusted", "fixture Suez estimate is trusted");
+  eq(canalFromSuez(trustedSuez, S, true).status, "trusted", "trusted Suez → trusted canal");
+  const reportedSuez = estimateSuezTransit(sIn, sCtx("modelled", [sur("reported")]));
+  const fb = canalFromSuez(reportedSuez, S, true);
+  ok(fb.status === "fallback" && fb.costUsd === reportedSuez.totals.appliedUsd, "a partial-but-complete Suez estimate → fallback canal with its labelled figure");
+  const unk = canalFromSuez(estimateSuezTransit(sIn, sCtx("unknown")), S, true);
+  ok(unk.status === "unavailable" && unk.costUsd == null, "base dues without the surcharge → canal unavailable, no figure");
+  const manualSuez = estimateSuezTransit({ ...sIn, overrides: { sdrRate: { value: 1.4, reason: "bank rate today", actorUserId: "u-1", at: "2026-10-05T08:00:00Z" } } }, sCtx("modelled", [sur("official")]));
+  eq(canalFromSuez(manualSuez, S, true).status, "manual", "only the stamped SDR override departs from trusted → manual canal");
+  eq(canalFromSuez(null, S, true).status, "unavailable", "no Suez estimate → unavailable");
+  const v = { ...base().vessel, consumption: { ...base().vessel.consumption, anchorage: { residual: 2, distillate: 0.5 } } };
+  const ve = estimateVoyage(base({ vessel: v, canal: fb }));
+  ok(ve.costs.canal.status === "fallback" && ve.costs.canal.usd === fb.costUsd && ve.status === "partial", "a fallback canal is costed, labelled, and keeps the voyage partial");
+  ok(ve.warnings.some((w) => w.includes("labelled fallback")), "the fallback canal is explained");
+
+  // P1-8 · an assumed cost class is a stated assumption AND a partial estimate
+  eq(estimateVoyage(base({ vessel: { ...base().vessel, vesselClass: null } })).status, "partial", "unknown class → partial (never trusted on an assumed multiplier)");
+
+  // P0-3 / P0-4 / P1-9 · contract: the save re-resolves legs and the guard covers every action
+  const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
+  ok((act.match(/await resolveCalculatorAccess\(\)/g) ?? []).length >= 2, "both voyage actions pass the entitlement guard");
+  ok(act.includes("lookupLeg(supabase, from, to, today)") && !act.includes("payload.routeLegs") && !act.includes("payload.routeMeta"), "legs and route metadata are resolved on the server, never taken from the browser");
+  ok(act.includes('p?.pda?.source === "tariff"'), "a browser-asserted tariff DA is refused");
+  ok(act.includes("canalFromSuez(suez, settingsLoad.settings"), "the canal status is derived on the server");
+  ok(/status: l\.status/.test(act) && /status: f\.status/.test(act), "every saved line carries its governed status");
+  const sz = readFileSync(new URL("../app/(dashboard)/dashboard/suez-toll/actions.ts", import.meta.url), "utf8");
+  eq((sz.match(/await resolveCalculatorAccess\(\)/g) ?? []).length, 3, "all three Suez actions pass the entitlement guard");
+  for (const page of ["suez-toll", "voyage-estimator"]) {
+    const src = readFileSync(new URL(`../app/(dashboard)/dashboard/${page}/page.tsx`, import.meta.url), "utf8");
+    ok(src.includes("resolveCalculatorAccess()") && !src.includes("loadViewerContext"), `${page} page uses the same guard as its actions`);
+  }
 }
 
 console.log(`voyage-check: ${checks} checks passed`);

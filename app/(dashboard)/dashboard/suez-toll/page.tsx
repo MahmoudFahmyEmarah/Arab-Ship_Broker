@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getAppUserRow } from "@/lib/app-user";
-import { loadViewerContext, loadVesselViews } from "@/lib/portal/data";
+import { loadVesselViews } from "@/lib/portal/data";
 import { ComingSoon } from "@/components/portal/ComingSoon";
-import { isCalculatorLocked } from "@/lib/portal/tier-gate";
+import { resolveCalculatorAccess } from "@/lib/voyage/calculator-access";
 import { CalculatorLocked } from "@/components/portal/calculators";
 import { SuezCalculator } from "@/components/suez/SuezCalculator";
 import { getSuezTariffContext } from "@/sdk/app/suez";
@@ -36,30 +34,26 @@ async function loadAdminVesselOptions(): Promise<SuezVesselOption[]> {
 }
 
 export default async function SuezTollPage({ searchParams }: { searchParams: Promise<{ vessel?: string | string[] }> }) {
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
-
-  const { tier, role } = await loadViewerContext();
-  // Admin-only until a published SCA toll table and SDR rate exist in
-  // production (PLAN-voyage-economics §5); then T3+ through the tier gate.
-  if (role !== "admin") return <ComingSoon variant="compass" />;
-  if (isCalculatorLocked(tier)) return <CalculatorLocked title="Suez Canal Transit Cost" />;
+  // One entitlement rule for this page and every calculator action (lib/voyage/calculator-policy.ts):
+  // active profile; admin (row + Auth claim) or, once the member rollout opens, T3/T4.
+  const { access, supabase } = await resolveCalculatorAccess();
+  if (!access.allowed) {
+    if (access.reason === "signed_out" || access.reason === "no_profile" || access.reason === "inactive") redirect("/auth/login");
+    if (access.reason === "tier_locked") return <CalculatorLocked title="Suez Canal Transit Cost" />;
+    return <ComingSoon variant="compass" />;
+  }
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
   let context: SuezTariffContextResult = { found: false, date: today };
   try { context = await getSuezTariffContext(supabase, today); } catch { /* the calculator shows the unavailable state */ }
-  const [vessels, viewer] = await Promise.all([
-    role === "admin" ? loadAdminVesselOptions() : loadVesselViews({ mine: true }).then((r) => r.views.map(suezOptionFromView)),
-    getAppUserRow(supabase, user.id, "id"),
-  ]);
+  const vessels = access.kind === "admin" ? await loadAdminVesselOptions() : await loadVesselViews({ mine: true }).then((r) => r.views.map(suezOptionFromView));
 
   return (
     <SuezCalculator
       vessels={vessels}
       initialContext={context}
-      viewerUserId={viewer?.id ?? null}
+      viewerUserId={access.actorId}
       initialVesselId={typeof params.vessel === "string" ? params.vessel : undefined}
     />
   );

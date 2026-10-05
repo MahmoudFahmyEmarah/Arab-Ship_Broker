@@ -169,8 +169,10 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   if (input.canal?.required) {
     const c = input.canal;
     dCanalTransit = c.transitDays; dCanalAnch = c.anchorageDays;
-    if (c.costUsd != null && c.complete && (c.status === "trusted" || c.status === "manual")) canal = { usd: c.costUsd, status: c.status, required: true };
-    else { canal = { usd: null, status: "unavailable", required: true }; unavailable.push({ code: "canal", reason: `${c.name} transit cost unavailable (the Suez estimate is ${c.status}${c.complete ? "" : ", incomplete"}).` }); }
+    if (c.costUsd != null && c.complete && (c.status === "trusted" || c.status === "manual" || c.status === "fallback")) {
+      canal = { usd: c.costUsd, status: c.status, required: true };
+      if (c.status === "fallback") warnings.push(`${c.name} cost is a labelled fallback: the canal estimate is partial (reported surcharge, undecided flags or placeholder bands).`);
+    } else { canal = { usd: null, status: "unavailable", required: true }; unavailable.push({ code: "canal", reason: `${c.name} transit cost unavailable (the Suez estimate is ${c.status}${c.complete ? "" : ", incomplete"}).` }); }
     const burns: FuelBurn[] = [];
     const aBurns: FuelBurn[] = [];
     const okT = burnState(burns, "sea_laden", dCanalTransit, 0);
@@ -271,7 +273,7 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   // ── status ──────────────────────────────────────────────────────────
   let status: VoyageStatus;
   if (anyLegUnavailable && legs.filter((l) => l.kind === "sea").every((l) => l.status === "unavailable")) status = "unavailable";
-  else if (!complete || fuelStatus !== "trusted" || canal.status === "manual" || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
+  else if (!complete || fuelStatus !== "trusted" || canal.status === "manual" || canal.status === "fallback" || classAssumed || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
   else status = "trusted";
 
   return {

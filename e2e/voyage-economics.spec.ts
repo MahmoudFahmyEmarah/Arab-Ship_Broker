@@ -58,6 +58,11 @@ alter table public.suez_tariff_items enable trigger trg_suez_items_guard;
 alter table public.suez_toll_tiers enable trigger trg_suez_tiers_guard;
 alter table public.sdr_rates enable trigger trg_sdr_rates_guard;
 alter table public.suez_tariff_events enable trigger trg_suez_events_append_only;
+alter table public.voyage_estimate_runs disable trigger trg_voyage_run_immutable;
+alter table public.voyage_estimate_lines disable trigger trg_voyage_lines_immutable;
+delete from public.voyage_estimate_runs where actor_user_id = '${admin.userId}' and label like '%${seed.vesselName}%';
+alter table public.voyage_estimate_runs enable trigger trg_voyage_run_immutable;
+alter table public.voyage_estimate_lines enable trigger trg_voyage_lines_immutable;
 alter table public.vessel_economics_profile_events disable trigger trg_vep_events_append_only;
 delete from public.vessel_economics_profile_events where vessel_id = '${seed.vesselId}';
 alter table public.vessel_economics_profile_events enable trigger trg_vep_events_append_only;
@@ -148,6 +153,9 @@ test("member calculator prices a transit from the published bands and saves the 
     // Searchlight and first transit are unknown → undecided flags; the estimate says so instead of charging or waiving.
     await expect(flags.locator(".sz-flag.is-undecided").first()).toBeVisible();
     await expect(page.locator(".sz-status")).toContainText("partial");
+    // The e2e version (copied, surcharge regime unknown) prices base dues only: never trusted, no total (C2O-039 P0-1).
+    await expect(tollCard).toContainText("does not model the SCA category surcharges");
+    await expect(page.locator(".sz-status")).toContainText("category surcharge");
 
     // Save the facts to the vessel economics profile through the member RPC, then they load as Record.
     await page.getByRole("button", { name: "Save facts to vessel profile" }).click();
@@ -206,6 +214,21 @@ test("voyage estimator prices the seeded pairing and saves an immutable estimate
     await page.getByRole("button", { name: "Save estimate" }).click();
     await expect(page.locator(".ve-head")).toContainText("Estimate saved");
     await expect(page.locator(".ve-head")).toContainText("partial");
+  } finally {
+    await context.close();
+  }
+});
+
+test("a member without the calculator entitlement is refused both calculator pages", async ({ browser, baseURL }) => {
+  // One rule for pages and actions (lib/voyage/calculator-policy.ts): members wait for the rollout; T1/T2 are locked.
+  const { page, context } = await signInAs(browser, baseURL!, seed.charterer.email);
+  try {
+    await page.goto("/dashboard/suez-toll");
+    await expect(page.getByText("Plotting the Course").first()).toBeVisible();
+    await expect(page.getByText("Suez Canal Transit Cost", { exact: true })).toHaveCount(0);
+    await page.goto("/dashboard/voyage-estimator");
+    await expect(page.getByText("Still Charting These Waters").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save estimate" })).toHaveCount(0);
   } finally {
     await context.close();
   }

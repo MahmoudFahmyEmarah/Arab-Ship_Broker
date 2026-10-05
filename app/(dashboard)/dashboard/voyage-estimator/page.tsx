@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getAppUserRow } from "@/lib/app-user";
-import { loadViewerContext, loadCargoViews } from "@/lib/portal/data";
+import { loadCargoViews } from "@/lib/portal/data";
 import { ComingSoon } from "@/components/portal/ComingSoon";
-import { isCalculatorLocked } from "@/lib/portal/tier-gate";
+import { resolveCalculatorAccess } from "@/lib/voyage/calculator-access";
 import { CalculatorLocked } from "@/components/portal/calculators";
 import { VoyageEstimatorV2 } from "@/components/voyage/VoyageEstimatorV2";
 import { getSuezTariffContext } from "@/sdk/app/suez";
@@ -38,19 +36,18 @@ async function loadAdminVoyageVessels(): Promise<VoyageVesselOption[]> {
 }
 
 export default async function VoyageEstimatorPage({ searchParams }: { searchParams: Promise<{ vessel?: string | string[]; cargo?: string | string[] }> }) {
-  const supabase = await getSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
-
-  const { tier, role } = await loadViewerContext();
-  // Admin-only until a published Suez tariff and a live fuel index exist in
-  // production (PLAN-voyage-economics §5); then T3+ through the tier gate.
-  if (role !== "admin") return <ComingSoon variant="radar" />;
-  if (isCalculatorLocked(tier)) return <CalculatorLocked title="Voyage Cost Estimator" />;
+  // One entitlement rule for this page and every calculator action (lib/voyage/calculator-policy.ts).
+  const { access, supabase } = await resolveCalculatorAccess();
+  if (!access.allowed) {
+    if (access.reason === "signed_out" || access.reason === "no_profile" || access.reason === "inactive") redirect("/auth/login");
+    if (access.reason === "tier_locked") return <CalculatorLocked title="Voyage Cost Estimator" />;
+    return <ComingSoon variant="radar" />;
+  }
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
-  const [vessels, cargos, settingsLoad, viewer] = await Promise.all([loadAdminVoyageVessels(), loadCargoViews(), getVoyageSettings(supabase), getAppUserRow(supabase, user.id, "id")]);
+  // The admin vessel list reads the master tables through the service role; only an admin reaches it today (member rollout off).
+  const [vessels, cargos, settingsLoad] = await Promise.all([access.kind === "admin" ? loadAdminVoyageVessels() : Promise.resolve([] as VoyageVesselOption[]), loadCargoViews(), getVoyageSettings(supabase)]);
   let suezContext: SuezTariffContextResult = { found: false, date: today };
   try { suezContext = await getSuezTariffContext(supabase, today); } catch { /* unavailable state */ }
   // The frozen B→S index snapshot (status unavailable until Stream B's index is wired → fallback prices, labelled).
@@ -65,7 +62,7 @@ export default async function VoyageEstimatorPage({ searchParams }: { searchPara
       settingsError={settingsLoad.error}
       suezContext={suezContext}
       fuel={fuel}
-      viewerUserId={viewer?.id ?? null}
+      viewerUserId={access.actorId}
       initialVesselId={typeof params.vessel === "string" ? params.vessel : undefined}
       initialCargoId={typeof params.cargo === "string" ? params.cargo : undefined}
     />

@@ -1,4 +1,4 @@
-// suez-check — golden fixtures for lib/suez/engine.ts (suez-engine/2).
+// suez-check — golden fixtures for lib/suez/engine.ts (suez-engine/3).
 //
 // The items mirror the seed (20261003200100 + the 205100 corrections). Toll
 // bands and the SDR rate are FIXTURE-ONLY (the seed publishes neither): one
@@ -9,9 +9,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { estimateSuezTransit, tollSdrFromTiers } from "../lib/suez/engine";
-import { parseSuezInput } from "../lib/suez/schemas";
+import { parseSuezInput, parseTierCsv } from "../lib/suez/schemas";
 import type { SuezInput, SuezTariffContext, SuezTariffItem, SuezTollTier } from "../lib/suez/types";
-import { suezCategoryFromVesselType } from "../lib/suez/types";
+import { SUEZ_VESSEL_CATEGORIES, suezCategoryFromVesselType } from "../lib/suez/types";
 
 let checks = 0;
 const ok = (cond: boolean, msg: string) => { assert.ok(cond, msg); checks++; };
@@ -77,8 +77,9 @@ function ctxFor(versionNo: 1 | 2, date: string, extra: Partial<SuezTariffContext
     found: true,
     date,
     version: versionNo === 1
-      ? { id: "v1", versionNo: 1, effectiveFrom: "2026-04-15", effectiveTo: "2026-05-14", sourceRef: "seed v1" }
-      : { id: "v2", versionNo: 2, effectiveFrom: "2026-05-15", effectiveTo: null, sourceRef: "seed v2" },
+      // The fixture rate 8.687 is back-solved all-in from the proforma, so these fixture versions declare no separate surcharge.
+      ? { id: "v1", versionNo: 1, effectiveFrom: "2026-04-15", effectiveTo: "2026-05-14", sourceRef: "seed v1", surchargeRegime: "none" }
+      : { id: "v2", versionNo: 2, effectiveFrom: "2026-05-15", effectiveTo: null, sourceRef: "seed v2", surchargeRegime: "none" },
     sources: [{ id: "s1", title: "RUBATO proforma", issuer: "Owner", documentNo: null, issueDate: "2026-04-20", authority: "owner", evidenceStatus: "pending_document", sha256: null }],
     items: seedItems(versionNo),
     tiers: fixtureTiers(),
@@ -109,7 +110,7 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   ok(e.totals.potentialUsd >= e.totals.appliedUsd, "potential ≥ applied");
   eq([e.transitDays, e.anchorageDays], [1, 0.5], "Suez days from settings");
   near(e.layers.toll.sdr, 16070 * 8.687, 0.01, "toll SDR = SCNT × rate");
-  eq(e.algorithmVersion, "suez-engine/2", "algorithm version stamped");
+  eq(e.algorithmVersion, "suez-engine/3", "algorithm version stamped");
   eq(e.sdrRate.status, "trusted", "SDR rate from the dated file");
   eq(e.sources.length, 1, "sources passed through");
 }
@@ -283,6 +284,56 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   eq(suezCategoryFromVesselType(null), null, "no type → null");
 }
 
+// ── 13 · Category surcharges, band ceiling, decimal SCNT (audit C2O-039 P0-1/P0-2) ─
+{
+  const officialBands: SuezTollTier[] = [
+    [0, 0, 5000, 10.13], [1, 5000, 10000, 7.74], [2, 10000, 20000, 6.12], [3, 20000, 40000, 2.24], [4, 40000, 70000, 1.97], [5, 70000, 120000, 1.85], [6, 120000, null, 1.77],
+  ].map(([o, f, t, r]) => ({ vesselCategory: "dry_bulk", cargoStatus: "laden" as const, tierOrder: o as number, scntFrom: f as number, scntTo: t as number | null, sdrPerScnt: r as number, confidence: "official" as const }));
+  const surchargeItem = (pct: number, confidence: "official" | "reported" = "official", categoryScope = ["dry_bulk"]) =>
+    item({ code: "surcharge_dry_bulk", labelEn: "Dry bulk temporary surcharge", layer: "surcharge", basis: "pct_of_toll", currency: "SDR", params: { pct }, categoryScope, confidence, sortOrder: 15 });
+  const ctxWith = (regime: "unknown" | "none" | "modelled", extraItems: SuezTariffItem[], rate: number, date: string): SuezTariffContext => ({
+    ...ctxFor(1, date), version: { id: "vS", versionNo: 9, effectiveFrom: "2026-01-01", effectiveTo: null, sourceRef: "SCA schedule 2024 + surcharge", surchargeRegime: regime },
+    tiers: officialBands, items: [...seedItems(1), ...extraItems], sdr: { rateUsd: rate, asOf: "2026-01-01", source: "IMF" },
+  });
+  // RUBATO proforma (27 Apr 2026): SCNRT 15,836.28, dry bulk laden SB, SDR 1.38, dry-bulk surcharge then 10 % → agent tolls USD 189,854.
+  const rub: SuezInput = { ...rubato, vessel: { ...rubato.vessel, scnt: 15836.28 }, voyage: { ...rubato.voyage, transitDate: "2026-04-27" } };
+  const baseSdr = 5000 * 10.13 + 5000 * 7.74 + 5836.28 * 6.12;
+  const e10 = estimateSuezTransit(rub, ctxWith("modelled", [surchargeItem(10)], 1.38, "2026-04-27"));
+  near(e10.layers.toll.sdr, baseSdr, 0.01, "official bands, decimal SCNT 15,836.28");
+  near(e10.totals.surchargeUsd, baseSdr * 0.10 * 1.38, 0.01, "10 % dry-bulk surcharge on the toll");
+  near((e10.totals.tollUsd ?? 0) + e10.totals.surchargeUsd, 189854, 1, "toll + surcharge reproduces the RUBATO proforma within USD 1");
+  eq([e10.layers.surcharge.status, e10.status], ["trusted", "trusted"], "an official surcharge covering the category keeps the estimate trusted");
+  const today = estimateSuezTransit({ ...rub, voyage: { ...rub.voyage, transitDate: "2026-10-05" } }, ctxWith("modelled", [surchargeItem(22)], 1.35408, "2026-10-05"));
+  near((today.totals.tollUsd ?? 0) + today.totals.surchargeUsd, baseSdr * 1.22 * 1.35408, 0.02, "the same hull today: 22 % since 15 Jul 2026");
+  const unknown = estimateSuezTransit(rub, ctxWith("unknown", [], 1.38, "2026-04-27"));
+  ok(unknown.status === "partial" && !unknown.totals.complete && unknown.unavailable.some((u) => u.code === "category_surcharge"), "base dues without a modelled surcharge are never trusted and never complete");
+  ok(unknown.totals.tollUsd != null && unknown.layers.surcharge.status === "unavailable", "base toll still shown, surcharge unavailable");
+  const noRegime = estimateSuezTransit(rub, { ...ctxWith("none", [], 1.38, "2026-04-27"), version: { id: "vX", versionNo: 8, effectiveFrom: "2026-01-01", effectiveTo: null, sourceRef: "pre-v3 context" } });
+  eq(noRegime.layers.surcharge.regime, "unknown", "a context without a regime is treated as unknown");
+  const reported = estimateSuezTransit(rub, ctxWith("modelled", [surchargeItem(10, "reported")], 1.38, "2026-04-27"));
+  ok(reported.status === "partial" && reported.totals.complete && reported.layers.surcharge.lines[0].status === "placeholder", "a reported surcharge is priced, labelled placeholder, estimate partial");
+  const uncovered = estimateSuezTransit(rub, ctxWith("modelled", [surchargeItem(26, "official", ["general_cargo"])], 1.38, "2026-04-27"));
+  ok(uncovered.status === "partial" && uncovered.unavailable.some((u) => u.code === "category_surcharge") && uncovered.totals.surchargeUsd === 0, "a surcharge for another category does not cover dry bulk");
+  const exempt = estimateSuezTransit(rub, ctxWith("modelled", [surchargeItem(0)], 1.38, "2026-04-27"));
+  ok(exempt.status === "trusted" && exempt.totals.surchargeUsd === 0, "an explicit 0 % (exempt) surcharge is covered and trusted");
+  const contradiction = estimateSuezTransit(rub, ctxWith("none", [surchargeItem(10)], 1.38, "2026-04-27"));
+  eq(contradiction.status, "invalid", "regime none with surcharge items is malformed tariff data");
+  ok(e10.algorithmVersion === "suez-engine/3", "suez-engine/3 stamped");
+
+  // P0-2: a finite last band never undercharges silently.
+  const capped = officialBands.slice(0, 3).map((t, i) => (i === 2 ? { ...t, scntTo: 20000 } : t));
+  eq(tollSdrFromTiers(25000, capped).ceiling, 20000, "SCNT above a finite last band reports the ceiling");
+  eq(tollSdrFromTiers(15000, capped).ceiling, null, "SCNT within the bands has no ceiling");
+  const big = estimateSuezTransit({ ...rub, vessel: { ...rub.vessel, scnt: 25000 } }, { ...ctxWith("modelled", [surchargeItem(10)], 1.38, "2026-04-27"), tiers: capped });
+  ok(big.layers.toll.status === "unavailable" && big.layers.toll.usd == null && !big.totals.complete, "toll unavailable above the published ceiling (not charged at the cap)");
+  const { errors: capErr } = parseTierCsv("dry_bulk,laden,0,0,5000,8\ndry_bulk,laden,1,5000,10000,6");
+  ok(capErr.some((m) => m.includes("open-ended")), "CSV import refuses a finite last band");
+  eq(parseTierCsv("dry_bulk,laden,0,0,5000,8\ndry_bulk,laden,1,5000,,6").errors, [], "CSV import accepts an open last band");
+  eq(parseSuezInput({ ...rub, vessel: { ...rub.vessel, scnt: 15836.283 } }).ok, false, "SCNT with three decimals refused");
+  eq(parseSuezInput(rub).ok, true, "SCNT with two decimals accepted");
+  ok(SUEZ_VESSEL_CATEGORIES.some((c) => c.key === "floating_unit"), "floating_unit is a selectable SCA category");
+}
+
 // ── 12 · Contract: fixtures mirror the seed, governance SQL carries the guards ─
 {
   const seed = readFileSync(new URL("../supabase/migrations/20261003200100_suez_tariff_seed.sql", import.meta.url), "utf8");
@@ -308,6 +359,18 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   const down = readFileSync(new URL("../supabase/rollback/20261003_suez_voyage_down.sql", import.meta.url), "utf8");
   for (const t of ["suez_tariff_versions", "suez_tariff_items", "suez_toll_tiers", "sdr_rates", "vessel_economics_profiles", "eca_zones", "suez_tariff_sources", "suez_tariff_events", "vessel_economics_profile_events", "voyage_estimate_runs"]) ok(down.includes(`drop table if exists public.${t}`), `DOWN drops ${t}`);
   ok(down.includes("value ->> 'seedMarker' = 'stream-s-20261003'"), "DOWN removes only the seeded voyage_settings row");
+  ok(down.includes("STREAM_S_DOWN_REFUSED") && down.includes("asb.stream_s_down"), "DOWN refuses a used database without a confirmed export");
+  for (const f of ["admin_suez_publish", "admin_suez_replace_tiers", "admin_suez_save_item", "admin_eca_save_zone", "eca_zone_versions", "fn_voyage_may_reference"]) ok(down.includes(f), `DOWN drops ${f}`);
+  const rem = readFileSync(new URL("../supabase/migrations/20261003205400_suez_voyage_audit_remediation.sql", import.meta.url), "utf8");
+  for (const s of [
+    "check (layer in ('toll','fixed','conditional','waste','surcharge'))", "category_scope text[]", "surcharge_regime text not null default 'unknown'",
+    "the last band must be open-ended", "a version cites no source record", "pg_advisory_xact_lock(hashtext('asb.suez_tariff_publish'))",
+    "function public.admin_suez_publish(p_version_id uuid, p_actor uuid, p_confirm text)", "p_confirm is distinct from 'PUBLISH'",
+    "revoke insert, update, delete, truncate on table", "create table if not exists public.eca_zone_versions",
+    "a saved voyage estimate is never deleted", "before update or delete on public.voyage_estimate_runs", "grant select, insert on table public.voyage_estimate_runs",
+    "on delete set null", "VOYAGE_FORBIDDEN", "alter column scnt type numeric(10,2)", "SCNT and SCGT carry at most two decimals", "the position does not belong to the vessel", "carries no governed status", "'categoryScope', to_jsonb(i.category_scope)",
+  ]) ok(rem.includes(s), `remediation migration carries: ${s.slice(0, 60)}`);
+  ok(!/grant all on table public\.voyage_estimate_runs/.test(rem), "the service role never regains ALL on saved runs");
 }
 
 console.log(`suez-check: ${checks} checks passed`);

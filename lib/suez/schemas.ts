@@ -3,7 +3,9 @@
 // 20261003200000 and the params each basis expects in lib/suez/engine.ts.
 import { z } from "zod";
 
-export const SUEZ_LAYERS = ["toll", "fixed", "conditional", "waste"] as const;
+export const SUEZ_LAYERS = ["toll", "surcharge", "fixed", "conditional", "waste"] as const;
+export const SUEZ_SURCHARGE_REGIMES = ["unknown", "none", "modelled"] as const;
+const categoryKey = z.string().regex(/^[a-z][a-z0-9_]{1,40}$/);
 export const SUEZ_BASES = ["toll_tiered_scnt", "flat", "pct_of_toll", "tier_by_scnt", "per_unit", "gt_threshold", "flag_only"] as const;
 export const SUEZ_CONDITION_KEYS = [
   "no_mooring_cranes", "late_arrival", "no_searchlight", "not_ready", "heavy_lift", "floating_unit",
@@ -61,6 +63,8 @@ export const suezItemInputSchema = z.object({
   params: z.record(z.string(), z.unknown()),
   directionScope: z.enum(["any", "SB", "NB"]).default("any"),
   cargoStatusScope: z.enum(["any", "laden", "ballast"]).default("any"),
+  categoryScope: z.array(categoryKey).min(1).max(20).nullable().optional(),
+  confidence: z.enum(["official", "reported"]).default("official"),
   conditionKey: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/).optional().nullable(),
   payerParty: z.enum(["owner", "charterer", "either"]).default("owner"),
   sortOrder: z.number().int().min(0).max(10000).default(100),
@@ -71,6 +75,10 @@ export const suezItemInputSchema = z.object({
   if (!r.success) ctx.addIssue({ code: "custom", path: ["params"], message: `params for basis ${v.basis}: ${r.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}` });
   if (v.layer === "conditional" && !v.conditionKey) ctx.addIssue({ code: "custom", path: ["conditionKey"], message: "a conditional item needs a condition key" });
   if (v.layer === "toll" && v.basis !== "toll_tiered_scnt") ctx.addIssue({ code: "custom", path: ["basis"], message: "the toll layer uses toll_tiered_scnt" });
+  if (v.layer === "surcharge") {
+    if (!v.categoryScope?.length) ctx.addIssue({ code: "custom", path: ["categoryScope"], message: "a surcharge names the vessel categories it applies to" });
+    if (v.basis !== "pct_of_toll" || typeof (v.params as { pct?: unknown }).pct !== "number") ctx.addIssue({ code: "custom", path: ["params"], message: "a surcharge is pct_of_toll with params {pct}" });
+  }
 });
 export type SuezItemInput = z.infer<typeof suezItemInputSchema>;
 
@@ -80,6 +88,7 @@ export const suezVersionInputSchema = z.object({
   sourceRef: z.string().trim().min(2).max(500),
   sourceUrl: z.string().trim().url().max(500).optional().nullable().or(z.literal("")),
   notes: z.string().trim().max(2000).optional().nullable(),
+  surchargeRegime: z.enum(SUEZ_SURCHARGE_REGIMES).default("unknown"),
 });
 
 // Governed source record (suez_tariff_sources): the circular / guide / proforma
@@ -139,6 +148,8 @@ export function parseTierCsv(text: string): { rows: TierCsvRow[]; errors: string
       else if (sorted[i].scntFrom !== sorted[i - 1].scntTo) errors.push(`${k}: band ${sorted[i].tierOrder} must start at ${sorted[i - 1].scntTo}`);
     }
     if (sorted.length && sorted[0].scntFrom !== 0) errors.push(`${k}: the first band must start at 0`);
+    // A finite last band would stop charging above its ceiling (audit C2O-039 P0-2).
+    if (sorted.length && sorted[sorted.length - 1].scntTo != null) errors.push(`${k}: the last band must be open-ended (leave scnt_to blank)`);
   }
   return { rows, errors };
 }
@@ -148,13 +159,15 @@ export function parseTierCsv(text: string): { rows: TierCsvRow[]; errors: string
 // the engine never computes from poisoned input.
 
 const posInt = (max: number) => z.number().int().min(1).max(max);
+// SCA tonnage certificates carry decimals (e.g. SCNT 15,836.28); two places at most.
+const tonnage = (max: number) => z.number().finite().positive().max(max).refine((n) => Math.abs(Math.round(n * 100) - n * 100) < 1e-6, "at most two decimals");
 const nonNeg = (max: number) => z.number().finite().min(0).max(max);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "ISO date (YYYY-MM-DD)");
 
 export const suezInputSchema = z.object({
   vessel: z.object({
-    scnt: posInt(300000).nullable(),
-    scgt: posInt(300000).nullable().optional(),
+    scnt: tonnage(300000).nullable(),
+    scgt: tonnage(300000).nullable().optional(),
     gt: posInt(300000).nullable(),
     category: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/),
     buildYear: z.number().int().min(1900).max(2100).nullable().optional(),

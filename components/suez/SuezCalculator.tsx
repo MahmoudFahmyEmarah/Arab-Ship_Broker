@@ -338,13 +338,14 @@ function TriState({ label, value, onChange }: { label: string; value: Tri; onCha
 
 function statusSummary(e: SuezEstimate): string {
   if (e.status === "invalid") return `Invalid input: ${(e.errors ?? []).join("; ")}`;
-  if (e.status === "trusted") return "Every layer is priced from the published tariff and known facts.";
+  if (e.status === "trusted") return "Every layer is priced from the published tariff (base dues and the category surcharge in force) and known facts.";
   const parts: string[] = [];
   if (e.layers.toll.status !== "trusted") parts.push(`toll ${e.layers.toll.status}${e.layers.toll.reason ? ` (${e.layers.toll.reason})` : ""}`);
+  if (e.layers.surcharge.status !== "trusted" && e.layers.toll.sdr != null) parts.push(`category surcharge ${e.layers.surcharge.status === "placeholder" ? "reported, not on file" : e.layers.surcharge.status}${e.layers.surcharge.reason ? ` (${e.layers.surcharge.reason})` : ""}`);
   if (e.sdrRate.status === "manual") parts.push(`SDR rate manual (${e.sdrRate.manual?.reason ?? "reason not given"})`);
   const undecided = e.layers.conditional.filter((f) => f.triggered === null).length;
   if (undecided) parts.push(`${undecided} flag${undecided > 1 ? "s" : ""} undecided from the facts`);
-  const other = e.unavailable.filter((u) => u.code !== "toll" && u.code !== "sdr_rate").length;
+  const other = e.unavailable.filter((u) => u.code !== "transit_toll" && u.code !== "category_surcharge" && u.code !== "sdr_rate").length;
   if (other) parts.push(`${other} line${other > 1 ? "s" : ""} unavailable`);
   if (e.invalid.length) parts.push(`${e.invalid.length} malformed tariff line${e.invalid.length > 1 ? "s" : ""}`);
   return (e.status === "unavailable" ? "The transit cannot be priced: " : "Priced with gaps: ") + (parts.join(" · ") || "see the notes");
@@ -375,7 +376,7 @@ function Results({ estimate, vessel }: { estimate: SuezEstimate; vessel: SuezVes
       <div className={`sz-status sz-status--${estimate.status}`}><span className="sz-status__k">{estimate.status}</span><span>{statusSummary(estimate)}</span></div>
       {head && <div className="sz-unavailable">{head}</div>}
       <div className="ve-results sz-results">
-        <div className="ve-result"><div className="ve-result__k">1 · Transit toll</div><div className={`ve-result__v ${estimate.layers.toll.usd != null ? "ve-result__v--navy" : "is-missing"}`}>{fmtUSD(estimate.layers.toll.usd)}</div><div className="ve-note-sub">{fmtSDR(estimate.layers.toll.sdr)} · {STATUS_LABEL[estimate.layers.toll.status]}</div></div>
+        <div className="ve-result"><div className="ve-result__k">1 · Transit toll</div><div className={`ve-result__v ${estimate.layers.toll.usd != null ? "ve-result__v--navy" : "is-missing"}`}>{fmtUSD(estimate.layers.toll.usd)}</div><div className="ve-note-sub">{fmtSDR(estimate.layers.toll.sdr)} · {STATUS_LABEL[estimate.layers.toll.status]}{t.surchargeUsd > 0 ? ` · + category surcharge ${fmtUSD(t.surchargeUsd)} (${STATUS_LABEL[estimate.layers.surcharge.status]})` : ""}</div></div>
         <div className="ve-result"><div className="ve-result__k">2 · Fixed charges</div><div className="ve-result__v ve-result__v--navy">{fmtUSD(t.fixedUsd)}</div><div className="ve-note-sub">{estimate.layers.fixed.filter((l) => l.amountUsd != null).length} of {estimate.layers.fixed.length} items priced</div></div>
         <div className="ve-result"><div className="ve-result__k">3 · Conditional (applied)</div><div className={`ve-result__v ${t.conditionalAppliedUsd > 0 ? "ve-result__v--amber" : "ve-result__v--green"}`}>{fmtUSD(t.conditionalAppliedUsd)}</div><div className="ve-note-sub">{applied.length} applied · {undecided.length} undecided · {notApplied.length} not applicable</div></div>
         <div className="ve-result ve-result--tce"><div className="ve-result__k">Total transit cost</div><div className="ve-result__v">{t.complete ? fmtUSD(t.appliedUsd) : "—"}</div><div className="ve-note-sub">{t.complete ? `Exposure incl. flags ${fmtUSD(t.potentialUsd)}` : `Incomplete: computable parts ${fmtUSD(t.appliedUsd)}`}{t.wasteUsd > 0 ? ` · waste extras ${fmtUSD(t.wasteUsd)}` : ""}</div></div>
@@ -389,6 +390,8 @@ function Results({ estimate, vessel }: { estimate: SuezEstimate; vessel: SuezVes
           ))}
           <div className="ve-pl-row is-subtotal"><span>Toll in SDR</span><span>{fmtSDR(estimate.layers.toll.sdr)}</span></div>
           <div className="ve-pl-row"><span>× SDR rate {estimate.sdrRate.rateUsd != null ? `${estimate.sdrRate.rateUsd} (${estimate.sdrRate.asOf}, ${estimate.sdrRate.status})` : "not on file"}</span><span className={estimate.layers.toll.status === "trusted" ? "is-auto" : estimate.layers.toll.status === "manual" ? "is-manual" : "is-amber"}>{fmtUSD2(estimate.layers.toll.usd)}</span></div>
+          {estimate.layers.surcharge.lines.map((l) => <div key={l.code} className="ve-pl-row"><span>{l.label}<small className="sz-muted">{l.explanation}{l.status !== "trusted" ? ` · ${STATUS_LABEL[l.status]}` : ""}</small></span><span className={l.status === "trusted" ? "" : "is-amber"}>{fmtUSD2(l.amountUsd)}</span></div>)}
+          {estimate.layers.surcharge.lines.length === 0 && estimate.layers.toll.sdr != null && <div className={`ve-pl-row${estimate.layers.surcharge.status === "trusted" ? "" : " sz-surcharge-missing"}`}><span className={estimate.layers.surcharge.status === "trusted" ? "sz-muted" : "is-amber"}>Category surcharge: {estimate.layers.surcharge.reason}</span><span>{estimate.layers.surcharge.status === "trusted" ? fmtUSD2(0) : "—"}</span></div>}
           {estimate.layers.toll.status === "placeholder" && <div className="ve-warn is-placeholder">Placeholder bands: not the official SCA circular. The toll is flagged, not trusted.</div>}
           {estimate.layers.toll.status === "unavailable" && estimate.layers.toll.tiers.length > 0 && <div className="ve-warn">{estimate.layers.toll.reason}</div>}
         </div>

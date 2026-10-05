@@ -38,7 +38,17 @@ export function dbExec(sql: string): void {
   const cmd = remote
     ? `docker run --rm -i --entrypoint psql ${process.env.E2E_PG_IMAGE ?? "public.ecr.aws/supabase/postgres:17.6.1.127"} --dbname="${remote}" -q -v ON_ERROR_STOP=0`
     : "docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0";
-  execSync(cmd, { input: sql, stdio: ["pipe", "ignore", "ignore"], env: { ...process.env, MSYS_NO_PATHCONV: "1" } });
+  // A hosted session pooler can refuse a connection while the app under test holds its slots; psql then exits
+  // non-zero before running anything (statement errors alone exit 0 here). Retry the whole batch a few times.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      execSync(cmd, { input: sql, stdio: ["pipe", "ignore", "ignore"], env: { ...process.env, MSYS_NO_PATHCONV: "1" } });
+      return;
+    } catch (e) {
+      if (attempt >= 4) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000 * attempt);
+    }
+  }
 }
 
 function localKeys() {

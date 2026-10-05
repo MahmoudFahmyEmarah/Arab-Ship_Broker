@@ -1,5 +1,5 @@
 -- Voyage Economics · Stream S governance smoke test (4 Oct 2026)
--- for 20261003205000_suez_voyage_governance.sql + 20261003205100_suez_seed_corrections.sql.
+-- for 20261003205000_suez_voyage_governance.sql + 205100 seed corrections + 205400 audit remediation (S9–S12).
 --
 --   docker exec -i supabase_db_arab-ship-broker psql -U postgres -d <db> -v ON_ERROR_STOP=1 -f - \
 --     < supabase/tests/voyage_economics/suez_governance_smoke.sql
@@ -137,7 +137,7 @@ begin
   select effective_from into v_from from public.suez_tariff_versions where status = 'published' order by effective_from limit 1;
   v_ctx := public.get_suez_tariff_context(v_from);
   if (v_ctx ->> 'found')::boolean is not true then raise exception 'S5: no context for the first published effective date %', v_from; end if;
-  if v_ctx ->> 'algorithmVersion' <> 'suez-engine/2' then raise exception 'S5: algorithmVersion is %', v_ctx ->> 'algorithmVersion'; end if;
+  if v_ctx ->> 'algorithmVersion' <> 'suez-engine/3' then raise exception 'S5: algorithmVersion is %', v_ctx ->> 'algorithmVersion'; end if;
   if jsonb_array_length(v_ctx -> 'sources') < 1 then raise exception 'S5: context carries no sources'; end if;
   if jsonb_typeof(v_ctx -> 'items') <> 'array' or jsonb_array_length(v_ctx -> 'items') = 0 then raise exception 'S5: context carries no items'; end if;
   v_ctx := public.get_suez_tariff_context(date '1999-01-01');
@@ -199,6 +199,169 @@ begin
   if not v_refused then raise exception 'S8: a profile was written without an authenticated actor'; end if;
   raise notice 'S8 ok: profile write refused without an actor';
 end $$;
+
+-- ── S9 · 205400: publication through the transactional RPC (citation, typed confirmation, open last band, atomic close) ─
+do $$
+declare
+  v_admin uuid; v_id uuid; v_d uuid; r jsonb; v_err text; n int;
+  v_open uuid; v_open_from date;
+  catch text;
+begin
+  insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s9@arabshipbroker.test') returning id into v_admin;
+  insert into public.users (id, supabase_user_id, role, full_name, is_active) values (v_admin, v_admin, 'admin', 'smoke admin S9 (rolled back)', true)
+    on conflict (id) do update set supabase_user_id = excluded.supabase_user_id, role = excluded.role, full_name = excluded.full_name, is_active = true;
+
+  r := public.admin_suez_create_version(v_admin, jsonb_build_object('effectiveFrom', '2020-07-01', 'effectiveTo', '2020-07-31', 'sourceRef', 'smoke S9 (rolled back)', 'surchargeRegime', 'unknown'), null);
+  v_id := (r ->> 'id')::uuid;
+  perform public.admin_suez_save_item(v_id, v_admin, null, '{"code":"smoke_flat","labelEn":"Smoke flat","layer":"fixed","basis":"flat","currency":"USD","params":{"amount":1}}'::jsonb);
+
+  v_err := null; begin perform public.admin_suez_publish(v_id, v_admin, 'PUBLISH'); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like '%cites no source%' then raise exception 'S9: publication without a cited source was not refused (%)', v_err; end if;
+  perform public.admin_suez_register_source(v_admin, '{"title":"Smoke source","issuer":"Smoke","authority":"reference","evidenceStatus":"pending_document"}'::jsonb, v_id);
+
+  v_err := null; begin perform public.admin_suez_publish(v_id, v_admin, 'publish'); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'SUEZ_CONFIRM:%' then raise exception 'S9: publication without the typed PUBLISH was not refused (%)', v_err; end if;
+
+  v_err := null; begin perform public.admin_suez_publish(v_id, gen_random_uuid(), 'PUBLISH'); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'SUEZ_ACTOR:%' then raise exception 'S9: an unknown actor could publish (%)', v_err; end if;
+
+  v_err := null;
+  begin perform public.admin_suez_replace_tiers(v_id, v_admin, '[{"vessel_category":"dry_bulk","cargo_status":"laden","tier_order":0,"scnt_from":0,"scnt_to":5000,"sdr_per_scnt":8}]'::jsonb, 'official');
+  exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like '%open-ended%' then raise exception 'S9: a finite last toll band was accepted (%)', v_err; end if;
+  select count(*) into n from public.suez_toll_tiers where version_id = v_id;
+  if n <> 0 then raise exception 'S9: the refused band replacement left % row(s)', n; end if;
+  perform public.admin_suez_replace_tiers(v_id, v_admin,
+    '[{"vessel_category":"dry_bulk","cargo_status":"laden","tier_order":0,"scnt_from":0,"scnt_to":5000,"sdr_per_scnt":8},{"vessel_category":"dry_bulk","cargo_status":"laden","tier_order":1,"scnt_from":5000,"scnt_to":null,"sdr_per_scnt":6}]'::jsonb, 'official');
+
+  v_err := null;
+  begin perform public.admin_suez_save_item(v_id, v_admin, null, '{"code":"smoke_sur","labelEn":"Smoke surcharge","layer":"surcharge","basis":"pct_of_toll","currency":"SDR","params":{"pct":10}}'::jsonb);
+  exception when others then v_err := sqlerrm; end;
+  if v_err is null then raise exception 'S9: a surcharge without a category scope was accepted'; end if;
+
+  r := public.admin_suez_publish(v_id, v_admin, 'PUBLISH');
+  if (select status from public.suez_tariff_versions where id = v_id) <> 'published' then raise exception 'S9: publication did not take effect'; end if;
+  select count(*) into n from public.suez_tariff_events where version_id = v_id and actor_user_id = v_admin;
+  if n < 5 then raise exception 'S9: expected ≥ 5 events by the acting admin on the version, found %', n; end if;
+  v_err := null;
+  begin perform public.admin_suez_save_item(v_id, v_admin, null, '{"code":"smoke_late","labelEn":"Smoke late","layer":"fixed","basis":"flat","currency":"USD","params":{"amount":1}}'::jsonb);
+  exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'SUEZ_IMMUTABLE:%' then raise exception 'S9: a published version accepted a new item (%)', v_err; end if;
+
+  -- Atomicity: a publication that fails validation leaves the preceding open version open.
+  select id, effective_from into v_open, v_open_from from public.suez_tariff_versions
+   where status = 'published' and effective_to is null order by effective_from desc limit 1;
+  if v_open is not null then
+    r := public.admin_suez_create_version(v_admin, jsonb_build_object('effectiveFrom', (v_open_from + 1)::text, 'sourceRef', 'smoke S9 atomic (rolled back)'), null);
+    v_d := (r ->> 'id')::uuid;
+    perform public.admin_suez_save_item(v_d, v_admin, null, '{"code":"smoke_flat","labelEn":"Smoke flat","layer":"fixed","basis":"flat","currency":"USD","params":{"amount":1}}'::jsonb);
+    v_err := null; begin perform public.admin_suez_publish(v_d, v_admin, 'PUBLISH'); exception when others then v_err := sqlerrm; end;
+    if v_err is null then raise exception 'S9: an uncited draft published'; end if;
+    if (select effective_to from public.suez_tariff_versions where id = v_open) is not null then
+      raise exception 'S9: a failed publication still closed the preceding version (not atomic)';
+    end if;
+  end if;
+
+  if has_table_privilege('service_role', 'public.suez_tariff_items', 'INSERT') or has_table_privilege('service_role', 'public.suez_toll_tiers', 'DELETE')
+     or has_table_privilege('service_role', 'public.suez_tariff_versions', 'UPDATE') or has_table_privilege('service_role', 'public.suez_tariff_version_sources', 'INSERT')
+     or has_table_privilege('service_role', 'public.eca_zones', 'UPDATE') or has_table_privilege('service_role', 'public.sdr_rates', 'DELETE') then
+    raise exception 'S9: the service role can still write a governed tariff table directly';
+  end if;
+  if not has_function_privilege('service_role', 'public.admin_suez_publish(uuid, uuid, text)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.admin_suez_publish(uuid, uuid, text)', 'EXECUTE') then
+    raise exception 'S9: admin_suez_publish grants are wrong';
+  end if;
+  raise notice 'S9 ok: citation, typed PUBLISH, admin actor, open last band, surcharge scope, events in-transaction, atomic close, no direct writes';
+end $$;
+
+-- ── S10 · 205400: context v3 carries the surcharge regime; base dues alone are never trusted ─
+do $$
+declare c jsonb;
+begin
+  select public.get_suez_tariff_context(effective_from) into c
+    from public.suez_tariff_versions where status = 'published' order by effective_from desc limit 1;
+  if c is null or not (c -> 'version' ? 'surchargeRegime') or c ->> 'algorithmVersion' <> 'suez-engine/3' then
+    raise exception 'S10: the member context does not carry the surcharge regime (%)', c -> 'version';
+  end if;
+  if exists (select 1 from jsonb_array_elements(c -> 'items') i where not (i ? 'categoryScope' and i ? 'confidence')) then
+    raise exception 'S10: context items lack categoryScope/confidence';
+  end if;
+  raise notice 'S10 ok: context v3 with surcharge regime, category scope and confidence';
+end $$;
+
+-- ── S11 · 205400: saved runs — never updated or deleted, statused lines, owner/object checks, anonymised on user deletion ─
+do $$
+declare
+  v_member uuid; v_s9 uuid; v_run uuid; v_err text; n int;
+  v_payload jsonb := jsonb_build_object('label', 'smoke S11', 'algorithmVersion', 'voyage-engine/2', 'settingsHash', repeat('a', 64),
+    'input', '{}'::jsonb, 'result', '{}'::jsonb, 'totals', '{}'::jsonb,
+    'lines', '[{"kind":"cost","code":"canal","label":"Canal","status":"fallback","amountUsd":1}]'::jsonb);
+begin
+  insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s11@arabshipbroker.test') returning id into v_member;
+  insert into public.users (id, supabase_user_id, role, full_name, is_active) values (v_member, v_member, 'Broker', 'smoke member S11 (rolled back)', true)
+    on conflict (id) do update set supabase_user_id = excluded.supabase_user_id, role = excluded.role, full_name = excluded.full_name, is_active = true;
+  v_run := public.save_voyage_estimate(v_member, v_payload);
+  if (select status from public.voyage_estimate_lines where run_id = v_run and seq = 0) <> 'fallback' then raise exception 'S11: the line status was not persisted'; end if;
+
+  v_err := null; begin perform public.save_voyage_estimate(v_member, jsonb_set(v_payload, '{lines}', '[{"kind":"cost","code":"canal","label":"Canal","amountUsd":1}]'::jsonb)); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'VOYAGE_INVALID:%status%' then raise exception 'S11: a line without a governed status was saved (%)', v_err; end if;
+
+  v_err := null; begin perform public.save_voyage_estimate(v_member, v_payload || jsonb_build_object('vesselId', (select id from public.vessels limit 1))); exception when others then v_err := sqlerrm; end;
+  if exists (select 1 from public.vessels) and (v_err is null or v_err not like 'VOYAGE_FORBIDDEN:%') then raise exception 'S11: a member referenced a vessel they do not manage (%)', v_err; end if;
+
+  v_err := null; begin perform public.save_voyage_estimate(v_member, v_payload || jsonb_build_object('ownerOrgId', gen_random_uuid())); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'VOYAGE_FORBIDDEN:%' then raise exception 'S11: an estimate was bound to an organisation without a seat (%)', v_err; end if;
+
+  v_err := null; begin update public.voyage_estimate_runs set label = 'edited' where id = v_run; exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'VOYAGE_IMMUTABLE:%' then raise exception 'S11: a saved run was updated (%)', v_err; end if;
+  v_err := null; begin delete from public.voyage_estimate_runs where id = v_run; exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'VOYAGE_IMMUTABLE:%' then raise exception 'S11: a saved run was deleted (%)', v_err; end if;
+  v_err := null; begin delete from public.voyage_estimate_lines where run_id = v_run; exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'VOYAGE_IMMUTABLE:%' then raise exception 'S11: a saved line was deleted (%)', v_err; end if;
+  if has_table_privilege('service_role', 'public.voyage_estimate_runs', 'DELETE') or has_table_privilege('service_role', 'public.voyage_estimate_runs', 'UPDATE')
+     or has_table_privilege('service_role', 'public.voyage_estimate_lines', 'DELETE') or not has_table_privilege('service_role', 'public.voyage_estimate_runs', 'INSERT') then
+    raise exception 'S11: service-role grants on saved runs are not select/insert only';
+  end if;
+
+  -- Deleting the user anonymises the run; the economics stay. The S9 admin (published a version, wrote events) goes too.
+  delete from public.users where id = v_member;
+  select count(*) into n from public.voyage_estimate_runs where id = v_run and actor_user_id is null;
+  if n <> 1 then raise exception 'S11: user deletion did not anonymise the run (found %)', n; end if;
+  select id into v_s9 from public.users where full_name = 'smoke admin S9 (rolled back)';
+  select count(*) into n from public.suez_tariff_events where actor_user_id = v_s9;
+  if n = 0 then raise exception 'S11: the S9 admin has no events to anonymise'; end if;
+  delete from public.users where id = v_s9;
+  if exists (select 1 from public.suez_tariff_events where actor_user_id = v_s9)
+     or exists (select 1 from public.suez_tariff_versions where created_by = v_s9 or published_by = v_s9) then
+    raise exception 'S11: deleting the admin left references to it (events or versions)';
+  end if;
+  raise notice 'S11 ok: runs immutable, statused lines, object/owner checks, select/insert only, anonymised on user deletion';
+end $$;
+
+-- ── S12 · 205400: ECA geometry versions are append-only ─────────────────────
+do $$
+declare v_code text; v_err text;
+begin
+  perform set_config('asb.actor_user_id', '', true); -- S9's admin was deleted in S11; no actor carries over
+  select code into v_code from public.eca_zones order by code limit 1;
+  if v_code is null then raise notice 'S12 skipped: no ECA zone'; return; end if;
+  if not exists (select 1 from public.eca_zone_versions v join public.eca_zones z on z.code = v.code and z.geometry_version = v.geometry_version where z.code = v_code) then
+    raise exception 'S12: the current geometry of % has no version row', v_code;
+  end if;
+  v_err := null; begin update public.eca_zones set polygon = polygon || '[[0,0]]'::jsonb where code = v_code; exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'ECA_IMMUTABLE:%' then raise exception 'S12: geometry changed under an existing version id (%)', v_err; end if;
+  v_err := null; begin delete from public.eca_zones where code = v_code; exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'ECA_IMMUTABLE:%' then raise exception 'S12: an ECA zone was deleted (%)', v_err; end if;
+  v_err := null; begin update public.eca_zone_versions set name = 'edited' where code = v_code; exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'ECA_IMMUTABLE:%' then raise exception 'S12: a geometry version was edited (%)', v_err; end if;
+  update public.eca_zones set geometry_version = geometry_version || '-s12', polygon = polygon || '[[0,0]]'::jsonb where code = v_code;
+  if (select count(*) from public.eca_zone_versions where code = v_code) < 2 then raise exception 'S12: a new geometry did not append a version'; end if;
+  raise notice 'S12 ok: geometry versions append-only; a new geometry appends, an old one never changes';
+end $$;
+
+-- In linked mode (one rolled-back harness transaction) the rows above stay until the final ROLLBACK; they are
+-- smoke rows, not governed records, so the DOWN's used-state guard is told so for this transaction only.
+select set_config('asb.stream_s_down', 'export-taken', true);
 
 do $$ begin raise notice 'SUEZ GOVERNANCE SMOKE: ALL ASSERTIONS PASSED'; end $$;
 

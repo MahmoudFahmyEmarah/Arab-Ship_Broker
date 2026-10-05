@@ -13,7 +13,7 @@ import Link from "next/link";
 import { BunkerTicker } from "@/components/portal/BunkerTicker";
 import { estimateVoyage, seasonOf } from "@/lib/voyage/engine";
 import { OPERATING_STATES, type CanalInput, type ComponentStatus, type ConsumptionMap, type OperatingState, type PortCallInput, type SeaLegInput, type SettingsSource, type VesselClass, type VoyageEstimate, type VoyageInput, type VoyageSettings } from "@/lib/voyage/types";
-import type { FuelIndexSnapshot, RouteEcaClassification } from "@/lib/voyage/snapshots";
+import type { FuelIndexSnapshot } from "@/lib/voyage/snapshots";
 import { estimateSuezTransit } from "@/lib/suez/engine";
 import { suezCategoryFromVesselType, type SuezEstimate, type SuezInput, type SuezTariffContextResult } from "@/lib/suez/types";
 import type { VoyageVesselOption } from "@/lib/voyage/vessel-options";
@@ -23,6 +23,7 @@ import { logEvent } from "@/lib/portal/events";
 import type { VesselEconomicsProfile } from "@/sdk/app/suez";
 import { loadVesselEconomicsAction, saveVesselEconomicsAction } from "@/app/(dashboard)/dashboard/suez-toll/actions";
 import { routeLegAction, saveVoyageEstimateAction, type RouteLegResult } from "@/app/(dashboard)/dashboard/voyage-estimator/actions";
+import { canalFromSuez } from "@/lib/voyage/canal";
 import "@/lib/portal/voyage-estimator.css";
 import "./voyage-estimator-v2.css";
 
@@ -120,21 +121,11 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     };
   }, [suezRequired, cargo, suezCategory, form.scnt, form.gt, vessel?.built, profile, dir, suezContext.date]);
   const suezEstimate: SuezEstimate | null = React.useMemo(() => (suezInput && suezContext.found ? estimateSuezTransit(suezInput, suezContext) : null), [suezInput, suezContext]);
-  const canal: CanalInput | null = React.useMemo(() => {
-    if (!suezRequired) return null;
-    const complete = !!suezEstimate && suezEstimate.status !== "invalid" && suezEstimate.totals.complete;
-    return {
-      required: true, name: "Suez",
-      status: !complete ? "unavailable" : suezEstimate!.sdrRate.status === "manual" ? "manual" : "trusted",
-      costUsd: complete ? suezEstimate!.totals.appliedUsd : null,
-      transitDays: suezEstimate?.transitDays ?? settings.suez.transitDays,
-      anchorageDays: suezEstimate?.anchorageDays ?? settings.suez.anchorageDays,
-      anchorageInEca: dir === "SB", // Port Said anchorage lies inside the Med ECA
-      nm: settings.suez.nm,
-      tariffVersionNo: suezEstimate?.tariffVersion.versionNo ?? null,
-      complete,
-    };
-  }, [suezRequired, suezEstimate, settings.suez, dir]);
+  // Same mapping as the server save (lib/voyage/canal.ts): trusted only from a trusted Suez estimate.
+  const canal: CanalInput | null = React.useMemo(
+    () => (suezRequired ? canalFromSuez(suezEstimate, settings, dir === "SB" /* Port Said anchorage lies inside the Med ECA */) : null),
+    [suezRequired, suezEstimate, settings, dir],
+  );
 
   // ── engine input ────────────────────────────────────────────────────────
   const legInput = React.useCallback((key: "ballast" | "laden", from: string | null, to: string | null, l: LegState): SeaLegInput => {
@@ -197,28 +188,17 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
       else setProfileSave({ busy: false, note: r.error, error: true });
     });
   };
-  const legSnapshot = (key: string, from: string | null, to: string | null, l: LegState): RouteEcaClassification["legs"][number] => ({
-    key, pol: from, pod: to,
-    totalNm: l.useManual ? num(l.manualNm) : l.auto?.nm ?? null,
-    ecaNm: l.useManual ? num(l.manualEcaNm) ?? 0 : l.auto?.method === "waypoints" ? l.auto.ecaNm : null,
-    method: l.useManual ? "manual" : l.auto?.found ? l.auto.method : "none",
-    chokepoints: l.auto?.chokepoints, reversed: l.auto?.reversed ?? null, source: l.auto?.source ?? null,
-    manual: l.useManual ? { actorUserId: actor, reason: l.manualReason.trim(), at: sessionAt } : undefined,
-  });
   const saveEstimate = () => {
     if (!input || !estimate || !vessel || !cargo || estimate.status === "invalid") return;
     setSave({ busy: true, note: null, error: false });
-    const gv = new Map<string, string>();
-    for (const a of [ballast.auto, laden.auto]) a?.geometryVersions?.forEach((g) => gv.set(g.code, g.geometryVersion));
     startTransition(async () => {
       const r = await saveVoyageEstimateAction({
         label: `${vessel.name} · ${cargo.refId} · ${cargo.route.polCode} → ${cargo.route.podCode}`,
         vesselId: vessel.vesselId ?? null, availabilityId: vessel.id,
         // cargo.id is an actor-bound market handle, never a database id; only an owned listing's real id may reference cargo_listings
         cargoListingId: cargo.ownedListingId ?? null,
+        // legs, canal, settings and fuel are re-resolved on the server; only the facts travel
         input, suezInput,
-        routeLegs: [...(input.legs.ballast ? [legSnapshot("ballast", openCode, polCode, ballast)] : []), legSnapshot("laden", polCode, podCode, laden)],
-        routeMeta: { asOf: laden.auto?.asOf ?? ballast.auto?.asOf ?? null, geometryVersions: [...gv].map(([code, geometryVersion]) => ({ code, geometryVersion })), algorithmVersion: laden.auto?.algorithmVersion ?? ballast.auto?.algorithmVersion ?? null },
       });
       if (r.ok) { logEvent("voyage_estimate", { target: vessel.id, meta: { action: "save", status: r.data.status } }); setSave({ busy: false, note: `Estimate saved (${r.data.id.slice(0, 8)}… · ${r.data.status}).`, error: false, id: r.data.id }); }
       else setSave({ busy: false, note: r.error, error: true });
