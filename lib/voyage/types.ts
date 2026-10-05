@@ -119,6 +119,8 @@ export interface PortCallInput {
   euBerthOver2h: boolean; // EU berth beyond 2 h → 0.10 % in port
   /** governed = from the route's start/end zones; manual = asserted by the broker (estimate partial) */
   inEcaSource?: "governed" | "coarse" | "manual";
+  /** listing = the handling rate of the linked cargo listing; manual = typed for this estimate (a broker input) */
+  rateSource?: "listing" | "manual";
   pda: { usd: number | null; source: "tariff" | "manual" | "none"; manual?: ManualProvenance };
 }
 
@@ -130,6 +132,8 @@ export interface VoyageInput {
   ballastCanal?: CanalInput | null;
   /** profile = the vessel's governed economics profile; manual = facts typed for this estimate (estimate partial) */
   vesselSource?: "profile" | "manual";
+  /** listing = the start date is the linked cargo's laycan; manual = typed by the broker (a broker input) */
+  scheduleSource?: "listing" | "manual";
   ports: { load: PortCallInput; disch: PortCallInput };
   anchorageDays: number;
   anchorageInEca: boolean;

@@ -164,9 +164,11 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
       canal: null,
       ballastCanal: null,
       vesselSource,
+      // the server takes the laycan from the linked listing; a market cargo's date is a broker input
+      scheduleSource: cargo.ownedListingId && cargo.laycanFrom ? "listing" : "manual",
       ports: {
-        load: { key: "load", port: polCode, qtyMt: qty, rateMtDay: cargo.loadRate, allowanceDays: num(voy.loadAllowance) ?? 0, inEca: loadInEca, inEcaSource: ladenStartZones != null ? (laden.auto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.loadOpenLoopBan, euBerthOver2h: voy.loadEuBerth, pda: pdaInput(voy.pdaLoad, voy.pdaLoadReason) },
-        disch: { key: "disch", port: podCode, qtyMt: qty, rateMtDay: cargo.dischRate, allowanceDays: num(voy.dischAllowance) ?? 0, inEca: dischInEca, inEcaSource: ladenEndZones != null ? (laden.auto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.dischOpenLoopBan, euBerthOver2h: voy.dischEuBerth, pda: pdaInput(voy.pdaDisch, voy.pdaDischReason) },
+        load: { key: "load", port: polCode, qtyMt: qty, rateMtDay: cargo.loadRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.loadAllowance) ?? 0, inEca: loadInEca, inEcaSource: ladenStartZones != null ? (laden.auto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.loadOpenLoopBan, euBerthOver2h: voy.loadEuBerth, pda: pdaInput(voy.pdaLoad, voy.pdaLoadReason) },
+        disch: { key: "disch", port: podCode, qtyMt: qty, rateMtDay: cargo.dischRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.dischAllowance) ?? 0, inEca: dischInEca, inEcaSource: ladenEndZones != null ? (laden.auto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.dischOpenLoopBan, euBerthOver2h: voy.dischEuBerth, pda: pdaInput(voy.pdaDisch, voy.pdaDischReason) },
       },
       anchorageDays: num(voy.anchorageDays) ?? 0,
       anchorageInEca: voy.anchorageInEca,

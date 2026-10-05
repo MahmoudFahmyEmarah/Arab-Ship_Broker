@@ -12,7 +12,7 @@ import { parseVoyageInput, parseVoyageSettings } from "../lib/voyage/schemas";
 import { canonicalJson, sealSnapshot, type FuelIndexSnapshot } from "../lib/voyage/snapshots";
 import { DEFAULT_VOYAGE_SETTINGS, type VoyageInput, type VoyageSettings } from "../lib/voyage/types";
 import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage/calculator-policy";
-import { canalFromSuez, suezTransitDate } from "../lib/voyage/canal";
+import { canalDirection, canalFromSuez, suezTransitDate } from "../lib/voyage/canal";
 import { voyageFuelProducts } from "../lib/voyage/fuel-source";
 import { estimateSuezTransit } from "../lib/suez/engine";
 import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
@@ -405,6 +405,16 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   eq(voyageFuelProducts("LSMGO", "LSMGO", true), ["HSFO380", "LSMGO"], "a scrubber ship burns HSFO 380 and the 0.10 % product");
   eq(voyageFuelProducts("ULSFO", "MGO05", null), ["VLSFO", "ULSFO", "MGO05"], "unknown scrubber → VLSFO plus the ECA and distillate products");
   ok(!/585|725/.test(fs), "no fallback price is hard-coded in the seam");
+  // Opus B pre-audit (f87a560): flags left false, handling rates, start date, Suez facts, direction
+  eq(estimateVoyage(base({ ports: { load: port("load"), disch: port("disch", { port: "NLRTM" }) } })).status, "partial", "an EU port without the 2 h berth rule is an assertion (P1-3)");
+  eq(estimateVoyage(base({ vessel: { ...base().vessel, hasScrubber: true } })).status, "partial", "a scrubber ship with no open-loop ban asserted is not trusted (P1-3)");
+  eq(estimateVoyage(base({ ports: { load: port("load", { rateMtDay: 8000, rateSource: "manual" }), disch: port("disch") } })).status, "partial", "a typed handling rate is a broker input");
+  eq(estimateVoyage(base({ ports: { load: port("load", { rateMtDay: 8000, rateSource: "listing" }), disch: port("disch") } })).status, "trusted", "the linked listing's handling rate keeps it trusted");
+  eq(estimateVoyage(base({ scheduleSource: "manual" })).status, "partial", "a typed start date (it picks the tariff date) is a broker input (P1-2)");
+  eq(canalDirection([[21.5, 39.1, 0], [27.9, 33.9, 600], [29.9, 32.55, 700], [31.3, 32.33, 790], [36, 14, 1800], [6.4, 3.4, 5600]]), "NB", "Jeddah → Lagos crosses northbound although it ends further south (P2-1)");
+  eq(canalDirection([[31.3, 32.33, 0], [29.9, 32.55, 90], [21.5, 39.1, 700]]), "SB", "Port Said → Jeddah is southbound");
+  ok(actSrc.includes("cat: sv.category") && actSrc.includes("scnt: num(sv.scnt)"), "the Suez vessel facts are compared with the economics profile (P1-1)");
+  ok(actSrc.includes("const startDate = listedStart ?? typedStart ?? today;"), "the linked listing's laycan wins over the browser's date (P1-2)");
   // contract: server-side derivations
   const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
   for (const needle of ["rl.route!.chokepoints.includes(\"SUEZ\")", "suezDirection", "getPointEcaZones(supabase, point[0], point[1], date)", "portEca(ladenRoute?.startZones", "saved without the cargo link", "saved without the position link", "vesselSource = sameFacts(", "suezTransitDate(startDate, offset)", "cargoStatus: which", "routeVerified: r.verified"]) ok(act.includes(needle), `save derives on the server: ${needle.slice(0, 50)}`);

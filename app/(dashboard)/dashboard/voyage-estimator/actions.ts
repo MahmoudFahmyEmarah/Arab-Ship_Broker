@@ -27,7 +27,7 @@ import { getVoyageSettings, saveVoyageEstimate } from "@/sdk/app/voyage";
 import { estimateVoyage } from "@/lib/voyage/engine";
 import { parseVoyageInput } from "@/lib/voyage/schemas";
 import { loadFuelIndex, voyageFuelProducts } from "@/lib/voyage/fuel-source";
-import { canalFromSuez, suezTransitDate } from "@/lib/voyage/canal";
+import { canalDirection, canalFromSuez, suezTransitDate } from "@/lib/voyage/canal";
 import { resolveCalculatorAccess } from "@/lib/voyage/calculator-access";
 import { calculatorDenialMessage } from "@/lib/voyage/calculator-policy";
 import { estimateSuezTransit } from "@/lib/suez/engine";
@@ -86,7 +86,7 @@ async function lookupLeg(supabase: SupabaseClient, a: string, b: string, asOf?: 
     geometryConfidence: split.geometryConfidence === "official" ? "official" : "coarse",
     startZones: waypoints ? (split.startZones ?? null) : null,
     endZones: waypoints ? (split.endZones ?? null) : null,
-    suezDirection: suez && wp.length >= 2 ? (wp[0][0] > wp[wp.length - 1][0] ? "SB" : "NB") : null,
+    suezDirection: suez ? canalDirection(wp) : null,
     asOf: split.asOf ?? null,
     geometryVersions: split.geometryVersions ?? [],
     algorithmVersion: split.algorithmVersion ?? null,
@@ -205,11 +205,14 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     let vesselId = typeof payload.vesselId === "string" && UUID.test(payload.vesselId) ? payload.vesselId : null;
     let availabilityId = typeof payload.availabilityId === "string" && UUID.test(payload.availabilityId) ? payload.availabilityId : null;
     let cargoListingId = typeof payload.cargoListingId === "string" && UUID.test(payload.cargoListingId) ? payload.cargoListingId : null;
+    let listing: { laycan_from: string | null; load_rate: string | null; disch_rate: string | null } | null = null;
     if (cargoListingId) {
-      const { data: c } = await admin.from("cargo_listings").select("load_port_locode, disch_port_locode").eq("id", cargoListingId).maybeSingle();
+      const { data: c } = await admin.from("cargo_listings").select("load_port_locode, disch_port_locode, laycan_from, load_rate, disch_rate").eq("id", cargoListingId).maybeSingle();
+      listing = c ? { laycan_from: c.laycan_from ?? null, load_rate: c.load_rate ?? null, disch_rate: c.disch_rate ?? null } : null;
       if (!c || c.load_port_locode !== ladenLeg.leg.from || c.disch_port_locode !== ladenLeg.leg.to) {
         notes.push("The laden route differs from the cargo listing's ports; the estimate is saved without the cargo link.");
         cargoListingId = null;
+        listing = null;
       }
     }
     if (availabilityId) {
@@ -228,8 +231,14 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     if (vesselId) {
       const prof = await getVesselEconomicsProfile(supabase, vesselId).catch(() => null);
       if (prof?.found && prof.allowed) {
-        const fromProfile = { l: prof.speedLadenKn ?? null, b: prof.speedBallastKn ?? null, s: prof.hasScrubber ?? null, k: prof.vesselClass ?? null, c: consumptionOf(prof.consumption) };
-        const typed = { l: client.vessel?.speedLadenKn ?? null, b: client.vessel?.speedBallastKn ?? null, s: client.vessel?.hasScrubber ?? null, k: client.vessel?.vesselClass ?? null, c: consumptionOf(client.vessel?.consumption) };
+        // Operating facts AND the Suez facts (SCNT, GT, category, transit history, searchlight, cranes) must equal the
+        // governed profile; anything typed differently is manual for this estimate (Opus B pre-audit P1-1).
+        const sv = payload.suezInput?.vessel;
+        const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
+        const fromProfile = { l: prof.speedLadenKn ?? null, b: prof.speedBallastKn ?? null, s: prof.hasScrubber ?? null, k: prof.vesselClass ?? null, c: consumptionOf(prof.consumption),
+          ...(sv ? { scnt: num(prof.scnt), gt: num(prof.gt), cat: prof.suezCategory ?? null, ft: prof.firstTransit ?? null, sl: prof.searchlightCompliant ?? null, mc: prof.mooringCranesOk ?? null } : {}) };
+        const typed = { l: client.vessel?.speedLadenKn ?? null, b: client.vessel?.speedBallastKn ?? null, s: client.vessel?.hasScrubber ?? null, k: client.vessel?.vesselClass ?? null, c: consumptionOf(client.vessel?.consumption),
+          ...(sv ? { scnt: num(sv.scnt), gt: num(sv.gt), cat: sv.category ?? null, ft: sv.firstTransit ?? null, sl: sv.searchlightCompliant ?? null, mc: sv.mooringCranesOk ?? null } : {}) };
         vesselSource = sameFacts(fromProfile, typed) ? "profile" : "manual";
       }
     }
@@ -239,9 +248,12 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     const portEca = (zones: string[] | null | undefined, clientValue: boolean) =>
       zones == null ? { inEca: !!clientValue, inEcaSource: "manual" as const }
         : { inEca: zones.length > 0, inEcaSource: ladenRoute?.geometryConfidence === "official" ? ("governed" as const) : ("coarse" as const) };
+    // Handling rates equal to the linked listing's are listing facts; any other figure is a broker input.
+    const listingRate = (v: string | null | undefined) => { const n = v == null ? NaN : Number(String(v).replace(/[^0-9.]/g, "")); return Number.isFinite(n) && n > 0 ? n : null; };
+    const rateSource = (typed: number | null | undefined, listed: number | null) => (listed != null && typed === listed ? ("listing" as const) : ("manual" as const));
     const ports: VoyageInput["ports"] = {
-      load: { ...client.ports.load, ...portEca(ladenRoute?.startZones, client.ports.load.inEca), pda: { ...client.ports.load.pda, manual: stamp(client.ports.load.pda?.manual) } },
-      disch: { ...client.ports.disch, ...portEca(ladenRoute?.endZones, client.ports.disch.inEca), pda: { ...client.ports.disch.pda, manual: stamp(client.ports.disch.pda?.manual) } },
+      load: { ...client.ports.load, ...portEca(ladenRoute?.startZones, client.ports.load.inEca), rateSource: rateSource(client.ports.load.rateMtDay, listingRate(listing?.load_rate)), pda: { ...client.ports.load.pda, manual: stamp(client.ports.load.pda?.manual) } },
+      disch: { ...client.ports.disch, ...portEca(ladenRoute?.endZones, client.ports.disch.inEca), rateSource: rateSource(client.ports.disch.rateMtDay, listingRate(listing?.disch_rate)), pda: { ...client.ports.disch.pda, manual: stamp(client.ports.disch.pda?.manual) } },
     };
 
     const base: VoyageInput = {
@@ -252,8 +264,14 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     };
 
     // ── canal transits: requirement, direction, date and price on the server ──
-    const startDate = typeof payload.startDate === "string" && ISO_DATE.test(payload.startDate) ? payload.startDate : today;
-    if (startDate === today && payload.startDate !== today) notes.push("No laycan date: transit dates are counted from today.");
+    // The start date picks the tariff, SDR and ECA date: the linked listing's laycan when there is one; otherwise the
+    // broker's date is a broker input and the estimate says so (Opus B pre-audit P1-2).
+    const listedStart = listing?.laycan_from && ISO_DATE.test(String(listing.laycan_from).slice(0, 10)) ? String(listing.laycan_from).slice(0, 10) : null;
+    const typedStart = typeof payload.startDate === "string" && ISO_DATE.test(payload.startDate) ? payload.startDate : null;
+    const startDate = listedStart ?? typedStart ?? today;
+    const scheduleSource: "listing" | "manual" = listedStart ? "listing" : "manual";
+    if (!listedStart && !typedStart) notes.push("No laycan date: transit dates are counted from today.");
+    base.scheduleSource = scheduleSource;
     const pre = estimateVoyage(base); // days per leg, before any canal
     const transitFor = async (rl: ResolvedLeg | null, which: "laden" | "ballast", clientCanal: CanalInput | null | undefined): Promise<{ canal: CanalInput | null; suez: SuezEstimate | null; date: string | null; basis: string | null }> => {
       if (!rl) return { canal: null, suez: null, date: null, basis: null };
@@ -303,7 +321,7 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     const fuelSnapshot = sealSnapshot({ ...fuel, canonicalSha256: undefined });
     const routeLegs = [...(ballastLeg ? [ballastLeg.snap] : []), ladenLeg.snap];
     const routeStatus: RouteEcaClassification["status"] = routeLegs.some((l) => l.method === "none") ? "unavailable"
-      : routeLegs.some((l) => l.method === "manual") ? "manual" : routeLegs.some((l) => l.verified === false || (l.method === "waypoints" && l.ecaConfidence === "coarse")) ? "fallback" : "trusted";
+      : routeLegs.some((l) => l.method === "manual") ? "manual" : routeLegs.some((l) => l.verified === false || l.method === "distance_only" || (l.method === "waypoints" && l.ecaConfidence === "coarse")) ? "fallback" : "trusted";
     const routeSnapshot = sealSnapshot<RouteEcaClassification>({
       kind: "route_eca", status: routeStatus, asOf: today, legs: routeLegs,
       geometryVersions: [...geometry].map(([code, geometryVersion]) => ({ code, geometryVersion })),

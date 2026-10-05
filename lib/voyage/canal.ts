@@ -65,3 +65,12 @@ export function suezTransitDate(startIso: string, offsetDays: number): string {
   d.setUTCDate(d.getUTCDate() + Math.round(offsetDays));
   return d.toISOString().slice(0, 10);
 }
+
+// The canal runs north (Port Said, ~31.3°N) to south (Suez, ~29.9°N) between 32.2°E and 32.65°E: the order in which
+// the track passes those latitudes inside that corridor is the transit direction (an end-point guess fails for
+// e.g. Jeddah → Lagos, which crosses northbound). Falls back to the end points only if no waypoint lies in it.
+export function canalDirection(wp: [number, number, number | null][]): "SB" | "NB" | null {
+  const inCanal = wp.filter(([lat, lon]) => lat >= 29.85 && lat <= 31.35 && lon >= 32.2 && lon <= 32.65);
+  if (inCanal.length >= 2) return inCanal[0][0] > inCanal[inCanal.length - 1][0] ? "SB" : "NB";
+  return wp.length >= 2 ? (wp[0][0] > wp[wp.length - 1][0] ? "SB" : "NB") : null;
+}

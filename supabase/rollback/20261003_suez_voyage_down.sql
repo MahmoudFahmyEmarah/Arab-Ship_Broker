@@ -1,5 +1,6 @@
 -- DOWN for Stream S (Voyage Economics): 20261003200000 … 205500.
--- Run it as ONE transaction (psql -1, or inside the migration harness): the first statement refuses otherwise,
+-- Run it as ONE transaction WITH ON_ERROR_STOP (psql -1 -v ON_ERROR_STOP=1, or inside the migration harness): the
+-- first statement refuses otherwise,
 -- so a failure can never leave a partially removed module.
 -- Returns the schema to 677613e. Order: dependents first.
 --
@@ -25,6 +26,8 @@ begin
   if to_regclass('public.sdr_rates') is not null and exists (select 1 from public.sdr_rates) then v_used := v_used || 'SDR rates'::text; end if;
   if to_regclass('public.suez_tariff_events') is not null and exists (select 1 from public.suez_tariff_events where origin = 'command') then v_used := v_used || 'admin tariff events'::text; end if;
   if to_regclass('public.vessel_economics_profiles') is not null and exists (select 1 from public.vessel_economics_profiles) then v_used := v_used || 'vessel economics profiles'::text; end if;
+  if to_regclass('public.vessel_economics_profile_events') is not null and exists (select 1 from public.vessel_economics_profile_events) then v_used := v_used || 'vessel economics profile history'::text; end if;
+  if to_regclass('public.eca_zone_versions') is not null and exists (select 1 from public.eca_zone_versions where created_by is not null) then v_used := v_used || 'admin ECA geometry versions'::text; end if;
   if exists (select 1 from public.app_settings where key = 'voyage_settings' and coalesce(value ->> 'seedMarker', '') <> 'stream-s-20261003') then v_used := v_used || 'admin-edited voyage settings (preserved)'::text; end if;
   if cardinality(v_used) > 0 and not v_confirmed then
     raise exception 'STREAM_S_DOWN_REFUSED: this database holds governed records (%). Export them, then set asb.stream_s_down = ''export-taken:<where the export is>'' in this session and rerun.', array_to_string(v_used, ', ')
