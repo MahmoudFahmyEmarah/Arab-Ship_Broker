@@ -1,0 +1,310 @@
+[
+  {
+    "code": "cleanliness_fee_container",
+    "label": "Cleanliness (garbage) fee: container",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 41,
+    "applicability": {
+      "cargoTypes": [
+        "container"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 300,
+        "flatAmount": 50
+      },
+      {
+        "order": 2,
+        "lowerBound": 300,
+        "upperBound": 999,
+        "flatAmount": 60
+      },
+      {
+        "order": 3,
+        "lowerBound": 999,
+        "upperBound": 4999,
+        "flatAmount": 70
+      },
+      {
+        "order": 4,
+        "lowerBound": 4999,
+        "upperBound": 9999,
+        "flatAmount": 80
+      },
+      {
+        "order": 5,
+        "lowerBound": 9999,
+        "upperBound": 19999,
+        "flatAmount": 90
+      },
+      {
+        "order": 6,
+        "lowerBound": 19999,
+        "upperBound": 29999,
+        "flatAmount": 100
+      },
+      {
+        "order": 7,
+        "lowerBound": 29999,
+        "upperBound": 39999,
+        "flatAmount": 110
+      },
+      {
+        "order": 8,
+        "lowerBound": 39999,
+        "upperBound": 49999,
+        "flatAmount": 120
+      },
+      {
+        "order": 9,
+        "lowerBound": 49999,
+        "upperBound": 59999,
+        "flatAmount": 130
+      },
+      {
+        "order": 10,
+        "lowerBound": 59999,
+        "upperBound": null,
+        "flatAmount": 140
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000000488",
+    "sourcePage": "Art. 7",
+    "sourceExcerpt": "Cleanliness fee, foreign vessels, USD per call, container column, by GT band"
+  },
+  {
+    "code": "cleanliness_fee_general_cargo",
+    "label": "Cleanliness (garbage) fee: general cargo",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 42,
+    "applicability": {
+      "cargoTypes": [
+        "general_cargo"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 300,
+        "flatAmount": 120
+      },
+      {
+        "order": 2,
+        "lowerBound": 300,
+        "upperBound": 999,
+        "flatAmount": 140
+      },
+      {
+        "order": 3,
+        "lowerBound": 999,
+        "upperBound": 4999,
+        "flatAmount": 160
+      },
+      {
+        "order": 4,
+        "lowerBound": 4999,
+        "upperBound": 9999,
+        "flatAmount": 180
+      },
+      {
+        "order": 5,
+        "lowerBound": 9999,
+        "upperBound": 19999,
+        "flatAmount": 200
+      },
+      {
+        "order": 6,
+        "lowerBound": 19999,
+        "upperBound": 29999,
+        "flatAmount": 220
+      },
+      {
+        "order": 7,
+        "lowerBound": 29999,
+        "upperBound": 39999,
+        "flatAmount": 240
+      },
+      {
+        "order": 8,
+        "lowerBound": 39999,
+        "upperBound": 49999,
+        "flatAmount": 260
+      },
+      {
+        "order": 9,
+        "lowerBound": 49999,
+        "upperBound": 59999,
+        "flatAmount": 280
+      },
+      {
+        "order": 10,
+        "lowerBound": 59999,
+        "upperBound": null,
+        "flatAmount": 300
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000000488",
+    "sourcePage": "Art. 7",
+    "sourceExcerpt": "Cleanliness fee, foreign vessels, USD per call, general_cargo column, by GT band"
+  },
+  {
+    "code": "cleanliness_fee_clean_bulk",
+    "label": "Cleanliness (garbage) fee: clean bulk",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 43,
+    "applicability": {
+      "cargoTypes": [
+        "clean_bulk"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 300,
+        "flatAmount": 150
+      },
+      {
+        "order": 2,
+        "lowerBound": 300,
+        "upperBound": 999,
+        "flatAmount": 175
+      },
+      {
+        "order": 3,
+        "lowerBound": 999,
+        "upperBound": 4999,
+        "flatAmount": 200
+      },
+      {
+        "order": 4,
+        "lowerBound": 4999,
+        "upperBound": 9999,
+        "flatAmount": 225
+      },
+      {
+        "order": 5,
+        "lowerBound": 9999,
+        "upperBound": 19999,
+        "flatAmount": 250
+      },
+      {
+        "order": 6,
+        "lowerBound": 19999,
+        "upperBound": 29999,
+        "flatAmount": 275
+      },
+      {
+        "order": 7,
+        "lowerBound": 29999,
+        "upperBound": 39999,
+        "flatAmount": 300
+      },
+      {
+        "order": 8,
+        "lowerBound": 39999,
+        "upperBound": 49999,
+        "flatAmount": 325
+      },
+      {
+        "order": 9,
+        "lowerBound": 49999,
+        "upperBound": 59999,
+        "flatAmount": 350
+      },
+      {
+        "order": 10,
+        "lowerBound": 59999,
+        "upperBound": null,
+        "flatAmount": 375
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000000488",
+    "sourcePage": "Art. 7",
+    "sourceExcerpt": "Cleanliness fee, foreign vessels, USD per call, clean_bulk column, by GT band"
+  },
+  {
+    "code": "cleanliness_fee_unclean_bulk",
+    "label": "Cleanliness (garbage) fee: unclean bulk",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 44,
+    "applicability": {
+      "cargoTypes": [
+        "unclean_bulk"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 300,
+        "flatAmount": 200
+      },
+      {
+        "order": 2,
+        "lowerBound": 300,
+        "upperBound": 999,
+        "flatAmount": 225
+      },
+      {
+        "order": 3,
+        "lowerBound": 999,
+        "upperBound": 4999,
+        "flatAmount": 250
+      },
+      {
+        "order": 4,
+        "lowerBound": 4999,
+        "upperBound": 9999,
+        "flatAmount": 275
+      },
+      {
+        "order": 5,
+        "lowerBound": 9999,
+        "upperBound": 19999,
+        "flatAmount": 300
+      },
+      {
+        "order": 6,
+        "lowerBound": 19999,
+        "upperBound": 29999,
+        "flatAmount": 325
+      },
+      {
+        "order": 7,
+        "lowerBound": 29999,
+        "upperBound": 39999,
+        "flatAmount": 350
+      },
+      {
+        "order": 8,
+        "lowerBound": 39999,
+        "upperBound": 49999,
+        "flatAmount": 375
+      },
+      {
+        "order": 9,
+        "lowerBound": 49999,
+        "upperBound": 59999,
+        "flatAmount": 400
+      },
+      {
+        "order": 10,
+        "lowerBound": 59999,
+        "upperBound": null,
+        "flatAmount": 425
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000000488",
+    "sourcePage": "Art. 7",
+    "sourceExcerpt": "Cleanliness fee, foreign vessels, USD per call, unclean_bulk column, by GT band"
+  }
+]

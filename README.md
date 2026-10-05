@@ -206,7 +206,7 @@ The backend is **Postgres on Supabase**, defined entirely as code in [supabase/m
           └─ both cargo & vessel_availability ──► review_queue (moderation)
 
    commodities ─► commodity_map · grain_list · imsbc_codes · css_categories  (classification reference)
-   bunker_prices ─► bunker_suppliers · bunker_ingest_accounts
+   fuel_products · bunker_suppliers ─► bunker_supplier_ports · bunker_supplier_members · bunker_quotes ─► bunker_quote_events
    market_insights_editions · market_insights_subscribers      fuel_prices · voyage_estimates
    contact_messages (public contact form)
 ```

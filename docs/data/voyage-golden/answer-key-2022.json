@@ -1,0 +1,588 @@
+{
+  "source": {
+    "file": "tmp/Data/Voyage_Estimation_Spreadsheet1-_answer_(1).xlsx",
+    "sha256": "ab5bddf6026fdf4ba39d7f08205dafc1cfd8a776f906db0a3e916fdff854fb25"
+  },
+  "cases": [
+    {
+      "id": "handymax-no-yokohama",
+      "sheet": "Handymax Cargo",
+      "description": "45k HSS New Orleans to Yokohama, 40,000 t at USD 40/t, 1.25 % commission",
+      "vessel": {
+        "name": "CBS Prosperity (geared Handymax)",
+        "dwt": 45000,
+        "constants": 250,
+        "gt": 28073,
+        "nt": 16285
+      },
+      "blocks": [
+        {
+          "label": "Ballast to New Orleans",
+          "kind": "ballast",
+          "miles": 1630,
+          "knots": 13.5,
+          "days": 5.030864197530864,
+          "foPerDay": 24.5,
+          "doPerDay": 0,
+          "inDuration": true,
+          "fo": 123.25617283950616,
+          "do": 0
+        },
+        {
+          "label": "New Orleans to Yokohama",
+          "kind": "laden",
+          "miles": 9183,
+          "knots": 13.5,
+          "days": 28.34259259259259,
+          "foPerDay": 29.5,
+          "doPerDay": 0,
+          "inDuration": true,
+          "fo": 836.1064814814814,
+          "do": 0
+        },
+        {
+          "label": "BWA",
+          "kind": "reserve",
+          "miles": null,
+          "knots": null,
+          "days": 0,
+          "foPerDay": 29.5,
+          "doPerDay": 0,
+          "inDuration": false,
+          "fo": 0,
+          "do": 0
+        },
+        {
+          "label": "Canal transit",
+          "kind": "canal",
+          "miles": null,
+          "knots": null,
+          "days": 1,
+          "foPerDay": 0,
+          "doPerDay": 1.5,
+          "inDuration": true,
+          "fo": 0,
+          "do": 1.5
+        },
+        {
+          "label": "Port (load 2 + discharge 2)",
+          "kind": "port",
+          "miles": null,
+          "knots": null,
+          "days": 4,
+          "foPerDay": 0,
+          "doPerDay": 1.5,
+          "inDuration": true,
+          "fo": 0,
+          "do": 6
+        }
+      ],
+      "bunkers": [
+        {
+          "grade": "FO",
+          "place": "Baltimore",
+          "usdPerMt": 680,
+          "qtyFormula": "typed (960 for 959.36 consumed)",
+          "qty": 960
+        },
+        {
+          "grade": "DO",
+          "place": "NOLS",
+          "usdPerMt": 980,
+          "qtyFormula": "ROUNDUP(total DO − ROB + DO at sea, 0)",
+          "qty": 8
+        }
+      ],
+      "expenses": [
+        {
+          "label": "Loading port disbursements",
+          "usd": 120000
+        },
+        {
+          "label": "Discharging port disbursements",
+          "usd": 150000
+        },
+        {
+          "label": "Canal transit expenses",
+          "usd": 90000
+        }
+      ],
+      "cargoes": [
+        {
+          "label": "HSS",
+          "mt": 40000,
+          "usdPerMt": 40
+        }
+      ],
+      "commissionRate": 0.0125,
+      "runningCostPerDay": 6000,
+      "tceFormula": "typed",
+      "expected": {
+        "totalDays": 38.373456790123456,
+        "totalFo": 959.3626543209875,
+        "totalDo": 7.5,
+        "bunkersOnBoard": 1118,
+        "cargoIntake": 43632,
+        "bunkerCost": 660640,
+        "otherExpenses": 360000,
+        "grossExpenses": 1020640,
+        "grossFreight": 1600000,
+        "commission": 20000,
+        "netFreight": 1580000,
+        "grossSurplus": 559360,
+        "grossDaily": 14576.742540014478,
+        "netDaily": 8576.742540014478,
+        "tce": 16000
+      },
+      "quirks": [
+        "T/C equivalent is typed (16,000), not computed.",
+        "The canal day burns DO only, no FO.",
+        "Bunkers on board for the intake = purchases + a typed 150 t, while the cargo line uses 40,000 t of a 43,632 t intake."
+      ]
+    },
+    {
+      "id": "panamax-norfolk-rotterdam",
+      "sheet": "Panamax Cargo",
+      "description": "Coal Norfolk to Rotterdam, 3d/3d, USD 15/t FIOT, 1.25 % (header says 75,000 t; the freight line uses 66,000 t)",
+      "vessel": {
+        "name": "HESSAH / CBS Serenity (geared Panamax)",
+        "dwt": 81800,
+        "constants": 500,
+        "gt": 39727,
+        "nt": 25754
+      },
+      "blocks": [
+        {
+          "label": "New Orleans / Norfolk (ballast)",
+          "kind": "ballast",
+          "miles": 1342,
+          "knots": 14.5,
+          "days": 3.8563218390804597,
+          "foPerDay": 27.8,
+          "doPerDay": 0.5,
+          "inDuration": true,
+          "fo": 107.20574712643678,
+          "do": 1.9281609195402298
+        },
+        {
+          "label": "Norfolk / Rotterdam (laden)",
+          "kind": "laden",
+          "miles": 3514,
+          "knots": 14,
+          "days": 20,
+          "foPerDay": 32.6,
+          "doPerDay": 0.5,
+          "inDuration": true,
+          "fo": 652,
+          "do": 10
+        },
+        {
+          "label": "BWA 1 day",
+          "kind": "reserve",
+          "miles": null,
+          "knots": null,
+          "days": 1,
+          "foPerDay": 32.6,
+          "doPerDay": 0.5,
+          "inDuration": false,
+          "fo": 32.6,
+          "do": 0.5
+        },
+        {
+          "label": "Port (load 4 / discharge 4, counted 5)",
+          "kind": "port",
+          "miles": null,
+          "knots": null,
+          "days": 5,
+          "foPerDay": 0,
+          "doPerDay": 0.1,
+          "inDuration": true,
+          "fo": 0,
+          "do": 0.5
+        }
+      ],
+      "bunkers": [
+        {
+          "grade": "FO",
+          "place": "ROB",
+          "usdPerMt": 640,
+          "qtyFormula": "typed",
+          "qty": 100
+        },
+        {
+          "grade": "FO",
+          "place": "NOLS",
+          "usdPerMt": 640,
+          "qtyFormula": "total FO − ROB",
+          "qty": 691.8057471264368
+        },
+        {
+          "grade": "DO",
+          "place": "ROB",
+          "usdPerMt": 980,
+          "qtyFormula": "typed (covers 12.93 consumed)",
+          "qty": 20
+        }
+      ],
+      "expenses": [
+        {
+          "label": "Loading port disbursements",
+          "usd": 140000
+        },
+        {
+          "label": "Discharging port disbursements",
+          "usd": 150000
+        }
+      ],
+      "cargoes": [
+        {
+          "label": "Coal",
+          "mt": 66000,
+          "usdPerMt": 15
+        }
+      ],
+      "commissionRate": 0.0125,
+      "runningCostPerDay": 6000,
+      "tceFormula": "typed",
+      "expected": {
+        "totalDays": 28.856321839080458,
+        "totalFo": 791.8057471264368,
+        "totalDo": 12.928160919540229,
+        "bunkersOnBoard": 811.8057471264368,
+        "cargoIntake": 80488.19425287357,
+        "bunkerCost": 526355.6781609196,
+        "otherExpenses": 290000,
+        "grossExpenses": 816355.6781609196,
+        "grossFreight": 990000,
+        "commission": 12375,
+        "netFreight": 977625,
+        "grossSurplus": 161269.32183908042,
+        "grossDaily": 5588.69986058554,
+        "netDaily": -411.3001394144603,
+        "tce": 16000
+      },
+      "quirks": [
+        "The laden leg's days are typed as 20 (3,514 nm at 14 kn is 10.46 days).",
+        "Port time shows load 4 / discharge 4 but the sheet counts 5 days (Loading + Discharging named cells).",
+        "Header cargo 75,000 t vs 66,000 t in the freight line; DWT 81,800 vs 76,662 summer in the particulars.",
+        "ROB bunkers are priced as a voyage cost; T/C equivalent is typed (16,000)."
+      ]
+    },
+    {
+      "id": "panamax-backhaul",
+      "sheet": "Panamax Cargo with Backhaul",
+      "description": "60,000 t coal Norfolk/Rotterdam USD 15 + 65,000 t iron ore Saldanha Bay/Morehead City USD 20, 3d/3d, FIOT, 1.25 %",
+      "vessel": {
+        "name": "CBS Serenity (geared Panamax)",
+        "dwt": 76662,
+        "constants": 500,
+        "gt": 39727,
+        "nt": 25754
+      },
+      "blocks": [
+        {
+          "label": "New Orleans / Norfolk (ballast)",
+          "kind": "ballast",
+          "miles": 1342,
+          "knots": 15,
+          "days": 3.727777777777778,
+          "foPerDay": 31.5,
+          "doPerDay": 0.5,
+          "inDuration": true,
+          "fo": 117.425,
+          "do": 1.863888888888889
+        },
+        {
+          "label": "Norfolk / Rotterdam (laden)",
+          "kind": "laden",
+          "miles": 3514,
+          "knots": 14,
+          "days": 10.458333333333334,
+          "foPerDay": 33.5,
+          "doPerDay": 0.5,
+          "inDuration": true,
+          "fo": 350.3541666666667,
+          "do": 5.229166666666667
+        },
+        {
+          "label": "Rotterdam / Saldanha Bay (ballast)",
+          "kind": "ballast",
+          "miles": 6116,
+          "knots": 15,
+          "days": 16.988888888888887,
+          "foPerDay": 31.5,
+          "doPerDay": 0.5,
+          "inDuration": true,
+          "fo": 535.15,
+          "do": 8.494444444444444
+        },
+        {
+          "label": "Saldanha Bay / Morehead City (laden)",
+          "kind": "laden",
+          "miles": 6754,
+          "knots": 14,
+          "days": 20.101190476190474,
+          "foPerDay": 33.5,
+          "doPerDay": 0.5,
+          "inDuration": true,
+          "fo": 673.3898809523808,
+          "do": 10.050595238095237
+        },
+        {
+          "label": "BWA 2 days",
+          "kind": "reserve",
+          "miles": null,
+          "knots": null,
+          "days": 2,
+          "foPerDay": 33.5,
+          "doPerDay": 0.5,
+          "inDuration": false,
+          "fo": 67,
+          "do": 1
+        },
+        {
+          "label": "Port (load 6 + discharge 6)",
+          "kind": "port",
+          "miles": null,
+          "knots": null,
+          "days": 12,
+          "foPerDay": 0,
+          "doPerDay": 0.5,
+          "inDuration": true,
+          "fo": 0,
+          "do": 6
+        }
+      ],
+      "bunkers": [
+        {
+          "grade": "FO",
+          "place": "ROB",
+          "usdPerMt": 640,
+          "qtyFormula": "typed",
+          "qty": 100
+        },
+        {
+          "grade": "FO",
+          "place": "NOLS",
+          "usdPerMt": 640,
+          "qtyFormula": "FO of legs 1+2 − ROB",
+          "qty": 367.7791666666667
+        },
+        {
+          "grade": "FO",
+          "place": "Rotterdam",
+          "usdPerMt": 630,
+          "qtyFormula": "total FO − NOLS − ROB",
+          "qty": 1275.5398809523808
+        },
+        {
+          "grade": "DO",
+          "place": "ROB",
+          "usdPerMt": 980,
+          "qtyFormula": "typed",
+          "qty": 20
+        },
+        {
+          "grade": "DO",
+          "place": "NOLS",
+          "usdPerMt": 980,
+          "qtyFormula": "ROUNDUP(total DO − ROB, 0)",
+          "qty": 13
+        }
+      ],
+      "expenses": [
+        {
+          "label": "Loading port disbursements",
+          "usd": 290000
+        },
+        {
+          "label": "Discharging port disbursements",
+          "usd": 270000
+        }
+      ],
+      "cargoes": [
+        {
+          "label": "Coal",
+          "mt": 60000,
+          "usdPerMt": 15
+        },
+        {
+          "label": "Iron ore",
+          "mt": 65000,
+          "usdPerMt": 20
+        }
+      ],
+      "commissionRate": 0.0125,
+      "runningCostPerDay": 8000,
+      "tceFormula": "gross_daily/(1-commission)",
+      "expected": {
+        "totalDays": 63.27619047619047,
+        "totalFo": 1743.3190476190475,
+        "totalDo": 32.63809523809523,
+        "bunkersOnBoard": 1776.3190476190475,
+        "cargoIntake": 74385.68095238095,
+        "bunkerCost": 1135308.7916666665,
+        "otherExpenses": 560000,
+        "grossExpenses": 1695308.7916666665,
+        "grossFreight": 2200000,
+        "commission": 27500,
+        "netFreight": 2172500,
+        "grossSurplus": 477191.2083333335,
+        "grossDaily": 7541.40229906683,
+        "netDaily": -458.59770093317,
+        "tce": 7636.863087662612
+      },
+      "quirks": [
+        "Reserve (BWA) days burn fuel but are not added to the voyage duration.",
+        "Bunkers on board for the intake = every purchase over the whole round voyage, not the quantity on board at loading.",
+        "T/C equivalent = gross daily / (1 − commission); the running cost is not added back."
+      ]
+    },
+    {
+      "id": "tanker-houston-shanghai",
+      "sheet": "Tanker Cargo",
+      "description": "65,000 t fuel oil Houston/Shanghai and ballast back, 2d/2d, WS 130 on flat USD 28.64, 1.25 %",
+      "vessel": {
+        "name": "CBS Endurance (product carrier)",
+        "dwt": 69850,
+        "constants": 500,
+        "gt": 41690,
+        "nt": 20900
+      },
+      "blocks": [
+        {
+          "label": "Houston / Shanghai (laden)",
+          "kind": "laden",
+          "miles": 10216,
+          "knots": 15.5,
+          "days": 27.462365591397848,
+          "foPerDay": 44.5,
+          "doPerDay": 4,
+          "inDuration": true,
+          "fo": 1222.0752688172042,
+          "do": 109.84946236559139
+        },
+        {
+          "label": "Shanghai / Houston (ballast)",
+          "kind": "ballast",
+          "miles": 10216,
+          "knots": 15.5,
+          "days": 27.462365591397848,
+          "foPerDay": 39.5,
+          "doPerDay": 4,
+          "inDuration": true,
+          "fo": 1084.763440860215,
+          "do": 109.84946236559139
+        },
+        {
+          "label": "BWA 1 day",
+          "kind": "reserve",
+          "miles": null,
+          "knots": null,
+          "days": 1,
+          "foPerDay": 44.5,
+          "doPerDay": 4,
+          "inDuration": false,
+          "fo": 44.5,
+          "do": 4
+        },
+        {
+          "label": "Canal transit 2 days",
+          "kind": "canal",
+          "miles": null,
+          "knots": null,
+          "days": 2,
+          "foPerDay": 44.5,
+          "doPerDay": 4,
+          "inDuration": true,
+          "fo": 89,
+          "do": 8
+        },
+        {
+          "label": "Port (load 2 + discharge 2)",
+          "kind": "port",
+          "miles": null,
+          "knots": null,
+          "days": 4,
+          "foPerDay": 0,
+          "doPerDay": 4,
+          "inDuration": true,
+          "fo": 0,
+          "do": 16
+        }
+      ],
+      "bunkers": [
+        {
+          "grade": "FO",
+          "place": "ROB",
+          "usdPerMt": 640,
+          "qtyFormula": "typed",
+          "qty": 100
+        },
+        {
+          "grade": "FO",
+          "place": "Houston",
+          "usdPerMt": 640,
+          "qtyFormula": "typed (tank capacity 2,400 less ROB)",
+          "qty": 2300
+        },
+        {
+          "grade": "FO",
+          "place": "Shanghai",
+          "usdPerMt": 660,
+          "qtyFormula": "main + auxiliary FO − ROB − Houston",
+          "qty": 288.0376344086021
+        }
+      ],
+      "expenses": [
+        {
+          "label": "Loading port disbursements",
+          "usd": 125000
+        },
+        {
+          "label": "Discharging port disbursements",
+          "usd": 100000
+        },
+        {
+          "label": "Canal transit expenses",
+          "usd": 234442.5,
+          "formula": "10,000×7.16 + 10,000×7.09 + 13,325×6.90 (banded toll on 33,325 t, the Panama tonnage)"
+        }
+      ],
+      "cargoes": [
+        {
+          "label": "Fuel oil",
+          "mt": 65000,
+          "worldscale": 130,
+          "flatUsdPerMt": 28.64
+        }
+      ],
+      "commissionRate": 0.0125,
+      "runningCostPerDay": 7000,
+      "tceFormula": "gross_daily/(1-commission)",
+      "expected": {
+        "totalDays": 60.924731182795696,
+        "totalFo": 2440.3387096774195,
+        "totalDo": 247.69892473118279,
+        "bunkersOnBoard": 2688.037634408602,
+        "cargoIntake": 66661.9623655914,
+        "bunkerCost": 1726104.8387096773,
+        "otherExpenses": 459442.5,
+        "grossExpenses": 2185547.3387096776,
+        "grossFreight": 2420080,
+        "commission": 30251,
+        "netFreight": 2389829,
+        "grossSurplus": 204281.66129032243,
+        "grossDaily": 3353.0170314154584,
+        "netDaily": -3646.9829685845416,
+        "tce": 3395.4602849776793
+      },
+      "quirks": [
+        "The \"DO\" column is the auxiliary engine burning FO (4 t/day at sea and in port); it is bought as FO.",
+        "The canal is the Panama Canal (banded toll on the Panama tonnage 33,325); it burns laden FO for 2 days.",
+        "Worldscale freight = cargo × flat × WS / 100.",
+        "T/C equivalent = gross daily / (1 − commission)."
+      ]
+    }
+  ]
+}

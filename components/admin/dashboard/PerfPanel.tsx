@@ -17,7 +17,6 @@ const ROUTES: { path: string; kind: string; job?: string; note: string }[] = [
   { path: "/api/cron/refresh-matches", kind: "cron", job: "refresh-matches", note: "daily 05:00 UTC" },
   { path: "/api/cron/market-insights", kind: "cron", job: "market-insights", note: "Mondays 06:00 UTC" },
   { path: "/api/group-mail/dispatch", kind: "cron", job: "groupmail-dispatch", note: "pg_cron */10" },
-  { path: "/api/bunker/ingest", kind: "api", job: "bunker-ingest", note: "bunker ticker" },
   { path: "/api/contact", kind: "api", note: "public contact form" },
   { path: "/api/whatsapp/webhook", kind: "webhook", job: "whatsapp-webhook", note: "bridge inbound" },
 ];

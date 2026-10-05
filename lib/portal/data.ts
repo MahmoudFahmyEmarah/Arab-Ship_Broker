@@ -8,6 +8,7 @@
 import { getAppUserRow } from "@/lib/app-user";
 import { getSpotActiveDays, getVesselActiveDays } from "@/lib/app-settings";
 import { getMyCargoListings } from "@/sdk/app/cargos";
+import { getFuelIndexSnapshot, type FuelIndexSnapshot } from "@/sdk/app/bunker";
 import {
   getMyVesselAvailability,
 } from "@/sdk/app/vessels";
@@ -56,32 +57,44 @@ function isSupabaseConfigured(): boolean {
   return !!url && !url.includes("placeholder");
 }
 
-// Live bunker prices for the calculators — the SAME admin-managed fuel_prices
-// table the bunker ticker reads. Falls back to the econ defaults if unset.
-export async function loadFuelPrices(): Promise<{ vlsfo: number; lsmgo: number; port: string; updated: string }> {
-  const fallback = { vlsfo: 585, lsmgo: 725, port: "Singapore", updated: "" };
+// Fuel prices for the voyage estimator, through the governed snapshot
+// (sdk/app/bunker.ts#getFuelIndexSnapshot, C2O-033). `snapshot.status` is the
+// truth: only "trusted" prices are live. The numeric fields keep the legacy
+// calculator rendering and carry the fallback values when the snapshot is
+// unavailable; a caller must never label them live unless `live` says so.
+// The Voyage engine consumes the snapshot itself for the bunkering port.
+export async function loadFuelPrices(portLocode?: string | null): Promise<{
+  vlsfo: number; lsmgo: number; port: string; updated: string;
+  live: { vlsfo: boolean; lsmgo: boolean };
+  snapshot: FuelIndexSnapshot | null;
+}> {
+  const fallback = {
+    vlsfo: 585, lsmgo: 725, port: "Fallback values (no live index)", updated: "",
+    live: { vlsfo: false, lsmgo: false }, snapshot: null,
+  };
   if (!isSupabaseConfigured()) return fallback;
+  let snapshot: FuelIndexSnapshot;
   try {
     const supabase = await getSupabaseServerClient();
-    const { data } = await supabase
-      .from("fuel_prices")
-      .select("vlsfo_usd_mt, lsmgo_usd_mt, port_area, updated_at")
-      .eq("is_active", true)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const fp = data as { vlsfo_usd_mt?: number | null; lsmgo_usd_mt?: number | null; port_area?: string | null; updated_at?: string | null } | null;
-    if (!fp) return fallback;
-    return {
-      vlsfo: fp.vlsfo_usd_mt ?? fallback.vlsfo,
-      lsmgo: fp.lsmgo_usd_mt ?? fallback.lsmgo,
-      port: fp.port_area ?? fallback.port,
-      updated: fp.updated_at ? new Date(fp.updated_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : fallback.updated,
-    };
+    snapshot = await getFuelIndexSnapshot(supabase, { portLocode: portLocode ?? undefined, productKeys: ["VLSFO", "LSMGO"] });
   } catch (err) {
-    console.error("[portal] fuel price load failed:", err);
+    console.error("[portal] fuel index snapshot failed:", err);
     return fallback;
   }
+  if (snapshot.status !== "trusted") return { ...fallback, snapshot };
+  // Partial snapshots are normal (O2B-007): a product in noOffer keeps its
+  // fallback value and its live flag stays false.
+  const vlsfo = snapshot.products.find((p) => p.key === "VLSFO");
+  const lsmgo = snapshot.products.find((p) => p.key === "LSMGO");
+  const latest = snapshot.products.map((p) => p.latestQuoteAt).sort().pop()!;
+  return {
+    vlsfo: vlsfo?.averageUsdMt ?? fallback.vlsfo,
+    lsmgo: lsmgo?.averageUsdMt ?? fallback.lsmgo,
+    port: snapshot.actualPort ?? (snapshot.region ? `${snapshot.region} average` : "Platform index (all ports)"),
+    updated: new Date(latest).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+    live: { vlsfo: !!vlsfo, lsmgo: !!lsmgo },
+    snapshot,
+  };
 }
 
 // Port names for the route legs: locode → trade name and normalised name →

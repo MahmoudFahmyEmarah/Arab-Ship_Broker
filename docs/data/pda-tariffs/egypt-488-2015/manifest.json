@@ -1,0 +1,66 @@
+{
+  "package": "egypt-488-2015",
+  "publishable": false,
+  "ownerRuling": "5 Oct 2026: publish the 2015/2016 face values, labelled as base rates (not escalated), until fresh data is provided.",
+  "blockers": [
+    {
+      "id": "flag-treatment",
+      "finding": "C2B-007 #2",
+      "text": "These are the foreign-flag USD tables. The PDA request has no governed flag/tariff-treatment input, and PdaEstimator hard-codes voyageScope. Publish only after the engine and both estimator flows carry an explicit treatment (foreign/national); then add that condition to every rule. Until then the Egyptian tariff stays unavailable.",
+      "owner": "PDA owner (Codex)"
+    }
+  ],
+  "sources": {
+    "d488": {
+      "placeholderId": "00000000-0000-4000-9000-000000000488",
+      "title": "Ministerial Decree 488/2015 — charges for services to vessels in Egyptian seaports",
+      "authority": "statutory",
+      "file": "tmp/Data/EGY 3.Ministerial Decree No.488 of 2015 (full version).20211211214808-2021-12-11media_manager214747.pdf",
+      "sha256": "b2d326ddf92b86bc895b4380efc1c66c7da142dcf629971206fd19f4e408b9ad",
+      "reference": {
+        "file": "tmp/Data/Ministry_of_Transport_Decree_No._488_of_2015.pdf",
+        "sha256": "1da870dbdcab59fbffebe7e6d8a1d04bc401ce02a8f3c161123a72af56d2017f",
+        "note": "English translation; the Arabic gazette wins where they differ"
+      }
+    },
+    "d416": {
+      "placeholderId": "00000000-0000-4000-9000-000000000416",
+      "title": "Ministerial Decree 416/2019 amending 488/2015",
+      "authority": "statutory",
+      "file": "tmp/Data/EGY4. Ministerial Decree No.416 of 2019 on” amending some provisions of Ministerial Decree No. 488 of 2015″ (full version).20211211214717-2021-12-11media_manager214714.pdf",
+      "sha256": "e8a896262882c7008ebb1ef2d61fdd569602bc42983b98fc8458a1b424e415ce",
+      "note": "Referenced, no rate taken from it: escalation suspended 3 years from 8 Sep 2019; light-dues reductions for calls combined with a Suez transit (not applied, see README)."
+    },
+    "d800": {
+      "placeholderId": "00000000-0000-4000-9000-000000000800",
+      "title": "Ministerial Decree 800/2016 — maritime agency and related charges",
+      "authority": "statutory",
+      "file": "tmp/Data/EGY 2.nisterial Decree No.800 of 2016 (full version ).20211211214623-2021-12-11media_manager214621.pdf",
+      "sha256": "2dc69f9e1a5407f56a9da4b626a612e93d690f8e0bf2bcf5c47b5c41d1465221"
+    },
+    "d417": {
+      "placeholderId": "00000000-0000-4000-9000-000000000417",
+      "title": "Ministerial Decree 417/2019 amending 800/2016",
+      "authority": "statutory",
+      "file": "tmp/Data/EGY 1.Ministerial Decree No.417 of 2019 on” amending some provisions of Ministerial Decree No.800 of 2016″ (full version ).20211211214540-2021-12-11media_manager2145051.pdf",
+      "sha256": "3959483d52d8cdbcd707cc0b5349ea2ed65072749063b814d01ba615e606bafd",
+      "note": "Referenced, no rate taken from it."
+    }
+  },
+  "deferred": {
+    "file": "rules.deferred-cleanliness-by-class.json",
+    "replaces": "cleanliness_fee",
+    "condition": "the request carries a tariff cargo class confirmed by the user",
+    "proposedMapping": {
+      "note": "Proposal for the PDA owner; the user confirms the class on each estimate. Platform cargo types are Grain / Dry Bulk / Break Bulk.",
+      "Grain": "clean_bulk",
+      "Break Bulk": "general_cargo",
+      "Dry Bulk": "clean_bulk or unclean_bulk by commodity (e.g. clinker, coal, phosphate rock, petcoke = unclean_bulk) — user choice, no default",
+      "Container": "container"
+    }
+  },
+  "knownLimits": [
+    "Light dues are charged at the full rate; the 416/2019 reductions for calls combined with a Suez transit cannot be entered (manual amounts are non-negative).",
+    "One tariff set per port (EGALY, EGDAM, EGPSD, EGSOK, …) with the same rules; minimum towage/mooring hours differ by port (towage instructions)."
+  ]
+}

@@ -1,0 +1,9 @@
+/* Bunker ticker accessibility (the base strip styles live in app/globals.css). */
+.bt-copy { display: inline-flex; align-items: center; }
+.bunker-ticker:focus-within .bt-track { animation-play-state: paused; }
+.bt-sponsor:focus-visible, .bt-cta__link:focus-visible { outline: 2px solid var(--asb-gold); outline-offset: 2px; border-radius: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .bt-track { animation: none; transform: none; }
+  .bt-track-wrap { overflow-x: auto; }
+  .bt-copy--dup { display: none; }
+}
