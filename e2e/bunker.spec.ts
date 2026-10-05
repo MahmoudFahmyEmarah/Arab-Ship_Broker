@@ -126,8 +126,15 @@ delete from auth.users where id in (${ids});
     // Hosted staging: one linked query; a failure must be visible, not swallowed.
     const dir = process.env.E2E_STAGING_WORKDIR ?? "";
     if (linkedRef(dir) !== STAGING_REF) throw new Error("Refusing to clean: the workdir is not linked to staging");
+    // Hosted postgres is not a superuser: instead of replica mode, the table owner
+    // disables only the two append-only guards for this one transaction (O2ALL-001 §D).
+    const hosted = sql.replace("set session_replication_role = replica;",
+      "alter table public.bunker_quotes disable trigger trg_bunker_quote_append_only;\n" +
+      "alter table public.bunker_quote_events disable trigger trg_bunker_event_immutable;");
     const file = path.join(os.tmpdir(), `bunker-e2e-cleanup-${s.stamp}.sql`);
-    writeFileSync(file, `begin;\n${sql}\ncommit;\n`);
+    writeFileSync(file, `begin;\n${hosted}\n` +
+      "alter table public.bunker_quotes enable trigger trg_bunker_quote_append_only;\n" +
+      "alter table public.bunker_quote_events enable trigger trg_bunker_event_immutable;\ncommit;\n");
     try {
       execSync(`supabase db query --linked --workdir "${dir}" --file "${file}"`, { stdio: ["ignore", "ignore", "inherit"] });
     } finally {
