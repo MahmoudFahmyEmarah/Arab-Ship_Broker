@@ -28,6 +28,7 @@ import { legInfo, legMarker, routeLegs, type RouteLeg } from "@/lib/portal/route
 import { PosterLine } from "./PosterLine";
 import { RouteEstimateLine } from "./RouteEstimate";
 import { MatchesPopover } from "./MatchesPopover";
+import type { MatchingRuntime } from "@/lib/portal/matching";
 
 // Route legs (owner's rule, 9 Sep 2026): port NAME first — a bare LOCODE
 // resolves to its trade name, the code rides in the tooltip. "Izmail or Reni"
@@ -50,6 +51,7 @@ export function DashCargoRow({
   onClick,
   matchPool,
   onFocusMatch,
+  matching,
 }: {
   c: CargoView;
   focused?: boolean;
@@ -57,6 +59,7 @@ export function DashCargoRow({
   /** the vessels this cargo can match against (for the match popover) */
   matchPool?: VesselView[];
   onFocusMatch?: (vesselId: string) => void;
+  matching?: MatchingRuntime | null;
 }) {
   const [matchesOpen, setMatchesOpen] = React.useState(false);
   const { weight } = formatQtyVol(c);
@@ -72,6 +75,7 @@ export function DashCargoRow({
     <div className={`dash-row strip-${c.scope}${focused ? " is-focused" : ""}`} data-row-id={c.id} onClick={onClick}>
       {matchesOpen && (
         <MatchesPopover source={{ kind: "cargo", view: c }} pool={matchPool ?? []} count={c.matches}
+          matching={matching}
           onClose={() => setMatchesOpen(false)} onFocus={(id) => onFocusMatch?.(id)} />
       )}
       {postedAgeLabel(c.postedAt) && (
@@ -137,6 +141,7 @@ export function DashVesselRow({
   onClick,
   matchPool,
   onFocusMatch,
+  matching,
 }: {
   v: VesselView;
   focused?: boolean;
@@ -144,6 +149,7 @@ export function DashVesselRow({
   /** the cargoes this vessel can match against (for the match popover) */
   matchPool?: CargoView[];
   onFocusMatch?: (cargoId: string) => void;
+  matching?: MatchingRuntime | null;
 }) {
   const [matchesOpen, setMatchesOpen] = React.useState(false);
   const urg = v.openDateUrgency || "green";
@@ -167,6 +173,7 @@ export function DashVesselRow({
         )}
         {matchesOpen && (
           <MatchesPopover source={{ kind: "vessel", view: v }} pool={matchPool ?? []} count={v.matches}
+            matching={matching}
             onClose={() => setMatchesOpen(false)} onFocus={(id) => onFocusMatch?.(id)} />
         )}
         {flagName && (
@@ -220,6 +227,7 @@ export function DashboardPanel<T extends { id: string }>({
   defaultOpen = true,
   hint,
   matchPool,
+  matching,
   onFocusMatch,
   headerAccessory,
   children,
@@ -237,6 +245,7 @@ export function DashboardPanel<T extends { id: string }>({
   hint?: string;
   /** the OTHER side of the market, for the match popover on each row */
   matchPool?: T extends CargoView ? VesselView[] : CargoView[];
+  matching?: MatchingRuntime | null;
   /** focus a matched listing on the chart (same as clicking its own row) */
   onFocusMatch?: (id: string) => void;
   headerAccessory?: React.ReactNode;
@@ -331,6 +340,7 @@ export function DashboardPanel<T extends { id: string }>({
                     focused={focusedId === item.id}
                     onClick={() => onSelect?.(item)}
                     matchPool={matchPool as VesselView[] | undefined}
+                    matching={matching}
                     onFocusMatch={onFocusMatch}
                   />
                 ) : (
@@ -340,6 +350,7 @@ export function DashboardPanel<T extends { id: string }>({
                     focused={focusedId === item.id}
                     onClick={() => onSelect?.(item)}
                     matchPool={matchPool as CargoView[] | undefined}
+                    matching={matching}
                     onFocusMatch={onFocusMatch}
                   />
                 ),

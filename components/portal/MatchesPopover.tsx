@@ -7,9 +7,8 @@
 //
 // Source of truth = the governed opaque-key market match RPC. Details come
 // from the board's own safe lists so
-// what you read here is what the row shows. If the RPC is unavailable the
-// client-side eligibility gate (pairEligible) fills in, so the list never
-// silently stays empty.
+// what you read here is what the row shows. A live RPC failure fails closed;
+// only the explicit sample-data experience may use the local mirror.
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -22,7 +21,14 @@ import {
   listMarketMatches,
   marketBoardKey,
 } from "@/sdk/app/market";
-import { pairEligible, fitLabel, type FitBand } from "@/lib/portal/matching";
+import {
+  canUseClientMatchingMirror,
+  pairEligible,
+  fitLabel,
+  compareViewPairRank,
+  type FitBand,
+  type MatchingRuntime,
+} from "@/lib/portal/matching";
 import { formatLaycanRange, formatShortDate, formatQtyVol } from "@/lib/portal/format";
 import { flagCode } from "@/lib/portal/flags";
 import { PosterLine } from "./PosterLine";
@@ -31,23 +37,25 @@ type Item =
   | { kind: "vessel"; id: string; view: VesselView | null; fallback: { name: string; dwt: number | null; open: string } | null; fit: FitBand | null }
   | { kind: "cargo"; id: string; view: CargoView | null; fallback: { name: string; qty: string; route: string } | null; fit: FitBand | null };
 
-const RANK: Record<FitBand, number> = { Strong: 3, Good: 2, Possible: 1, Weak: 0 };
 const FIT_COLOR: Record<FitBand, string> = { Strong: "#2A9962", Good: "#185FA5", Possible: "#854F0B", Weak: "#8B95A3" };
 
 export function MatchesPopover({
   source,
   pool,
   count,
+  matching,
   onClose,
   onFocus,
 }: {
   source: { kind: "cargo"; view: CargoView } | { kind: "vessel"; view: VesselView };
   pool: CargoView[] | VesselView[];
   count: number;
+  matching?: MatchingRuntime | null;
   onClose: () => void;
   onFocus: (id: string) => void;
 }) {
   const [items, setItems] = React.useState<Item[] | null>(null);
+  const [unavailable, setUnavailable] = React.useState(false);
   const [i, setI] = React.useState(0);
   const touchX = React.useRef<number | null>(null);
 
@@ -58,6 +66,7 @@ export function MatchesPopover({
       meta: { kind: source.kind, count },
     });
     (async () => {
+      setUnavailable(false);
       const sb = getSupabaseBrowserClient();
       let out: Item[] = [];
       try {
@@ -72,7 +81,9 @@ export function MatchesPopover({
             return {
               kind: "vessel", id, view: v,
               fallback: v ? null : { name: r.vessel.vessel_name, dwt: r.vessel.dwt_grain, open: [r.open_port_name, r.open_zone].filter(Boolean).join(" · ") },
-              fit: v ? fitLabel(source.view, v) : null,
+              fit: v && canUseClientMatchingMirror(matching)
+                ? fitLabel(source.view, v, matching)
+                : null,
             };
           });
         } else {
@@ -83,24 +94,53 @@ export function MatchesPopover({
             const name = r.commodity_name || "Cargo";
             const qty = r.qty_max_mt != null ? `${Number(r.qty_max_mt).toLocaleString()} MT` : "";
             const route = [r.load_port_name ?? r.load_zone, r.disch_port_name ?? r.disch_zone].filter(Boolean).join(" → ");
-            return { kind: "cargo", id, view: c, fallback: c ? null : { name, qty, route }, fit: c ? fitLabel(c, source.view) : null };
+            return {
+              kind: "cargo",
+              id,
+              view: c,
+              fallback: c ? null : { name, qty, route },
+              fit: c && canUseClientMatchingMirror(matching)
+                ? fitLabel(c, source.view, matching)
+                : null,
+            };
           });
         }
       } catch {
-        // RPC unavailable → same client-side gate the map uses
-        if (source.kind === "cargo") {
-          out = (pool as VesselView[]).filter((v) => pairEligible(source.view, v)).map((v) => ({ kind: "vessel", id: v.id, view: v, fallback: null, fit: fitLabel(source.view, v) }));
+        // A live RPC failure fails closed. The local evaluator exists only for
+        // the explicit sample-data experience.
+        if (!canUseClientMatchingMirror(matching) || !source.view.matchingFacts) {
+          if (!x) setUnavailable(true);
+          out = [];
+        } else if (source.kind === "cargo") {
+          out = (pool as VesselView[])
+            .filter((v) => pairEligible(source.view, v, matching))
+            .sort((left, right) => compareViewPairRank(
+              source.view,
+              left,
+              source.view,
+              right,
+              matching,
+            ))
+            .map((v) => ({ kind: "vessel", id: v.id, view: v, fallback: null, fit: fitLabel(source.view, v, matching) }));
         } else {
-          out = (pool as CargoView[]).filter((c) => pairEligible(c, source.view)).map((c) => ({ kind: "cargo", id: c.id, view: c, fallback: null, fit: fitLabel(c, source.view) }));
+          out = (pool as CargoView[])
+            .filter((c) => pairEligible(c, source.view, matching))
+            .sort((left, right) => compareViewPairRank(
+              left,
+              source.view,
+              right,
+              source.view,
+              matching,
+            ))
+            .map((c) => ({ kind: "cargo", id: c.id, view: c, fallback: null, fit: fitLabel(c, source.view, matching) }));
         }
       }
-      out.sort((a, b) => RANK[b.fit ?? "Weak"] - RANK[a.fit ?? "Weak"]);
       if (!x) { setItems(out); setI(0); }
     })();
     return () => { x = true; };
     // keyed on the listing id — the source object is rebuilt on every parent render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source.kind, source.view.id, pool]);
+  }, [source.kind, source.view.id, pool, matching]);
 
   const n = items?.length ?? 0;
   const prev = React.useCallback(() => setI((k) => (n ? (k - 1 + n) % n : 0)), [n]);
@@ -147,7 +187,11 @@ export function MatchesPopover({
         </div>
 
         {items === null && <div className="mpop__empty">Loading matches…</div>}
-        {items !== null && n === 0 && <div className="mpop__empty">No matches in the market right now.</div>}
+        {items !== null && n === 0 && (
+          <div className="mpop__empty">
+            {unavailable ? "Matching is temporarily unavailable. Please try again." : "No matches in the market right now."}
+          </div>
+        )}
 
         {cur && (
           <div className="mpop__card" onClick={() => focus(cur)} title={cur.view ? "Show on the chart" : undefined}>

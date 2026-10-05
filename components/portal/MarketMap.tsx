@@ -26,7 +26,15 @@ import { zoneByCode, zoneCentroid } from "@/lib/portal/zones";
 import { routeAlerts, positionAlerts, tagLeg, parseRiskAreaRow, type RiskArea, type RouteAlert } from "@/lib/portal/risk-areas";
 import { OPERATING_ZONES, operatingZoneCode } from "@/lib/zones";
 import { ZONE_SHAPES } from "@/lib/portal/zone-shapes";
-import { pairEligible, fitLabel, cargoQtyMax } from "@/lib/portal/matching";
+import {
+  pairEligible,
+  fitLabel,
+  cargoQtyMax,
+  selectCargoVesselMatches,
+  type GovernedMatchSelection,
+  type MatchingRuntime,
+  type SurfaceVesselMatch,
+} from "@/lib/portal/matching";
 import { formatLaycanRange, formatShortDate } from "@/lib/portal/format";
 import { postedAgeLabel } from "@/lib/portal/useMarketVisibility";
 import { flagCode } from "@/lib/portal/flags";
@@ -405,6 +413,10 @@ type Popup =
   | { kind: "cargo"; data: CargoView; ll: L.LatLng }
   | { kind: "vessel"; data: VesselView; ll: L.LatLng };
 
+type GovernedEligibility =
+  | { status: "idle" | "loading" | "sample" | "unavailable" }
+  | { status: "ready"; ids: Set<string> };
+
 export default function MarketMap({
   cargos,
   vessels,
@@ -417,6 +429,7 @@ export default function MarketMap({
   barLeft = false,
   selectedZoneCodes,
   onSelectedZoneCodesChange,
+  matching,
 }: {
   cargos: CargoView[];
   vessels: VesselView[];
@@ -436,6 +449,8 @@ export default function MarketMap({
   // lockstep. Other map surfaces may omit these and use local map state.
   selectedZoneCodes?: string[];
   onSelectedZoneCodesChange?: (codes: string[]) => void;
+  /** Request-scoped active rules; absent means client matching fails closed. */
+  matching?: MatchingRuntime | null;
 }) {
   const geoFor = React.useCallback(
     (locode?: string | null): PortGeo | null => {
@@ -657,15 +672,17 @@ export default function MarketMap({
   const anchorVessel = pairAnchor?.kind === "vessel" ? vessels.find((v) => v.id === pairAnchor.id) ?? null : null;
 
   // AUTHORITATIVE eligibility (09 §9): on anchor, fetch the match set from the
-  // SAME governed opaque-key RPC the count badges use. dbEligible holds the
+  // SAME governed opaque-key RPC the count badges use. The ready state holds
   // opposite-side market handles, never database listing/vessel ids.
-  // If the DB is unreachable (sample/offline), we fall back to the client gates
-  // in lib/portal/matching, which mirror the same funnel.
-  const [dbEligible, setDbEligible] = React.useState<Set<string> | null>(null);
+  // Live mode never treats loading or a failed RPC as permission to pair. The
+  // pure mirror is an explicit sample-mode facility only.
+  const [governedEligibility, setGovernedEligibility] = React.useState<GovernedEligibility>({ status: "idle" });
   React.useEffect(() => {
-    if (!pairAnchor) { setDbEligible(null); return; }
+    if (!pairAnchor) { setGovernedEligibility({ status: "idle" }); return; }
+    if (matching?.source === "sample") { setGovernedEligibility({ status: "sample" }); return; }
+    if (matching?.source !== "live") { setGovernedEligibility({ status: "unavailable" }); return; }
     let cancelled = false;
-    setDbEligible(null);
+    setGovernedEligibility({ status: "loading" });
     (async () => {
       try {
         const supabase = getSupabaseBrowserClient();
@@ -674,34 +691,96 @@ export default function MarketMap({
           if (!source?.listingKey) throw new Error("No governed cargo key");
           const res = await listMarketMatches(supabase, source.listingKey);
           if (!cancelled) {
-            setDbEligible(
-              new Set(res.filter(isMarketVesselRow).map(marketBoardKey)),
-            );
+            setGovernedEligibility({ status: "ready", ids: new Set(res.filter(isMarketVesselRow).map(marketBoardKey)) });
           }
         } else {
           const source = vessels.find((vessel) => vessel.id === pairAnchor.id);
           if (!source?.listingKey) throw new Error("No governed vessel key");
           const res = await listMarketMatches(supabase, source.listingKey);
           if (!cancelled) {
-            setDbEligible(
-              new Set(res.filter(isMarketCargoRow).map(marketBoardKey)),
-            );
+            setGovernedEligibility({ status: "ready", ids: new Set(res.filter(isMarketCargoRow).map(marketBoardKey)) });
           }
         }
       } catch {
-        if (!cancelled) setDbEligible(null); // -> client fallback below
+        if (!cancelled) setGovernedEligibility({ status: "unavailable" });
       }
     })();
     return () => { cancelled = true; };
-  }, [pairAnchor, cargos, vessels]);
+  }, [pairAnchor, cargos, vessels, matching?.source]);
+
+  // The cargo deal card and its dashed map lines share one result set. Live
+  // mode is populated only by the governed RPC; the local evaluator is an
+  // explicit sample-data facility and never a live fallback.
+  const [popupMatchSelection, setPopupMatchSelection] = React.useState<GovernedMatchSelection>({ status: "idle" });
+  React.useEffect(() => {
+    if (!popup || popup.kind !== "cargo") {
+      setPopupMatchSelection({ status: "idle" });
+      return;
+    }
+    if (matching?.source === "sample") {
+      setPopupMatchSelection({ status: "sample", sourceId: popup.data.id });
+      return;
+    }
+    if (matching?.source !== "live" || !popup.data.listingKey) {
+      setPopupMatchSelection({ status: "unavailable", sourceId: popup.data.id });
+      return;
+    }
+
+    let cancelled = false;
+    const sourceId = popup.data.id;
+    setPopupMatchSelection({ status: "loading", sourceId });
+    (async () => {
+      try {
+        const rows = await listMarketMatches(
+          getSupabaseBrowserClient(),
+          popup.data.listingKey!,
+        );
+        if (!cancelled) {
+          setPopupMatchSelection({
+            status: "ready",
+            sourceId,
+            ids: rows.filter(isMarketVesselRow).map(marketBoardKey),
+          });
+        }
+      } catch {
+        if (!cancelled) setPopupMatchSelection({ status: "unavailable", sourceId });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [popup, matching?.source]);
+  const popupVesselMatches = React.useMemo(
+    () => popup?.kind === "cargo"
+      ? selectCargoVesselMatches(
+        popup.data,
+        visVessels,
+        matching,
+        popupMatchSelection,
+      )
+      : [],
+    [matching, popup, popupMatchSelection, visVessels],
+  );
+  const popupMatchStatus: GovernedMatchSelection["status"] =
+    popup?.kind === "cargo"
+    && popupMatchSelection.status !== "idle"
+    && popupMatchSelection.sourceId !== popup.data.id
+      ? "loading"
+      : popupMatchSelection.status;
 
   const eligibleVesselIds = React.useMemo(
-    () => (anchorCargo ? (dbEligible ?? new Set(visVessels.filter((v) => pairEligible(anchorCargo, v)).map((v) => v.id))) : null),
-    [anchorCargo, visVessels, dbEligible],
+    () => !anchorCargo ? null
+      : governedEligibility.status === "ready" ? governedEligibility.ids
+      : governedEligibility.status === "sample"
+        ? new Set(visVessels.filter((v) => pairEligible(anchorCargo, v, matching)).map((v) => v.id))
+        : new Set<string>(),
+    [anchorCargo, visVessels, governedEligibility, matching],
   );
   const eligibleCargoIds = React.useMemo(
-    () => (anchorVessel ? (dbEligible ?? new Set(visCargos.filter((c) => pairEligible(c, anchorVessel)).map((c) => c.id))) : null),
-    [anchorVessel, visCargos, dbEligible],
+    () => !anchorVessel ? null
+      : governedEligibility.status === "ready" ? governedEligibility.ids
+      : governedEligibility.status === "sample"
+        ? new Set(visCargos.filter((c) => pairEligible(c, anchorVessel, matching)).map((c) => c.id))
+        : new Set<string>(),
+    [anchorVessel, visCargos, governedEligibility, matching],
   );
   // Marker pair-state class (styled on .leaflet-marker-icon in map.css).
   const pairCls = (kind: "cargo" | "vessel", id: string): string => {
@@ -715,6 +794,9 @@ export default function MarketMap({
     if (!pairAnchor || pairAnchor.kind === kind) {
       setPairAnchor({ kind, id });
       setPairDone(null);
+      return true;
+    }
+    if (governedEligibility.status === "loading" || governedEligibility.status === "unavailable" || governedEligibility.status === "idle") {
       return true;
     }
     // Completion uses the SAME eligible set that drives the highlighting, so
@@ -1300,23 +1382,15 @@ export default function MarketMap({
     if (!lyr || !ready) return;
     lyr.clearLayers();
     if (!popup || popup.kind !== "cargo") return;
-    const c = popup.data;
     const from: [number, number] = [popup.ll.lat, popup.ll.lng];
-    const rank: Record<string, number> = { Strong: 0, Good: 1 };
-    const ms = visVessels
-      .filter((v) => pairEligible(c, v))
-      .map((v) => ({ v, fit: fitLabel(c, v) }))
-      .sort((a, b) => (rank[a.fit] ?? 2) - (rank[b.fit] ?? 2))
-      .slice(0, 3);
-    for (const { v, fit } of ms) {
-      const g = vesselGeo(v);
+    for (const { vessel, fit } of popupVesselMatches) {
+      const g = vesselGeo(vessel);
       if (!g) continue;
-      const to = anchoredLL(g, "sea", (v.id || "").charCodeAt(0) || 0, (v.id || "").charCodeAt(1) || 0);
+      const to = anchoredLL(g, "sea", (vessel.id || "").charCodeAt(0) || 0, (vessel.id || "").charCodeAt(1) || 0);
       const color = fit === "Strong" ? "#97C459" : fit === "Good" ? "#7BB8F0" : "#8C9BB5";
       L.polyline(curvePts(from, to, 0.12), { color, weight: 2, dashArray: "4 6", opacity: 0.85, interactive: false }).addTo(lyr);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popup, visVessels, ready]);
+  }, [anchoredLL, popup, popupVesselMatches, ready, vesselGeo]);
 
   // Trade-lane flows (P5): animated corridors for the busiest visible lanes —
   // the market's pulse, ShipMap-style, weighted by live listing volume.
@@ -1529,6 +1603,8 @@ export default function MarketMap({
             popup={popup}
             cargoList={visCargos}
             vesselList={visVessels}
+            matches={popupVesselMatches}
+            matchStatus={popupMatchStatus}
             onClose={() => setPopup(null)}
             onStep={(dir) => {
               const list = popup.kind === "cargo" ? visCargos : visVessels;
@@ -1791,9 +1867,13 @@ export default function MarketMap({
       {pairingEnabled && pairAnchor && !pairDone && (
         <div className="dash-pair-hint" onClick={(e) => e.stopPropagation()}>
           <span className="dash-pair-hint__dot" />
-          {pairAnchor.kind === "cargo"
-            ? <>Cargo anchored — click a <strong>highlighted vessel</strong> to estimate the pairing</>
-            : <>Vessel anchored — click a <strong>highlighted cargo</strong> to estimate the pairing</>}
+          {governedEligibility.status === "loading"
+            ? <>Checking governed matches…</>
+            : governedEligibility.status === "unavailable" || governedEligibility.status === "idle"
+              ? <>Matching checks are unavailable. Pairing is paused.</>
+              : pairAnchor.kind === "cargo"
+                ? <>Cargo anchored — click a <strong>highlighted vessel</strong> to estimate the pairing</>
+                : <>Vessel anchored — click a <strong>highlighted cargo</strong> to estimate the pairing</>}
           <button type="button" onClick={clearPairing} aria-label="Clear">✕</button>
         </div>
       )}
@@ -1806,11 +1886,15 @@ export default function MarketMap({
           </div>
           <div className="pair-card__route">{pairDone.cargo.cargo} · <span className="mono">{pairDone.cargo.refId}</span></div>
           {(() => {
-            const band = fitLabel(pairDone.cargo, pairDone.vessel);
+            const band = fitLabel(pairDone.cargo, pairDone.vessel, matching);
             return (
               <>
                 <div className="pair-card__to">→ {pairDone.vessel.name}</div>
-                <div className={`pair-band band-${band.toLowerCase()}`}>{band} fit</div>
+                {band ? (
+                  <div className={`pair-band band-${band.toLowerCase()}`}>{band} fit</div>
+                ) : (
+                  <div className="pair-band">Fit unavailable</div>
+                )}
                 <div className="pair-card__chips">
                   <span>{pairDone.vessel.type}</span>
                   <span>{pairDone.vessel.dwt} DWT</span>
@@ -1837,6 +1921,8 @@ function DealCard({
   popup,
   cargoList,
   vesselList,
+  matches,
+  matchStatus,
   onClose,
   onStep,
   onPickVessel,
@@ -1846,6 +1932,8 @@ function DealCard({
   popup: Popup;
   cargoList: CargoView[];
   vesselList: VesselView[];
+  matches: readonly SurfaceVesselMatch[];
+  matchStatus: GovernedMatchSelection["status"];
   onClose: () => void;
   onStep: (dir: 1 | -1) => void;
   onPickVessel: (v: VesselView) => void;
@@ -1855,16 +1943,6 @@ function DealCard({
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   const list = popup.kind === "cargo" ? cargoList : vesselList;
   const idx = list.findIndex((x) => x.id === popup.data.id);
-  const matches = React.useMemo(() => {
-    if (popup.kind !== "cargo") return [];
-    const c = popup.data;
-    const rank: Record<string, number> = { Strong: 0, Good: 1 };
-    return vesselList
-      .filter((v) => pairEligible(c, v))
-      .map((v) => ({ v, fit: fitLabel(c, v) }))
-      .sort((a, b) => (rank[a.fit] ?? 2) - (rank[b.fit] ?? 2))
-      .slice(0, 3);
-  }, [popup, vesselList]);
 
   const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
     <div className="deal-card__row"><span className="deal-card__k">{k}</span><span className="deal-card__v">{v}</span></div>
@@ -1903,14 +1981,23 @@ function DealCard({
             {c.freightIdea != null && (
               <Row k="Freight idea" v={`$${c.freightIdea}/MT${c.commission != null ? ` · ${c.commission}%` : ""}`} />
             )}
+            {(matchStatus === "idle" || matchStatus === "loading") && (
+              <div className="deal-card__dim" role="status">Loading governed matches…</div>
+            )}
+            {matchStatus === "unavailable" && (
+              <div className="deal-card__dim" role="status">Matching is temporarily unavailable.</div>
+            )}
+            {(matchStatus === "ready" || matchStatus === "sample") && matches.length === 0 && (
+              <div className="deal-card__dim">No matching tonnage in the current filter.</div>
+            )}
             {matches.length > 0 && (
               <div className="deal-card__matches">
                 <div className="deal-card__mtitle">Top matching tonnage</div>
-                {matches.map(({ v, fit }) => (
-                  <button key={v.id} className="deal-card__match" onClick={() => onPickVessel(v)}>
-                    <span className={`deal-card__fit fit-${fit.toLowerCase()}`}>{fit}</span>
-                    <span className="deal-card__mname">{v.name}</span>
-                    <span className="deal-card__dim">{v.dwt} DWT</span>
+                {matches.map(({ vessel, fit }) => (
+                  <button key={vessel.id} className="deal-card__match" onClick={() => onPickVessel(vessel)}>
+                    <span className={`deal-card__fit ${fit ? `fit-${fit.toLowerCase()}` : "fit-good"}`}>{fit ?? "Match"}</span>
+                    <span className="deal-card__mname">{vessel.name}</span>
+                    <span className="deal-card__dim">{vessel.dwt} DWT</span>
                   </button>
                 ))}
               </div>

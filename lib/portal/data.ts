@@ -28,6 +28,10 @@ import { legInfo, portKey, type PortNames } from "./route-legs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 import type { CargoOpt, VesselOpt } from "./post-types";
+import {
+  decorateCargoViewsWithIntelligence,
+  decorateVesselViewsWithIntelligence,
+} from "./intelligence.server";
 
 export type DataSource = "live" | "sample";
 export type Loaded<T> = { views: T[]; source: DataSource; archiveLabel?: string };
@@ -181,10 +185,13 @@ export async function loadCargoViews({ mine = false } = {}): Promise<Loaded<Carg
         views = rows.map((row) => toCargoView(row));
       }
       const names = views.length ? await loadPortNames() : null;
+      const decoratedViews = await decorateCargoViewsWithIntelligence(
+        views.map((view) => withLegs(view, names)),
+      );
       // Configured = real environment: return live results even when empty so
       // members see a proper empty state, never mock listings.
       return {
-        views: views.map((view) => withLegs(view, names)),
+        views: decoratedViews,
         source: "live",
         archiveLabel,
       };
@@ -283,8 +290,9 @@ export async function loadVesselViews({ mine = false } = {}): Promise<Loaded<Ves
         });
         views = rows.map((row) => vesselFromAvailability(row));
       }
+      const decoratedViews = await decorateVesselViewsWithIntelligence(views);
       return {
-        views,
+        views: decoratedViews,
         source: "live",
         archiveLabel,
       };

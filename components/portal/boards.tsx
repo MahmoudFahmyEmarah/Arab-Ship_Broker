@@ -33,7 +33,28 @@ import { IconPlus, IconBell, IconMap } from "./icons";
 import { operatingZoneCode, zoneMatchesSelection } from "@/lib/zones";
 
 // Top matches: ONE matching module (lib/portal/matching) — same gates as the map pairing.
-import { buildTopMatches, type DashMatch } from "@/lib/portal/matching";
+import {
+  boundedAuthoritativeMatchSourcesForMode,
+  buildAuthoritativeTopMatches,
+  buildTopMatches,
+  loadBoundedAuthoritativeMatchBatches,
+  matchingRuntimeFromSnapshot,
+  selectUniqueAuthoritativeBatchPairs,
+  type AuthoritativeViewPair,
+  type DashMatch,
+  type MatchingRulesSnapshot,
+} from "@/lib/portal/matching";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  isMarketCargoRow,
+  isMarketVesselRow,
+  listMarketMatches,
+  marketBoardKey,
+} from "@/sdk/app/market";
+
+type LiveTopMatchesState =
+  | { status: "idle"; queryKey: null; cargo: DashMatch[]; vessel: DashMatch[] }
+  | { status: "loading" | "unavailable" | "ready"; queryKey: string; cargo: DashMatch[]; vessel: DashMatch[] };
 
 function fmtTce(tce: number): string {
   if (!tce) return "—";
@@ -66,7 +87,7 @@ function DashMatchCard({ m, mode, focused, onClick }: {
   };
   const anchor = mode === "cargo" ? cargo : vessel;
   const matched = mode === "cargo" ? vessel : cargo;
-  const badge = m.quality === "Strong" ? "in" : m.quality === "Good" ? "blue" : "review";
+  const badge = m.quality === "Strong" ? "in" : m.quality === "Good" || m.quality === "Matched" ? "blue" : "review";
   return (
     <div className={`dash-match${focused ? " is-focused" : ""}`} onClick={onClick}
       style={onClick ? { cursor: "pointer" } : undefined}
@@ -155,6 +176,7 @@ export function DashboardBoard({
   portCoords,
   matchCargos,
   matchVessels,
+  matchingRulesSnapshot,
 }: {
   cargos: CargoView[];
   vessels: VesselView[];
@@ -166,7 +188,12 @@ export function DashboardBoard({
   // displayed arrays (admin / discovery), so behaviour is unchanged when unset.
   matchCargos?: CargoView[];
   matchVessels?: VesselView[];
+  matchingRulesSnapshot: MatchingRulesSnapshot | null;
 }) {
+  const matching = React.useMemo(
+    () => matchingRuntimeFromSnapshot(matchingRulesSnapshot),
+    [matchingRulesSnapshot],
+  );
   const [mode, setMode] = React.useState<"cargo" | "vessel">("cargo");
   // Layout: split (panels beside the map) or wide (full-width map, card
   // sections below). Split is the standing default on every fresh visit;
@@ -347,18 +374,140 @@ export function DashboardBoard({
     [matchVessels, vessels, vesselPasses],
   );
 
-  // Two directions: my cargos → market vessels, and market cargos → my vessels.
-  // The mode switch picks which to show; buildTopMatches always anchors on its
-  // first arg, so each direction surfaces the displayed side as the anchor.
-  const cargoTopMatches = React.useMemo(
-    () => buildTopMatches(filteredCargos, filteredMatchVessels, (v) => vesselClassTags(v)[0] || v.type),
-    [filteredCargos, filteredMatchVessels],
+  // Sample data can use the local mirror. Live data is resolved exclusively
+  // through list_market_matches; loading and failure remain visibly closed.
+  const sampleCargoTopMatches = React.useMemo(
+    () => matching?.source === "sample"
+      ? buildTopMatches(
+        filteredCargos,
+        filteredMatchVessels,
+        (v) => vesselClassTags(v)[0] || v.type,
+        matching,
+      )
+      : [],
+    [filteredCargos, filteredMatchVessels, matching],
   );
-  const vesselTopMatches = React.useMemo(
-    () => buildTopMatches(filteredMatchCargos, filteredVessels, (v) => vesselClassTags(v)[0] || v.type),
-    [filteredMatchCargos, filteredVessels],
+  const sampleVesselTopMatches = React.useMemo(
+    () => matching?.source === "sample"
+      ? buildTopMatches(
+        filteredMatchCargos,
+        filteredVessels,
+        (v) => vesselClassTags(v)[0] || v.type,
+        matching,
+      )
+      : [],
+    [filteredMatchCargos, filteredVessels, matching],
   );
-  const topMatches = mode === "cargo" ? cargoTopMatches : vesselTopMatches;
+  const liveTopMatchesQueryKey = React.useMemo(() => JSON.stringify(
+    mode === "cargo"
+      ? [
+        mode,
+        filteredCargos.map((cargo) => [cargo.id, cargo.listingKey, cargo.matches]),
+        filteredMatchVessels.map((vessel) => vessel.id),
+      ]
+      : [
+        mode,
+        filteredVessels.map((vessel) => [vessel.id, vessel.listingKey, vessel.matches]),
+        filteredMatchCargos.map((cargo) => cargo.id),
+      ],
+  ), [mode, filteredCargos, filteredMatchCargos, filteredMatchVessels, filteredVessels]);
+  const [liveTopMatches, setLiveTopMatches] = React.useState<LiveTopMatchesState>({
+    status: "idle",
+    queryKey: null,
+    cargo: [],
+    vessel: [],
+  });
+  React.useEffect(() => {
+    if (matching?.source === "sample") {
+      setLiveTopMatches({ status: "idle", queryKey: null, cargo: [], vessel: [] });
+      return;
+    }
+    if (matching?.source !== "live") {
+      setLiveTopMatches({ status: "unavailable", queryKey: liveTopMatchesQueryKey, cargo: [], vessel: [] });
+      return;
+    }
+
+    let cancelled = false;
+    setLiveTopMatches({ status: "loading", queryKey: liveTopMatchesQueryKey, cargo: [], vessel: [] });
+    (async () => {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        if (mode === "cargo") {
+          const sources = boundedAuthoritativeMatchSourcesForMode(
+            mode,
+            filteredCargos,
+            filteredVessels,
+          );
+          const result = await loadBoundedAuthoritativeMatchBatches(
+            sources,
+            (listingKey) => listMarketMatches(supabase, listingKey),
+            () => cancelled,
+          );
+          if (result.status === "discarded") return;
+          if (result.status === "unavailable") throw new Error("Authoritative matches unavailable");
+
+          const vesselsById = new Map(filteredMatchVessels.map((vessel) => [vessel.id, vessel]));
+          const pairs: AuthoritativeViewPair[] = selectUniqueAuthoritativeBatchPairs(
+            result.batches,
+            (row) => isMarketVesselRow(row) ? vesselsById.get(marketBoardKey(row)) ?? null : null,
+            (vessel) => vessel.id,
+          ).map(({ source: cargo, counterpart: vessel }) => ({ cargo, vessel }));
+          setLiveTopMatches({
+            status: "ready",
+            queryKey: liveTopMatchesQueryKey,
+            cargo: buildAuthoritativeTopMatches(pairs, (v) => vesselClassTags(v)[0] || v.type),
+            vessel: [],
+          });
+          return;
+        }
+
+        const sources = boundedAuthoritativeMatchSourcesForMode(
+          mode,
+          filteredCargos,
+          filteredVessels,
+        );
+        const result = await loadBoundedAuthoritativeMatchBatches(
+          sources,
+          (listingKey) => listMarketMatches(supabase, listingKey),
+          () => cancelled,
+        );
+        if (result.status === "discarded") return;
+        if (result.status === "unavailable") throw new Error("Authoritative matches unavailable");
+
+        const cargosById = new Map(filteredMatchCargos.map((cargo) => [cargo.id, cargo]));
+        const pairs: AuthoritativeViewPair[] = selectUniqueAuthoritativeBatchPairs(
+          result.batches,
+          (row) => isMarketCargoRow(row) ? cargosById.get(marketBoardKey(row)) ?? null : null,
+          (cargo) => cargo.id,
+        ).map(({ source: vessel, counterpart: cargo }) => ({ cargo, vessel }));
+        setLiveTopMatches({
+          status: "ready",
+          queryKey: liveTopMatchesQueryKey,
+          cargo: [],
+          vessel: buildAuthoritativeTopMatches(pairs, (v) => vesselClassTags(v)[0] || v.type),
+        });
+      } catch {
+        if (!cancelled) {
+          setLiveTopMatches({ status: "unavailable", queryKey: liveTopMatchesQueryKey, cargo: [], vessel: [] });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [filteredCargos, filteredMatchCargos, filteredMatchVessels, filteredVessels, liveTopMatchesQueryKey, matching?.source, mode]);
+
+  const liveTopMatchesAreCurrent = liveTopMatches.queryKey === liveTopMatchesQueryKey;
+  const topMatchesStatus = matching?.source === "sample"
+    ? "ready"
+    : matching?.source !== "live"
+      ? "unavailable"
+      : liveTopMatchesAreCurrent
+        ? liveTopMatches.status
+        : "loading";
+  const topMatches = matching?.source === "sample"
+    ? (mode === "cargo" ? sampleCargoTopMatches : sampleVesselTopMatches)
+    : liveTopMatchesAreCurrent
+      ? (mode === "cargo" ? liveTopMatches.cargo : liveTopMatches.vessel)
+      : [];
 
   // In the wide layout the map sits above the card sections — selecting a
   // card must bring the map back into view, or the fly-to happens off-screen
@@ -483,6 +632,7 @@ export function DashboardBoard({
             onSelectVessel={focus.vessel}
             selectedZoneCodes={fZones}
             onSelectedZoneCodesChange={setFZones}
+            matching={matching}
           />
         );
         const panelEls = (defaultView: "list" | "card") => (
@@ -494,6 +644,7 @@ export function DashboardBoard({
               data={filteredCargos}
               defaultView={defaultView}
               matchPool={vessels}
+              matching={matching}
               onFocusMatch={(id) => {
                 const v = vessels.find((x) => x.id === id);
                 if (!v) return;
@@ -514,6 +665,7 @@ export function DashboardBoard({
               data={filteredVessels}
               defaultView={defaultView}
               matchPool={cargos}
+              matching={matching}
               onFocusMatch={(id) => {
                 const c = cargos.find((x) => x.id === id);
                 if (!c) return;
@@ -533,7 +685,11 @@ export function DashboardBoard({
               hint="Best cargo ↔ vessel pairings in the current filter, scored on size, position, timing and cargo suitability."
               headerAccessory={<MatchModeSwitch mode={mode} setMode={setMode} />}
             >
-              {topMatches.length === 0 ? (
+              {topMatchesStatus === "loading" ? (
+                <div className="dash-empty">Loading governed matches…</div>
+              ) : topMatchesStatus === "unavailable" || !matching ? (
+                <div className="dash-empty">Matching is temporarily unavailable. Please try again.</div>
+              ) : topMatches.length === 0 ? (
                 <div className="dash-empty">No matches in the current filter.</div>
               ) : (
                 <div className="dash-match-list">

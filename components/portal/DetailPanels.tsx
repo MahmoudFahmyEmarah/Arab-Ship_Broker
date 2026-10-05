@@ -2,7 +2,8 @@
 
 // Sliding detail panels for cargo + vessel, ported from the Claude design
 // (asb/detail-panel.jsx). Real values from the view models; "—" where the
-// source row has no value (no invented data). Rules-engine tooltips deferred.
+// source row has no value (no invented data). Governed Intelligence signals
+// annotate only the corresponding source-backed fields.
 import { routeLegs } from "@/lib/portal/route-legs";
 import * as React from "react";
 import Link from "next/link";
@@ -11,6 +12,10 @@ import { MatchVesselView, MatchCargoView } from "@/lib/portal/match-views";
 import { fetchCargoMatches, fetchAvailabilityMatches, fetchVesselOwnership } from "@/lib/portal/actions";
 import { FieldRow } from "./ui";
 import { IconBack, IconClose } from "./icons";
+import {
+  IntelligenceAvailabilityNotice,
+  IntelligenceFieldFlags,
+} from "./IntelligenceFlags";
 
 const dash = (v: React.ReactNode) =>
   v === null || v === undefined || v === "" || v === "—" ? "—" : v;
@@ -141,6 +146,7 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
             <span className="asb-badge neutral">IMSBC {cargo.imsbcGroup}</span>
           )}
         </div>
+        <IntelligenceAvailabilityNotice intelligence={cargo.intelligence} />
       </header>
 
       <div className="body">
@@ -170,20 +176,20 @@ export function CargoDetailPanel({ cargo, onClose }: { cargo: CargoView; onClose
             <FieldRow label="IMSBC group" value={`Group ${cargo.imsbcGroup}`} />
             <FieldRow label="Quantity" value={`${cargo.qtyMt} MT`} />
             <FieldRow label="Volume (auto)" value={cargo.vol !== "—" ? `${cargo.vol} CBM` : "—"} />
-            <FieldRow label="Stowage SF" value={cargo.sf != null ? `${cargo.sf} m³/t` : "—"} />
+            <FieldRow label="Stowage SF" value={<>{cargo.sf != null ? `${cargo.sf} m³/t` : "—"} <IntelligenceFieldFlags intelligence={cargo.intelligence} field="stowage_sf" /></>} />
           </div>
         </div>
 
         <div className="section">
           <h4>Commercial terms</h4>
           <div className="grid-2">
-            <FieldRow label="Laycan from" value={dash(cargo.laycanFrom)} />
+            <FieldRow label="Laycan from" value={<>{dash(cargo.laycanFrom)} <IntelligenceFieldFlags intelligence={cargo.intelligence} field="laycan_days_remaining" /></>} />
             <FieldRow label="Laycan to" value={dash(cargo.laycanTo)} />
             <FieldRow label="Load terms" value={dash(cargo.loadTerms)} />
-            <FieldRow label="Load rate" value={cargo.loadRate != null ? `${cargo.loadRate.toLocaleString()} MT/d` : "—"} />
+            <FieldRow label="Load rate" value={<>{cargo.loadRate != null ? `${cargo.loadRate.toLocaleString()} MT/d` : "—"} <IntelligenceFieldFlags intelligence={cargo.intelligence} field="load_rate_mt_day" /></>} />
             <FieldRow label="Discharge rate" value={cargo.dischRate != null ? `${cargo.dischRate.toLocaleString()} MT/d` : "—"} />
-            <FieldRow label="Freight idea" value={cargo.freightIdea != null ? `$${cargo.freightIdea}/MT` : "—"} valueClass="blue" />
-            <FieldRow label="Commission" value={cargo.commission != null ? `${cargo.commission}%` : "—"} />
+            <FieldRow label="Freight idea" value={<>{cargo.freightIdea != null ? `$${cargo.freightIdea}/MT` : "—"} <IntelligenceFieldFlags intelligence={cargo.intelligence} field="freight_idea_usd_mt" /></>} valueClass="blue" />
+            <FieldRow label="Commission" value={<>{cargo.commission != null ? `${cargo.commission}%` : "—"} <IntelligenceFieldFlags intelligence={cargo.intelligence} field="commission_pct" /></>} />
             <FieldRow label="Demurrage" value={cargo.demurrage != null ? `$${cargo.demurrage.toLocaleString()}/d` : "—"} />
           </div>
         </div>
@@ -254,8 +260,9 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
           <span className={`asb-badge ${v.status === "open" ? "open" : v.status === "review" ? "review" : "fixed"}`}>{v.status.toUpperCase()}</span>
           <span className="asb-badge neutral">{v.type}</span>
           <span className="asb-badge neutral">{v.flag}</span>
-          {v.built && <span className="asb-badge neutral">Built {v.built} ({v.age} yrs)</span>}
+          {v.built && <span className="asb-badge neutral">Built {v.built} ({v.age} yrs) <IntelligenceFieldFlags intelligence={v.intelligence} field="age_years" /></span>}
         </div>
+        <IntelligenceAvailabilityNotice intelligence={v.intelligence} />
       </header>
 
       <div className="body">
@@ -292,7 +299,7 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
               <span className={`asb-badge ${v.status === "open" ? "open" : "review"}`}>{v.status.toUpperCase()}</span>
             </div>
             <div className="grid-2">
-              <FieldRow label="Open date" value={dash(v.openDate)} />
+              <FieldRow label="Open date" value={<>{dash(v.openDate)} <IntelligenceFieldFlags intelligence={v.intelligence} field="open_days_delta" /></>} />
               <FieldRow label="Date flex" value={v.openDateRangeDays != null ? `± ${v.openDateRangeDays} days` : "—"} />
               <FieldRow label="Last cargo" value={dash(v.lastCargo)} />
               <FieldRow label="Part cargo" value={v.acceptsPartCargo == null ? "—" : v.acceptsPartCargo ? "Accepts" : "No"} />
@@ -305,9 +312,9 @@ export function VesselDetailPanel({ vessel, onClose }: { vessel: VesselView; onC
           <div className="grid-2">
             <FieldRow label="Service speed" value={v.serviceSpeed != null ? `${v.serviceSpeed} kts` : "—"} />
             <FieldRow label="Fuel type (main)" value={dash(v.fuelType)} />
-            <FieldRow label="M/E · Sea" value={v.fuel.vlsfoSea !== "—" ? `${v.fuel.vlsfoSea} MT/d` : "—"} />
+            <FieldRow label="M/E · Sea" value={<>{v.fuel.vlsfoSea !== "—" ? `${v.fuel.vlsfoSea} MT/d` : "—"} <IntelligenceFieldFlags intelligence={v.intelligence} field="vlsfo_sea_mt_day" /></>} />
             <FieldRow label="M/E · Port" value={v.fuel.vlsfoPort !== "—" ? `${v.fuel.vlsfoPort} MT/d` : "—"} />
-            <FieldRow label="Aux · Sea" value={v.fuel.lsmgoSea !== "—" ? `${v.fuel.lsmgoSea} MT/d` : "—"} />
+            <FieldRow label="Aux · Sea" value={<>{v.fuel.lsmgoSea !== "—" ? `${v.fuel.lsmgoSea} MT/d` : "—"} <IntelligenceFieldFlags intelligence={v.intelligence} field="lsmgo_sea_mt_day" /></>} />
             <FieldRow label="Aux · Port" value={v.fuel.lsmgoPort !== "—" ? `${v.fuel.lsmgoPort} MT/d` : "—"} />
           </div>
         </div>

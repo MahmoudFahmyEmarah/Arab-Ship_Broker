@@ -12,9 +12,13 @@ import {
   loadPortCoords,
   loadViewerContext,
 } from "@/lib/portal/data";
+import { loadMatchingRulesSnapshot } from "@/lib/portal/matching.server";
 
 export default async function DashboardPage() {
-  const { role } = await loadViewerContext();
+  const [{ role }, matchingRulesSnapshot] = await Promise.all([
+    loadViewerContext(),
+    loadMatchingRulesSnapshot(),
+  ]);
   const isAdmin = role === "admin";
 
   if (isAdmin) {
@@ -32,6 +36,7 @@ export default async function DashboardPage() {
         vessels={vessel.views}
         source={cargo.source}
         portCoords={portCoords}
+        matchingRulesSnapshot={matchingRulesSnapshot}
       />
     );
   }
@@ -60,6 +65,7 @@ export default async function DashboardPage() {
       matchVessels={mktVessel.views}
       source={myCargo.source}
       portCoords={portCoords}
+      matchingRulesSnapshot={matchingRulesSnapshot}
     />
   );
 }
