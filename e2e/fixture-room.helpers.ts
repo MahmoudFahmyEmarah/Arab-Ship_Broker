@@ -27,6 +27,20 @@ export interface FixtureSeed {
   tbn: { vesselId: string; name: string; availabilityId: string };
 }
 
+/**
+ * Runs SQL as the database owner. Default: the local Supabase container. With E2E_DB_URL set (a staging
+ * session-pooler string) the same statements run there through the local image's psql. The production
+ * project is refused by ref, whatever the environment says.
+ */
+export function dbExec(sql: string): void {
+  const remote = process.env.E2E_DB_URL;
+  if (remote && /rezfejaxbmdzkslrrefr/.test(remote)) throw new Error("e2e refuses to run SQL against the production project");
+  const cmd = remote
+    ? `docker run --rm -i --entrypoint psql ${process.env.E2E_PG_IMAGE ?? "public.ecr.aws/supabase/postgres:17.6.1.127"} --dbname="${remote}" -q -v ON_ERROR_STOP=0`
+    : "docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0";
+  execSync(cmd, { input: sql, stdio: ["pipe", "ignore", "ignore"], env: { ...process.env, MSYS_NO_PATHCONV: "1" } });
+}
+
 function localKeys() {
   let url = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
   let service = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
@@ -36,7 +50,9 @@ function localKeys() {
     url = out.match(/^API_URL="?([^"\n]+)"?/m)?.[1] ?? url;
   }
   if (!service) throw new Error("no local service role key (E2E_SUPABASE_SERVICE_ROLE_KEY or `supabase status`)");
-  if (!/127\.0\.0\.1|localhost/.test(url)) throw new Error(`refusing to seed members against ${url}`);
+  // Remote seeding only for the staging project named in E2E_ALLOW_REMOTE (never production).
+  const allowed = process.env.E2E_ALLOW_REMOTE;
+  if (!/127\.0\.0\.1|localhost/.test(url) && !(allowed && url.includes(allowed) && !/rezfejaxbmdzkslrrefr/.test(url))) throw new Error(`refusing to seed members against ${url}`);
   return { url, service };
 }
 
@@ -119,7 +135,7 @@ delete from public.users where id = '${seat.userId}';
 delete from auth.users where id = '${seat.userId}';
 `;
   try {
-    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: sql, stdio: ["pipe", "ignore", "ignore"] });
+    dbExec(sql);
   } catch {
     // leaving rows behind on a disposable database is not a test failure
   }
@@ -169,7 +185,7 @@ delete from public.users where id = '${a.userId}';
 delete from auth.users where id = '${a.userId}';
 `;
   try {
-    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: sql, stdio: ["pipe", "ignore", "ignore"] });
+    dbExec(sql);
   } catch {
     // leaving rows behind on a disposable database is not a test failure
   }
@@ -215,7 +231,7 @@ delete from auth.users where id in ('${s.charterer.userId}', '${s.owner.userId}'
 delete from public.organizations where id in ('${s.charterer.orgId}', '${s.owner.orgId}');
 `;
   try {
-    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: sql, stdio: ["pipe", "ignore", "ignore"] });
+    dbExec(sql);
   } catch {
     // leaving rows behind on a disposable database is not a test failure
   }

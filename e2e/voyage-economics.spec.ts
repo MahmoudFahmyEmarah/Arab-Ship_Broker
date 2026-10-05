@@ -14,8 +14,7 @@
  * previously open published version gets its open window back.
  */
 import { test, expect, type Browser } from "@playwright/test";
-import { execSync } from "node:child_process";
-import { cleanupAdmin, cleanupFixture, seedAdmin, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { cleanupAdmin, cleanupFixture, dbExec, seedAdmin, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
 
 const stamp = Date.now().toString(36);
 const plus = (days: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
@@ -28,7 +27,7 @@ let seed: FixtureSeed;
 let versionId: string | null = null;
 
 function psql(sql: string) {
-  try { execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: sql, stdio: ["pipe", "ignore", "ignore"] }); } catch { /* disposable rows */ }
+  try { dbExec(sql); } catch { /* disposable rows */ }
 }
 
 test.describe.configure({ mode: "serial" });
