@@ -10,6 +10,11 @@
 // fields its model shares and treat the quirks as known differences, not as
 // expected behaviour.
 //
+// Reference evidence only, NOT a release check (audit C2B-007 #5): this script
+// does not call the Voyage engine (`estimateVoyage`, Stream S). Registering it as
+// a gate needs an explicit adapter on the composed branch that runs the current
+// engine on these inputs and asserts the shared outputs.
+//
 //   node --import tsx scripts/voyage-golden-fixtures.ts          # check only
 //   node --import tsx scripts/voyage-golden-fixtures.ts --write  # (re)write the JSON
 import assert from "node:assert/strict";
@@ -255,13 +260,15 @@ function compute(c: Case) {
   const netFreight = grossFreight - commission;
   const grossSurplus = netFreight - grossExpenses;
   const grossDaily = grossSurplus / totalDays;
-  const result: Expected = {
+  // A typed T/C value is an input of the sheet, not a result: it is never
+  // "computed" here, so it cannot be proven by comparing it with itself.
+  const result: Omit<Expected, "tce"> & { tce: number | null } = {
     totalDays, totalFo: fo, totalDo: dO,
     bunkersOnBoard, cargoIntake: c.vessel.dwt - bunkersOnBoard - c.vessel.constants,
     bunkerCost, otherExpenses, grossExpenses,
     grossFreight, commission, netFreight,
     grossSurplus, grossDaily, netDaily: grossDaily - c.runningCostPerDay,
-    tce: c.tceFormula === "typed" ? c.expected.tce : grossDaily / (1 - c.commissionRate),
+    tce: c.tceFormula === "typed" ? null : grossDaily / (1 - c.commissionRate),
   };
   return { blocks, bunkers, result };
 }
@@ -275,8 +282,15 @@ const fixtures = CASES.map((c) => {
   const { blocks, bunkers, result } = compute(c);
   check(`${c.id}: every recorded workbook value`, () => {
     for (const k of Object.keys(c.expected) as (keyof Expected)[]) {
-      assert.ok(Math.abs(result[k] - c.expected[k]) < 1e-6, `${k}: computed ${result[k]} vs workbook ${c.expected[k]}`);
+      const got = result[k];
+      if (got === null) continue; // typed T/C, checked below
+      assert.ok(Math.abs(got - c.expected[k]) < 1e-6, `${k}: computed ${got} vs workbook ${c.expected[k]}`);
     }
+  });
+  if (c.tceFormula === "typed") check(`${c.id}: typed T/C is an input, not a derivable result`, () => {
+    // Neither T/C formula used elsewhere in the workbook reproduces it.
+    assert.ok(Math.abs(result.grossDaily / (1 - c.commissionRate) - c.expected.tce) > 1);
+    assert.ok(Math.abs(result.grossDaily - c.expected.tce) > 1);
   });
   return {
     id: c.id, sheet: c.sheet, description: c.description, vessel: c.vessel,
