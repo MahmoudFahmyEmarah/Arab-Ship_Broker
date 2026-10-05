@@ -12,6 +12,9 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { PASSWORD, apiClientAs, signInAs } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -38,9 +41,16 @@ function localKeys() {
     url = out.match(/^API_URL="?([^"\n]+)"?/m)?.[1] ?? url;
   }
   if (!service) throw new Error("No local service key");
-  if (!/127\.0\.0\.1|localhost/.test(url)) throw new Error(`Refusing to seed bunker data against ${url}`);
+  if (/rezfejaxbmdzkslrrefr/.test(url)) throw new Error("Refusing to seed bunker data against production");
+  // Hosted staging only when named explicitly (owner instruction, 5 Oct 2026).
+  const staging = STAGING_REF !== "" && url.includes(STAGING_REF);
+  if (!staging && !/127\.0\.0\.1|localhost/.test(url)) throw new Error(`Refusing to seed bunker data against ${url}`);
   return { url, service };
 }
+
+// E2E_STAGING_REF=sidcsytgqalqacsgyguz allows the staging project; cleanup then
+// runs through `supabase db query --linked` from E2E_STAGING_WORKDIR.
+const STAGING_REF = process.env.E2E_STAGING_REF === "sidcsytgqalqacsgyguz" ? process.env.E2E_STAGING_REF : "";
 
 async function seed(): Promise<Seed> {
   const { url, service } = localKeys();
@@ -92,6 +102,15 @@ delete from public.profiles where account_id in (${ids});
 delete from public.users where id in (${ids});
 delete from auth.users where id in (${ids});
 `;
+  if (STAGING_REF) {
+    // Hosted staging: one linked query; a failure must be visible, not swallowed.
+    const dir = process.env.E2E_STAGING_WORKDIR;
+    if (!dir) throw new Error("E2E_STAGING_WORKDIR is required to clean staging");
+    const file = path.join(os.tmpdir(), `bunker-e2e-cleanup-${s.stamp}.sql`);
+    writeFileSync(file, `begin;\n${sql}\ncommit;\n`);
+    execSync(`supabase db query --linked --workdir "${dir}" --file "${file}"`, { stdio: ["ignore", "ignore", "inherit"] });
+    return;
+  }
   try {
     execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0",
       { input: sql, stdio: ["pipe", "ignore", "ignore"] });
