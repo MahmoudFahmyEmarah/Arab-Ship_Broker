@@ -49,7 +49,13 @@ function termsFrom(quotes: SupplierPortalQuote[], locode: string): PortTerms {
 function CellStatus({ live, pending, now }: { live?: SupplierPortalQuote; pending?: SupplierPortalQuote; now: number }) {
   if (pending) return <span className="bks-tag bks-tag--pending">${pending.priceUsdMt} awaiting approval</span>;
   if (!live) return <span className="bks-tag">No price</span>;
-  const age = now - Date.parse(live.submittedAt);
+  const starts = Date.parse(live.validFrom);
+  if (starts > now) {
+    // Approved but not yet in effect: the previous price stays live until then (109000).
+    return <span className="bks-tag bks-tag--pending">${live.priceUsdMt} from {new Date(starts).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>;
+  }
+  // Age runs from when the price took effect, as on the ticker and in the index.
+  const age = now - Math.max(Date.parse(live.submittedAt), starts);
   const tier = Date.parse(live.validUntil) < now ? "expired" : freshnessFromAgeMs(age);
   const label = tier === "current" ? "Current" : tier === "stale" ? `Stale · ${Math.floor(age / DAY_MS)}d` : "Outdated";
   return (

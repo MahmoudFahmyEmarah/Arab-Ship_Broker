@@ -5,7 +5,7 @@ first-hand physical bunker suppliers publish their price tables; the platform
 shows each sponsor on a ticker (their exposure) and computes an index whose
 **average** feeds the Voyage estimator.
 
-## Data model (migrations `20261003100000`–`108000`)
+## Data model (migrations `20261003100000`–`109000`)
 
 | Table | Purpose | Member access |
 |---|---|---|
@@ -18,15 +18,22 @@ shows each sponsor on a ticker (their exposure) and computes an index whose
 | `bunker_quote_events` | Audit trail (submit, approve, reject, withdraw, override, import). | none |
 
 Content of a quote never changes (trigger): only the status decision and
-`superseded_at` (once). `client_ref` is bound to `command_sha256`, the hash of
+`superseded_at` (fixed once it has taken effect). `client_ref` is bound to `command_sha256`, the hash of
 every submitted term; submissions are serialised per supplier (and per
 supplier + reference), so a concurrent or repeated first use replays the same
 quote and a reused reference with any different term is refused (23505). One live and one pending quote per supplier × port ×
-product. Approving a quote supersedes the previous live one.
+product. Approving a quote supersedes the previous live one **when the new one
+takes effect** (`greatest(now, valid_from)`), so a future-dated price never
+leaves a gap; withdrawing an approved quote before it starts restores the price
+it was to replace (a supersession in the past stays immutable). A quote whose
+validity has lapsed cannot be approved. A price counts (index and ticker) only
+while its supplier still serves the port: removing a port takes its prices out
+at once (`20261003109000`).
 
 ## Rules
 
-- **Freshness** by quote age: ≤ 7 d current, 8–14 d stale (flat arrow, "·Nd"),
+- **Freshness** by quote age, counted from when the price takes effect
+  (`greatest(submitted_at, valid_from)`): ≤ 7 d current, 8–14 d stale (flat arrow, "·Nd"),
   15–21 d expired ("Outdated" on the ticker), > 21 d hidden. Validity lapsed = expired.
 - **Index** (`get_fuel_price_index(p_port_locode, p_product_keys, p_as_of, p_stem_mt default 500)`):
   approved quotes valid at `as_of`, ≤ 14 d old, supplier enabled, applicable to
@@ -39,6 +46,13 @@ product. Approving a quote supersedes the previous live one.
   actually used and is set only for scope `port`; a region or global answer
   returns `port: null`, `requestedPort`, `region` (region scope) and the sorted
   `contributingPorts` (architect ruling C2O-033). An empty product list is refused.
+  **Members cannot choose the moment or an arbitrary stem** (109000): for a
+  member the RPC answers as of now and at the nearest standard stem (100, 250,
+  500, 1,000, 2,000, 3,000, 5,000, 10,000 MT); `asOf` and `stemMt` in the answer
+  are the ones used. Admins and the service role keep both parameters. The
+  logic lives in the service-only `fn_bunker_fuel_index(…, p_full)`. Note: the
+  ticker shows each sponsor's own prices by design (their paid exposure), so the
+  3-supplier rule protects the index statistics, not sponsor prices.
 - **Ticker** (`get_bunker_ticker()`): enabled, non-platform sponsors; only quotes
   valid now (`valid_from ≤ now ≤ valid_until`), judged per product; one row per
   sponsor × port with their own prices and direction against the previous
@@ -115,7 +129,7 @@ in production); a token-based feed, if wanted later, should use Vault like Data 
 ## Proof
 
 ```
-node --import tsx scripts/bunker-check.ts                       # 68 pure + SDK + snapshot + retry + Stream S parity assertions
+node --import tsx scripts/bunker-check.ts                       # 70 pure + SDK + snapshot + retry + Stream S parity assertions
 node --import tsx scripts/bunker-sql-suite.ts | docker exec -i supabase_db_arab-ship-broker \
   psql -U postgres -d <db> -v ON_ERROR_STOP=1 -q                  # rolled-back SQL suite, same fixtures
 HARNESS_PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_bunker" \

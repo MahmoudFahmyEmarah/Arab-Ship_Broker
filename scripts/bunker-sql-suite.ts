@@ -6,7 +6,7 @@
 // it, so the suite neither depends on nor changes the data it runs over.
 //   node --import tsx scripts/bunker-sql-suite.ts | \
 //     docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_bunker -v ON_ERROR_STOP=1 -q
-import { AS_OF, INDEX_CASES, PORTS, QUOTES, SUPPLIERS } from "./bunker-fixtures";
+import { AS_OF, INDEX_CASES, PORTS, QUOTES, SUPPLIER_PORTS, SUPPLIERS } from "./bunker-fixtures";
 
 const lit = (v: string | number | boolean | null | undefined) =>
   v === null || v === undefined ? "null" : typeof v === "string" ? `'${v.replace(/'/g, "''")}'` : String(v);
@@ -64,8 +64,15 @@ values (${lit(q.id)}, ${lit(q.supplierId)}, ${lit(q.portLocode)}, ${lit(q.produc
   ${q.bargeFeeUsd}, ${q.mandatoryChargesUsd}, ${lit(q.validFrom)}, ${lit(q.validUntil)}, 'admin_input', ${lit(q.status)},
   ${lit(q.submittedAt)}, ${lit(q.supersededAt)}); -- ${q.note}`);
 }
+// 109000: a price counts only while its supplier serves the port.
+sql(`insert into public.bunker_supplier_ports (supplier_id, port_locode) values
+  ${SUPPLIER_PORTS.map((x) => `(${lit(x.supplierId)}, ${lit(x.portLocode)})`).join(", ")}
+on conflict do nothing;`);
 
 // ── Index parity cases ──────────────────────────────────────────────────────
+// The index logic (service-only fn_bunker_fuel_index, 109000) is asserted at the
+// fixtures' fixed as_of; the member view (p_full = false) is the same function
+// the public RPC calls for members. R6 below covers the public wrapper.
 const asMember = `set local role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"${MEMBER_SUB}"}', true);`;
 const asOwner = `reset role;
@@ -73,10 +80,10 @@ select set_config('request.jwt.claims', '', true);`;
 
 for (const c of INDEX_CASES) {
   const p = c.params;
-  const call = `public.get_fuel_price_index(${lit(p.portLocode)}, ${
+  const call = `public.fn_bunker_fuel_index(${lit(p.portLocode)}, ${
     p.productKeys ? `array[${p.productKeys.map(lit).join(",")}]::text[]` : "null"
-  }, ${lit(p.asOf)}::timestamptz${p.stemMt !== undefined ? `, ${p.stemMt}` : ""})`;
-  sql(p.viewer === "member" ? asMember : asOwner);
+  }, ${lit(p.asOf)}::timestamptz, ${p.stemMt ?? 500}, ${p.viewer === "admin"})`;
+  sql(asOwner);
   if ("error" in c.expected) {
     sql(`do $t$ begin
   perform ${call};
@@ -97,6 +104,7 @@ sql(asOwner);
 // ── Never zero, append-only, lifecycle ──────────────────────────────────────
 const A = SUPPLIERS[0].id;
 const B = SUPPLIERS[1].id;
+const C = SUPPLIERS[2].id;
 sql(`
 do $t$ begin
   insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status)
@@ -145,7 +153,8 @@ insert into public.users (id, supabase_user_id, email, full_name, role, is_activ
   ('${OUTSIDER_SUB}', '${OUTSIDER_SUB}', 'src-bunker-e2e-outsider@example.invalid', 'src:bunker-e2e outsider', 'user', true)
 on conflict (id) do update set supabase_user_id = excluded.supabase_user_id, role = 'user', is_active = true;
 insert into public.bunker_supplier_ports (supplier_id, port_locode, is_primary) values
-  ('${A}', 'GRPIR', true), ('${B}', 'GRPIR', true), ('${B}', 'CYLCA', false);
+  ('${A}', 'GRPIR', true), ('${B}', 'GRPIR', true), ('${B}', 'CYLCA', false)
+on conflict (supplier_id, port_locode) do update set is_primary = excluded.is_primary;
 insert into public.bunker_supplier_members (supplier_id, user_id, role) values
   ('${A}', '${MEMBER_SUB}', 'editor'),
   ('${B}', '${VIEWER_SUB}', 'viewer');
@@ -441,6 +450,94 @@ end $t$;
 select 'T5 ok: a withdrawn live price stays the previous price';
 reset role;
 select set_config('request.jwt.claims', '', true);
+`);
+
+// Program review corrections (109000, B2O-012). A's GRPIR VLSFO 650 is live (T5).
+sql(`
+do $t$ begin
+  delete from public.bunker_supplier_ports where supplier_id = '${A}' and port_locode = 'GRPIR';
+  if exists (select 1 from public.fn_bunker_live_quotes(now(), 500) l where l.supplier_id = '${A}' and l.port_locode = 'GRPIR') then
+    raise exception 'R1 FAILED: a removed port still feeds the index'; end if;
+  if exists (select 1 from jsonb_array_elements((public.get_bunker_ticker())->'sponsors') x
+              where x->>'name' = 'src:bunker-e2e A' and x->>'portLocode' = 'GRPIR') then
+    raise exception 'R1 FAILED: a removed port is still on the ticker'; end if;
+  insert into public.bunker_supplier_ports (supplier_id, port_locode, is_primary) values ('${A}', 'GRPIR', true);
+  if not exists (select 1 from public.fn_bunker_live_quotes(now(), 500) l where l.supplier_id = '${A}' and l.port_locode = 'GRPIR') then
+    raise exception 'R1 FAILED: the re-registered port did not come back'; end if;
+end $t$;
+select 'R1 ok: a price is live only while its supplier serves the port';
+
+do $t$ declare v_live uuid; v_new uuid; v_from timestamptz := date_trunc('second', now()) + interval '2 days';
+  price_at numeric;
+begin
+  select id into v_live from public.bunker_quotes
+   where supplier_id = '${A}' and port_locode = 'GRPIR' and product_key = 'VLSFO' and status = 'approved' and superseded_at is null;
+  update public.bunker_quotes set status = 'withdrawn'
+   where supplier_id = '${A}' and port_locode = 'GRPIR' and product_key = 'VLSFO' and status = 'submitted';
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+  values ('${A}', 'GRPIR', 'VLSFO', 660, v_from, v_from + interval '7 days', 'admin_input', 'submitted', now())
+  returning id into v_new;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_new, 'approve', null);
+  if (select superseded_at from public.bunker_quotes where id = v_live) is distinct from v_from then
+    raise exception 'R2 FAILED: supersession not scheduled at the new start'; end if;
+  select l.normalised_usd_mt into price_at from public.fn_bunker_live_quotes(now(), 500) l
+   where l.supplier_id = '${A}' and l.port_locode = 'GRPIR' and l.product_key = 'VLSFO';
+  if price_at is distinct from 650 then raise exception 'R2 FAILED: gap or wrong price before the start: %', price_at; end if;
+  if (select p->>'usdMt' from jsonb_array_elements((public.get_bunker_ticker())->'sponsors') x, jsonb_array_elements(x->'prices') p
+       where x->>'name' = 'src:bunker-e2e A' and x->>'portLocode' = 'GRPIR' and p->>'productKey' = 'VLSFO')::numeric
+     is distinct from 650 then
+    raise exception 'R2 FAILED: the ticker lost the current price'; end if;
+  select l.normalised_usd_mt into price_at from public.fn_bunker_live_quotes(v_from + interval '1 hour', 500) l
+   where l.supplier_id = '${A}' and l.port_locode = 'GRPIR' and l.product_key = 'VLSFO';
+  if price_at is distinct from 660 then raise exception 'R2 FAILED: the new price is not live after its start: %', price_at; end if;
+
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_new, 'withdraw', 'scheduled in error');
+  if (select superseded_at from public.bunker_quotes where id = v_live) is not null then
+    raise exception 'R3 FAILED: withdrawing the unstarted quote did not restore the previous price'; end if;
+  select l.normalised_usd_mt into price_at from public.fn_bunker_live_quotes(v_from + interval '1 hour', 500) l
+   where l.supplier_id = '${A}' and l.port_locode = 'GRPIR' and l.product_key = 'VLSFO';
+  if price_at is distinct from 650 then raise exception 'R3 FAILED: previous price not live after the cancelled start: %', price_at; end if;
+end $t$;
+select 'R2-R3 ok: a scheduled replacement keeps the current price until it starts; cancelling it restores the price';
+
+do $t$ declare v uuid;
+begin
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+  values ('${A}', 'GRPIR', 'MDO', 900, now() - interval '3 days', now() - interval '1 hour', 'admin_input', 'submitted', now() - interval '3 days')
+  returning id into v;
+  begin
+    perform public.admin_bunker_decide_quote('${ADMIN_ID}', v, 'approve', null);
+    raise exception 'R4 FAILED: a lapsed quote was approved';
+  exception when sqlstate '22023' then
+    if sqlerrm not like 'BUNKER_VALIDITY%' then raise exception 'R4 FAILED: wrong error %', sqlerrm; end if;
+  end;
+end $t$;
+select 'R4 ok: a lapsed quote cannot be approved';
+
+insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+values ('${C}', 'CYLCA', 'MDO', 950, now() - interval '1 day', now() + interval '5 days', 'admin_input', 'approved', now() - interval '20 days');
+do $t$ begin
+  if not exists (select 1 from public.fn_bunker_live_prices(now(), 500) l
+                  where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'MDO'
+                    and l.effective_at > now() - interval '2 days') then
+    raise exception 'R5 FAILED: a price in effect for a day was aged from its submission 20 days ago'; end if;
+end $t$;
+select 'R5 ok: age runs from when a price takes effect';
+
+${asMember}
+do $t$ declare r jsonb := public.get_fuel_price_index('GRPIR', array['VLSFO'], '2020-01-01T00:00:00Z', 777);
+begin
+  if abs(extract(epoch from (r->>'asOf')::timestamptz - now())) > 120 then
+    raise exception 'R6 FAILED: a member chose the as_of: %', r->>'asOf'; end if;
+  if (r->>'stemMt')::numeric <> 1000 then raise exception 'R6 FAILED: member stem not standardised: %', r->>'stemMt'; end if;
+end $t$;
+${asOwner}
+do $t$ declare r jsonb := public.get_fuel_price_index('GRPIR', array['VLSFO'], '2020-01-01T00:00:00Z', 777);
+begin
+  if r->>'asOf' <> '2020-01-01T00:00:00Z' or (r->>'stemMt')::numeric <> 777 then
+    raise exception 'R6 FAILED: the admin/service view changed: %', r; end if;
+end $t$;
+select 'R6 ok: members get the index as of now at a standard stem; admins unchanged';
 `);
 
 // Grants: anon reaches nothing; members only the five member RPCs.

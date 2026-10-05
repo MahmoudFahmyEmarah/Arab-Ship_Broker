@@ -148,6 +148,25 @@ for (const c of INDEX_CASES) {
   });
 }
 
+// ── Program review corrections (109000) ─────────────────────────────────────
+check("a port the supplier no longer serves leaves the index", () => {
+  const params = { portLocode: "GRPIR", productKeys: ["VLSFO"], asOf: INDEX_CASES[0].params.asOf, viewer: "admin" as const };
+  const before = computeFuelPriceIndex(input, params).products[0];
+  const removed = { ...input, quotes: input.quotes.map((q) =>
+    q.supplierId === "00000000-0000-4000-b000-00000000000b" && q.portLocode === "GRPIR" ? { ...q, supplierServesPort: false } : q) };
+  const after = computeFuelPriceIndex(removed, params).products[0];
+  assert.equal(after.quoteCount, before.quoteCount - 1);
+});
+check("age runs from when a price takes effect, not from submission", () => {
+  const asOf = "2026-10-03T12:00:00Z";
+  const base = input.quotes.find((q) => q.productKey === "HSFO380" && q.status === "approved")!;
+  const scheduled = { ...base, submittedAt: "2026-09-15T12:00:00Z", validFrom: "2026-10-02T12:00:00Z" };
+  const r = computeFuelPriceIndex({ ...input, quotes: [scheduled] }, { portLocode: base.portLocode, productKeys: ["HSFO380"], asOf, viewer: "admin" });
+  assert.equal(r.products.length, 1, "18 days since submission, 1 day in effect: still counts");
+  assert.equal(r.products[0].freshness, "current");
+  assert.equal(r.products[0].latestQuoteAt, "2026-10-02T12:00:00Z");
+});
+
 // ── SDK boundary: runtime parsing and argument rules (fake client) ─────────
 async function checkAsync(name: string, fn: () => Promise<void>) {
   try {

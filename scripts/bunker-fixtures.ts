@@ -38,7 +38,7 @@ export const SUPPLIERS = [
 ] as const;
 const [A, B, C, D, P] = SUPPLIERS.map((s) => s.id);
 
-type Q = Omit<IndexQuote, "supplierEnabled"> & { id: string; note: string };
+type Q = Omit<IndexQuote, "supplierEnabled" | "supplierServesPort"> & { id: string; note: string };
 const q = (
   id: string, note: string, supplierId: string, portLocode: string, productKey: IndexQuote["productKey"],
   price: number, submittedH: number, validFromH: number, validUntilH: number,
@@ -73,7 +73,12 @@ export const QUOTES: Q[] = [
 ];
 
 export const indexQuotes = (): IndexQuote[] =>
-  QUOTES.map((x) => ({ ...x, supplierEnabled: SUPPLIERS.find((s) => s.id === x.supplierId)!.enabled }));
+  QUOTES.map((x) => ({ ...x, supplierEnabled: SUPPLIERS.find((s) => s.id === x.supplierId)!.enabled, supplierServesPort: true }));
+
+// Every (supplier, port) pair quoted above is a registered supplier port (109000).
+export const SUPPLIER_PORTS: { supplierId: string; portLocode: string }[] = [
+  ...new Map(QUOTES.map((x) => [`${x.supplierId}|${x.portLocode}`, { supplierId: x.supplierId, portLocode: x.portLocode }])).values(),
+];
 
 export interface IndexCase {
   id: string;

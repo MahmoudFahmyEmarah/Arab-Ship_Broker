@@ -34,6 +34,8 @@ export interface IndexPortDef {
 export interface IndexQuote extends QuoteCharges {
   supplierId: string;
   supplierEnabled: boolean;
+  /** The supplier still serves this port (bunker_supplier_ports, 109000). */
+  supplierServesPort: boolean;
   portLocode: string;
   productKey: FuelProductKey;
   status: "submitted" | "approved" | "rejected" | "withdrawn";
@@ -55,6 +57,8 @@ interface LiveQuote {
   productKey: FuelProductKey;
   normalised: number;
   submittedMs: number;
+  /** When the price took effect: max(submitted, validFrom) (109000). */
+  effectiveMs: number;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -65,9 +69,10 @@ function liveQuotes(
   const latest = new Map<string, LiveQuote>();
   for (const q of quotes) {
     const submitted = Date.parse(q.submittedAt);
+    const effective = Math.max(submitted, Date.parse(q.validFrom));
     const port = ports.get(q.portLocode);
-    if (!q.supplierEnabled || !port || q.status !== "approved" || !appliesToStem(q, stemMt)) continue;
-    if (submitted > asOfMs || submitted < asOfMs - INDEX_MAX_AGE_DAYS * DAY_MS) continue;
+    if (!q.supplierEnabled || !q.supplierServesPort || !port || q.status !== "approved" || !appliesToStem(q, stemMt)) continue;
+    if (submitted > asOfMs || effective < asOfMs - INDEX_MAX_AGE_DAYS * DAY_MS) continue;
     if (Date.parse(q.validFrom) > asOfMs || Date.parse(q.validUntil) < asOfMs) continue;
     if (q.supersededAt && Date.parse(q.supersededAt) <= asOfMs) continue;
     const k = `${q.supplierId}|${q.portLocode}|${q.productKey}`;
@@ -76,6 +81,7 @@ function liveQuotes(
     latest.set(k, {
       supplierId: q.supplierId, portLocode: q.portLocode, zone: port.zone,
       productKey: q.productKey, normalised: normalisedPrice(q, stemMt), submittedMs: submitted,
+      effectiveMs: effective,
     });
   }
   return [...latest.values()];
@@ -154,7 +160,7 @@ export function computeFuelPriceIndex(
     const prices = rows.map((r) => r.normalised).sort((a, b) => a - b);
     const mean = round2(prices.reduce((s, x) => s + x, 0) / prices.length);
     if (!(mean > 0)) continue; // never zero
-    const latest = Math.max(...rows.map((r) => r.submittedMs));
+    const latest = Math.max(...rows.map((r) => r.effectiveMs));
     avg.set(p.key, mean);
     const show = fullStats || rows.length >= MIN_COHORT;
     out.push({
