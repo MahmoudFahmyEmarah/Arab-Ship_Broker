@@ -69,6 +69,7 @@ function displayedTotal(
     ?? result.warnings.find((item) => item.code === "MANUAL_QUOTE_UNMATCHED")
     ?? result.warnings.find((item) => item.code === "MANUAL_QUOTE_NOT_APPLIED")
     ?? result.warnings.find((item) => item.code === "MANUAL_QUOTE_REQUIRED")
+    ?? result.warnings.find((item) => item.code === "TARIFF_GAP")
     ?? result.warnings.find((item) => item.code === "MISSING_INPUT")
     ?? result.warnings.find((item) => item.code === "NO_APPLICABLE_RULES")
     ?? result.warnings.find((item) => item.code === "NO_PUBLISHED_TARIFF")
@@ -79,6 +80,7 @@ function displayedTotal(
   else if (warning?.code === "MANUAL_QUOTE_UNMATCHED") reason = "MANUAL_QUOTE_UNMATCHED";
   else if (warning?.code === "MANUAL_QUOTE_NOT_APPLIED") reason = "MANUAL_QUOTE_NOT_APPLIED";
   else if (warning?.code === "MANUAL_QUOTE_REQUIRED") reason = "MANUAL_QUOTE_REQUIRED";
+  else if (warning?.code === "TARIFF_GAP") reason = "TARIFF_GAP";
   else if (warning?.code === "MISSING_INPUT") reason = "MISSING_TARIFF_INPUT";
   else if (warning?.code === "NO_APPLICABLE_RULES") reason = "NO_APPLICABLE_RULES";
   else if (result.coverage === "manual_required" || result.tariffVersionId == null || !result.lines.length) {
@@ -117,6 +119,7 @@ function legNotSourced(
     NO_PUBLISHED_TARIFF: `${label} is not sourced because no effective published tariff is available.`,
     NO_APPLICABLE_RULES: `${label} is not sourced because no published tariff rule applies to the supplied call facts.`,
     MISSING_TARIFF_INPUT: `${label} is incomplete because a published tariff line still needs an explicit input.`,
+    TARIFF_GAP: `${label} is incomplete because a published tariff has no band for this vessel or call.`,
     MANUAL_QUOTE_REQUIRED: `${label} is incomplete until the required attributed manual quotation is supplied.`,
     MANUAL_QUOTE_DUPLICATE: `${label} is incomplete because duplicate quotations target the same tariff rule and none was applied.`,
     MANUAL_QUOTE_UNMATCHED: `${label} is incomplete because a rule-coded quotation did not match an applicable manual-quote rule.`,
