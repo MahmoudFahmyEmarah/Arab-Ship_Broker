@@ -32,6 +32,7 @@ import { countdown, formatFixtureValue, parseFixtureInput, spreadLabel } from "@
 import { findMaskingLeaks, embeddedIdentifiers } from "@/lib/fixture-room/masking-view";
 import { recapSections, renderRecapText } from "@/lib/fixture-room/recap";
 import { listingSyncNotice } from "@/lib/fixture-room/listing-sync";
+import { STANDARD_SUBJECTS, missingStandardSubjects } from "@/lib/fixture-room/subjects";
 import type { FixtureRecapContent, FixtureRoomView } from "@/lib/fixture-room/types";
 
 let pass = 0, fail = 0;
@@ -343,7 +344,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
     payload: { kind: "offer", displayValue: "$26.25/MT", termLabel: "Freight & terms", termCode: "freight", expiresAt: "2026-09-28T12:00:00Z", orgName: "Secret Owners SA", vesselName: "MV HIDDEN", imo: "9876543", reason: "call Tasos on +30 690", actorLabel: "Secret Owners SA" } };
   const offer = notificationFor("proposal.submitted", ctx);
   ok(!!offer && offer.importance === "urgent" && offer.audience === "other_side" && offer.deadlineAt === "2026-09-28T12:00:00Z", "an offer with a validity window is urgent, for the other side, with its deadline");
-  const all = ["party.invited", "party.accepted", "proposal.submitted", "proposal.lapsed", "term.agreed", "term.reopened", "term.referred", "room.fixed_on_subjects", "subject.lifted", "subject.failed", "room.fixed", "recap.published", "room.counterparty_disclosed", "message.posted", "room.closed"] as const;
+  const all = ["party.invited", "party.accepted", "proposal.submitted", "proposal.lapsed", "term.agreed", "term.reopened", "term.referred", "term.bridge_suggested", "room.fixed_on_subjects", "subject.lifted", "subject.failed", "room.fixed", "recap.published", "room.counterparty_disclosed", "message.posted", "room.closed"] as const;
   const early = new Date("2026-09-28T11:57:00Z");
   const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n") + (lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, early)?.body ?? "");
   ok(!/Secret Owners|MV HIDDEN|9876543|Tasos|\+30 690/.test(texts), "no notification text or link carries an organisation, vessel, IMO or a member's free text, even when the payload holds them (hostile actorLabel ignored)");
@@ -667,4 +668,37 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
     "ADMIN_NAV has an owner-only /admin/fixtures entry");
   ok(/\{ id: "fixtures", href: "\/admin\/fixtures" \}/.test(sections) && /OWNER_ONLY[^;]*fixtures: true/.test(sections),
     "the nav entry matches the owner-gated section registry");
+}
+
+// ── Wave 3 · the mediator's bridging suggestion; standard subjects as chips ──
+{
+  const bm = read("supabase/migrations/20261007400000_fixture_bridge_suggestion.sql");
+  const cmd = bm.split("create or replace function public.suggest_fixture_bridge(")[1].split("end $$;")[0];
+  ok(/fn_fixture_replay\(r\.id, p_idempotency_key, v_hash\)/.test(cmd) && /fn_fixture_check_version\(r, p_expected_version\)/.test(cmd) && /fn_fixture_require_window\(r\)/.test(cmd), "the suggestion is a governed command: replay, version check and the negotiation window");
+  ok(/p\.side = 'mediator' and p\.capacity = 'broker' and p\.status = 'active'/.test(cmd) && /FX_AUTH: only the mediator can suggest/.test(cmd), "only the room's active mediator suggests");
+  ok(/fn_fixture_validate_value\(t\.value_kind, p_value\)/.test(cmd) && !/insert into public\.fixture_proposals|update public\.fixture_terms|update public\.fixture_rooms/.test(cmd), "the suggestion validates the value and moves nothing (no proposal, no term or room write)");
+  ok(/'term\.bridge_suggested'/.test(bm.split("-- ── 2")[0]) && /comment on constraint fixture_events_type_check/.test(bm), "the event CHECK gains term.bridge_suggested and keeps the saved DOWN comment");
+  ok(/revoke all on function public\.fn_fixture_live_bridges\(uuid\) from public, anon, authenticated;/.test(bm) && /revoke all on function public\.suggest_fixture_bridge\(uuid, uuid, jsonb, text, integer, text\) from public, anon, authenticated;/.test(bm), "the internal reader is private; the command is granted explicitly");
+  ok(/v := public\.fn_fixture_room_read_unscrubbed\(p_room_id, p_events_after\);\s*v := v \|\| jsonb_build_object\('bridges'/.test(bm) && bm.indexOf("'bridges'") < bm.indexOf("fn_fixture_scrub_masked(v"), "bridges join the read after its authorisation and before the masked-vessel scrub");
+  ok(/x\.type in \('term\.agreed', 'term\.reopened'\)/.test(bm) && /t\.status not in \('agreed', 'withdrawn'\)/.test(bm), "a suggestion is live only on an open term and only after its last agreement or reopening");
+  const bd = read("supabase/rollback/20261007_fixture_bridge_suggestion_down.sql");
+  const wrap = (f: string) => f.split("create or replace function public.get_fixture_room(")[1].split("end $$;")[0];
+  ok(wrap(bd) === wrap(read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql")), "the DOWN restores the 208000 room read verbatim");
+  ok(/drop function if exists public\.suggest_fixture_bridge\(uuid, uuid, jsonb, text, integer, text\);/.test(bd) && /drop function if exists public\.fn_fixture_live_bridges\(uuid\);/.test(bd) && /the wider event CHECK stays/.test(bd) && /set constraints all immediate;/.test(bd), "the DOWN drops the command and reader, never deletes ledger rows, fires deferred checks first");
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20261007400000_fixture_bridge_suggestion\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261007_fixture_bridge_suggestion_down\.sql" /.test(h) && /\[bridge\]="FIXTURE BRIDGE SMOKE"/.test(h) && / enforcement bridge; do/.test(h), "the harness applies the bridge, runs its suite and reverses it first");
+  const tr = read("components/fixture-room/TermRow.tsx");
+  ok(/view\.bridges\?\.find\(\(b\) => b\.termId === term\.id\)/.test(tr) && /onClick=\{\(\) => submit\(\{ value: bridge\.value, expiresInMinutes: null, comment: "Adopted the mediator's suggestion\." \}\)\}/.test(tr), "either side adopts the suggestion through its own bid / offer (submit_fixture_proposal)");
+  ok(/run\("bridge", \(base\) => \(\{ \.\.\.base, termId: term\.id, value: r\.value, comment: bridgeComment\.trim\(\) \|\| null \}\)\)/.test(tr) && /data-testid=\{`suggest-\$\{term\.code\}`\}/.test(tr), "the mediator console sends the suggestion from its own seat (no acting-for)");
+  ok(/bridge: suggestFixtureBridgeAction/.test(read("components/fixture-room/FixtureRoomClient.tsx")) && /parse\(suggestBridgeSchema, input\)/.test(read("app/(dashboard)/dashboard/fixture-room/actions.ts")), "the room's command runner reaches the validated server action");
+  ok(commandAllowedIn("suggest_fixture_bridge", "negotiating") && commandAllowedIn("suggest_fixture_bridge", "invited") && !commandAllowedIn("suggest_fixture_bridge", "on_subjects") && !commandAllowedIn("suggest_fixture_bridge", "fixed"), "suggestions only while the terms are negotiated");
+  const ctx = { roomId: "00000000-0000-4000-8000-000000000001", roomRef: "FX-2026-00001", actor: { side: "mediator" as const, isPlatform: true },
+    payload: { termLabel: "Freight & terms", termCode: "freight", displayValue: "$26.25/MT", comment: "call Tasos on +30 690" } };
+  const n = notificationFor("term.bridge_suggested", ctx);
+  ok(!!n && n.audience === "both_sides" && n.importance === "normal" && /\$26\.25\/MT/.test(n.body) && !/Tasos/.test(`${n.title} ${n.body}`), "both sides are told of the figure; the mediator's free-text comment stays in the room");
+  // standard subjects
+  ok(STANDARD_SUBJECTS.length === 3 && STANDARD_SUBJECTS.map((x) => x.responsibleSide).join() === "cargo,vessel," && STANDARD_SUBJECTS.every((x) => x.title.length <= 200 && x.hint.length <= 1000), "three standard subjects, each within the command's limits, with the side that usually lifts it");
+  ok(missingStandardSubjects([{ title: "subject  shippers' STEM approval" }]).map((x) => x.key).join() === "owners_management,cp_details" && missingStandardSubjects([]).length === 3, "a chip disappears once its subject is in the room (case and spacing ignored)");
+  const rails = read("components/fixture-room/RoomRails.tsx");
+  ok(/run\("addSubject", \(b\) => \(\{ \.\.\.b, title: std\.title, description: std\.hint, responsibleSide: std\.responsibleSide, deadlineAt: null \}\)\)/.test(rails) && /caps\.canAddSubject && \(/.test(rails), "a chip adds the subject through the ordinary governed command, only where subjects may be added");
 }

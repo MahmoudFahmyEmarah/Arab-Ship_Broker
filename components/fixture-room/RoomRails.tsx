@@ -9,6 +9,7 @@ import Link from "next/link";
 import type { FixtureEventView, FixtureRoomView } from "@/lib/fixture-room/types";
 import { relativeTime, shortDateTime } from "@/lib/fixture-room/format";
 import { roleLabel } from "@/lib/fixture-room/permissions";
+import { missingStandardSubjects } from "@/lib/fixture-room/subjects";
 import type { RunCommand } from "./FixtureRoomClient";
 import { Gloss } from "./Gloss";
 import { IcLock } from "./icons";
@@ -214,6 +215,16 @@ export function SubjectsRail({ view, run, busy, actForPartyId, now }: { view: Fi
       })}
       {caps.canAddSubject && (
         <div style={{ marginTop: 8 }}>
+          {missingStandardSubjects(view.subjects).length > 0 && (
+            <div className="fx-acts2" style={{ marginBottom: 6 }} data-testid="subject-standard">
+              {missingStandardSubjects(view.subjects).map((std) => (
+                <button key={std.key} type="button" className="fx-chip2" disabled={busy} data-testid={`subject-std-${std.key}`} title={std.hint}
+                  onClick={() => run("addSubject", (b) => ({ ...b, title: std.title, description: std.hint, responsibleSide: std.responsibleSide, deadlineAt: null }))}>
+                  + {std.title.replace(/^Subject /, "")}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="fx-fields">
             <div className="fx-field"><label htmlFor="fx-subject-title">New subject</label><input id="fx-subject-title" value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} placeholder="Sub shippers' / stem approval" /></div>
             <div className="fx-field" style={{ flex: "0 0 120px" }}>
@@ -285,6 +296,7 @@ export const EVENT_TEXT: Record<string, (p: Record<string, unknown>) => string> 
   "term.resumed": (p) => `resumed ${String(p.termLabel ?? "").toLowerCase()}`,
   "term.referred": (p) => `referred ${String(p.termLabel ?? "").toLowerCase()} to principal`,
   "term.referral_cleared": (p) => `cleared the referral on ${String(p.termLabel ?? "").toLowerCase()}`,
+  "term.bridge_suggested": (p) => `suggested ${p.displayValue ?? ""} on ${String(p.termLabel ?? "").toLowerCase()} to bridge the gap${p.comment ? ` · “${p.comment}”` : ""}`,
   "subject.added": (p) => `added subject “${p.title}”`,
   "subject.lifted": (p) => `lifted “${p.title}”`,
   "subject.failed": (p) => `failed “${p.title}”${p.reason ? ` · ${p.reason}` : ""}`,

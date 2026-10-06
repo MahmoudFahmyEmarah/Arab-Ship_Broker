@@ -35,6 +35,7 @@ export type FixtureEventType =
   | "party.disclosure_agreed" | "room.counterparty_disclosed"
   | "proposal.submitted" | "proposal.withdrawn" | "proposal.lapsed" | "proposal.accepted"
   | "term.agreed" | "term.reopened" | "term.held" | "term.resumed" | "term.referred" | "term.referral_cleared"
+  | "term.bridge_suggested"
   | "subject.added" | "subject.lifted" | "subject.failed" | "subject.extended" | "subject.reinstated"
   | "room.fix_confirmed" | "room.fixed_on_subjects" | "room.fixed" | "room.returned_to_negotiation" | "room.window_extended"
   | "recap.published" | "recap.acknowledged" | "recap.invalidated"
@@ -293,6 +294,21 @@ export interface FixtureRoomView {
   messages: FixtureMessageView[];
   recaps: FixtureRecapView[];
   events: FixtureEventView[];
+  /** the mediator's live bridging suggestion per open term (Wave 3); absent on a server without 20261007400000 */
+  bridges?: FixtureBridgeView[];
+}
+
+/** An advisory figure the mediator put on a term; either side adopts it by sending it as its own bid / offer. */
+export interface FixtureBridgeView {
+  termId: string;
+  termCode: string;
+  eventId: number;
+  seq: number;
+  displayValue: string;
+  value: FixtureValue;
+  comment: string | null;
+  suggestedAt: string;
+  byLabel: string;
 }
 
 export interface FixtureRoomListItem {

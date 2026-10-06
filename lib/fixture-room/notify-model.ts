@@ -91,6 +91,9 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
       return { audience: "both_sides", importance: "normal", title: `${room}: ${termOf(p)} reopened`, body: `${who} reopened ${termOf(p)}.`, href: base, deadlineAt: null };
     case "term.referred":
       return { audience: "mediator", importance: "urgent", title: `${room}: ${termOf(p)} referred to principal`, body: `${who} referred ${termOf(p)}. The item waits for a decision.`, href: base, deadlineAt: null };
+    case "term.bridge_suggested":
+      // the mediator's comment is free text: it stays in the room; the governed figure is what both sides weigh
+      return { audience: "both_sides", importance: "normal", title: `${room}: suggested figure on ${termOf(p)}`, body: `${who} suggested ${str(p.displayValue)} on ${termOf(p)} to bridge the gap. Either side may adopt it.`, href: `${base}#term-${str(p.termCode)}`, deadlineAt: null };
     case "room.fix_confirmed":
       // PR-07: the first side's confirmation is what the other side must act on; the second fixes the room
       if (!p.awaitingSide) return null;

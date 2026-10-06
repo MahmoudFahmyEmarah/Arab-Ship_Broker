@@ -122,6 +122,9 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
   // the figure currently on the table: the latest of the two sides' standing positions
   const standing = [term.cargoPosition, term.vesselPosition].filter((p): p is FixtureProposalView => !!p).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const canWork = caps.canPropose && !!mySide && !agreed && term.status !== "withdrawn";
+  // the mediator's live advisory figure on this term (Wave 3); adopting it is an ordinary bid / offer
+  const bridge = view.bridges?.find((b) => b.termId === term.id) ?? null;
+  const roomOpen = view.room.status === "invited" || view.room.status === "negotiating";
   const commonBase = { asPartyId: null as string | null, onBehalfOfPartyId: actForPartyId };
   const [prompt, setPrompt] = React.useState<PromptConfig | null>(null);
   const closePrompt = React.useCallback(() => setPrompt(null), []);
@@ -134,13 +137,27 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
   const [err, setErr] = React.useState<string | null>(null);
   const [lapseDismissed, setLapseDismissed] = React.useState<string | null>(null);
   const setField = (k: string, v: string) => setFields((f) => ({ ...f, [k]: v }));
+  const [bridgeFields, setBridgeFields] = React.useState<Record<string, string>>({});
+  const [bridgeComment, setBridgeComment] = React.useState("");
+  const setBridgeField = (k: string, v: string) => setBridgeFields((f) => ({ ...f, [k]: v }));
+  const bridgePreview = React.useMemo(() => {
+    const r = parseFixtureInput(term.valueKind, bridgeFields);
+    return r.ok ? formatFixtureValue(term.valueKind, r.value, term.unit) : null;
+  }, [bridgeFields, term.valueKind, term.unit]);
+  const suggest = async () => {
+    const r = parseFixtureInput(term.valueKind, bridgeFields);
+    if (!r.ok) { setErr(r.error); return; }
+    setErr(null);
+    const ok = await run("bridge", (base) => ({ ...base, termId: term.id, value: r.value, comment: bridgeComment.trim() || null }));
+    if (ok) { setBridgeFields({}); setBridgeComment(""); }
+  };
   const preview = React.useMemo(() => {
     const r = parseFixtureInput(term.valueKind, fields);
     return r.ok ? formatFixtureValue(term.valueKind, r.value, term.unit) : null;
   }, [fields, term.valueKind, term.unit]);
   const listingFigure = React.useMemo(() => (mySide ? openingValueFromListing(term.code, figuresFromSnapshot(view), mySide) : null), [term.code, view, mySide]);
 
-  const submit = async (override?: { value: FixtureValue; expiresInMinutes: number | null }) => {
+  const submit = async (override?: { value: FixtureValue; expiresInMinutes: number | null; comment?: string }) => {
     let value: FixtureValue;
     if (override) value = override.value;
     else {
@@ -150,7 +167,7 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
     }
     setErr(null);
     const ok = await run("submit", (base) => ({
-      ...base, ...commonBase, termId: term.id, value, comment: override ? null : comment.trim() || null, isFinal: override ? false : isFinal,
+      ...base, ...commonBase, termId: term.id, value, comment: override ? override.comment ?? null : comment.trim() || null, isFinal: override ? false : isFinal,
       expiresInMinutes: override ? override.expiresInMinutes : validity ? Number(validity) : null,
     }));
     if (ok && !override) { setFields({}); setComment(""); setIsFinal(false); }
@@ -166,7 +183,11 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
     key: `m-${m.id}`, lane: m.side === "mediator" ? "broker" : m.side, who: m.isMine ? "You" : m.label, tag: m.kind === "nudge" ? "NUDGE" : "NOTE",
     kind: "note", value: m.redacted ? "Redacted by an administrator." : m.body ?? "", comment: null, at: m.createdAt, mine: m.isMine,
   }));
-  const thread = [...threadProposals, ...threadNotes].sort((a, b) => a.at.localeCompare(b.at)).slice(-6);
+  const threadBridges: ThreadItem[] = view.events.filter((e) => e.type === "term.bridge_suggested" && e.payload.termId === term.id).map((e) => ({
+    key: `b-${e.id}`, lane: "broker", who: e.actorLabel, tag: "SUGGESTED", kind: "note", value: String(e.payload.displayValue ?? ""),
+    comment: e.payload.comment == null ? null : String(e.payload.comment), at: e.at, mine: false,
+  }));
+  const thread = [...threadProposals, ...threadNotes, ...threadBridges].sort((a, b) => a.at.localeCompare(b.at)).slice(-6);
 
   const ringPct = live?.expiresAt && !liveLapsed && now > 0
     ? Math.max(0, Math.min(100, ((Date.parse(live.expiresAt) - now) / Math.max(1, Date.parse(live.expiresAt) - Date.parse(live.createdAt))) * 100))
@@ -278,6 +299,16 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
                 </div>
               ) : null}
 
+              {bridge && (
+                <div className="fx-bridge" data-testid={`bridge-${term.code}`}>
+                  <span className="fx-bridge__txt">{bridge.byLabel} suggests <b><Gloss text={bridge.displayValue} /></b>{bridge.comment ? <> · <em>{bridge.comment}</em></> : null}</span>
+                  <button type="button" className="asb-btn primary fx-send" disabled={busy} data-testid={`adopt-${term.code}`}
+                    title={`Send ${bridge.displayValue} as your ${mySide === "cargo" ? "bid" : "offer"}`}
+                    onClick={() => submit({ value: bridge.value, expiresInMinutes: null, comment: "Adopted the mediator's suggestion." })}>
+                    Adopt {bridge.displayValue}
+                  </button>
+                </div>
+              )}
               <div className="fx-fields"><ValueFields kind={term.valueKind} fields={fields} setField={setField} /></div>
               <div className="fx-send2">
                 <input className="asb-input fx-amend2" id={`fx-${term.code}-comment`} aria-label="Comment" value={comment} maxLength={1000} onChange={(e) => setComment(e.target.value)} placeholder="comment, optional" />
@@ -288,6 +319,7 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
               <div className="fx-acts2">
                 {listingFigure && <button type="button" className="fx-chip2" onClick={() => setFields(valueToFields(term.valueKind, listingFigure))}>Use listing figure</button>}
                 {live && !liveLapsed && <button type="button" className="fx-chip2" onClick={() => setFields(valueToFields(term.valueKind, live.value))}>Match their figure</button>}
+                {bridge && <button type="button" className="fx-chip2" onClick={() => setFields(valueToFields(term.valueKind, bridge.value))}>Use suggestion</button>}
                 {caps.canMessage && otherSide && term.holder === otherSide && (
                   <button type="button" className="fx-chip2" disabled={busy} data-testid={`nudge-${term.code}`} title={`Ask the ${otherSide} side to answer on ${term.label.toLowerCase()}`}
                     onClick={() => run("message", (b) => ({ ...b, body: `Awaiting your answer on ${term.label.toLowerCase()}.`, kind: "nudge", visibility: "room", termId: term.id }))}>↑ Nudge {sideNoun(otherSide)}</button>
@@ -319,7 +351,7 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
                 <span className={`fx-flag${term.vesselPosition?.isFinal ? " is-on" : ""}`} title={term.vesselPosition?.isFinal ? "The vessel side marked its figure final" : "Vessel side has not marked a final figure"}>{term.vesselPosition?.isFinal ? "✓ Vessel final" : "Vessel open"}</span>
               </div>
             </div>
-          ) : view.viewer.isMediator && !mySide && (view.room.status === "invited" || view.room.status === "negotiating") ? (
+          ) : view.viewer.isMediator && !mySide && roomOpen ? (
             // the mediator's console (design: broker seat): press either side, acknowledge the
             // standing figure, hold or refer; relaying a figure for a relayed party goes through
             // "Acting for" in the header, which turns this into that party's composer
@@ -344,6 +376,18 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
                     <button type="button" className="fx-link" disabled={busy} onClick={() => run("flag", (base) => ({ ...base, ...commonBase, termId: term.id, flag: term.referredAt ? "clear_referral" : "refer" }))}>{term.referredAt ? "Clear referral" : "Refer"}</button>
                   </>
                 )}
+              </div>
+              <div className="fx-bridge-form" data-testid={`suggest-${term.code}`}>
+                {bridge && <div className="fx-offnote">Your live suggestion: <b><Gloss text={bridge.displayValue} /></b> · a new one replaces it.</div>}
+                <div className="fx-fields"><ValueFields kind={term.valueKind} fields={bridgeFields} setField={setBridgeField} /></div>
+                <div className="fx-send2">
+                  <input className="asb-input fx-amend2" aria-label="Why this figure" value={bridgeComment} maxLength={1000} onChange={(e) => setBridgeComment(e.target.value)} placeholder="why this figure, optional" />
+                  <button type="button" className="asb-btn fx-send" disabled={busy || !bridgePreview} onClick={() => suggest()} data-testid={`suggest-send-${term.code}`}
+                    title="An advisory figure both sides see; either side may adopt it as its own">
+                    Suggest{bridgePreview ? ` · ${bridgePreview}` : " a bridging figure"}
+                  </button>
+                </div>
+                {err && <span className="fx-error" role="alert">{err}</span>}
               </div>
               {caps.actForPartyIds.length > 0 && <div className="fx-offnote">To relay a figure for a party that is off-platform, choose it under “Acting for” in the header.</div>}
               {term.referredAt && <div className="fx-offnote refer">Referred to principal{term.referredByLabel ? ` by ${term.referredByLabel}` : ""} · awaiting a decision before this item moves.</div>}
