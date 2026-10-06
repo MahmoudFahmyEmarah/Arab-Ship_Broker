@@ -50,7 +50,8 @@ begin
     v_actor,
     v_created_id,
     v_revision,
-    '31030000-0000-4000-8000-000000000012'
+    '31030000-0000-4000-8000-000000000012',
+    'ACTIVATE v' || (v_created->>'version')
   );
 
   if not exists (select 1 from public.intelligence_rule_sets where id=v_created_id and created_by=v_actor)
@@ -126,5 +127,7 @@ begin
 end;
 $tombstone$;
 
-select 'INTELLIGENCE TOMBSTONE: ALL ASSERTIONS PASSED' as result;
+do $marker$ begin
+  raise notice 'INTELLIGENCE TOMBSTONE: ALL ASSERTIONS PASSED';
+end $marker$;
 rollback;

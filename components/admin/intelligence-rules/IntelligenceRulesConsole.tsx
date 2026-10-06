@@ -26,6 +26,14 @@ import { StructuredDraftEditor } from "./StructuredDraftEditor";
 
 type Tab = "rules" | "frameworks" | "versions" | "provenance" | "audit" | "new";
 type Notice = { kind: "success" | "error" | "info"; text: string } | null;
+type ReleaseOperation = "activate" | "rollback";
+
+interface ReleaseTarget {
+  ruleSetId: string;
+  version: number;
+  label: string;
+  operation: ReleaseOperation;
+}
 
 const TABS: readonly { id: Exclude<Tab, "new">; label: string }[] = [
   { id: "rules", label: "Rules" },
@@ -338,6 +346,8 @@ export function IntelligenceRulesConsole({ initial, canEdit }: { initial: Intell
   const [diff, setDiff] = useState<IntelligenceRuleSetDiff | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const [releaseTarget, setReleaseTarget] = useState<ReleaseTarget | null>(null);
+  const [releaseConfirmation, setReleaseConfirmation] = useState("");
   const createGesture = useRef<{ signature: string; requestId: string } | null>(null);
   const activateGesture = useRef<{ signature: string; requestId: string } | null>(null);
   const compareEpoch = useRef(0);
@@ -351,6 +361,9 @@ export function IntelligenceRulesConsole({ initial, canEdit }: { initial: Intell
 
   const selectedSummary = overview.versions.find((item) => item.ruleSetId === selected?.ruleSetId) ?? null;
   const activeSummary = overview.versions.find((item) => item.isActive) ?? null;
+  const releaseExpected = releaseTarget
+    ? `${releaseTarget.operation.toUpperCase()} v${releaseTarget.version}`
+    : "";
   const activeGroups = selected?.document.groups.filter((group) => group.active).length ?? 0;
   const activeRules = selected?.document.rules.filter((rule) => rule.active).length ?? 0;
   const frameworkCount = selected?.document.groups.filter((group) => group.scope === "framework").length ?? 0;
@@ -364,15 +377,15 @@ export function IntelligenceRulesConsole({ initial, canEdit }: { initial: Intell
   async function reload(preferredId?: string) {
     const response = await getIntelligenceBootstrap();
     if (!response.success) throw new Error(response.error);
-    setOverview(response.data.overview);
-    setEvents(response.data.events);
+    let nextSelected = response.data.selected;
     if (preferredId) {
       const detail = await getIntelligenceRuleSetAction(preferredId);
       if (!detail.success) throw new Error(detail.error);
-      setSelected(detail.data);
-    } else {
-      setSelected(response.data.selected);
+      nextSelected = detail.data;
     }
+    setOverview(response.data.overview);
+    setEvents(response.data.events);
+    setSelected(nextSelected);
   }
 
   async function selectVersion(ruleSetId: string) {
@@ -433,13 +446,32 @@ export function IntelligenceRulesConsole({ initial, canEdit }: { initial: Intell
     }
   }
 
-  async function activate(ruleSetId: string) {
-    const version = overview.versions.find((item) => item.ruleSetId === ruleSetId);
-    if (!version || version.isActive) return;
-    if (!window.confirm(`Activate v${version.version} · ${version.label}? This changes live intelligence signals for members.`)) return;
-    setBusy(`activate:${ruleSetId}`);
+  function requestRelease(version: IntelligenceVersionSummary) {
+    if (version.isActive) return;
+    const operation: ReleaseOperation = activeSummary && version.version < activeSummary.version
+      ? "rollback"
+      : "activate";
+    setReleaseTarget({
+      ruleSetId: version.ruleSetId,
+      version: version.version,
+      label: version.label,
+      operation,
+    });
+    setReleaseConfirmation("");
     setNotice(null);
-    const gestureSignature = `${ruleSetId}\u0000${overview.revision}`;
+  }
+
+  async function releaseVersion() {
+    if (!releaseTarget) return;
+    if (releaseConfirmation !== releaseExpected) {
+      setNotice({ kind: "error", text: `Type ${releaseExpected} exactly to confirm this release.` });
+      return;
+    }
+    const { ruleSetId, version, operation } = releaseTarget;
+    const pastTense = operation === "rollback" ? "rolled back" : "activated";
+    setBusy(`${operation}:${ruleSetId}`);
+    setNotice(null);
+    const gestureSignature = `${operation}\u0000${ruleSetId}\u0000${overview.revision}\u0000${releaseExpected}`;
     if (activateGesture.current?.signature !== gestureSignature) {
       activateGesture.current = { signature: gestureSignature, requestId: crypto.randomUUID() };
     }
@@ -449,13 +481,28 @@ export function IntelligenceRulesConsole({ initial, canEdit }: { initial: Intell
         ruleSetId,
         expectedRevision: overview.revision,
         requestId,
+        operation,
+        version,
+        confirmation: releaseConfirmation,
       });
       if (!response.success) throw new Error(response.error);
-      await reload(ruleSetId);
-      activateGesture.current = null;
-      setNotice({ kind: "success", text: `Version ${response.data.version} is now active at release revision ${response.data.revision}.` });
+      try {
+        await reload(ruleSetId);
+        activateGesture.current = null;
+        setReleaseTarget(null);
+        setReleaseConfirmation("");
+        setNotice({
+          kind: "success",
+          text: `Version ${response.data.version} was ${pastTense} and is now active at release revision ${response.data.revision}.`,
+        });
+      } catch (reloadError) {
+        setNotice({
+          kind: "info",
+          text: `Version ${response.data.version} was ${pastTense}, but the page state could not be reconciled. Retry the unchanged ${operation} request to replay it, or reload before another change. ${reloadError instanceof Error ? reloadError.message : ""}`.trim(),
+        });
+      }
     } catch (error) {
-      setNotice({ kind: "error", text: error instanceof Error ? error.message : "Could not activate the version." });
+      setNotice({ kind: "error", text: error instanceof Error ? error.message : `Could not ${operation} the version.` });
     } finally {
       setBusy(null);
     }
@@ -473,13 +520,20 @@ export function IntelligenceRulesConsole({ initial, canEdit }: { initial: Intell
     try {
       const created = await createIntelligenceVersionAction({ ...draft, requestId });
       if (!created.success) throw new Error(created.error);
-      await reload(created.data.ruleSetId);
-      createGesture.current = null;
-      setTab("versions");
-      setNotice({
-        kind: "success",
-        text: `Version ${created.data.version} was created and remains inactive pending separate review and activation.`,
-      });
+      try {
+        await reload(created.data.ruleSetId);
+        createGesture.current = null;
+        setTab("versions");
+        setNotice({
+          kind: "success",
+          text: `Version ${created.data.version} was created and remains inactive pending separate review and activation.`,
+        });
+      } catch (reloadError) {
+        setNotice({
+          kind: "info",
+          text: `Version ${created.data.version} was created, but the page state could not be reconciled. Retry Create with the unchanged form to replay the same request, or reload the page. ${reloadError instanceof Error ? reloadError.message : ""}`.trim(),
+        });
+      }
     } catch (error) {
       setNotice({ kind: "error", text: error instanceof Error ? error.message : "Could not create the version." });
     } finally {
@@ -585,8 +639,8 @@ export function IntelligenceRulesConsole({ initial, canEdit }: { initial: Intell
                           <div className={styles.rowActions}>
                             <button type="button" className="adm-btn small" onClick={() => void selectVersion(version.ruleSetId)}>Inspect</button>
                             {canEdit && !version.isActive && (
-                              <button type="button" className="adm-btn approve small" onClick={() => void activate(version.ruleSetId)} disabled={busy !== null}>
-                                {busy === `activate:${version.ruleSetId}` ? "Activating…" : activeSummary && version.version < activeSummary.version ? "Roll back" : "Activate"}
+                              <button type="button" className="adm-btn approve small" onClick={() => requestRelease(version)} disabled={busy !== null}>
+                                {activeSummary && version.version < activeSummary.version ? "Roll back" : "Activate"}
                               </button>
                             )}
                           </div>
@@ -596,6 +650,48 @@ export function IntelligenceRulesConsole({ initial, canEdit }: { initial: Intell
                   </tbody>
                 </table>
               </div>
+              {releaseTarget && (
+                <div className={styles.confirmationPanel} role="group" aria-labelledby="intelligence-release-title">
+                  <div>
+                    <strong id="intelligence-release-title">
+                      {releaseTarget.operation === "rollback" ? "Roll back" : "Activate"} v{releaseTarget.version} · {releaseTarget.label}
+                    </strong>
+                    <span>
+                      This changes live intelligence signals for members. Type <code>{releaseExpected}</code> exactly.
+                    </span>
+                  </div>
+                  <input
+                    className="adm-input"
+                    aria-label={`Type ${releaseExpected} to confirm the intelligence release`}
+                    value={releaseConfirmation}
+                    onChange={(event) => setReleaseConfirmation(event.currentTarget.value)}
+                    disabled={busy !== null}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <button
+                    type="button"
+                    className={releaseTarget.operation === "rollback" ? "adm-btn warn" : "adm-btn approve"}
+                    onClick={() => void releaseVersion()}
+                    disabled={busy !== null || releaseConfirmation !== releaseExpected}
+                  >
+                    {busy === `${releaseTarget.operation}:${releaseTarget.ruleSetId}`
+                      ? releaseTarget.operation === "rollback" ? "Rolling back…" : "Activating…"
+                      : `${releaseTarget.operation === "rollback" ? "Roll back" : "Activate"} v${releaseTarget.version}`}
+                  </button>
+                  <button
+                    type="button"
+                    className="adm-btn"
+                    onClick={() => {
+                      setReleaseTarget(null);
+                      setReleaseConfirmation("");
+                    }}
+                    disabled={busy !== null}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </section>
 
             {overview.versions.length > 1 && selected && (

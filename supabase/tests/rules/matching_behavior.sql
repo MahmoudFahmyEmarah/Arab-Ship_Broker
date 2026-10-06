@@ -20,6 +20,9 @@ declare
   v_create_request uuid := gen_random_uuid();
   v_activate_request uuid := gen_random_uuid();
   v_version3_request uuid := gen_random_uuid();
+  v_rollback_request uuid := gen_random_uuid();
+  v_redo_request uuid := gen_random_uuid();
+  v_zero_rollback_request uuid := gen_random_uuid();
   v_active1 uuid;
   v_active2 uuid;
   v_version3 uuid;
@@ -32,6 +35,8 @@ declare
   v_count integer;
   v_snapshot_count integer;
   v_as_of_year integer;
+  v_source_before text;
+  v_source_after text;
 begin
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -82,7 +87,7 @@ begin
   v_denied := false;
   begin
     perform public.matching_activate_rule_version(
-      v_sub_admin, gen_random_uuid(), gen_random_uuid(), v_active1
+      v_sub_admin, gen_random_uuid(), gen_random_uuid(), v_active1, 'ACTIVATE v0'
     );
   exception when others then
     if sqlerrm like 'MATCHING_AUTH:%' then v_denied := true; else raise; end if;
@@ -112,7 +117,7 @@ begin
   end if;
   v_result := public.admin_matching_preview(v_checker, v_params);
   if (v_result->>'activeVersionId')::uuid is distinct from v_active1
-     or (v_result->>'asOfYear')::integer is distinct from extract(year from current_date)::integer
+     or (v_result->>'asOfYear')::integer is distinct from extract(year from (current_timestamp at time zone 'UTC'))::integer
      or (v_result->>'currentCandidateCount')::integer is distinct from (v_result->>'proposedCandidateCount')::integer
      or (v_result->>'addedCount')::integer <> 0
      or (v_result->>'removedCount')::integer <> 0
@@ -273,19 +278,35 @@ begin
   v_denied := false;
   begin
     perform public.matching_activate_rule_version(
-      v_checker, gen_random_uuid(), v_active2, gen_random_uuid()
+      v_checker, gen_random_uuid(), v_active2, gen_random_uuid(),
+      'ACTIVATE v' || (select version_no from public.matching_rule_versions where id = v_active2)
     );
   exception when others then
     if sqlerrm like 'MATCHING_CAS:%' then v_denied := true; else raise; end if;
   end;
   if not v_denied then raise exception 'MATCHING TEST: stale activation CAS succeeded'; end if;
 
+  v_denied := false;
+  begin
+    perform public.matching_activate_rule_version(
+      v_checker, gen_random_uuid(), v_active2, v_active1, 'ACTIVATE v999999'
+    );
+  exception when others then
+    if sqlerrm like 'MATCHING_CONFIRMATION:%' then v_denied := true; else raise; end if;
+  end;
+  if not v_denied
+     or (select active_version_id from public.matching_rule_state where singleton) <> v_active1 then
+    raise exception 'MATCHING TEST: invalid typed activation confirmation changed state';
+  end if;
+
   v_result := public.matching_activate_rule_version(
-    v_checker, v_activate_request, v_active2, v_active1
+    v_checker, v_activate_request, v_active2, v_active1,
+    'ACTIVATE v' || (select version_no from public.matching_rule_versions where id = v_active2)
   );
   v_as_of_year := (v_result->>'asOfYear')::integer;
   v_replay := public.matching_activate_rule_version(
-    v_checker, v_activate_request, v_active2, v_active1
+    v_checker, v_activate_request, v_active2, v_active1,
+    'ACTIVATE v' || (select version_no from public.matching_rule_versions where id = v_active2)
   );
   if v_replay is distinct from v_result then
     raise exception 'MATCHING TEST: activation request replay changed its result';
@@ -293,7 +314,8 @@ begin
   v_denied := false;
   begin
     perform public.matching_activate_rule_version(
-      v_checker, v_activate_request, v_active2, v_active2
+      v_checker, v_activate_request, v_active2, v_active2,
+      'ACTIVATE v' || (select version_no from public.matching_rule_versions where id = v_active2)
     );
   exception when others then
     if sqlerrm like 'MATCHING_IDEMPOTENCY:%' then v_denied := true; else raise; end if;
@@ -366,6 +388,135 @@ begin
     raise exception 'MATCHING TEST: candidate retention exceeded active + previous';
   end if;
 
+  -- Change a governed source after activation. Per-row refresh updates only the
+  -- active v2 cache, so v1 is deliberately stale before the rollback command.
+  v_source_before := public.fn_matching_source_sha256(v_as_of_year);
+  if not coalesce((
+    select is_rate_aligned from public.matching_candidates
+    where version_id = v_active1
+      and cargo_id = v_cargo
+      and vessel_avail_id = v_avail_aligned
+  ), false) then
+    raise exception 'MATCHING TEST: rollback stale-candidate precondition was not established';
+  end if;
+  update public.cargo_listings
+  set freight_idea_usd_mt = 50.25
+  where id = v_cargo;
+  v_source_after := public.fn_matching_source_sha256(v_as_of_year);
+  if v_source_after = v_source_before then
+    raise exception 'MATCHING TEST: source mutation did not change rollback evidence';
+  end if;
+  if not coalesce((
+       select is_rate_aligned from public.matching_candidates
+       where version_id = v_active1
+         and cargo_id = v_cargo
+         and vessel_avail_id = v_avail_aligned
+     ), false)
+     or coalesce((
+       select is_rate_aligned
+       from public.fn_matching_evaluate(
+         (select params from public.matching_rule_versions where id = v_active1),
+         v_as_of_year, v_cargo, v_avail_aligned
+       )
+     ), true) then
+    raise exception 'MATCHING TEST: retained v1 candidates were not demonstrably stale before rollback';
+  end if;
+
+  v_denied := false;
+  begin
+    perform public.matching_rollback_rule_version(
+      v_checker, gen_random_uuid(), v_active2, 'ROLLBACK v999999'
+    );
+  exception when others then
+    if sqlerrm like 'MATCHING_CONFIRMATION:%' then v_denied := true; else raise; end if;
+  end;
+  if not v_denied
+     or (select active_version_id from public.matching_rule_state where singleton) <> v_active2 then
+    raise exception 'MATCHING TEST: invalid typed rollback confirmation changed state';
+  end if;
+
+  v_result := public.matching_rollback_rule_version(
+    v_checker, v_rollback_request, v_active2,
+    'ROLLBACK v' || (select version_no from public.matching_rule_versions where id = v_active1)
+  );
+  v_replay := public.matching_rollback_rule_version(
+    v_checker, v_rollback_request, v_active2,
+    'ROLLBACK v' || (select version_no from public.matching_rule_versions where id = v_active1)
+  );
+  if v_replay is distinct from v_result then
+    raise exception 'MATCHING TEST: rollback request replay changed its result';
+  end if;
+  v_denied := false;
+  begin
+    perform public.matching_rollback_rule_version(
+      v_checker, v_rollback_request, v_active2, 'ROLLBACK v999999'
+    );
+  exception when others then
+    if sqlerrm like 'MATCHING_IDEMPOTENCY:%' then v_denied := true; else raise; end if;
+  end;
+  if not v_denied then
+    raise exception 'MATCHING TEST: altered rollback request replay was accepted';
+  end if;
+  if (select active_version_id from public.matching_rule_state where singleton) <> v_active1
+     or (select previous_version_id from public.matching_rule_state where singleton) <> v_active2
+     or (select source_sha256 from public.matching_candidate_snapshots where version_id = v_active1)
+          is distinct from v_source_after
+     or (v_result->>'sourceSha256') is distinct from v_source_after
+     or not exists (
+       select 1 from public.matching_rule_events
+       where request_id = v_rollback_request
+         and event_type = 'version_rolled_back'
+         and version_id = v_active1
+         and prior_version_id = v_active2
+     ) then
+    raise exception 'MATCHING TEST: rollback pointer/snapshot/event evidence is incomplete';
+  end if;
+  if exists (
+    select 1
+    from public.fn_matching_evaluate(
+      (select params from public.matching_rule_versions where id = v_active1),
+      v_as_of_year, null, null
+    ) e
+    full join (
+      select * from public.matching_candidates where version_id = v_active1
+    ) c on c.cargo_id = e.cargo_id and c.vessel_avail_id = e.vessel_avail_id
+    where e.cargo_id is null or c.cargo_id is null
+       or e.score is distinct from c.score
+       or e.score_label is distinct from c.score_label
+       or e.is_rate_aligned is distinct from c.is_rate_aligned
+       or e.dwt_delta is distinct from c.dwt_delta
+       or c.as_of_year is distinct from v_as_of_year
+  ) then
+    raise exception 'MATCHING TEST: rollback reused stale candidates instead of rebuilding current sources';
+  end if;
+  if exists (
+    select 1 from public.matches m
+    full join (
+      select * from public.matching_candidates where version_id = v_active1
+    ) c
+      on c.cargo_id = m.cargo_id
+     and c.vessel_avail_id = m.vessel_avail_id
+    where m.id is null or c.cargo_id is null
+       or m.match_score is distinct from c.score
+       or m.score_label is distinct from c.score_label
+       or m.is_rate_aligned is distinct from c.is_rate_aligned
+       or m.dwt_delta is distinct from c.dwt_delta
+       or m.matching_as_of_year is distinct from c.as_of_year
+  ) then
+    raise exception 'MATCHING TEST: rollback compatibility cache is not the rebuilt target';
+  end if;
+
+  -- The distinct rollback command can also reverse the rollback. This restores
+  -- v2 as active for the remaining forward-activation failure checks.
+  perform public.matching_rollback_rule_version(
+    v_checker, v_redo_request, v_active1,
+    'ROLLBACK v' || (select version_no from public.matching_rule_versions where id = v_active2)
+  );
+  if (select active_version_id from public.matching_rule_state where singleton) <> v_active2
+     or (select previous_version_id from public.matching_rule_state where singleton) <> v_active1 then
+    raise exception 'MATCHING TEST: second rollback did not restore the prior active version';
+  end if;
+
   -- A newer draft exists, but reverse activation and stale-CAS activation are
   -- both prohibited.
   v_params3 := jsonb_set(v_params, '{rateAlignmentUsd}', '15'::jsonb);
@@ -377,7 +528,8 @@ begin
   v_denied := false;
   begin
     perform public.matching_activate_rule_version(
-      v_checker, gen_random_uuid(), v_active1, v_active2
+      v_checker, gen_random_uuid(), v_active1, v_active2,
+      'ACTIVATE v' || (select version_no from public.matching_rule_versions where id = v_active1)
     );
   exception when others then
     if sqlerrm like 'MATCHING_DIRECTION:%' then v_denied := true; else raise; end if;
@@ -387,7 +539,8 @@ begin
   v_denied := false;
   begin
     perform public.matching_activate_rule_version(
-      v_checker, gen_random_uuid(), v_version3, v_active1
+      v_checker, gen_random_uuid(), v_version3, v_active1,
+      'ACTIVATE v' || (select version_no from public.matching_rule_versions where id = v_version3)
     );
   exception when others then
     if sqlerrm like 'MATCHING_CAS:%' then v_denied := true; else raise; end if;
@@ -424,7 +577,8 @@ begin
   v_denied := false;
   begin
     perform public.matching_activate_rule_version(
-      v_checker, gen_random_uuid(), v_version3, v_active2
+      v_checker, gen_random_uuid(), v_version3, v_active2,
+      'ACTIVATE v' || (select version_no from public.matching_rule_versions where id = v_version3)
     );
   exception when others then
     if sqlerrm like 'MATCHING_EMPTY:%' then v_denied := true; else raise; end if;
@@ -435,8 +589,26 @@ begin
      or exists (select 1 from public.matching_candidate_snapshots where version_id = v_version3) then
     raise exception 'MATCHING TEST: zero-candidate activation did not fail atomically';
   end if;
+
+  -- A rollback is the recovery path from the currently active version and is
+  -- therefore allowed to publish a truthful zero-candidate snapshot. Reusing
+  -- stale target candidates here would leave the platform in a false state.
+  v_result := public.matching_rollback_rule_version(
+    v_checker, v_zero_rollback_request, v_active2,
+    'ROLLBACK v' || (select version_no from public.matching_rule_versions where id = v_active1)
+  );
+  if (select active_version_id from public.matching_rule_state where singleton) <> v_active1
+     or (select previous_version_id from public.matching_rule_state where singleton) <> v_active2
+     or (v_result->>'candidateCount')::integer <> 0
+     or (select candidate_count from public.matching_candidate_snapshots where version_id = v_active1) <> 0
+     or exists (select 1 from public.matching_candidates where version_id = v_active1)
+     or exists (select 1 from public.matches) then
+    raise exception 'MATCHING TEST: zero-candidate rollback did not publish an empty rebuilt snapshot';
+  end if;
 end;
 $behavior$;
 
-select 'MATCHING BEHAVIOR: ALL ASSERTIONS PASSED' as result;
+do $marker$ begin
+  raise notice 'MATCHING BEHAVIOR: ALL ASSERTIONS PASSED';
+end $marker$;
 rollback;

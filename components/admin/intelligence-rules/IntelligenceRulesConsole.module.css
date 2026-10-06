@@ -413,6 +413,41 @@
 
 .checkLabel input { accent-color: var(--adm-accent-2); }
 
+.confirmationPanel {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(190px, 280px) auto auto;
+  align-items: end;
+  gap: 10px;
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid var(--adm-amber-bd);
+  border-radius: var(--adm-r);
+  background: var(--adm-amber-bg);
+}
+
+.confirmationPanel > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.confirmationPanel strong {
+  color: var(--asb-navy);
+  font-size: var(--fs-body-sm);
+}
+
+.confirmationPanel span {
+  color: var(--adm-muted);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+}
+
+.confirmationPanel code {
+  color: var(--asb-navy);
+  font-weight: 800;
+}
+
 .vocabulary {
   display: flex;
   flex-direction: column;
@@ -451,6 +486,8 @@
   .releaseRow { align-items: stretch; flex-direction: column; }
   .releaseRow button { width: 100%; }
   .rowActions { justify-content: flex-start; }
+  .confirmationPanel { grid-template-columns: 1fr; align-items: stretch; }
+  .confirmationPanel button { width: 100%; }
   .structuredHead,
   .ruleEditorHead,
   .groupEditorActions,

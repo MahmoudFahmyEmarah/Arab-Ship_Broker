@@ -1685,7 +1685,8 @@ button { font: inherit; cursor: pointer; }
 .dm-main--match { margin-bottom: 0; }
 .dm-main--match .dm-name { color: #1B3A5C; }
 .dash-match__econ { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 11px; color: #6B7A99; }
-.dash-match__econ .dm-tce { color: #2A9962; font-weight: 600; }
+.dash-match__econ .dm-voyage-link { color: var(--asb-blue); font-weight: 600; text-decoration: none; }
+.dash-match__econ .dm-voyage-link:hover { text-decoration: underline; }
 
 /* ── Match-mode pill switch (lives in the Top-matches panel header) ── */
 .panel-head__acc { display: inline-flex; align-items: center; margin-left: auto; }

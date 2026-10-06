@@ -21,6 +21,10 @@ declare
   v_create_request uuid := gen_random_uuid();
   v_zero_request uuid := gen_random_uuid();
   v_activate_request uuid := gen_random_uuid();
+  v_rollback_request uuid := gen_random_uuid();
+  v_created_id uuid;
+  v_created_version bigint;
+  v_active_version bigint;
   v_result jsonb;
   v_replay jsonb;
   v_zero_result jsonb;
@@ -51,6 +55,8 @@ begin
 
   select active_rule_set_id, revision into v_active_id, v_revision
   from public.intelligence_rule_state where singleton;
+  select version_no into v_active_version
+  from public.intelligence_rule_sets where id = v_active_id;
   if v_active_id is null or v_revision <> 1 then
     raise exception 'INTELLIGENCE TEST: bootstrap pointer/revision missing';
   end if;
@@ -179,6 +185,8 @@ begin
   v_result := public.admin_intelligence_create_rule_set(
     v_admin, v_changed, v_changed_provenance, 'Contract clone', 'Contract/idempotency proof', v_active_id, v_create_request
   );
+  v_created_id := (v_result->>'ruleSetId')::uuid;
+  v_created_version := (v_result->>'version')::bigint;
   v_replay := public.admin_intelligence_create_rule_set(
     v_admin, v_changed, v_changed_provenance, 'Contract clone', 'Contract/idempotency proof', v_active_id, v_create_request
   );
@@ -223,7 +231,8 @@ begin
   v_bad := false;
   begin
     perform public.admin_intelligence_activate_rule_set(
-      v_admin, (v_zero_result->>'ruleSetId')::uuid, v_revision, gen_random_uuid()
+      v_admin, (v_zero_result->>'ruleSetId')::uuid, v_revision, gen_random_uuid(),
+      'ACTIVATE v' || (v_zero_result->>'version')
     );
   exception when others then
     if sqlerrm like 'INTELLIGENCE_STATE:%' then v_bad := true; else raise; end if;
@@ -234,20 +243,61 @@ begin
   end if;
 
   -- CAS activation and idempotent activation replay.
+  v_bad := false;
+  begin
+    perform public.admin_intelligence_activate_rule_set(
+      v_admin, v_created_id, v_revision, gen_random_uuid(), 'ACTIVATE v999999'
+    );
+  exception when others then
+    if sqlerrm like 'INTELLIGENCE_CONFIRMATION:%' then v_bad := true; else raise; end if;
+  end;
+  if not v_bad
+     or (select revision from public.intelligence_rule_state where singleton) <> v_revision then
+    raise exception 'INTELLIGENCE TEST: invalid typed activation confirmation changed state';
+  end if;
   v_result := public.admin_intelligence_activate_rule_set(
-    v_admin, (v_result->>'ruleSetId')::uuid, v_revision, v_activate_request
+    v_admin, v_created_id, v_revision, v_activate_request,
+    'ACTIVATE v' || v_created_version::text
   );
   v_replay := public.admin_intelligence_activate_rule_set(
-    v_admin, (v_result->>'ruleSetId')::uuid, v_revision, v_activate_request
+    v_admin, v_created_id, v_revision, v_activate_request,
+    'ACTIVATE v' || v_created_version::text
   );
   if v_replay is distinct from v_result or (v_result->>'revision')::bigint <> v_revision + 1 then
     raise exception 'INTELLIGENCE TEST: activation replay/revision failed';
   end if;
   v_bad := false;
   begin
-    perform public.admin_intelligence_activate_rule_set(v_admin, v_active_id, v_revision, gen_random_uuid());
+    perform public.admin_intelligence_activate_rule_set(
+      v_admin, v_active_id, v_revision, gen_random_uuid(),
+      'ROLLBACK v' || v_active_version::text
+    );
   exception when sqlstate '40001' then v_bad := true; end;
   if not v_bad then raise exception 'INTELLIGENCE TEST: stale CAS activation was accepted'; end if;
+
+  v_bad := false;
+  begin
+    perform public.admin_intelligence_activate_rule_set(
+      v_admin, v_active_id, v_revision + 1, gen_random_uuid(), 'ROLLBACK v999999'
+    );
+  exception when others then
+    if sqlerrm like 'INTELLIGENCE_CONFIRMATION:%' then v_bad := true; else raise; end if;
+  end;
+  if not v_bad
+     or (select active_rule_set_id from public.intelligence_rule_state where singleton) <> v_created_id then
+    raise exception 'INTELLIGENCE TEST: invalid typed rollback confirmation changed state';
+  end if;
+  v_result := public.admin_intelligence_activate_rule_set(
+    v_admin, v_active_id, v_revision + 1, v_rollback_request,
+    'ROLLBACK v' || v_active_version::text
+  );
+  if (select active_rule_set_id from public.intelligence_rule_state where singleton) <> v_active_id
+     or not exists (
+       select 1 from public.intelligence_rule_events
+       where request_id = v_rollback_request and action = 'version.rolled_back'
+     ) then
+    raise exception 'INTELLIGENCE TEST: typed rollback did not switch pointer/audit event';
+  end if;
 
   -- Canonical actor check is server-side, independent of UI permission checks.
   foreach v_bad_actor in array array[v_member, v_inactive_admin] loop
@@ -264,5 +314,7 @@ begin
 end;
 $contract$;
 
-select 'INTELLIGENCE CONTRACT: ALL ASSERTIONS PASSED' as result;
+do $marker$ begin
+  raise notice 'INTELLIGENCE CONTRACT: ALL ASSERTIONS PASSED';
+end $marker$;
 rollback;

@@ -228,6 +228,53 @@
   margin: 9px 0 0;
 }
 
+.confirmationField {
+  margin-top: 12px;
+}
+
+.confirmationHelp,
+.confirmationPanel span {
+  color: var(--adm-muted);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+}
+
+.confirmationHelp code,
+.confirmationPanel code {
+  color: var(--asb-navy);
+  font-weight: 800;
+}
+
+.confirmationPanel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, 280px) auto auto;
+  align-items: end;
+  gap: 10px;
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid var(--adm-amber-bd);
+  border-radius: var(--adm-r);
+  background: var(--adm-amber-bg);
+}
+
+.confirmationPanel > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.confirmationPanel strong {
+  color: var(--asb-navy);
+  font-size: var(--fs-body-sm);
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .preview {
   border-left: 3px solid var(--adm-accent-2);
 }
@@ -375,6 +422,16 @@
 
   .releaseRow > div {
     min-width: 0;
+  }
+
+  .confirmationPanel {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .confirmationPanel button {
+    justify-content: center;
+    width: 100%;
   }
 
   .releaseRow button {

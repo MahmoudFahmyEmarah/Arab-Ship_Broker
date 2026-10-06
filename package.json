@@ -24,7 +24,8 @@
     "test:suez": "node --import tsx scripts/suez-check.ts",
     "test:voyage": "node --import tsx scripts/voyage-check.ts",
     "test:bunker": "node --import tsx scripts/bunker-check.ts",
-    "test:rules": "node --import tsx scripts/rules-check.ts",
+    "test:rules": "node --import tsx scripts/rules-check.ts && node --import tsx scripts/intelligence-rules-check.ts && node --import tsx scripts/rules-ui-contract-check.ts && node --import tsx scripts/matching-live-surfaces-check.ts",
+    "test:rules:db": "node --import tsx scripts/matching-sql-parity-check.ts && node --import tsx scripts/matching-concurrency-check.ts && node scripts/run-intelligence-race.mjs",
     "test:legacy-econ": "node scripts/legacy-econ-guard.mjs"
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-  [switch]$KeepStack
+  [switch]$KeepStack,
+  [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -309,7 +310,27 @@ try {
     $env:E2E_RULES_DISPOSABLE_STACK = "1"
     $env:E2E_BASE_URL = "http://127.0.0.1:3103"
 
-    Invoke-CheckedNative "production build" { & npm.cmd run build }
+    # The disposable acceptance stack needs no third-party network credentials.
+    # Blank inherited secrets so a browser/build regression cannot contact a
+    # hosted mail, model, deployment or registrar API during this proof.
+    $env:VERCEL_TOKEN = ""
+    $env:RESEND_API_KEY = ""
+    $env:ANTHROPIC_API_KEY = ""
+    $env:OPENAI_API_KEY = ""
+    $env:GROQ_API_KEY = ""
+    $env:NAMECHEAP_API_KEY = ""
+    $env:NAMECHEAP_API_USER = ""
+    $env:NAMECHEAP_USERNAME = ""
+
+    if ($SkipBuild) {
+      $buildId = Join-Path $repoRoot ".next\BUILD_ID"
+      if (!(Test-Path -LiteralPath $buildId -PathType Leaf)) {
+        throw "-SkipBuild requires an existing successful production build at $buildId"
+      }
+      Write-Host "production build: reusing the already-verified .next artifact (-SkipBuild)"
+    } else {
+      Invoke-CheckedNative "production build" { & npm.cmd run build }
+    }
     Invoke-CheckedNative "Stream R Playwright" {
       & npx.cmd playwright test --config=playwright.rules.config.ts
     }

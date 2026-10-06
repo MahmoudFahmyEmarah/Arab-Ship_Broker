@@ -11,7 +11,6 @@ import {
   type ValidatedMatchingRulesV1,
 } from "@/lib/matching-rules";
 import type { CargoView, VesselView } from "./types";
-import { calcVoyage } from "./econ";
 
 export interface MatchingRulesSnapshot {
   readonly source: "live" | "sample";
@@ -127,6 +126,8 @@ export function fitLabel(
 export interface DashMatch {
   cargoId: string;
   vesselId: string;
+  cargoListingKey: string | null;
+  vesselListingKey: string | null;
   commodity: string;
   qtyMt: string;
   pol: string;
@@ -138,7 +139,6 @@ export interface DashMatch {
   dwt: string;
   vOpen: string;
   laycan: number | null;
-  tce: number;
   quality: Exclude<FitBand, "Weak"> | "Matched";
 }
 
@@ -192,6 +192,12 @@ export interface AuthoritativeViewPair {
  * source; this merely caps the number of source-listing RPCs made per mode. */
 export const LIVE_TOP_MATCH_REQUEST_LIMIT = 6;
 
+/** Keep the authoritative read below the database's practical burst limit.
+ * Six source listings are still evaluated, but only two RPCs may be in flight
+ * at once. Results are written into source-indexed slots so completion order
+ * can never change governed Top Matches priority. */
+export const LIVE_TOP_MATCH_CONCURRENCY_LIMIT = 2;
+
 export function boundedAuthoritativeMatchSources<
   T extends { readonly listingKey?: string | null; readonly matches: number },
 >(sources: readonly T[]): T[] {
@@ -229,30 +235,57 @@ export type AuthoritativeMatchBatchResult<TSource, TRow> =
   | { readonly status: "ready"; readonly batches: readonly AuthoritativeMatchBatch<TSource, TRow>[] }
   | { readonly status: "discarded" | "unavailable"; readonly batches: readonly [] };
 
-/** Run one fixed-size RPC batch and check obsolescence only after every request
- * settles. A rejected request invalidates the whole authoritative view. */
+/** Run one fixed-size RPC batch through a small worker pool. A rejected request
+ * invalidates the whole authoritative view; cancellation stops new scheduling
+ * and aborts already-started reads through the shared signal. */
 export async function loadBoundedAuthoritativeMatchBatches<
   TSource extends { readonly listingKey?: string | null; readonly matches: number },
   TRow,
 >(
   sources: readonly TSource[],
-  load: (listingKey: string) => Promise<readonly TRow[]>,
+  load: (listingKey: string, signal?: AbortSignal) => Promise<readonly TRow[]>,
   shouldDiscard: () => boolean = () => false,
+  signal?: AbortSignal,
 ): Promise<AuthoritativeMatchBatchResult<TSource, TRow>> {
-  try {
-    const batches = await Promise.all(
-      boundedAuthoritativeMatchSources(sources).map(async (source) => ({
-        source,
-        rows: await load(source.listingKey!),
-      })),
-    );
-    if (shouldDiscard()) return { status: "discarded", batches: [] };
-    return { status: "ready", batches };
-  } catch {
-    return shouldDiscard()
-      ? { status: "discarded", batches: [] }
-      : { status: "unavailable", batches: [] };
-  }
+  const selected = boundedAuthoritativeMatchSources(sources);
+  if (selected.length === 0) return { status: "ready", batches: [] };
+
+  const batches = new Array<AuthoritativeMatchBatch<TSource, TRow> | undefined>(selected.length);
+  let nextIndex = 0;
+  let completed = 0;
+  let failed = false;
+
+  const worker = async () => {
+    while (!failed && !shouldDiscard() && !signal?.aborted) {
+      const index = nextIndex;
+      if (index >= selected.length) return;
+      nextIndex += 1;
+
+      const source = selected[index]!;
+      try {
+        const rows = await load(source.listingKey!, signal);
+        batches[index] = { source, rows };
+        completed += 1;
+      } catch {
+        if (signal?.aborted) return;
+        failed = true;
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(LIVE_TOP_MATCH_CONCURRENCY_LIMIT, selected.length) },
+      () => worker(),
+    ),
+  );
+
+  if (shouldDiscard() || signal?.aborted) return { status: "discarded", batches: [] };
+  if (failed || completed !== selected.length) return { status: "unavailable", batches: [] };
+  return {
+    status: "ready",
+    batches: batches as AuthoritativeMatchBatch<TSource, TRow>[],
+  };
 }
 
 export interface AuthoritativeBatchPair<TSource, TCounterpart> {
@@ -288,15 +321,11 @@ function dashMatchFromPair(
   vClassOf: (vessel: VesselView) => string,
   quality: DashMatch["quality"],
 ): DashMatch {
-  let tce = 0;
-  try {
-    tce = Math.round(calcVoyage(vessel, cargo).costs.tce);
-  } catch {
-    tce = 0;
-  }
   return {
     cargoId: cargo.id,
     vesselId: vessel.id,
+    cargoListingKey: cargo.listingKey ?? null,
+    vesselListingKey: vessel.listingKey ?? null,
     commodity: cargo.commodity || cargo.cargo,
     qtyMt: cargo.qtyMt,
     pol: cargo.route?.polName || cargo.route?.polCode || "—",
@@ -308,7 +337,6 @@ function dashMatchFromPair(
     dwt: vessel.dwt,
     vOpen: vessel.openPortZone || "—",
     laycan: cargo.laycanDays ?? null,
-    tce,
     quality,
   };
 }
@@ -361,29 +389,7 @@ export function buildTopMatches(
     if (quality === "Weak") continue;
     used.add(best.vessel.id);
 
-    let tce = 0;
-    try {
-      tce = Math.round(calcVoyage(best.vessel, cargo).costs.tce);
-    } catch {
-      tce = 0;
-    }
-    out.push({
-      cargoId: cargo.id,
-      vesselId: best.vessel.id,
-      commodity: cargo.commodity || cargo.cargo,
-      qtyMt: cargo.qtyMt,
-      pol: cargo.route?.polName || cargo.route?.polCode || "—",
-      pod: cargo.route?.podName || cargo.route?.podCode || "—",
-      polZone: cargo.route?.polZone || "",
-      podZone: cargo.route?.podZone || "",
-      vessel: best.vessel.name,
-      vClass: vClassOf(best.vessel),
-      dwt: best.vessel.dwt,
-      vOpen: best.vessel.openPortZone || "—",
-      laycan: cargo.laycanDays ?? null,
-      tce,
-      quality,
-    });
+    out.push(dashMatchFromPair(cargo, best.vessel, vClassOf, quality));
   }
   return out;
 }

@@ -88,6 +88,8 @@ export interface MatchingRuleActivationResult {
   paramsSha256: string;
 }
 
+export type MatchingRuleReleaseOperation = "activate" | "rollback";
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 
@@ -119,6 +121,19 @@ function nullableUuid(value: unknown, name: string): string | null {
 
 function sameUuid(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
+}
+
+function releaseConfirmation(
+  value: string,
+  operation: MatchingRuleReleaseOperation,
+  versionNo: number,
+): string {
+  integer(versionNo, "Matching rule release version", 1);
+  const expected = `${operation.toUpperCase()} v${versionNo}`;
+  if (value !== expected) {
+    throw new TypeError(`Matching rule release confirmation must be exactly ${expected}.`);
+  }
+  return value;
 }
 
 function assertSameUuid(actual: string, expected: string, name: string): void {
@@ -383,13 +398,16 @@ export async function activateMatchingRuleVersion(
     actorId: string;
     requestId: string;
     versionId: string;
+    versionNo: number;
     expectedActiveVersionId: string;
+    confirmation: string;
   },
 ): Promise<MatchingRuleActivationResult> {
   uuid(input.actorId, "Activate matching rule version actor");
   uuid(input.requestId, "Activate matching rule version request");
   uuid(input.versionId, "Activate matching rule version ID");
   uuid(input.expectedActiveVersionId, "Activate matching rule expected active version ID");
+  const confirmation = releaseConfirmation(input.confirmation, "activate", input.versionNo);
   if (sameUuid(input.versionId, input.expectedActiveVersionId)) {
     throw new TypeError("Activate matching rule version requires a target distinct from the active version.");
   }
@@ -401,6 +419,7 @@ export async function activateMatchingRuleVersion(
       p_request_id: input.requestId,
       p_version_id: input.versionId,
       p_expected_active_version_id: input.expectedActiveVersionId,
+      p_confirmation: confirmation,
     },
     (value) => {
       const item = record(value, "Activate matching rule version");
@@ -417,11 +436,64 @@ export async function activateMatchingRuleVersion(
       };
       assertSameUuid(result.requestId, input.requestId, "Activate matching rule version");
       assertSameUuid(result.versionId, input.versionId, "Activate matching rule version");
+      if (result.versionNo !== input.versionNo) {
+        throw new TypeError("Activate matching rule version returned a different version number.");
+      }
       assertSameUuid(
         result.previousVersionId,
         input.expectedActiveVersionId,
         "Activate matching rule previous version",
       );
+      return result;
+    },
+  );
+}
+
+export async function rollbackMatchingRuleVersion(
+  supabase: SupabaseClient,
+  input: {
+    actorId: string;
+    requestId: string;
+    expectedActiveVersionId: string;
+    targetVersionNo: number;
+    confirmation: string;
+  },
+): Promise<MatchingRuleActivationResult> {
+  uuid(input.actorId, "Rollback matching rule version actor");
+  uuid(input.requestId, "Rollback matching rule version request");
+  uuid(input.expectedActiveVersionId, "Rollback matching rule expected active version ID");
+  const confirmation = releaseConfirmation(input.confirmation, "rollback", input.targetVersionNo);
+  return rpc(
+    supabase,
+    "matching_rollback_rule_version",
+    {
+      p_actor: input.actorId,
+      p_request_id: input.requestId,
+      p_expected_active_version_id: input.expectedActiveVersionId,
+      p_confirmation: confirmation,
+    },
+    (value) => {
+      const item = record(value, "Rollback matching rule version");
+      const result: MatchingRuleActivationResult = {
+        requestId: uuid(item.requestId, "Rollback matching rule version"),
+        versionId: uuid(item.versionId, "Rollback matching rule version"),
+        previousVersionId: uuid(item.previousVersionId, "Rollback matching rule version"),
+        versionNo: integer(item.versionNo, "Rollback matching rule version", 1),
+        candidateCount: integer(item.candidateCount, "Rollback matching rule version", 1),
+        candidateSha256: sha256(item.candidateSha256, "Rollback matching rule version"),
+        sourceSha256: sha256(item.sourceSha256, "Rollback matching rule version"),
+        asOfYear: integer(item.asOfYear, "Rollback matching rule version", 1900),
+        paramsSha256: sha256(item.paramsSha256, "Rollback matching rule version"),
+      };
+      assertSameUuid(result.requestId, input.requestId, "Rollback matching rule version");
+      assertSameUuid(
+        result.previousVersionId,
+        input.expectedActiveVersionId,
+        "Rollback matching rule previous version",
+      );
+      if (result.versionNo !== input.targetVersionNo) {
+        throw new TypeError("Rollback matching rule version returned a different target version number.");
+      }
       return result;
     },
   );

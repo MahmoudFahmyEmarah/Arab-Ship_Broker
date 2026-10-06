@@ -4,6 +4,20 @@
 -- definitions, their member/service ACLs, the legacy cache rows and the prior
 -- app_settings row in public.matching_rule_rollback_catalog.  Refuse to run
 -- without that catalogue: guessing a historical matcher is not a rollback.
+--
+-- RELEASE ORDER: this DOWN must run before the market-firewall DOWN, whose
+-- legacy_routine_acl_snapshot contains the pre-Stream-R matcher ACLs.
+
+begin; -- RULES_DOWN_TRANSACTION_START
+
+do $require_history_ack$
+begin
+  if current_setting('asb.rules_down_ack', true) is distinct from 'discard-history' then
+    raise exception 'RULES_DOWN_ACK: export the rules ledgers, then set asb.rules_down_ack to discard-history'
+      using errcode = '55000';
+  end if;
+end;
+$require_history_ack$;
 
 do $require_snapshot$
 declare
@@ -43,6 +57,7 @@ drop function if exists public.admin_intelligence_get_clone_input(uuid, uuid);
 drop function if exists public.admin_intelligence_get_rule_set(uuid, uuid);
 drop function if exists public.admin_intelligence_list_rule_sets(uuid);
 drop function if exists public.get_intelligence_rules();
+drop function if exists public.admin_intelligence_activate_rule_set(uuid, uuid, bigint, uuid, text);
 drop function if exists public.admin_intelligence_activate_rule_set(uuid, uuid, bigint, uuid);
 drop function if exists public.admin_intelligence_create_rule_set(uuid, jsonb, jsonb, text, text, uuid, uuid);
 drop function if exists public.fn_intelligence_request_finish(uuid, text, uuid, jsonb);
@@ -90,13 +105,19 @@ drop trigger if exists trg_matching_requests_immutable on public.matching_rule_r
 drop trigger if exists trg_matching_snapshots_immutable on public.matching_candidate_snapshots;
 alter table public.matching_rule_versions
   drop constraint if exists matching_rule_versions_canonical_ck;
+drop function if exists public.fn_matching_immutable_guard();
+drop function if exists public.fn_matching_guard_settings_mirror();
 
+drop function if exists public.matching_rollback_rule_version(uuid, uuid, uuid, text);
+drop function if exists public.matching_activate_rule_version(uuid, uuid, uuid, uuid, text);
 drop function if exists public.matching_activate_rule_version(uuid, uuid, uuid, uuid);
 drop function if exists public.matching_create_rule_version(uuid, uuid, jsonb, text);
 drop function if exists public.admin_matching_preview(uuid, jsonb);
 drop function if exists public.admin_matching_rules_dashboard(uuid);
 drop function if exists public.get_matching_rules_snapshot();
 drop function if exists public.fn_matching_params();
+drop function if exists public.fn_matching_replace_candidate_snapshot(uuid, integer, text, text, integer, uuid);
+drop function if exists public.fn_matching_write_settings_mirror(jsonb);
 drop function if exists public.fn_matching_candidate_digest(uuid);
 drop function if exists public.fn_matching_evaluate(jsonb, integer, uuid, uuid);
 drop function if exists public.fn_matching_validate_as_of_year(integer);
@@ -106,8 +127,6 @@ drop function if exists public.fn_matching_assert_super_actor(uuid);
 drop function if exists public.fn_matching_params_sha256(jsonb);
 drop function if exists public.fn_matching_canonical_params_text(jsonb);
 drop function if exists public.fn_matching_validate_params(jsonb);
-drop function if exists public.fn_matching_immutable_guard();
-drop function if exists public.fn_matching_guard_settings_mirror();
 
 do $restore_legacy_definitions$
 declare
@@ -277,3 +296,4 @@ drop table if exists public.matching_rule_versions;
 drop table public.matching_rule_rollback_catalog;
 
 notify pgrst, 'reload schema';
+commit; -- RULES_DOWN_TRANSACTION_END

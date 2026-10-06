@@ -59,12 +59,32 @@ SMOKES=(
 # Expand the two transactional rollback probes on the host before handing them
 # to migration-harness, which will stream each resulting file over stdin.
 ROLLBACK_SMOKE_TMP="$(mktemp -d -t rules-rollback.XXXXXX)"
-trap 'rm -f "$ROLLBACK_SMOKE_TMP/matching_rollback_unchanged.sql" "$ROLLBACK_SMOKE_TMP/matching_rollback_source_change.sql"; rmdir "$ROLLBACK_SMOKE_TMP" 2>/dev/null || true' EXIT
+DOWN_TX_BODY="$ROLLBACK_SMOKE_TMP/20261003_rules_down_body.sql"
+trap 'rm -f "$ROLLBACK_SMOKE_TMP/matching_rollback_unchanged.sql" "$ROLLBACK_SMOKE_TMP/matching_rollback_source_change.sql" "$DOWN_TX_BODY"; rmdir "$ROLLBACK_SMOKE_TMP" 2>/dev/null || true' EXIT
+
+# The release DOWN is deliberately self-transactional. migration-harness and
+# the rollback probes already provide an outer transaction, so embed only its
+# body there while separately proving the checked-in wrapper is present.
+if ! grep -Fq 'RULES_DOWN_TRANSACTION_START' "$DOWN" \
+   || ! grep -Fq 'RULES_DOWN_TRANSACTION_END' "$DOWN"; then
+  echo "STOP  rules DOWN must contain an explicit BEGIN/COMMIT wrapper." >&2
+  exit 2
+fi
+if ! grep -Fq "current_setting('asb.rules_down_ack', true)" "$DOWN" \
+   || ! grep -Fq "discard-history" "$DOWN"; then
+  echo "STOP  rules DOWN must require explicit discard-history acknowledgement." >&2
+  exit 2
+fi
+{
+  printf "set local asb.rules_down_ack = 'discard-history';\n"
+  grep -vE 'RULES_DOWN_TRANSACTION_(START|END)' "$DOWN"
+} > "$DOWN_TX_BODY"
+
 expand_rollback_smoke() {
   local template="$1" output="$2" line
   while IFS= read -r line || [ -n "$line" ]; do
     if [ "$line" = '-- @RULES_DOWN@' ]; then
-      cat "$DOWN"
+      cat "$DOWN_TX_BODY"
     else
       printf '%s\n' "$line"
     fi
@@ -100,7 +120,8 @@ if [ "$TARGET" = local ]; then
   if [ "$applied" = t ]; then
     if [ "$FROM_APPLIED" = 1 ]; then
       echo "rules modules present at baseline: applying the combined DOWN first (--from-applied)"
-      if ! $PSQL -v ON_ERROR_STOP=1 -q -1 -f - < "$DOWN"; then
+      if ! $PSQL -v ON_ERROR_STOP=1 -q \
+          -c "set asb.rules_down_ack = 'discard-history'" -f - < "$DOWN"; then
         echo "FAIL  combined DOWN did not complete; the forward proof was not started" >&2
         exit 1
       fi
@@ -118,7 +139,7 @@ bash scripts/migration-harness.sh \
   --target "$TARGET" \
   --chain "${CHAIN[@]}" \
   --smokes "${SMOKES[@]}" \
-  --downs "$DOWN"
+  --downs "$DOWN_TX_BODY"
 rc=$?
 
 if [ "$REAPPLY" = 1 ] && [ "$TARGET" = local ] && [ "$rc" = 0 ]; then

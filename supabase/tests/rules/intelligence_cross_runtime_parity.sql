@@ -71,5 +71,7 @@ begin
 end;
 $parity$;
 
-select 'INTELLIGENCE CROSS-RUNTIME PARITY: ALL ASSERTIONS PASSED' as result;
+do $marker$ begin
+  raise notice 'INTELLIGENCE CROSS-RUNTIME PARITY: ALL ASSERTIONS PASSED';
+end $marker$;
 rollback;

@@ -97,6 +97,8 @@ export interface IntelligenceActivationResult {
   status: "active" | "already_active";
 }
 
+export type IntelligenceReleaseOperation = "activate" | "rollback";
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function record(value: unknown, name: string): Record<string, unknown> {
@@ -476,12 +478,23 @@ export async function activateIntelligenceRuleSet(
     ruleSetId: string;
     expectedRevision: number;
     requestId: string;
+    operation: IntelligenceReleaseOperation;
+    version: number;
+    confirmation: string;
   },
 ): Promise<IntelligenceActivationResult> {
   uuid(input.actorId, "Activate rule-set actor");
   uuid(input.ruleSetId, "Activate rule-set ID");
   uuid(input.requestId, "Activate rule-set request");
   integer(input.expectedRevision, "Activate rule-set revision", 0);
+  integer(input.version, "Activate rule-set version", 1);
+  if (input.operation !== "activate" && input.operation !== "rollback") {
+    throw new TypeError("Rule-set release operation is invalid.");
+  }
+  const expectedConfirmation = `${input.operation.toUpperCase()} v${input.version}`;
+  if (input.confirmation !== expectedConfirmation) {
+    throw new TypeError(`Rule-set release confirmation must be exactly ${expectedConfirmation}.`);
+  }
   const result = await rpc(
     supabase,
     "admin_intelligence_activate_rule_set",
@@ -490,6 +503,7 @@ export async function activateIntelligenceRuleSet(
       p_rule_set_id: input.ruleSetId,
       p_expected_revision: input.expectedRevision,
       p_request_id: input.requestId,
+      p_confirmation: input.confirmation,
     },
     (value) => {
       const item = record(value, "Activate rule set");
@@ -505,6 +519,9 @@ export async function activateIntelligenceRuleSet(
         status,
       };
       assertSameUuid(activation.ruleSetId, input.ruleSetId, "Activate rule set");
+      if (activation.version !== input.version) {
+        throw new TypeError("Activate rule set returned a different version number.");
+      }
       if (activation.status === "already_active" && activation.revision !== input.expectedRevision) {
         throw new TypeError("Activate rule set returned an inconsistent no-op revision.");
       }
