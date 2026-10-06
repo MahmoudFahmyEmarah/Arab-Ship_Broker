@@ -23,7 +23,7 @@ import { logEvent } from "@/lib/portal/events";
 import type { VesselEconomicsProfile } from "@/sdk/app/suez";
 import { loadSuezContextAction, loadVesselEconomicsAction, saveVesselEconomicsAction } from "@/app/(dashboard)/dashboard/suez-toll/actions";
 import { routeLegAction, saveVoyageEstimateAction, type RouteLegResult } from "@/app/(dashboard)/dashboard/voyage-estimator/actions";
-import { canalFromSuez, suezTransitDate } from "@/lib/voyage/canal";
+import { canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "@/lib/voyage/canal";
 import "@/lib/portal/voyage-estimator.css";
 import "./voyage-estimator-v2.css";
 
@@ -65,8 +65,11 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   anchorageEcaConfidence?: "official" | "coarse";
 }) {
   const [ownerOrgId, setOwnerOrgId] = React.useState<string>(ownerOrgs.length === 1 ? ownerOrgs[0].id : "");
-  const [vesselId, setVesselId] = React.useState(initialVesselId && vessels.some((v) => v.id === initialVesselId) ? initialVesselId : vessels[0]?.id ?? "");
-  const [cargoId, setCargoId] = React.useState(initialCargoId && cargos.some((c) => c.id === initialCargoId) ? initialCargoId : cargos[0]?.id ?? "");
+  // A link that names a vessel or cargo this member cannot see opens with nothing selected and says so; it never
+  // falls back to the first option, which would present an arbitrary pair as the matched one (O2C-036 #1).
+  const linkMissing = { vessel: !!initialVesselId && !vessels.some((v) => v.id === initialVesselId), cargo: !!initialCargoId && !cargos.some((c) => c.id === initialCargoId) };
+  const [vesselId, setVesselId] = React.useState(initialVesselId ? (linkMissing.vessel ? "" : initialVesselId) : vessels[0]?.id ?? "");
+  const [cargoId, setCargoId] = React.useState(initialCargoId ? (linkMissing.cargo ? "" : initialCargoId) : cargos[0]?.id ?? "");
   const vessel = vessels.find((v) => v.id === vesselId) ?? null;
   const cargo = cargos.find((c) => c.id === cargoId) ?? null;
   const [profile, setProfile] = React.useState<VesselEconomicsProfile | null>(null);
@@ -76,6 +79,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   const [voy, setVoy] = React.useState({
     seaMargin: "", anchorageDays: str(settings.anchorageDaysDefault), anchorageInEca: false, suezOverride: "auto" as "auto" | "yes" | "no",
     canalManualUsd: "", canalManualReason: "", ballastCanalManualUsd: "", ballastCanalManualReason: "",
+    suezConditionsDeclared: false, arrivalDraftFt: "",
     loadAllowance: "0.5", dischAllowance: "0.5", loadInEca: false, dischInEca: false, loadOpenLoopBan: false, dischOpenLoopBan: false, loadEuBerth: false, dischEuBerth: false,
     pdaLoad: "", pdaLoadReason: "", pdaDisch: "", pdaDischReason: "", freight: "", commission: "", insurance: "", stevedoring: "", other: "",
   });
@@ -171,7 +175,8 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
         disch: { key: "disch", port: podCode, qtyMt: qty, rateMtDay: cargo.dischRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.dischAllowance) ?? 0, inEca: dischInEca, inEcaSource: ladenEndZones != null ? (laden.auto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.dischOpenLoopBan, euBerthOver2h: voy.dischEuBerth, pda: pdaInput(voy.pdaDisch, voy.pdaDischReason) },
       },
       anchorageDays: num(voy.anchorageDays) ?? 0,
-      anchorageInEca: voy.anchorageInEca,
+      anchorageInEca: ladenEndZones != null ? dischInEca : voy.anchorageInEca,
+      waitingAnchorageEcaSource: ladenEndZones != null && laden.auto?.geometryConfidence === "official" ? "governed" : "manual",
       seaMarginPct: num(voy.seaMargin),
       lane: laneKey(cargo.route.polZone, cargo.route.podZone),
       season: seasonOf(cargo.laycanFrom || null),
@@ -205,12 +210,19 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   const suezFor = React.useCallback((which: "laden" | "ballast", date: string, direction: "SB" | "NB"): { input: SuezInput | null; estimate: SuezEstimate | null } => {
     if (!suezCategory) return { input: null, estimate: null };
     const input: SuezInput = {
-      vessel: { scnt: num(form.scnt), gt: num(form.gt), category: suezCategory, buildYear: vessel?.built ?? null, mooringCranesOk: profile?.mooringCranesOk ?? null, searchlightCompliant: profile?.searchlightCompliant ?? null, firstTransit: profile?.firstTransit ?? null },
-      voyage: { direction, cargoStatus: which, transitDate: date },
+      vessel: {
+        scnt: num(form.scnt), gt: num(form.gt), scgt: profile?.scgt ?? null, category: suezCategory, buildYear: profile?.buildYear ?? vessel?.built ?? null,
+        craneCount: profile?.craneCount ?? null, craneSwlMt: profile?.craneSwlMt ?? null,
+        mooringCranesOk: profile?.mooringCranesOk ?? null, searchlightCompliant: profile?.searchlightCompliant ?? null, firstTransit: profile?.firstTransit ?? null,
+        beamFt: profile?.beamFt ?? null, doubleBottom: profile?.doubleBottom ?? null, draftFt: num(voy.arrivalDraftFt),
+      },
+      voyage: voy.suezConditionsDeclared
+        ? { direction, cargoStatus: which, transitDate: date, heavyLiftOver250t: false, floatingUnitScgt300: false, militaryCargo: false, lateArrivalBand: "none", notReady: false, deckProtrusionFt: 0, ladderNoncompliant: false, relievingPilots: 0, wasteNormalM3: 0, wasteHazardousM3: 0, bagsM3: 0, bargeHours: 0 }
+        : { direction, cargoStatus: which, transitDate: date },
     };
     const ctx = ctxByDate[date];
     return { input, estimate: ctx?.found ? estimateSuezTransit(input, ctx) : null };
-  }, [suezCategory, form.scnt, form.gt, vessel?.built, profile, ctxByDate]);
+  }, [suezCategory, form.scnt, form.gt, vessel?.built, profile, ctxByDate, voy.arrivalDraftFt, voy.suezConditionsDeclared]);
   const suezLaden = React.useMemo(() => (ladenSuez ? suezFor("laden", ladenDate, ladenDir) : { input: null, estimate: null }), [ladenSuez, suezFor, ladenDate, ladenDir]);
   const suezBallast = React.useMemo(() => (ballastSuez ? suezFor("ballast", ballastDate, ballastDir) : { input: null, estimate: null }), [ballastSuez, suezFor, ballastDate, ballastDir]);
   const suezInput = suezLaden.input ?? suezBallast.input;
@@ -220,13 +232,18 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     return v != null && reason.trim().length >= 3 ? { usd: v, manual: { actorUserId: actor, reason: reason.trim(), at: sessionAt } } : null;
   }, [actor, sessionAt]);
   const anch = React.useCallback((d: "SB" | "NB") => (anchorageEca[d] == null ? { anchorageInEca: d === "SB", anchorageInEcaSource: "manual" as const } : { anchorageInEca: !!anchorageEca[d], anchorageInEcaSource: anchorageEcaConfidence === "official" ? ("governed" as const) : ("coarse" as const) }), [anchorageEca, anchorageEcaConfidence]);
+  // the server also compares every typed Suez fact with the governed profile; the preview shows the reasons it can see
+  const suezFactReasons = React.useMemo(() => [
+    ...(num(voy.arrivalDraftFt) != null ? ["arrival draft typed for this voyage"] : []),
+    ...(voy.suezConditionsDeclared ? [] : ["voyage conditions (special services, surcharges) not declared"]),
+  ], [voy.arrivalDraftFt, voy.suezConditionsDeclared]);
   const canal: CanalInput | null = React.useMemo(
-    () => (ladenSuez ? canalFromSuez(suezLaden.estimate, settings, { leg: "laden", ...anch(ladenDir), manualCost: manualCost(voy.canalManualUsd, voy.canalManualReason) }) : null),
-    [ladenSuez, suezLaden.estimate, settings, ladenDir, anch, manualCost, voy.canalManualUsd, voy.canalManualReason],
+    () => (ladenSuez ? downgradeCanalForFacts(canalFromSuez(suezLaden.estimate, settings, { leg: "laden", ...anch(ladenDir), manualCost: manualCost(voy.canalManualUsd, voy.canalManualReason) }), suezFactReasons, { actorUserId: actor, at: sessionAt }) : null),
+    [ladenSuez, suezLaden.estimate, settings, ladenDir, anch, manualCost, voy.canalManualUsd, voy.canalManualReason, suezFactReasons, actor, sessionAt],
   );
   const ballastCanal: CanalInput | null = React.useMemo(
-    () => (ballastSuez ? canalFromSuez(suezBallast.estimate, settings, { leg: "ballast", ...anch(ballastDir), manualCost: manualCost(voy.ballastCanalManualUsd, voy.ballastCanalManualReason) }) : null),
-    [ballastSuez, suezBallast.estimate, settings, ballastDir, anch, manualCost, voy.ballastCanalManualUsd, voy.ballastCanalManualReason],
+    () => (ballastSuez ? downgradeCanalForFacts(canalFromSuez(suezBallast.estimate, settings, { leg: "ballast", ...anch(ballastDir), manualCost: manualCost(voy.ballastCanalManualUsd, voy.ballastCanalManualReason) }), suezFactReasons, { actorUserId: actor, at: sessionAt }) : null),
+    [ballastSuez, suezBallast.estimate, settings, ballastDir, anch, manualCost, voy.ballastCanalManualUsd, voy.ballastCanalManualReason, suezFactReasons, actor, sessionAt],
   );
   const input: VoyageInput | null = React.useMemo(() => (baseInput ? { ...baseInput, canal, ballastCanal } : null), [baseInput, canal, ballastCanal]);
   const estimate: VoyageEstimate | null = React.useMemo(() => (input ? estimateVoyage(input) : null), [input]);
@@ -241,6 +258,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
       const r = await saveVesselEconomicsAction(vessel.vesselId!, {
         scnt: num(form.scnt), gt: num(form.gt), scgt: profile?.scgt ?? null, suezCategory: suezCategory,
         mooringCranesOk: profile?.mooringCranesOk ?? null, searchlightCompliant: profile?.searchlightCompliant ?? null, firstTransit: profile?.firstTransit ?? null,
+        buildYear: profile?.buildYear ?? null, craneCount: profile?.craneCount ?? null, craneSwlMt: profile?.craneSwlMt ?? null, beamFt: profile?.beamFt ?? null, doubleBottom: profile?.doubleBottom ?? null,
         speedLadenKn: num(form.speedLaden), speedBallastKn: num(form.speedBallast), consumption, hasScrubber: triToBool(form.hasScrubber), vesselClass: form.vesselClass || null,
       });
       if (r.ok) { setProfile(r.data); setProfileSave({ busy: false, note: "Operating profile saved for this vessel.", error: false }); }
@@ -258,7 +276,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
         // cargo.id is an actor-bound market handle, never a database id; only an owned listing's real id may reference cargo_listings
         cargoListingId: cargo.ownedListingId ?? null,
         // legs, canal, settings and fuel are re-resolved on the server; only the facts travel
-        input, suezInput, startDate, ownerOrgId: ownerOrgId || null,
+        input, suezInput, startDate, ownerOrgId: ownerOrgId || null, suezConditionsDeclared: voy.suezConditionsDeclared,
         canalManual: {
           laden: num(voy.canalManualUsd) != null ? { usd: num(voy.canalManualUsd)!, reason: voy.canalManualReason } : null,
           ballast: num(voy.ballastCanalManualUsd) != null ? { usd: num(voy.ballastCanalManualUsd)!, reason: voy.ballastCanalManualReason } : null,
@@ -308,6 +326,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
 
         {settingsSource === "defaults" && <div className="vy-unavailable">Voyage constants are not governed{settingsError ? ` (${settingsError})` : ""}: compiled defaults are in use and every estimate is marked partial. Admins fix this under Admin → Voyage estimator data → Constants.</div>}
 
+        {(linkMissing.vessel || linkMissing.cargo) && <div className="vy-unavailable" role="status" data-testid="link-not-found">The linked {linkMissing.vessel && linkMissing.cargo ? "vessel and cargo are" : linkMissing.vessel ? "vessel is" : "cargo is"} not in your list (not yours, or no longer open). Choose them below; nothing was selected for you.</div>}
         <div className="ve-selector ve-selector--two">
           <label className="ve-selector__field"><span className="ve-selector__label">Vessel</span><span className="ve-selector__control"><select value={vesselId} onChange={(e) => setVesselId(e.target.value)} aria-label="Vessel"><option value="">Select vessel…</option>{vessels.map((v) => <option key={v.id} value={v.id}>{v.name}, IMO {v.imo}{v.openPortLocode ? ` · open ${v.openPortLocode}` : ""}</option>)}</select></span></label>
           <label className="ve-selector__field"><span className="ve-selector__label">Cargo</span><span className="ve-selector__control"><select value={cargoId} onChange={(e) => setCargoId(e.target.value)} aria-label="Cargo"><option value="">Select cargo…</option>{cargos.map((c) => <option key={c.id} value={c.id}>{c.refId} · {c.commodity} · {c.route.polCode} → {c.route.podCode}</option>)}</select></span></label>
@@ -355,6 +374,13 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
                         {(ladenSuez ? ctxByDate[ladenDate] : ctxByDate[ballastDate])?.found === false ? <span className="vy-error">No published Suez tariff for {ladenSuez ? ladenDate : ballastDate}: the canal cost is unavailable unless you enter it below.</span>
                           : !suezCategory ? <span className="vy-error">SCA vessel category unknown for this vessel type: set it on the Suez calculator; the canal cost is unavailable.</span>
                           : suezEstimate ? <>Suez: {canal?.complete ? <b>{fmtUSD(canal.costUsd)}</b> : <span className="vy-error">unavailable</span>} <span className={`vy-badge vy-badge--${canal ? BADGE[canal.status] : "missing"}`}>{canal?.status}</span> · {suezEstimate.direction} · {suezEstimate.cargoStatus} · transit {suezEstimate.transitDate} · tariff v{suezEstimate.tariffVersion.versionNo} · {suezEstimate.transitDays} + {suezEstimate.anchorageDays} days{canal?.anchorageInEcaSource === "governed" ? ` · anchorage ${canal.anchorageInEca ? "inside" : "outside"} ECA` : ""} · <Link href={`/dashboard/suez-toll?vessel=${vesselId}`} className="sz-link">details →</Link>{!canal?.complete && suezEstimate.unavailable[0] ? <div className="vy-error">{suezEstimate.unavailable[0].reason}</div> : null}</> : null}
+                        <div className="vy-row2">
+                          <label className="vy-check" title="Without this declaration the canal figure is the broker's (manual): omitted conditions are never assumed absent">
+                            <input type="checkbox" checked={voy.suezConditionsDeclared} onChange={(e) => setVoy({ ...voy, suezConditionsDeclared: e.target.checked })} data-testid="suez-conditions-declared" />
+                            I declare no special Suez conditions (no heavy lift over 250 t, military cargo, floating unit, late arrival, deck protrusion, non-compliant ladder, relieving pilots, waste or barge services)
+                          </label>
+                          <label className="vy-field"><span>Arrival draft (ft, this voyage)</span><input type="number" min="0" step="0.1" value={voy.arrivalDraftFt} onChange={(e) => setVoy({ ...voy, arrivalDraftFt: e.target.value })} placeholder="decides escort tugs" /></label>
+                        </div>
                         {canal && !canal.complete && (
                           <div className="vy-row2">
                             <label className="vy-field"><span>Canal cost (manual, USD)</span><input type="number" min="0" value={voy.canalManualUsd} onChange={(e) => setVoy({ ...voy, canalManualUsd: e.target.value })} placeholder="agent proforma" /></label>

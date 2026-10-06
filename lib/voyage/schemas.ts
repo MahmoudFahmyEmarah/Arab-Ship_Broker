@@ -121,6 +121,7 @@ export const voyageInputSchema = z.object({
   ports: z.object({ load: portCall, disch: portCall }).strict(),
   anchorageDays: days,
   anchorageInEca: z.boolean(),
+  waitingAnchorageEcaSource: z.enum(["governed", "manual"]).optional(),
   seaMarginPct: pctSmall.nullable(),
   lane: z.string().regex(/^[A-Z0-9.]+>[A-Z0-9.]+$/).nullable(),
   season: z.enum(["winter", "spring", "summer", "autumn"]).nullable(),

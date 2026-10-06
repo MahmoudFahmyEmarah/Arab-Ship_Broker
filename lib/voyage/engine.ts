@@ -240,7 +240,9 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
     const burns: FuelBurn[] = [];
     const okA = burnState(burns, "anchorage", dAnch, input.anchorageInEca ? dAnch : 0, input.anchorageInEca);
     if (!okA) unavailable.push({ code: "anchorage_fuel", reason: "Waiting at anchorage: no anchorage consumption declared." });
-    legs.push({ key: "anchorage", label: "Waiting at anchorage", kind: "anchorage", status: okA ? "trusted" : "unavailable", from: null, to: null, nm: 0, ecaNm: 0, ecaShareKnown: true, days: round2(dAnch), ecaDays: round2(input.anchorageInEca ? dAnch : 0), burns, note: "Broker estimate" });
+    // the ECA status of the wait is governed only when it is the discharge port's governed status (C2O-050 #4)
+    const waitGoverned = input.waitingAnchorageEcaSource === "governed";
+    legs.push({ key: "anchorage", label: "Waiting at anchorage", kind: "anchorage", status: !okA ? "unavailable" : waitGoverned ? "trusted" : "manual", from: null, to: null, nm: 0, ecaNm: 0, ecaShareKnown: true, days: round2(dAnch), ecaDays: round2(input.anchorageInEca ? dAnch : 0), burns, note: "Broker estimate" });
   }
   const totalDays = dSeaBallast + dSeaLaden + dCanalTransit + dCanalAnch + dLoad + dDisch + dAnch;
 
@@ -258,6 +260,7 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
     if (!p.openLoopBan && scrubber) asserted.push(`${which}: no open-loop scrubber ban assumed`);
     if (!p.euBerthOver2h && p.port && EU_EEA.has(p.port.slice(0, 2))) asserted.push(`${which} is an EU/EEA port but the 2 h berth rule was not applied`);
   }
+  if (input.anchorageDays > 0 && input.waitingAnchorageEcaSource !== "governed") asserted.push(`waiting-anchorage ECA status (${input.anchorageInEca ? "inside" : "outside"})`);
   if (transits.some((c) => c.anchorageInEcaSource === "manual")) asserted.push("canal anchorage ECA status");
   if (transits.some((c) => c.anchorageInEcaSource === "coarse")) asserted.push("canal anchorage ECA status from a coarse ECA ring");
   if (asserted.length) assumptions.push(`Not governed: ${asserted.join("; ")}.`);
@@ -340,7 +343,8 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   // ── status ──────────────────────────────────────────────────────────
   let status: VoyageStatus;
   if (anyLegUnavailable && legs.filter((l) => l.kind === "sea").every((l) => l.status === "unavailable")) status = "unavailable";
-  else if (!complete || fuelStatus !== "trusted" || canal.status === "manual" || canal.status === "fallback" || classAssumed || asserted.length > 0 || brokerInputs.length > 0 || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
+  // an unconfirmed platform constant is an assumption: never trusted (C2O-050 #4)
+  else if (!complete || fuelStatus !== "trusted" || platformAssumptions.length > 0 || canal.status === "manual" || canal.status === "fallback" || classAssumed || asserted.length > 0 || brokerInputs.length > 0 || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
   else status = "trusted";
 
   return {

@@ -72,5 +72,16 @@ export function suezTransitDate(startIso: string, offsetDays: number): string {
 export function canalDirection(wp: [number, number, number | null][]): "SB" | "NB" | null {
   const inCanal = wp.filter(([lat, lon]) => lat >= 29.85 && lat <= 31.35 && lon >= 32.2 && lon <= 32.65);
   if (inCanal.length >= 2) return inCanal[0][0] > inCanal[inCanal.length - 1][0] ? "SB" : "NB";
-  return wp.length >= 2 ? (wp[0][0] > wp[wp.length - 1][0] ? "SB" : "NB") : null;
+  // No end-point guess (C2O-050 P2): a track with no waypoints inside the canal has no governed direction.
+  return null;
+}
+
+/**
+ * A canal estimate priced on facts that are not governed (typed vessel facts, undeclared voyage conditions, an
+ * arrival draft) is the broker's figure: a trusted canal becomes manual with the reasons, never stays trusted
+ * (C2O-050 #1). Server and preview share this rule.
+ */
+export function downgradeCanalForFacts(canal: CanalInput | null, reasons: string[], provenance: { actorUserId: string; at: string }): CanalInput | null {
+  if (!canal || reasons.length === 0 || canal.status !== "trusted") return canal;
+  return { ...canal, status: "manual", manual: { actorUserId: provenance.actorUserId, at: provenance.at, reason: `Suez facts not governed: ${reasons.join("; ")}` } };
 }

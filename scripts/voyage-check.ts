@@ -10,9 +10,10 @@ import { readFileSync } from "node:fs";
 import { estimateVoyage, seaDays, seaMarginFor, seasonOf } from "../lib/voyage/engine";
 import { parseVoyageInput, parseVoyageSettings } from "../lib/voyage/schemas";
 import { canonicalJson, sealSnapshot, type FuelIndexSnapshot } from "../lib/voyage/snapshots";
-import { DEFAULT_VOYAGE_SETTINGS, type VoyageInput, type VoyageSettings } from "../lib/voyage/types";
+import { DEFAULT_VOYAGE_SETTINGS, PLATFORM_CONSTANTS, type VoyageInput, type VoyageSettings } from "../lib/voyage/types";
 import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage/calculator-policy";
-import { canalDirection, canalFromSuez, suezTransitDate } from "../lib/voyage/canal";
+import { canalDirection, canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "../lib/voyage/canal";
+import { reconcileLinks, suezFactReasons, type GovernedSuezFacts } from "../lib/voyage/save-rules";
 import { voyageFuelProducts } from "../lib/voyage/fuel-source";
 import { estimateSuezTransit } from "../lib/suez/engine";
 import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
@@ -22,7 +23,8 @@ const ok = (cond: boolean, msg: string) => { assert.ok(cond, msg); checks++; };
 const eq = (a: unknown, b: unknown, msg: string) => { assert.deepStrictEqual(a, b, msg); checks++; };
 const near = (a: number | null | undefined, b: number, tol: number, msg: string) => { assert.ok(a != null && Math.abs(a - b) <= tol, `${msg}: got ${a}, want ${b} ±${tol}`); checks++; };
 
-const S: VoyageSettings = structuredClone(DEFAULT_VOYAGE_SETTINGS);
+// the governed baseline: every platform constant confirmed by the owner (C2O-050 #4 makes an unconfirmed one partial)
+const S: VoyageSettings = { ...structuredClone(DEFAULT_VOYAGE_SETTINGS), confirmed: PLATFORM_CONSTANTS.map((c) => c.key) };
 S.seaMargin.defaultPct = 0; // fixtures sail on the governed margin (an entered margin is a broker input since C2O-044 #5)
 const MANUAL = { actorUserId: "user-1", reason: "agent quote 3 Oct", at: "2026-10-03T10:00:00Z" };
 const index = (products: Record<string, number>, extra: Partial<FuelIndexSnapshot> = {}): FuelIndexSnapshot => ({
@@ -304,7 +306,7 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   // P0-3 / P0-4 / P1-9 · contract: the save re-resolves legs and the guard covers every action
   const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
   ok((act.match(/await resolveCalculatorAccess\(\)/g) ?? []).length >= 2, "both voyage actions pass the entitlement guard");
-  ok(act.includes("lookupLeg(supabase, from, to, today)") && !act.includes("payload.routeLegs") && !act.includes("payload.routeMeta"), "legs and route metadata are resolved on the server, never taken from the browser");
+  ok(act.includes("lookupLeg(supabase, from, to, startDate)") && !act.includes("payload.routeLegs") && !act.includes("payload.routeMeta"), "legs and route metadata are resolved on the server at the voyage date, never taken from the browser");
   ok(act.includes('p?.pda?.source === "tariff"'), "a browser-asserted tariff DA is refused");
   ok(act.includes("canalFromSuez(suez, settings, { leg: which"), "the canal status is derived on the server");
   ok(/status: l\.status/.test(act) && /status: f\.status/.test(act), "every saved line carries its governed status");
@@ -373,10 +375,53 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   eq(estimateVoyage(base({ vessel: v, canal: { ...laden, anchorageInEcaSource: "manual" } })).status, "partial", "an asserted anchorage ECA status is a manual fact");
 
   // PR-04 · platform assumptions are labelled until the owner confirms them
-  const pa = estimateVoyage(base());
+  const pa = estimateVoyage(base({ settings: { ...S, confirmed: [] } }));
   ok(pa.platformAssumptions.some((p) => p.key === "opex.crewUsdDay" && p.label.includes("1,450")) && pa.assumptions.some((a) => a.startsWith("Platform assumption")), "unconfirmed constants are labelled platform assumption");
   const conf = estimateVoyage(base({ settings: { ...S, confirmed: ["opex.crewUsdDay", "opex.maintenanceUsdDay", "classMultipliers", "seaMargin.defaultPct", "speeds", "portTimeDays", "suez.days"] } }));
   eq(conf.platformAssumptions, [], "confirmed constants carry no label");
+  // C2O-050 #4 · an unconfirmed constant is an assumption: the estimate is never trusted on it
+  eq(pa.status, "partial", "an unconfirmed platform constant keeps the estimate partial");
+  const wait = estimateVoyage(base({ anchorageDays: 1.5, anchorageInEca: false }));
+  ok(wait.status === "partial" && wait.legs.find((l) => l.key === "anchorage")?.status === "manual" && wait.assumptions.some((a) => a.includes("waiting-anchorage ECA status")), "a broker's waiting-anchorage ECA flag is an assertion: manual leg, partial estimate");
+  const waitGov = estimateVoyage(base({ anchorageDays: 1.5, anchorageInEca: false, waitingAnchorageEcaSource: "governed" }));
+  ok(waitGov.legs.find((l) => l.key === "anchorage")?.status === "trusted" && !waitGov.assumptions.some((a) => a.includes("waiting-anchorage")), "the discharge port's governed ECA status makes the wait trusted");
+  // C2O-050 P2 · no end-point guess for the canal direction
+  eq(canalDirection([[30.5, 25.0, null], [12.0, 45.0, null]]), null, "a track with no waypoints inside the canal has no direction");
+  eq(canalDirection([[31.25, 32.3, null], [30.6, 32.33, null], [29.95, 32.56, null]]), "SB", "waypoints inside the canal decide the direction");
+  // C2O-050 #1 · ungoverned Suez facts make a trusted canal the broker's figure
+  const tc = { required: true, status: "trusted" as const, costUsd: 300000, complete: true, transitDays: 1, anchorageDays: 1, anchorageInEca: false, anchorageInEcaSource: "governed" as const };
+  const dg = downgradeCanalForFacts(tc as never, ["voyage conditions (special services, surcharges) not declared"], { actorUserId: "run-actor", at: "2026-10-06T00:00:00Z" });
+  ok(dg?.status === "manual" && !!dg.manual?.reason.includes("not declared"), "undeclared conditions downgrade a trusted canal to manual with the reason");
+  eq(downgradeCanalForFacts(tc as never, [], { actorUserId: "run-actor", at: "x" })?.status, "trusted", "governed facts leave the canal trusted");
+
+  // C2O-050 #2 · adversarial links: every inconsistency is refused, never silently unlinked
+  const cargoRow = { load_port_locode: "EGALY", disch_port_locode: "SAJED", qty_min_mt: 25000, qty_max_mt: 27500 };
+  const L = (over: Partial<Parameters<typeof reconcileLinks>[0]>) => reconcileLinks({ ladenFrom: "EGALY", ladenTo: "SAJED", openPort: "EGALY", qtyMt: 26000, freightQtyMt: null, vesselId: "v1", ...over });
+  ok(L({ cargo: { id: "c1", row: cargoRow } }).ok, "a consistent cargo link is accepted");
+  ok(!L({ ladenTo: "SAYNB", cargo: { id: "c1", row: cargoRow } }).ok, "another discharge port than the linked cargo's is refused");
+  ok(!L({ ladenFrom: "TRMER", cargo: { id: "c1", row: cargoRow } }).ok, "another load port than the linked cargo's is refused");
+  ok(!L({ qtyMt: 40000, cargo: { id: "c1", row: cargoRow } }).ok, "a quantity above the cargo's range is refused");
+  ok(!L({ qtyMt: 1000, cargo: { id: "c1", row: cargoRow } }).ok, "a quantity below the cargo's range is refused");
+  ok(!L({ qtyMt: null, cargo: { id: "c1", row: cargoRow } }).ok, "no quantity against a ranged cargo is refused");
+  ok(!L({ freightQtyMt: 30000, cargo: { id: "c1", row: cargoRow } }).ok, "a freight quantity that is not the cargo quantity is refused");
+  ok(!L({ cargo: { id: "c1", row: null } }).ok, "a vanished cargo link is refused, not dropped");
+  ok(!L({ position: { id: "p1", row: { vessel_id: "v2", open_port_locode: "EGALY" } } }).ok, "a position of another vessel is refused");
+  ok(!L({ openPort: "GRPIR", position: { id: "p1", row: { vessel_id: "v1", open_port_locode: "EGALY" } } }).ok, "an open port that is not the position's is refused");
+  const adopt = L({ vesselId: null, position: { id: "p1", row: { vessel_id: "v9", open_port_locode: "EGALY" } } });
+  ok(adopt.ok && adopt.vesselId === "v9", "a position without a vessel id adopts the position's vessel");
+
+  // C2O-050 #1 / #5 · adversarial Suez facts: anything not governed, a draft, or undeclared conditions is a reason
+  const GOV: GovernedSuezFacts = { scnt: 16070, scgt: 21000, gt: 21500, category: "dry_bulk", buildYear: 2012, craneCount: 4, craneSwlMt: 30, mooringCranesOk: true, searchlightCompliant: true, firstTransit: false, beamFt: 105, doubleBottom: true };
+  const T = { scnt: 16070, scgt: 21000, gt: 21500, category: "dry_bulk", buildYear: 2012, craneCount: 4, craneSwlMt: 30, mooringCranesOk: true, searchlightCompliant: true, firstTransit: false, beamFt: 105, doubleBottom: true };
+  eq(suezFactReasons(T, GOV, true), [], "facts equal to the governed profile with declared conditions are governed");
+  ok(suezFactReasons({ ...T, scnt: 12000 }, GOV, true).some((r) => r.startsWith("scnt typed")), "a lower typed SCNT (cheaper toll) is not governed");
+  ok(suezFactReasons({ ...T, buildYear: 2020 }, GOV, true).some((r) => r.startsWith("buildYear")), "a younger typed build year (no overage) is not governed");
+  ok(suezFactReasons({ ...T, beamFt: 90 }, GOV, true).some((r) => r.startsWith("beamFt")), "a narrower typed beam (no escort) is not governed");
+  ok(suezFactReasons({ ...T, doubleBottom: true }, { ...GOV, doubleBottom: null }, true).some((r) => r.startsWith("doubleBottom")), "a double bottom the profile does not record is not governed");
+  ok(suezFactReasons({ ...T, firstTransit: false }, { ...GOV, firstTransit: null }, true).some((r) => r.startsWith("firstTransit")), "a typed transit history the profile does not hold is not governed");
+  ok(suezFactReasons({ ...T, draftFt: 30 }, GOV, true).includes("arrival draft typed for this voyage"), "an arrival draft is a voyage fact typed by the broker");
+  ok(suezFactReasons(T, GOV, false).some((r) => r.includes("not declared")), "omitted voyage conditions are never a governed none");
+  ok(suezFactReasons(T, null, true).length >= 10, "with no profile every typed fact is the broker's");
   ok(vy.includes("platform assumption"), "the page shows the label beside the running cost");
   ok(parseVoyageSettings({ ...S, confirmed: ["not.a.key"] }).ok === false, "only known constants can be confirmed");
   ok(parseVoyageSettings({ ...S, suez: { ...S.suez, anchorages: { SB: [31.35, 32.36] } } }).ok, "settings carry the anchorage points");
@@ -417,7 +462,7 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(actSrc.includes("const startDate = listedStart ?? typedStart ?? today;"), "the linked listing's laycan wins over the browser's date (P1-2)");
   // contract: server-side derivations
   const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
-  for (const needle of ["rl.route!.chokepoints.includes(\"SUEZ\")", "suezDirection", "getPointEcaZones(supabase, point[0], point[1], date)", "portEca(ladenRoute?.startZones", "saved without the cargo link", "saved without the position link", "vesselSource = sameFacts(", "suezTransitDate(startDate, offset)", "cargoStatus: which", "routeVerified: r.verified"]) ok(act.includes(needle), `save derives on the server: ${needle.slice(0, 50)}`);
+  for (const needle of ["rl.route!.chokepoints.includes(\"SUEZ\")", "suezDirection", "getPointEcaZones(supabase, point[0], point[1], date)", "portEca(ladenRoute?.startZones", "reconcileLinks({", "if (!linkCheck.ok) return", "suezFactReasons(payload.suezInput?.vessel", "downgradeCanalForFacts(priced, suezManual", "lookupLeg(supabase, from, to, startDate)", "vesselSource = sameFacts(", "suezTransitDate(startDate, offset)", "cargoStatus: which", "routeVerified: r.verified"]) ok(act.includes(needle), `save derives on the server: ${needle.slice(0, 50)}`);
   ok(!act.includes("client.canal.required") || act.includes("measured ? rl.route!.chokepoints"), "the browser's canal flag counts only for a manual leg");
   const page = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/page.tsx", import.meta.url), "utf8");
   ok(page.includes("loadVesselViews({ mine: true }).then((r) => r.views.map(voyageOptionFromView))") && page.includes("loadOwnerOrgs(access.actorId)"), "members get their own vessels and the owner organisations");

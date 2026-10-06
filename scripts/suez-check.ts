@@ -7,7 +7,7 @@
 // named (O2C-022/024) is asserted to be `unavailable`, `invalid`, undecided or
 // `manual` — never a silent figure. Run: npm run test:suez
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { estimateSuezTransit, tollSdrFromTiers } from "../lib/suez/engine";
 import { parseSuezInput, parseTierCsv, suezItemInputSchema } from "../lib/suez/schemas";
 import type { SuezInput, SuezTariffContext, SuezTariffItem, SuezTollTier } from "../lib/suez/types";
@@ -393,6 +393,22 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   const bad = estimateSuezTransit(rubato, ctx([{ ...escort, params: {} }]));
   eq(bad.status, "invalid", "escort rules missing from the item params → invalid tariff data");
   eq(parseSuezInput({ ...rubato, vessel: { ...rubato.vessel, draftFt: -1 } }).ok, false, "a negative draft is refused");
+}
+
+// ── 16 · C2O-050: governed escort/age facts, SQL validation, legacy origin, durable rollback evidence ─
+{
+  const m = readFileSync(new URL("../supabase/migrations/20261003205600_suez_voyage_truth_fixes.sql", import.meta.url), "utf8");
+  ok(["build_year", "crane_count", "crane_swl_mt", "beam_ft", "double_bottom"].every((c) => m.includes(`add column if not exists ${c}`)) && m.includes("'beamFt', v_row.beam_ft") && m.includes("v_build, v_cranes, v_swl, v_beam, (p_profile ->> 'doubleBottom')::boolean"), "#5 the profile governs build year, cranes, beam and double bottom (read and upsert)");
+  ok(m.includes("malformed escort rule") && m.includes("contingent item %") && m.includes("must be a conditional flag_only item"), "P2 escort and contingent params are validated structurally in SQL");
+  ok(/update public\.suez_tariff_events e\s+set origin = 'command'/.test(m) && m.includes("v.created_by is not null") && m.includes("disable trigger trg_suez_events_append_only"), "#6 legacy admin events are relabelled command under the guard's switch");
+  ok(m.includes("create table if not exists public.schema_rollback_evidence") && m.includes("revoke all on table public.schema_rollback_evidence from public, anon, authenticated, service_role"), "#6 durable rollback evidence outside the module, private");
+  const down = readFileSync(new URL("../supabase/rollback/20261003_suez_voyage_down.sql", import.meta.url), "utf8");
+  ok(down.includes("insert into public.schema_rollback_evidence") && down.includes("not exists (select 1 from public.schema_rollback_evidence)"), "#6 a forced DOWN writes evidence; an empty evidence table goes with a clean DOWN");
+  const r400 = readFileSync(new URL("../supabase/migrations/20261003205400_suez_voyage_audit_remediation.sql", import.meta.url), "utf8");
+  ok(r400.includes("'invalid','unrecorded'));"), "P2 205400 re-applies over 205500's unrecorded lines");
+  const purge = readFileSync(new URL("../supabase/maintenance/20261006_purge_pre_f87_voyage_runs.sql", import.meta.url), "utf8");
+  ok(purge.includes("VOYAGE_PURGE_REFUSED") && purge.includes("'test-data-only'") && purge.includes("enable trigger trg_voyage_run_immutable"), "#6 pre-f87 runs with a person's id are purged only on an acknowledged test database");
+  ok(existsSync(new URL("../supabase/data/suez/load-v5-escort-contingent.sql", import.meta.url)) && existsSync(new URL("../supabase/data/suez/README.md", import.meta.url)), "P2 the governed tariff loads and their runbook are in the repository");
 }
 
 // ── 12 · Contract: fixtures mirror the seed, governance SQL carries the guards ─

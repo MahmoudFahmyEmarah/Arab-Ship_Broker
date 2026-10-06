@@ -446,6 +446,57 @@ end $$;
 
 -- In linked mode (one rolled-back harness transaction) the rows above stay until the final ROLLBACK; they are
 -- smoke rows, not governed records, so the DOWN's used-state guard is told so for this transaction only.
+-- ── S14 · 205600: governed escort/age facts, SQL-validated escort + contingent params, legacy origin, rollback evidence ─
+do $$
+declare v_a uuid; v_vessel uuid; v_id uuid; v_item uuid; r jsonb; v_err text; n int;
+begin
+  insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s14@arabshipbroker.test') returning id into v_a;
+  insert into public.users (id, supabase_user_id, role, full_name, is_active) values (v_a, v_a, 'admin', 'smoke S14 admin (rolled back)', true)
+    on conflict (id) do update set role = 'admin', is_active = true;
+  -- the profile carries the governed Suez facts (as an admin session)
+  select id into v_vessel from public.vessels limit 1;
+  if v_vessel is null then raise notice 'S14 profile part skipped: no vessels in this database';
+  else
+    perform set_config('request.jwt.claim.sub', v_a::text, true);
+    perform set_config('request.jwt.claims', json_build_object('sub', v_a, 'role', 'authenticated', 'app_metadata', json_build_object('role', 'admin'))::text, true);
+    r := public.upsert_vessel_economics_profile(v_vessel, '{"scnt": 16070, "buildYear": 2012, "craneCount": 4, "craneSwlMt": 30, "beamFt": 105.5, "doubleBottom": true}'::jsonb);
+    if (r ->> 'buildYear')::int <> 2012 or (r ->> 'craneCount')::int <> 4 or (r ->> 'beamFt')::numeric <> 105.5 or (r ->> 'doubleBottom')::boolean is not true then
+      raise exception 'S14: the profile did not keep the governed Suez facts: %', r; end if;
+    v_err := null;
+    begin perform public.upsert_vessel_economics_profile(v_vessel, '{"beamFt": 5}'::jsonb); exception when others then v_err := sqlerrm; end;
+    if v_err is null or v_err not like 'VE_INVALID%' then raise exception 'S14: an impossible beam was accepted (%)', v_err; end if;
+    perform set_config('request.jwt.claim.sub', '', true);
+    perform set_config('request.jwt.claims', '', true);
+  end if;
+  -- escort and contingent params are validated by the database
+  r := public.admin_suez_create_version(v_a, jsonb_build_object('effectiveFrom', '2020-10-01', 'effectiveTo', '2020-10-31', 'sourceRef', 'smoke S14 (rolled back)'), null);
+  v_id := (r ->> 'id')::uuid;
+  perform public.admin_suez_save_item(v_id, v_a, null, '{"code":"smoke_flat","labelEn":"Smoke flat","layer":"fixed","basis":"flat","currency":"USD","params":{"amount":1}}'::jsonb);
+  perform public.admin_suez_register_source(v_a, jsonb_build_object('title','Smoke S14 instrument','issuer','Suez Canal Authority','authority','official','evidenceStatus','on_file','sha256',repeat('c',64)), v_id);
+  perform public.admin_suez_save_item(v_id, v_a, null, '{"code":"smoke_escort","labelEn":"Smoke escort","layer":"conditional","basis":"flag_only","currency":"USD","conditionKey":"escort_tugs","params":{"rules":[{"status":"laden","scntMin":90000,"tugs":9}]}}'::jsonb);
+  v_err := null; begin perform public.fn_suez_validate_version(v_id); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like '%malformed escort rule%' then raise exception 'S14: nine escort tugs passed validation (%)', v_err; end if;
+  select id into v_item from public.suez_tariff_items where version_id = v_id and code = 'smoke_escort';
+  perform public.admin_suez_save_item(v_id, v_a, v_item, '{"code":"smoke_escort","labelEn":"Smoke escort","layer":"conditional","basis":"flag_only","currency":"USD","conditionKey":"escort_tugs","params":{"rules":[{"status":"laden","scntMin":90000,"tugs":2,"secret":true}]}}'::jsonb);
+  v_err := null; begin perform public.fn_suez_validate_version(v_id); exception when others then v_err := sqlerrm; end;
+  if v_err is null then raise exception 'S14: an unknown key inside an escort rule passed validation'; end if;
+  perform public.admin_suez_save_item(v_id, v_a, v_item, '{"code":"smoke_escort","labelEn":"Smoke escort","layer":"conditional","basis":"flag_only","currency":"USD","conditionKey":"escort_tugs","params":{"rules":[{"status":"laden","scntMin":90000,"tugs":2}]}}'::jsonb);
+  perform public.fn_suez_validate_version(v_id);
+  perform public.admin_suez_save_item(v_id, v_a, null, '{"code":"smoke_cont","labelEn":"Smoke contingent","layer":"conditional","basis":"flag_only","currency":"USD","conditionKey":"contingent","params":{"amount":-5}}'::jsonb);
+  v_err := null; begin perform public.fn_suez_validate_version(v_id); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like '%contingent item%' then raise exception 'S14: a negative contingent amount passed validation (%)', v_err; end if;
+  -- no admin action is labelled system: an actor-less event of a version a person created is a command
+  select count(*) into n from public.suez_tariff_events e
+   where e.origin = 'system' and e.actor_user_id is null and e.entity <> 'seed' and not (e.details ? 'migration')
+     and exists (select 1 from public.suez_tariff_versions v where v.id = coalesce(e.version_id, e.entity_id) and v.created_by is not null);
+  if n > 0 then raise exception 'S14: % admin event(s) still labelled system', n; end if;
+  -- the rollback evidence table is outside the module and service-read-only
+  if to_regclass('public.schema_rollback_evidence') is null then raise exception 'S14: schema_rollback_evidence is missing'; end if;
+  if has_table_privilege('authenticated', 'public.schema_rollback_evidence', 'select') or has_table_privilege('service_role', 'public.schema_rollback_evidence', 'insert') then
+    raise exception 'S14: the evidence table must be service read-only'; end if;
+  raise notice 'S14 ok: profile carries build year, cranes, beam, double bottom (validated); escort and contingent params validated in SQL; no admin event labelled system; evidence table private';
+end $$;
+
 select set_config('asb.stream_s_down', 'export-taken:smoke rows of this rolled-back transaction', true);
 
 do $$ begin raise notice 'SUEZ GOVERNANCE SMOKE: ALL ASSERTIONS PASSED'; end $$;

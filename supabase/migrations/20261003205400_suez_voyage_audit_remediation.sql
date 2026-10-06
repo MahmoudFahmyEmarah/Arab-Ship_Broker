@@ -902,7 +902,7 @@ alter table public.voyage_estimate_runs add constraint voyage_estimate_runs_acto
 alter table public.voyage_estimate_lines add column if not exists status text;
 alter table public.voyage_estimate_lines drop constraint if exists voyage_estimate_lines_status_ck;
 alter table public.voyage_estimate_lines add constraint voyage_estimate_lines_status_ck
-  check (status is null or status in ('trusted','fallback','manual','unavailable','invalid'));
+  check (status is null or status in ('trusted','fallback','manual','unavailable','invalid','unrecorded'));  -- 'unrecorded' (205500 backfill) so a re-apply after 205500 never fails (C2O-050 P2)
 
 comment on table public.voyage_estimate_runs is
   'Immutable voyage estimate snapshots (Stream S). Retention: kept indefinitely; never updated or deleted. When a referenced user, organisation, vessel, position or listing is deleted, only that reference is set null (anonymisation); the economics stay.';

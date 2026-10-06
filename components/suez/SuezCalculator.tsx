@@ -90,6 +90,8 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
           mooringCranesOk: f.mooringCranesOk === "unknown" ? boolToTri(r.data.mooringCranesOk) : f.mooringCranesOk,
           searchlight: f.searchlight === "unknown" ? boolToTri(r.data.searchlightCompliant) : f.searchlight,
           firstTransit: f.firstTransit === "unknown" ? boolToTri(r.data.firstTransit) : f.firstTransit,
+          beamFt: f.beamFt === "" && r.data.beamFt != null ? String(r.data.beamFt) : f.beamFt,
+          doubleBottom: f.doubleBottom === "unknown" ? boolToTri(r.data.doubleBottom) : f.doubleBottom,
         }));
       }
     });
@@ -115,7 +117,7 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
     scnt: profile?.scnt ?? vessel?.scnrt ?? null,
     scgt: profile?.scgt ?? null,
     gt: profile?.gt ?? vessel?.gt ?? null,
-    buildYear: vessel?.built ?? null,
+    buildYear: profile?.buildYear ?? vessel?.built ?? null,
   };
   const resolve = (f: FactField, rec: number | null) => (f.mode === "manual" ? num(f.manual) : rec);
   const scnt = resolve(facts.scnt, record.scnt);
@@ -160,6 +162,9 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
         mooringCranesOk: triToBool(facts.mooringCranesOk),
         searchlightCompliant: triToBool(facts.searchlight),
         firstTransit: triToBool(facts.firstTransit),
+        // the escort and age facts are governed too (C2O-050 #5); arrival draft is per voyage and is not saved
+        buildYear: buildYear ?? null, beamFt: num(facts.beamFt), doubleBottom: triToBool(facts.doubleBottom),
+        craneCount: profile?.craneCount ?? null, craneSwlMt: profile?.craneSwlMt ?? null,
         speedLadenKn: profile?.speedLadenKn ?? null, speedBallastKn: profile?.speedBallastKn ?? null,
         consumption: profile?.consumption ?? {}, hasScrubber: profile?.hasScrubber ?? null, vesselClass: profile?.vesselClass ?? null,
       });

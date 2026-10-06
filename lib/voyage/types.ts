@@ -137,6 +137,8 @@ export interface VoyageInput {
   ports: { load: PortCallInput; disch: PortCallInput };
   anchorageDays: number;
   anchorageInEca: boolean;
+  /** governed = the discharge port's governed ECA status; anything else is the broker's (C2O-050 #4) */
+  waitingAnchorageEcaSource?: "governed" | "manual";
   seaMarginPct: number | null; // null → settings (default + lane + season)
   lane: string | null; // "E.MED>AG" style key for settings.seaMargin.byLane
   season: Season | null;

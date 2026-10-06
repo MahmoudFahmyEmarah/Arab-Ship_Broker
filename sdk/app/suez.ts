@@ -29,6 +29,12 @@ export interface VesselEconomicsProfile {
   /** true / false when declared; null = unknown (the estimator prices as no scrubber and says so) */
   hasScrubber?: boolean | null;
   vesselClass?: "A" | "B" | "C" | null;
+  /** governed Suez facts (C2O-050 #1/#5); arrival draft is a voyage fact and never stored here */
+  buildYear?: number | null;
+  craneCount?: number | null;
+  craneSwlMt?: number | null;
+  beamFt?: number | null;
+  doubleBottom?: boolean | null;
   source?: "member" | "admin" | "sync";
   updatedAt?: string;
 }

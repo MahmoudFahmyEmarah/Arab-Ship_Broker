@@ -1,4 +1,4 @@
--- DOWN for Stream S (Voyage Economics): 20261003200000 … 205500.
+-- DOWN for Stream S (Voyage Economics): 20261003200000 … 205600.
 -- Run it as ONE transaction WITH ON_ERROR_STOP (psql -1 -v ON_ERROR_STOP=1, or inside the migration harness): the
 -- first statement refuses otherwise,
 -- so a failure can never leave a partially removed module.
@@ -34,8 +34,23 @@ begin
       using errcode = '55000';
   end if;
   if cardinality(v_used) > 0 then raise notice 'Stream S DOWN on a used database by % at %; export confirmed: %; removed: %', session_user, now(), v_ref, array_to_string(v_used, ', '); end if;
+  -- durable evidence (C2O-050 #6): a NOTICE alone is lost with the session
+  if cardinality(v_used) > 0 and to_regclass('public.schema_rollback_evidence') is not null then
+    insert into public.schema_rollback_evidence (module, db_user, confirmation, used_state)
+    values ('stream-s', session_user, 'export-taken:' || v_ref, jsonb_build_object('removed', to_jsonb(v_used), 'at', now()));
+  end if;
 end
 $used$;
+
+-- 20261003205600 (truth fixes): the profile columns, validator and profile functions go with the module below;
+-- the evidence table is NOT the module's: it is removed only while it holds no evidence.
+do $ev$
+begin
+  if to_regclass('public.schema_rollback_evidence') is not null and not exists (select 1 from public.schema_rollback_evidence) then
+    drop table public.schema_rollback_evidence;
+  end if;
+end
+$ev$;
 
 -- 20261003205500 (review fixes)
 drop function if exists public.fn_point_eca_zones(numeric, numeric, date);

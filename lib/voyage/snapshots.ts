@@ -65,6 +65,10 @@ export interface SuezCostSnapshot {
   /** the transit date the tariff and SDR rate were taken on, and how it was derived */
   transitDate?: string | null;
   transitDateBasis?: string | null;
+  /** governed = every Suez fact came from its governed source and the voyage conditions were declared (C2O-050 #1) */
+  factsSource?: "governed" | "manual";
+  manualFacts?: string[];
+  conditionsDeclared?: boolean;
   /** a second transit on the ballast leg, same fields */
   ballastTransit?: Omit<SuezCostSnapshot, "kind" | "canonicalSha256" | "ballastTransit"> | null;
   canonicalSha256?: string;
