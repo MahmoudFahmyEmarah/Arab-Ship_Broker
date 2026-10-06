@@ -267,6 +267,9 @@ insert into public.listing_ownership (listing_type, listing_id, owner_user_id, o
 on conflict do nothing;
 
 set local session_replication_role = origin;
+-- Replica-mode seed writes bypass the matching maintenance triggers. Rebuild
+-- once so composed Stream R reads the same source truth as normal writes.
+select public.fn_refresh_matches();
 -- ── end of seed ─────────────────────────────────────────────────────────────
 
 -- Fixture Room · LIFT ALL body (C2O-012 item 5, 28 Sep 2026): lift_all_fixture_subjects of

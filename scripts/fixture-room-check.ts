@@ -550,6 +550,54 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/'HELD'/.test(body) && /'AB'/.test(body) && /H18 ok/.test(body) && /H19 ok/.test(body) && /statement_timeout = '5s'/.test(body), "the suite proves bounded, masked member reads for hulls named HELD and AB");
 }
 
+// -- C2O-070 . composed matcher cache test-seed discipline --
+{
+  const refreshSelectAfterOrigin = /set (?:local )?session_replication_role = origin;\s*(?:--[^\r\n]*(?:\r?\n|$)\s*)*select public\.fn_refresh_matches\(\);/;
+  const seed = read("supabase/tests/fixture_room/seed_fixture_shape.sql");
+  ok((seed.match(/fn_refresh_matches\(\)/g) ?? []).length === 1
+     && refreshSelectAfterOrigin.test(seed)
+     && /select public\.fn_refresh_matches\(\);\s*-- ── end of seed/.test(seed),
+     "the replica-mode shared seed returns to origin and refreshes the composed match cache exactly once");
+
+  const candidates = read("supabase/tests/fixture_room/bodies/candidates.sql");
+  ok((candidates.match(/fn_refresh_matches\(\)/g) ?? []).length === 1
+     && refreshSelectAfterOrigin.test(candidates)
+     && /select public\.fn_refresh_matches\(\);\s*do \$\$/.test(candidates),
+     "the candidates seed refreshes at top level before K1 reads governed matches");
+
+  const handles = read("supabase/tests/fixture_room/bodies/handles.sql");
+  ok((handles.match(/fn_refresh_matches\(\)/g) ?? []).length === 3
+     && refreshSelectAfterOrigin.test(handles)
+     && /open_date = current_date \+ 60[^;]*;\s*set local session_replication_role = origin;\s*perform public\.fn_refresh_matches\(\);\s*perform pg_temp\.fx_as/.test(handles)
+     && /open_date = current_date \+ 5[^;]*;\s*set local session_replication_role = origin;\s*perform public\.fn_refresh_matches\(\);\s*raise notice 'H9 ok/.test(handles),
+     "the handles suite refreshes after its seed, invalidation and restoration before H1/H9 assertions");
+
+  const snapshot = read("supabase/tests/fixture_room/bodies/snapshot.sql");
+  ok((snapshot.match(/perform public\.fn_refresh_matches\(\);/g) ?? []).length === 2
+     && /status = 'FIXED'[^;]*;\s*set local session_replication_role = origin;\s*perform public\.fn_refresh_matches\(\);/.test(snapshot)
+     && /status = 'OUT'[^;]*;\s*set local session_replication_role = origin;\s*perform public\.fn_refresh_matches\(\);\s*perform pg_temp\.fx_as/.test(snapshot),
+     "snapshot mutations leave replica mode and refresh before both cache-sensitive continuations");
+
+  const race = read("supabase/tests/fixture_room/fixture_race_two_sessions.sh");
+  ok((race.match(/fn_refresh_matches\(\)/g) ?? []).length === 6
+     && /delete from public\.ports[^;]*;\s*set session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);/.test(race)
+     && /values \('cargo', '\$C6'[^;]*;\s*set session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);/.test(race)
+     && /open_date = current_date \+ 60[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(4\);/.test(race)
+     && race.includes("open_date = current_date + 5 where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()")
+     && /status = 'FIXED'[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(4\);/.test(race)
+     && race.includes("status = 'OPEN' where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()"),
+     "the race harness refreshes exactly at cleanup, C6 seed, both invalidations and both restorations");
+
+  const normalize = (value: string) => value.replace(/\r\n/g, "\n");
+  const shared = normalize(seed).trimEnd();
+  const smokeNames = ["state", "rls", "masking", "idempotency", "immutability", "snapshot", "candidates", "liftall", "handles", "enforcement"];
+  ok(smokeNames.every((name) => {
+    const body = normalize(read(`supabase/tests/fixture_room/bodies/${name}.sql`)).trimEnd();
+    const generated = normalize(read(`supabase/tests/fixture_room/fixture_${name}_smoke.sql`));
+    return generated.includes(`${shared}\n\n${body}`);
+  }), "all ten generated Fixture smokes contain the exact current shared seed and authoritative body");
+}
+
 // -- PR-07 / PR-08 . enforcement (20261006100000) --
 {
   const m = read("supabase/migrations/20261006100000_fixture_room_enforcement.sql");

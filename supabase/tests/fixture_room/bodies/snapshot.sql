@@ -21,6 +21,7 @@ begin
   update public.cargo_listings set commodity_name = 'Corn, Bulk', qty_max_mt = 40000, notes = 'changed after the room opened' where id = pg_temp.fx_id('c1');
   update public.vessel_availability set status = 'FIXED', freight_idea_usd_mt = 99 where id = pg_temp.fx_id('a1');
   set local session_replication_role = origin;
+  perform public.fn_refresh_matches();
 
   -- the charterer, who can no longer see the position through listing RLS, still reads the whole room
   perform pg_temp.fx_as('u_ch1');
@@ -78,6 +79,7 @@ begin
   update public.vessel_availability set status = 'ON SUBS' where id = pg_temp.fx_id('a3');
   update public.cargo_listings set status = 'OUT' where id = pg_temp.fx_id('c2');
   set local session_replication_role = origin;
+  perform public.fn_refresh_matches();
   perform pg_temp.fx_as('u_ow1');
   r := public.get_fixture_room(v_room);
   if (r->'room'->'listingSync'->>'outstanding')::boolean then raise exception 'N2: sync should be satisfied now: %', r->'room'->'listingSync'; end if;

@@ -267,6 +267,9 @@ insert into public.listing_ownership (listing_type, listing_id, owner_user_id, o
 on conflict do nothing;
 
 set local session_replication_role = origin;
+-- Replica-mode seed writes bypass the matching maintenance triggers. Rebuild
+-- once so composed Stream R reads the same source truth as normal writes.
+select public.fn_refresh_matches();
 -- ── end of seed ─────────────────────────────────────────────────────────────
 
 -- Fixture Room · CANDIDATES body (C2O-011, 28 Sep 2026): list_fixture_match_candidates of
@@ -287,6 +290,7 @@ insert into public.listing_ownership (listing_type, listing_id, owner_user_id, o
   ('cargo', pg_temp.fx_id('c6'), pg_temp.fx_id('u_ch1'), pg_temp.fx_id('org_ch'), 'primary', true, 'initial_post')
 on conflict do nothing;
 set local session_replication_role = origin;
+select public.fn_refresh_matches();
 
 do $$
 declare v jsonb; c jsonb; s text; n int;

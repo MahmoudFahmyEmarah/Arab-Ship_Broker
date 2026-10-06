@@ -267,6 +267,9 @@ insert into public.listing_ownership (listing_type, listing_id, owner_user_id, o
 on conflict do nothing;
 
 set local session_replication_role = origin;
+-- Replica-mode seed writes bypass the matching maintenance triggers. Rebuild
+-- once so composed Stream R reads the same source truth as normal writes.
+select public.fn_refresh_matches();
 -- ── end of seed ─────────────────────────────────────────────────────────────
 
 -- Fixture Room · HANDLES body (C2O-013, 29 Sep 2026): the private selection handles of
@@ -304,6 +307,7 @@ insert into public.listing_ownership (listing_type, listing_id, owner_user_id, o
   ('vessel_availability', pg_temp.fx_id('a6'), pg_temp.fx_id('u_ow1'), pg_temp.fx_id('org_ow'), 'primary', true, 'initial_post')
 on conflict do nothing;
 set local session_replication_role = origin;
+select public.fn_refresh_matches();
 
 -- the raw identifiers a member must never receive for these candidates
 create or replace function pg_temp.fx_leaks(p_text text) returns text language sql stable as $f$
@@ -408,6 +412,7 @@ begin
   set local session_replication_role = replica;
   update public.vessel_availability set open_date = current_date + 60 where id = pg_temp.fx_id('a1');
   set local session_replication_role = origin;
+  perform public.fn_refresh_matches();
   perform pg_temp.fx_as('u_ch1');
   e := pg_temp.fx_err(format('select public.create_fixture_room_from_candidate(%L, %L::jsonb, %L)', k3, pg_temp.fx_terms(), 'h-stale'));
   if e <> 'FX_STATE' then raise exception 'H9: a pair that no longer matches must be FX_STATE, got %', e; end if;
@@ -415,6 +420,7 @@ begin
   set local session_replication_role = replica;
   update public.vessel_availability set open_date = current_date + 5 where id = pg_temp.fx_id('a1');
   set local session_replication_role = origin;
+  perform public.fn_refresh_matches();
   raise notice 'H9 ok: the governed match predicate is re-checked when the key is used';
 
   -- H10 · a used idempotency key with a different pairing is a mismatch, not a replay

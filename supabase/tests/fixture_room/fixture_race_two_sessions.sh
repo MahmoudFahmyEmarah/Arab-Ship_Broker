@@ -61,6 +61,8 @@ delete from public.users where email like '%@fixture.test';
 delete from auth.users where email like '%@fixture.test';
 delete from public.organizations where id in ('00000000-0000-4000-8000-0000000000c1', '00000000-0000-4000-8000-0000000000c2', '00000000-0000-4000-8000-0000000000c3', '00000000-0000-4000-8000-0000000000c4', '00000000-0000-4000-8000-0000000000c5');
 delete from public.ports where locode in ('ZZFXA', 'ZZFXB');
+set session_replication_role = origin;
+select public.fn_refresh_matches();
 SQL
 }
 cleanup
@@ -76,6 +78,8 @@ insert into public.cargo_listings (id, ref, status, review_status, cargo_type, c
    '8000', '6000', 'FIOST', 26.00, 2.5, 12000) on conflict (id) do nothing;
 insert into public.listing_ownership (listing_type, listing_id, owner_user_id, owner_org_id, role, is_current, transfer_reason)
   values ('cargo', '$C6', '$U_CH1', '$ORG_CH', 'primary', true, 'initial_post') on conflict do nothing;
+set session_replication_role = origin;
+select public.fn_refresh_matches();
 SQL
 
 # ── a room at version 2, the charterer holding the pen ──────────────────────
@@ -150,6 +154,8 @@ $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_e.log 2>&1 &
 begin;
 set local session_replication_role = replica;
 update public.vessel_availability set open_date = current_date + 60 where id = '$A1';
+set local session_replication_role = origin;
+select public.fn_refresh_matches();
 select pg_sleep(4);
 commit;
 SQL
@@ -163,7 +169,7 @@ PID_F=$!
 wait $PID_E; wait $PID_F
 ok "$(grep -c 'no longer matches' /tmp/fxrace_f.log)" "1" "a create racing an in-flight listing update waits, then refuses the invalid pair"
 ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C1' and vessel_availability_id = '$A1' and status not in ('withdrawn', 'failed', 'expired')")" "0" "no room was opened on the invalidated pair"
-q "set session_replication_role = replica; update public.vessel_availability set open_date = current_date + 5 where id = '$A1'" > /dev/null
+q "set session_replication_role = replica; update public.vessel_availability set open_date = current_date + 5 where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()" > /dev/null
 # 3b · the create is in flight first: the listing update waits until the room exists
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_g.log 2>&1 &
 $(claims $U_CH1)
@@ -224,6 +230,8 @@ $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_k.log 2>&1 &
 begin;
 set local session_replication_role = replica;
 update public.vessel_availability set status = 'FIXED' where id = '$A1';
+set local session_replication_role = origin;
+select public.fn_refresh_matches();
 select pg_sleep(4);
 commit;
 SQL
@@ -237,7 +245,7 @@ PID_L=$!
 wait $PID_K; wait $PID_L
 ok "$(grep -c 'not live on the market' /tmp/fxrace_l.log)" "1" "a recreate racing an in-flight listing update waits, then refuses the stale position"
 ok "$(live_rooms "$A1")" "0" "no room from the stale position"
-q "set session_replication_role = replica; update public.vessel_availability set status = 'OPEN' where id = '$A1'" > /dev/null
+q "set session_replication_role = replica; update public.vessel_availability set status = 'OPEN' where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()" > /dev/null
 # 5b · the recreate is in flight: the listing update waits until the room exists
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_m.log 2>&1 &
 $(claims $U_CH1)
