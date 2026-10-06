@@ -65,8 +65,8 @@ export function AlertsBoard() {
         <div className="asb-panel">
           <div className="panel-body" style={{ padding: 0 }}>
             {[
-              ["Wheat (Bulk) · CK-001 → MV TRADE WINDS", "E.MED → R.SEA · TCE $8.4k/d", "2h ago"],
-              ["Phosphate Rock · CK-003 → MV SEA NAVIGATOR", "R.SEA → A.SEA · TCE $7.1k/d", "5h ago"],
+              ["Wheat (Bulk) · CK-001 → MV TRADE WINDS", "E.MED → R.SEA · Voyage estimate not calculated", "2h ago"],
+              ["Phosphate Rock · CK-003 → MV SEA NAVIGATOR", "R.SEA → A.SEA · Voyage estimate not calculated", "5h ago"],
               ["Handysize open · MV BALTIC STAR", "Constanta · 35k DWT", "Yesterday"],
             ].map(([title, sub, when]) => (
               <div key={title} className="dash-row" style={{ paddingRight: 90 }}>

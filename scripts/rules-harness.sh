@@ -70,7 +70,15 @@ if ! grep -Fq 'RULES_DOWN_TRANSACTION_START' "$DOWN" \
   echo "STOP  rules DOWN must contain an explicit BEGIN/COMMIT wrapper." >&2
   exit 2
 fi
-grep -vE 'RULES_DOWN_TRANSACTION_(START|END)' "$DOWN" > "$DOWN_TX_BODY"
+if ! grep -Fq "current_setting('asb.rules_down_ack', true)" "$DOWN" \
+   || ! grep -Fq "discard-history" "$DOWN"; then
+  echo "STOP  rules DOWN must require explicit discard-history acknowledgement." >&2
+  exit 2
+fi
+{
+  printf "set local asb.rules_down_ack = 'discard-history';\n"
+  grep -vE 'RULES_DOWN_TRANSACTION_(START|END)' "$DOWN"
+} > "$DOWN_TX_BODY"
 
 expand_rollback_smoke() {
   local template="$1" output="$2" line
@@ -112,7 +120,8 @@ if [ "$TARGET" = local ]; then
   if [ "$applied" = t ]; then
     if [ "$FROM_APPLIED" = 1 ]; then
       echo "rules modules present at baseline: applying the combined DOWN first (--from-applied)"
-      if ! $PSQL -v ON_ERROR_STOP=1 -q -f - < "$DOWN"; then
+      if ! $PSQL -v ON_ERROR_STOP=1 -q \
+          -c "set asb.rules_down_ack = 'discard-history'" -f - < "$DOWN"; then
         echo "FAIL  combined DOWN did not complete; the forward proof was not started" >&2
         exit 1
       fi

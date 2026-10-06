@@ -30,6 +30,8 @@ const browserConfig = source("playwright.rules.config.ts");
 const browserHarness = source("scripts/rules-e2e-run.ps1");
 const matchingMigration = source("supabase/migrations/20261003300000_matching_rules.sql");
 const intelligenceServer = source("lib/portal/intelligence.server.ts");
+const rulesDown = source("supabase/rollback/20261003_rules_down.sql");
+const rulesHarness = source("scripts/rules-harness.sh");
 
 check("rules tab", () => assert.match(intelligenceConsole, /id: "rules", label: "Rules"/));
 check("frameworks tab", () => assert.match(intelligenceConsole, /id: "frameworks", label: "Frameworks"/));
@@ -99,6 +101,16 @@ check("real intelligence RPC failure proof", () => {
 });
 check("safe-update-compatible full cache rebuild", () => {
   assert.doesNotMatch(matchingMigration, /delete\s+from\s+public\.matches\s*;/i);
+});
+check("rules DOWN requires explicit history acknowledgement", () => {
+  assert.match(rulesDown, /current_setting\('asb\.rules_down_ack', true\)[\s\S]*?discard-history/);
+  assert.doesNotMatch(rulesDown, /^\s*set(?:\s+local)?\s+asb\.rules_down_ack/im);
+});
+check("rollback probes acknowledge discarded history", () => {
+  assert.match(rulesHarness, /set local asb\.rules_down_ack = 'discard-history'/);
+});
+check("from-applied DOWN acknowledges in the same psql session", () => {
+  assert.match(rulesHarness, /-c "set asb\.rules_down_ack = 'discard-history'" -f -/);
 });
 check("no fixed browser wait", () => assert.doesNotMatch(browserSpec, /waitForTimeout/));
 check("fresh browser server", () => assert.match(browserConfig, /reuseExistingServer: false/));

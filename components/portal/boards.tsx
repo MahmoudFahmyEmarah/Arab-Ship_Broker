@@ -71,6 +71,9 @@ function MatchModeSwitch({ mode, setMode }: { mode: "cargo" | "vessel"; setMode:
 function DashMatchCard({ m, mode, focused, onClick }: {
   m: DashMatch; mode: "cargo" | "vessel"; focused?: boolean; onClick?: () => void;
 }) {
+  const estimatorHref = m.cargoListingKey && m.vesselListingKey
+    ? `/dashboard/voyage-estimator?cargo=${encodeURIComponent(m.cargoListingKey)}&vessel=${encodeURIComponent(m.vesselListingKey)}`
+    : "/dashboard/voyage-estimator";
   const cargo = {
     main: <><span className="dm-name">{m.commodity}</span><span className="dm-sep">·</span><span className="dm-fig">{m.qtyMt} MT</span></>,
     sub: <><span className="dm-route">{m.pol} → {m.pod}</span><span className="dm-zone">{m.polZone}→{m.podZone}</span></>,
@@ -99,7 +102,7 @@ function DashMatchCard({ m, mode, focused, onClick }: {
         <span className="dm-sep">·</span>
         <Link
           className="dm-voyage-link"
-          href={`/dashboard/voyage-estimator?cargo=${encodeURIComponent(m.cargoId)}&vessel=${encodeURIComponent(m.vesselId)}`}
+          href={estimatorHref}
           onClick={(event) => event.stopPropagation()}
         >
           Open Voyage Estimator <span aria-hidden="true">↗</span>
@@ -428,6 +431,7 @@ export function DashboardBoard({
     }
 
     let cancelled = false;
+    const abortController = new AbortController();
     setLiveTopMatches({ status: "loading", queryKey: liveTopMatchesQueryKey, cargo: [], vessel: [] });
     (async () => {
       try {
@@ -440,8 +444,9 @@ export function DashboardBoard({
           );
           const result = await loadBoundedAuthoritativeMatchBatches(
             sources,
-            (listingKey) => listMarketMatches(supabase, listingKey),
+            (listingKey, signal) => listMarketMatches(supabase, listingKey, signal),
             () => cancelled,
+            abortController.signal,
           );
           if (result.status === "discarded") return;
           if (result.status === "unavailable") throw new Error("Authoritative matches unavailable");
@@ -468,8 +473,9 @@ export function DashboardBoard({
         );
         const result = await loadBoundedAuthoritativeMatchBatches(
           sources,
-          (listingKey) => listMarketMatches(supabase, listingKey),
+          (listingKey, signal) => listMarketMatches(supabase, listingKey, signal),
           () => cancelled,
+          abortController.signal,
         );
         if (result.status === "discarded") return;
         if (result.status === "unavailable") throw new Error("Authoritative matches unavailable");
@@ -492,7 +498,10 @@ export function DashboardBoard({
         }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
   }, [filteredCargos, filteredMatchCargos, filteredMatchVessels, filteredVessels, liveTopMatchesQueryKey, matching?.source, mode]);
 
   const liveTopMatchesAreCurrent = liveTopMatches.queryKey === liveTopMatchesQueryKey;

@@ -22,6 +22,7 @@ declare
   v_version3_request uuid := gen_random_uuid();
   v_rollback_request uuid := gen_random_uuid();
   v_redo_request uuid := gen_random_uuid();
+  v_zero_rollback_request uuid := gen_random_uuid();
   v_active1 uuid;
   v_active2 uuid;
   v_version3 uuid;
@@ -587,6 +588,22 @@ begin
      or exists (select 1 from public.matching_candidates where version_id = v_version3)
      or exists (select 1 from public.matching_candidate_snapshots where version_id = v_version3) then
     raise exception 'MATCHING TEST: zero-candidate activation did not fail atomically';
+  end if;
+
+  -- A rollback is the recovery path from the currently active version and is
+  -- therefore allowed to publish a truthful zero-candidate snapshot. Reusing
+  -- stale target candidates here would leave the platform in a false state.
+  v_result := public.matching_rollback_rule_version(
+    v_checker, v_zero_rollback_request, v_active2,
+    'ROLLBACK v' || (select version_no from public.matching_rule_versions where id = v_active1)
+  );
+  if (select active_version_id from public.matching_rule_state where singleton) <> v_active1
+     or (select previous_version_id from public.matching_rule_state where singleton) <> v_active2
+     or (v_result->>'candidateCount')::integer <> 0
+     or (select candidate_count from public.matching_candidate_snapshots where version_id = v_active1) <> 0
+     or exists (select 1 from public.matching_candidates where version_id = v_active1)
+     or exists (select 1 from public.matches) then
+    raise exception 'MATCHING TEST: zero-candidate rollback did not publish an empty rebuilt snapshot';
   end if;
 end;
 $behavior$;

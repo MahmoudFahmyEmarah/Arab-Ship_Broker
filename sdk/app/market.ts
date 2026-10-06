@@ -218,10 +218,12 @@ export async function listMarketVessels(
 export async function listMarketMatches(
   supabase: SupabaseClient,
   listingKey: string,
+  signal?: AbortSignal,
 ): Promise<MarketListingRow[]> {
-  const { data, error } = await supabase.rpc("list_market_matches", {
+  const request = supabase.rpc("list_market_matches", {
     p_listing_key: listingKey,
   });
+  const { data, error } = await (signal ? request.abortSignal(signal) : request);
   if (error) throw error;
   return unwrapItems<MarketListingRow>(data);
 }

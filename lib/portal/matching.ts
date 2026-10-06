@@ -126,6 +126,8 @@ export function fitLabel(
 export interface DashMatch {
   cargoId: string;
   vesselId: string;
+  cargoListingKey: string | null;
+  vesselListingKey: string | null;
   commodity: string;
   qtyMt: string;
   pol: string;
@@ -234,15 +236,16 @@ export type AuthoritativeMatchBatchResult<TSource, TRow> =
   | { readonly status: "discarded" | "unavailable"; readonly batches: readonly [] };
 
 /** Run one fixed-size RPC batch through a small worker pool. A rejected request
- * invalidates the whole authoritative view; cancellation or failure stops new
- * work from being scheduled while already-started reads settle. */
+ * invalidates the whole authoritative view; cancellation stops new scheduling
+ * and aborts already-started reads through the shared signal. */
 export async function loadBoundedAuthoritativeMatchBatches<
   TSource extends { readonly listingKey?: string | null; readonly matches: number },
   TRow,
 >(
   sources: readonly TSource[],
-  load: (listingKey: string) => Promise<readonly TRow[]>,
+  load: (listingKey: string, signal?: AbortSignal) => Promise<readonly TRow[]>,
   shouldDiscard: () => boolean = () => false,
+  signal?: AbortSignal,
 ): Promise<AuthoritativeMatchBatchResult<TSource, TRow>> {
   const selected = boundedAuthoritativeMatchSources(sources);
   if (selected.length === 0) return { status: "ready", batches: [] };
@@ -253,17 +256,18 @@ export async function loadBoundedAuthoritativeMatchBatches<
   let failed = false;
 
   const worker = async () => {
-    while (!failed && !shouldDiscard()) {
+    while (!failed && !shouldDiscard() && !signal?.aborted) {
       const index = nextIndex;
       if (index >= selected.length) return;
       nextIndex += 1;
 
       const source = selected[index]!;
       try {
-        const rows = await load(source.listingKey!);
+        const rows = await load(source.listingKey!, signal);
         batches[index] = { source, rows };
         completed += 1;
       } catch {
+        if (signal?.aborted) return;
         failed = true;
       }
     }
@@ -276,7 +280,7 @@ export async function loadBoundedAuthoritativeMatchBatches<
     ),
   );
 
-  if (shouldDiscard()) return { status: "discarded", batches: [] };
+  if (shouldDiscard() || signal?.aborted) return { status: "discarded", batches: [] };
   if (failed || completed !== selected.length) return { status: "unavailable", batches: [] };
   return {
     status: "ready",
@@ -320,6 +324,8 @@ function dashMatchFromPair(
   return {
     cargoId: cargo.id,
     vesselId: vessel.id,
+    cargoListingKey: cargo.listingKey ?? null,
+    vesselListingKey: vessel.listingKey ?? null,
     commodity: cargo.commodity || cargo.cargo,
     qtyMt: cargo.qtyMt,
     pol: cargo.route?.polName || cargo.route?.polCode || "—",

@@ -1873,10 +1873,6 @@ begin
   into v_expected_count, v_expected_digest
   from public.fn_matching_evaluate(v_target.params, v_as_of_year, null, null) e;
 
-  if v_expected_count = 0 then
-    raise exception 'MATCHING_EMPTY: rollback would publish zero candidates' using errcode = '55000';
-  end if;
-
   -- Per-row source refreshes intentionally maintain only the active version.
   -- Rebuild the rollback target in full from the same locked source snapshot.
   delete from public.matching_candidates where version_id = v_target.id;

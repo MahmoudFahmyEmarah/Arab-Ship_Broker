@@ -10,6 +10,15 @@
 
 begin; -- RULES_DOWN_TRANSACTION_START
 
+do $require_history_ack$
+begin
+  if current_setting('asb.rules_down_ack', true) is distinct from 'discard-history' then
+    raise exception 'RULES_DOWN_ACK: export the rules ledgers, then set asb.rules_down_ack to discard-history'
+      using errcode = '55000';
+  end if;
+end;
+$require_history_ack$;
+
 do $require_snapshot$
 declare
   v_rows jsonb;
