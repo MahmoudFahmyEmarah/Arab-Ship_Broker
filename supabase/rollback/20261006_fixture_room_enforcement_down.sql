@@ -640,6 +640,58 @@ end $$;
 revoke all on function public.list_fixture_rooms(text[], integer) from public, anon, authenticated;
 grant execute on function public.list_fixture_rooms(text[], integer) to authenticated, service_role;
 
+create or replace function public.lift_fixture_subject(
+  p_room_id uuid, p_subject_id uuid, p_expected_version integer, p_idempotency_key text,
+  p_as_party_id uuid default null, p_on_behalf_of_party_id uuid default null)
+ returns jsonb language plpgsql volatile security definer set search_path to 'public'
+as $$
+declare v_actor uuid; r public.fixture_rooms; v_hash text; v_replay jsonb; acting public.fixture_parties; rep public.fixture_parties;
+        s public.fixture_subjects; v_first jsonb; v_open int; v_fixed boolean := false;
+begin
+  v_actor := public.fn_fixture_actor();
+  r := public.fn_fixture_lock(p_room_id);
+  v_hash := md5(jsonb_build_object('cmd', 'lift_fixture_subject', 'subject', p_subject_id, 'as', p_as_party_id, 'behalf', p_on_behalf_of_party_id)::text);
+  v_replay := public.fn_fixture_replay(r.id, p_idempotency_key, v_hash);
+  if v_replay is not null then return v_replay; end if;
+  perform public.fn_fixture_check_version(r, p_expected_version);
+  if r.status <> 'on_subjects' then
+    raise exception 'FX_STATE: subjects can be lifted only while the room is on subjects (it is %)', replace(r.status, '_', ' ') using errcode = '55000';
+  end if;
+  acting := public.fn_fixture_acting_party(r.id, p_as_party_id);
+  rep := public.fn_fixture_rep(acting, p_on_behalf_of_party_id, false);
+  if rep.capacity = 'viewer' then
+    raise exception 'FX_AUTH: viewers cannot lift subjects' using errcode = '42501';
+  end if;
+  select * into s from public.fixture_subjects x where x.id = p_subject_id and x.room_id = r.id for update;
+  if s.id is null then
+    raise exception 'FX_NOT_FOUND: subject not found in this room' using errcode = 'P0002';
+  end if;
+  if s.status <> 'open' then
+    raise exception 'FX_STATE: subject "%" is already %', s.title, s.status using errcode = '55000';
+  end if;
+  if s.responsible_side is not null and s.responsible_side <> rep.side then
+    raise exception 'FX_AUTH: the % side must lift "%"', s.responsible_side, s.title using errcode = '42501';
+  end if;
+  v_first := public.fn_fixture_event(r.id, 'subject.lifted', v_actor, acting.id, case when rep.id <> acting.id then rep.id end, rep.id <> acting.id,
+    'lift_fixture_subject', p_idempotency_key, v_hash,
+    jsonb_build_object('subjectId', s.id, 'seq', s.seq, 'title', s.title, 'liftedBySide', rep.side),
+    jsonb_build_object('subjectId', s.id, 'subjectStatus', 'lifted'));
+  update public.fixture_subjects set status = 'lifted', resolved_at = now(), resolved_by_party_id = rep.id, resolved_event_id = (v_first->>'eventId')::bigint where id = s.id;
+  select count(*) into v_open from public.fixture_subjects x where x.room_id = r.id and x.status = 'open';
+  if v_open = 0 then
+    update public.fixture_rooms set status = 'fixed', fixed_at = now() where id = r.id;
+    perform public.fn_fixture_event(r.id, 'room.fixed', v_actor, acting.id, null, false, 'lift_fixture_subject', p_idempotency_key, v_hash,
+      jsonb_build_object('fixedAt', now(), 'lastSubjectId', s.id, 'lastSubjectTitle', s.title), null);
+    perform public.fn_fixture_listing_sync_require(r.id, jsonb_build_object('cargo_status', 'OUT', 'vessel_status', 'FIXED'), 'fixed', v_actor, acting.id, p_idempotency_key, v_hash);
+    v_fixed := true;
+  end if;
+  perform public.fn_fixture_invalidate_recap(r.id, v_actor, acting.id, 'subject lifted', p_idempotency_key, v_hash);
+  return (v_first || jsonb_build_object('version', (select max(e.seq) from public.fixture_events e where e.room_id = r.id)))
+         || jsonb_build_object('data', (v_first->'data') || jsonb_build_object('roomStatus', case when v_fixed then 'fixed' else 'on_subjects' end, 'openSubjects', v_open));
+end $$;
+revoke all on function public.lift_fixture_subject(uuid, uuid, integer, text, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.lift_fixture_subject(uuid, uuid, integer, text, uuid, uuid) to authenticated, service_role;
+
 drop function if exists public.fn_fixture_fix_confirmed_sides(public.fixture_rooms);
 drop function if exists public.fn_fixture_require_window(public.fixture_rooms);
 drop function if exists public.fn_fixture_window_closed(public.fixture_rooms);

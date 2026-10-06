@@ -599,6 +599,9 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/create or replace function public\.fn_fixture_backfill_windows\(\)/.test(sql) && /select public\.fn_fixture_backfill_windows\(\);/.test(sql), "C2O-055: the backfill is a function the suite exercises on a pre-migration room");
   const enfBody = read("supabase/tests/fixture_room/bodies/enforcement.sql");
   ok(/\(r - 'replayed'\) <> \(v - 'replayed'\)/.test(enfBody) && /E7 ok/.test(enfBody), "C2O-055: the suite compares replay and fresh results and runs the backfill case");
+  const liftBody = sql.split("create or replace function public.lift_fixture_subject(")[1].split("end $$;")[0];
+  ok(liftBody.includes("'subjectStatus', 'lifted', 'roomStatus', case when v_fixed then 'fixed' else 'on_subjects' end, 'openSubjects', v_open") && !liftBody.includes("|| jsonb_build_object('data'"), "lift_fixture_subject stores its final result; a retry returns it exactly");
+  ok(read("supabase/rollback/20261006_fixture_room_enforcement_down.sql").includes("create or replace function public.lift_fixture_subject("), "the DOWN restores the released lift_fixture_subject");
   ok(!/set negotiation_window_ends_at = null/.test(down) && /Window values are KEPT/.test(down), "C2O-052: the DOWN keeps window values");
   const late2 = computeCapabilities("negotiating", [P2("cargo", "principal")], false, [], { windowClosed: true });
   ok(!late2.canAddSubject && !late2.canInvite, "a closed window stops subjects and invitations");

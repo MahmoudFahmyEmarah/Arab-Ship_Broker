@@ -523,9 +523,14 @@ begin
   if v->'data'->>'roomStatus' <> 'on_subjects' then raise exception 'S5: second fix must be on_subjects: %', v; end if;
   v := public.lift_fixture_subject(v_room, v_sub, pg_temp.fx_ver(v_room), 'state-a4-lift-1');
   if v->'data'->>'roomStatus' <> 'on_subjects' or (v->'data'->>'openSubjects')::int <> 1 then raise exception 'S5: one subject left expected: %', v; end if;
+  -- a retried lift returns exactly the original result (replay == fresh)
+  t := public.lift_fixture_subject(v_room, v_sub, 1, 'state-a4-lift-1');
+  if (t->>'replayed')::boolean is not true or (t - 'replayed') <> (v - 'replayed') then raise exception 'S5: the lift replay differs: % vs %', t, v; end if;
   perform pg_temp.fx_as('u_solo');
   v := public.lift_fixture_subject(v_room, v_sub2, pg_temp.fx_ver(v_room), 'state-a4-lift-2');
   if v->'data'->>'roomStatus' <> 'fixed' or (v->'data'->>'openSubjects')::int <> 0 then raise exception 'S5: last lift must fix: %', v; end if;
+  t := public.lift_fixture_subject(v_room, v_sub2, 1, 'state-a4-lift-2');
+  if (t - 'replayed') <> (v - 'replayed') then raise exception 'S5: the fixing lift replay differs (it must say fixed): % vs %', t, v; end if;
   if pg_temp.fx_status(v_room) <> 'fixed' then raise exception 'S5: room not fixed after last lift'; end if;
   if pg_temp.fx_event_types(v_room) not like '%subject.lifted,room.fixed,listing_sync.required%' then raise exception 'S5: ledger %', pg_temp.fx_event_types(v_room); end if;
   raise notice 'S5 ok: subjects added/extended, wrong side refused, reopen → negotiating (+ sync back to market), last lift → fixed atomically';
