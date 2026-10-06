@@ -82,11 +82,13 @@ function SupplierTable({ supplier, products, now }: {
   // duplicating or conflicting. Cleared on success.
   const attempt = React.useRef<SubmissionAttempt | null>(null);
 
-  // The price live now wins over a scheduled replacement (110000); otherwise the scheduled one.
-  const live = (locode: string, key: string) => {
-    const approved = supplier.quotes.filter((q) => q.portLocode === locode && q.productKey === key && q.status === "approved");
-    return approved.find((q) => q.liveNow) ?? approved[0];
-  };
+  // A key can hold the price live now and a scheduled replacement at once (110000);
+  // both are shown, each with its own action (C2O-049).
+  const approvedAt = (locode: string, key: string) =>
+    supplier.quotes.filter((q) => q.portLocode === locode && q.productKey === key && q.status === "approved");
+  const isLive = (q: SupplierPortalQuote) => q.liveNow ?? Date.parse(q.validFrom) <= now;
+  const live = (locode: string, key: string) => approvedAt(locode, key).find(isLive);
+  const scheduled = (locode: string, key: string) => approvedAt(locode, key).find((q) => !isLive(q));
   const pending = (locode: string, key: string) =>
     supplier.quotes.find((q) => q.portLocode === locode && q.productKey === key && q.status === "submitted");
 
@@ -178,6 +180,7 @@ function SupplierTable({ supplier, products, now }: {
               {slots.map((p) => {
                 const k = `${port.locode}|${p.key}`;
                 const lv = live(port.locode, p.key);
+                const sc = scheduled(port.locode, p.key);
                 const pd = pending(port.locode, p.key);
                 return (
                   <div key={p.key} className="bks-cell" role="row">
@@ -185,6 +188,26 @@ function SupplierTable({ supplier, products, now }: {
                       {p.label} <span className="bks-muted">{p.isoGrade} · {p.sulphurClass}</span>
                     </div>
                     <CellStatus live={lv} pending={pd} now={now} />
+                    {sc && (
+                      <div className="bks-cell__row">
+                        <span className="bks-tag bks-tag--pending" data-testid="scheduled-price">
+                          Scheduled ${sc.priceUsdMt} from {new Date(sc.validFrom).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" })}
+                        </span>
+                        {canEdit && (
+                          <button
+                            type="button" className="bks-btn bks-btn--ghost" disabled={busy}
+                            aria-label={`Cancel the scheduled ${p.label} price at ${port.name}`}
+                            onClick={async () => {
+                              const r = await withdrawQuote(sc.id);
+                              setNotice(r.ok ? { kind: "ok", text: `Scheduled ${p.label} price cancelled at ${port.name}; the current price stays live.` } : { kind: "error", text: r.error ?? "Failed" });
+                              router.refresh();
+                            }}
+                          >
+                            Cancel scheduled
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <div className="bks-cell__row">
                       {canEdit && (
                         <input

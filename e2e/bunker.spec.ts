@@ -76,6 +76,9 @@ async function seed(): Promise<Seed> {
   const { url, service } = localKeys();
   const db: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
   const stamp = Date.now().toString(36);
+  const createdUsers: string[] = [];
+  let createdSupplier: string | null = null;
+  try {
   const mk = async (prefix: string, admin: boolean) => {
     const email = `e2e-bk-${prefix}-${stamp}@arabshipbroker.test`;
     const { data, error } = await db.auth.admin.createUser({
@@ -83,6 +86,7 @@ async function seed(): Promise<Seed> {
     });
     if (error || !data.user) throw new Error(`auth ${prefix}: ${error?.message}`);
     const userId = data.user.id;
+    createdUsers.push(userId);
     const { error: e2 } = await db.from("users").insert({
       id: userId, supabase_user_id: userId, email, full_name: `src:bunker-e2e ${prefix}`,
       company: "src:bunker-e2e", role: admin ? "admin" : "vessel_owner", admin_tier: admin ? "super" : null,
@@ -101,6 +105,7 @@ async function seed(): Promise<Seed> {
                   ports: [{ locode: PORT, isPrimary: true }] },
   });
   if (error) throw new Error(`supplier: ${error.message}`);
+  createdSupplier = supplierId as string;
   const { error: e3 } = await db.rpc("admin_bunker_set_member", {
     p_actor: admin.userId, p_supplier_id: supplierId, p_user_id: editor.userId, p_role: "editor",
   });
@@ -110,20 +115,33 @@ async function seed(): Promise<Seed> {
   const { data: portRow } = await db.from("ports").select("trade_name").eq("locode", PORT).maybeSingle();
   const portLabel = (portRow?.trade_name as string | null | undefined) || PORT;
   return { stamp, supplierName, portLabel, supplierId: supplierId as string, editor, outsider, admin };
+  } catch (e) {
+    // A seed that fails half-way removes what it created before failing the run.
+    cleanupIds(stamp, createdUsers, createdSupplier);
+    throw e;
+  }
 }
 
 function cleanup(s: Seed) {
-  const ids = [s.editor.userId, s.outsider.userId, s.admin.userId].map((x) => `'${x}'`).join(",");
+  cleanupIds(s.stamp, [s.editor.userId, s.outsider.userId, s.admin.userId], s.supplierId);
+}
+
+// Removes exactly what a seed created, also a partial seed (C2O-049): users by id,
+// the supplier and everything hanging off it when it exists.
+function cleanupIds(stamp: string, userIds: string[], supplierId: string | null) {
+  if (!userIds.length && !supplierId) return;
+  const ids = userIds.length ? userIds.map((x) => `'${x}'`).join(",") : "null";
+  const supplierSql = supplierId ? `
+delete from public.bunker_quote_supersessions where approved_quote_id in (select id from public.bunker_quotes where supplier_id = '${supplierId}')
+   or superseded_quote_id in (select id from public.bunker_quotes where supplier_id = '${supplierId}');
+delete from public.bunker_quote_events where supplier_id = '${supplierId}';
+delete from public.bunker_quotes where supplier_id = '${supplierId}';
+delete from public.bunker_supplier_members where supplier_id = '${supplierId}';
+delete from public.bunker_supplier_ports where supplier_id = '${supplierId}';
+delete from public.bunker_suppliers where id = '${supplierId}';` : "";
   // Quotes and events are append-only by trigger; replica mode bypasses it for test teardown.
   const sql = `
-set session_replication_role = replica;
-delete from public.bunker_quote_supersessions where approved_quote_id in (select id from public.bunker_quotes where supplier_id = '${s.supplierId}')
-   or superseded_quote_id in (select id from public.bunker_quotes where supplier_id = '${s.supplierId}');
-delete from public.bunker_quote_events where supplier_id = '${s.supplierId}';
-delete from public.bunker_quotes where supplier_id = '${s.supplierId}';
-delete from public.bunker_supplier_members where supplier_id = '${s.supplierId}';
-delete from public.bunker_supplier_ports where supplier_id = '${s.supplierId}';
-delete from public.bunker_suppliers where id = '${s.supplierId}';
+set session_replication_role = replica;${supplierSql}
 delete from public.profiles where account_id in (${ids});
 delete from public.users where id in (${ids});
 delete from auth.users where id in (${ids});
@@ -137,7 +155,7 @@ delete from auth.users where id in (${ids});
     const hosted = sql.replace("set session_replication_role = replica;",
       "alter table public.bunker_quotes disable trigger trg_bunker_quote_append_only;\n" +
       "alter table public.bunker_quote_events disable trigger trg_bunker_event_immutable;");
-    const file = path.join(os.tmpdir(), `bunker-e2e-cleanup-${s.stamp}.sql`);
+    const file = path.join(os.tmpdir(), `bunker-e2e-cleanup-${stamp}.sql`);
     writeFileSync(file, `begin;\n${hosted}\n` +
       "alter table public.bunker_quotes enable trigger trg_bunker_quote_append_only;\n" +
       "alter table public.bunker_quote_events enable trigger trg_bunker_event_immutable;\ncommit;\n");
@@ -324,4 +342,45 @@ test("a retry after a lost response replays instead of duplicating (C2B-003 #2)"
   const { count } = await db.from("bunker_quotes").select("id", { count: "exact", head: true })
     .eq("supplier_id", s.supplierId).eq("product_key", "HSFO380").eq("price", 533);
   expect(count).toBe(1);
+});
+
+test("a scheduled replacement shows beside the live price; each has its own action (C2O-049)", async ({ browser }, info) => {
+  const { url, service } = localKeys();
+  const db = createClient(url, service, { auth: { persistSession: false } });
+  const day = 86_400_000;
+  const { data: q, error } = await db.from("bunker_quotes").insert({
+    supplier_id: s.supplierId, port_locode: PORT, product_key: "VLSFO", price: PRICE + 20,
+    valid_from: new Date(Date.now() + 2 * day).toISOString(), valid_until: new Date(Date.now() + 9 * day).toISOString(),
+    source: "admin_input", status: "submitted",
+  }).select("id").single();
+  expect(error).toBeNull();
+  const { error: approveError } = await db.rpc("admin_bunker_decide_quote", {
+    p_actor: s.admin.userId, p_quote_id: q!.id, p_decision: "approve", p_reason: null,
+  });
+  expect(approveError).toBeNull();
+
+  // Admin: the live price stays under "Live prices"; the replacement is listed as scheduled.
+  const admin = await signedIn(browser, base(info.project.use), s.admin.email);
+  await gotoStable(admin.page, "/admin/bunker");
+  await expect(admin.page.getByRole("row").filter({ hasText: s.supplierName }).filter({ hasText: `$${PRICE}` }).first()).toContainText("Current");
+  const scheduledSection = admin.page.getByRole("region", { name: "Scheduled prices" });
+  await expect(scheduledSection).toBeVisible();
+  await expect(scheduledSection.getByRole("row").filter({ hasText: s.supplierName })).toContainText(`$${PRICE + 20}`);
+  await expect(scheduledSection.getByText("Scheduled · from").first()).toBeVisible();
+  await admin.context.close();
+
+  // Supplier: both are visible; cancelling the scheduled one keeps the live price.
+  const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
+  await gotoStable(page, "/dashboard/bunker-supplier");
+  await expect(page.getByTestId("scheduled-price")).toContainText(`$${PRICE + 20}`);
+  await expect(page.getByText(`$${PRICE} · Current`)).toBeVisible();
+  await page.getByRole("button", { name: new RegExp(`Cancel the scheduled VLSFO price at ${escapeRe(s.portLabel)}`) }).click();
+  await expect(page.getByRole("status")).toContainText("the current price stays live");
+  await expect(page.getByTestId("scheduled-price")).toHaveCount(0);
+  await expect(page.getByText(`$${PRICE} · Current`)).toBeVisible();
+  await context.close();
+
+  const { data: rows } = await db.from("bunker_quotes").select("price,status,superseded_at")
+    .eq("supplier_id", s.supplierId).eq("product_key", "VLSFO").eq("status", "approved");
+  expect(rows?.find((r) => Number(r.price) === PRICE)?.superseded_at ?? null).toBeNull();
 });
