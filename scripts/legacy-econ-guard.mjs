@@ -11,7 +11,7 @@ const ROOT = process.cwd();
 const MONEY = ["FUEL_PRICES", "SUEZ_SDR_USD", "SUEZ_FIXED", "calcPortDA", "calcSuezToll", "calcVoyage", "VoyageCalc"];
 // Temporary: removed by Codex's Stream R correction (C2O-042, R1). Then delete the
 // money exports from econ.ts and empty this list.
-const PENDING = new Set(["lib/portal/matching.ts"]);
+const PENDING = new Set([]); // R1 landed with Stream R 53390ce; the money exports are deleted (R4).
 const SCAN = ["app", "components", "lib", "sdk"];
 const IGNORE = new Set(["node_modules", ".next"]);
 
