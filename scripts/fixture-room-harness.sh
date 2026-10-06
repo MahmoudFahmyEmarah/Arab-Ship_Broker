@@ -50,8 +50,9 @@ CHAIN=(
   "$M/20260923207000_fixture_room_lift_all.sql"
   "$M/20260923208000_fixture_room_candidate_handles.sql"
   "$M/20261006100000_fixture_room_enforcement.sql"
+  "$M/20261007100000_fixture_match_label.sql"
 )
-DOWNS=("supabase/rollback/20261006_fixture_room_enforcement_down.sql" "supabase/rollback/20260923_fixture_room_down.sql")
+DOWNS=("supabase/rollback/20261007_fixture_match_label_down.sql" "supabase/rollback/20261006_fixture_room_enforcement_down.sql" "supabase/rollback/20260923_fixture_room_down.sql")
 
 # ── 0 · starting state (FR-L2) ──────────────────────────────────────────────
 if [ "$TARGET" = local ]; then

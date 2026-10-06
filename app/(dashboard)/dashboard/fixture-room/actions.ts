@@ -75,9 +75,13 @@ export async function loadFixtureRooms(input?: { statuses?: FixtureRoomStatus[] 
  * explanation can never contradict a valid match.
  */
 export interface MatchFacts {
-  zone: "load" | "discharge"; laycan: "spot" | "window"; grain: boolean; dg: boolean;
+  zone: "load" | "discharge" | "other"; openZone: string | null; laycan: "spot" | "window"; grain: boolean; dg: boolean;
   gearRequired: boolean; partCargo: boolean; dwtDelta: number;
 }
+/** the governed Rules label of a candidate pair (active rule version); members see the word only, never a score */
+export type MatchLabel = "Strong" | "Good" | "Possible" | "Weak";
+const MATCH_LABELS: readonly string[] = ["Strong", "Good", "Possible", "Weak"];
+const labelOf = (v: unknown): MatchLabel | null => (typeof v === "string" && MATCH_LABELS.includes(v) ? (v as MatchLabel) : null);
 export interface MatchCargoOption {
   /** the member's own listing id (step 1); absent on a counterparty candidate */
   id?: string;
@@ -87,7 +91,7 @@ export interface MatchCargoOption {
   hints?: Record<string, unknown> | null;
   ref: string | null; commodity: string; type: string; qtyMin: number; qtyMax: number;
   loadPort: string | null; dischPort: string | null; laycanFrom: string | null; laycanTo: string | null; isSpot: boolean;
-  freightIdea: number | null; rateAligned: boolean | null; mine: boolean; fit?: MatchFacts;
+  freightIdea: number | null; rateAligned: boolean | null; mine: boolean; fit?: MatchFacts; matchLabel?: MatchLabel | null;
 }
 /** No vessel id, IMO or (for a counterparty) availability id, ever (C2O-011, C2O-013). A TBN hull a member does not own is named "TBN". */
 export interface MatchVesselOption {
@@ -99,6 +103,7 @@ export interface MatchVesselOption {
   hints?: Record<string, unknown> | null;
   name: string; isTbn?: boolean; type: string; dwt: number | null; openPort: string | null;
   openZone: string | null; openDate: string | null; freightIdea: number | null; rateAligned: boolean | null; geared: boolean | null; mine: boolean; fit?: MatchFacts;
+  matchLabel?: MatchLabel | null;
 }
 export interface MatchBuilderData {
   myCargo: MatchCargoOption[];
@@ -117,7 +122,7 @@ const num = (v: unknown) => (v == null ? null : Number(v));
 const facts = (f: unknown): MatchFacts | undefined => {
   if (!f || typeof f !== "object") return undefined;
   const r = f as Row;
-  return { zone: r.zone === "discharge" ? "discharge" : "load", laycan: r.laycan === "spot" ? "spot" : "window", grain: r.grain === true, dg: r.dg === true,
+  return { zone: r.zone === "discharge" ? "discharge" : r.zone === "other" ? "other" : "load", openZone: r.openZone == null ? null : String(r.openZone), laycan: r.laycan === "spot" ? "spot" : "window", grain: r.grain === true, dg: r.dg === true,
     gearRequired: r.gearRequired === true, partCargo: r.partCargo === true, dwtDelta: Number(r.dwtDelta ?? 0) };
 };
 const hintsOf = (r: Row) => (r.hints && typeof r.hints === "object" ? (r.hints as Record<string, unknown>) : null);
@@ -125,6 +130,7 @@ const vesselCandidate = (r: Row): MatchVesselOption => ({
   candidateKey: String(r.candidateKey), hints: hintsOf(r), name: r.isTbn === true && r.name === "TBN" ? "TBN" : stripVesselNamePrefix(String(r.name ?? "Vessel")), isTbn: r.isTbn === true,
   type: String(r.type ?? "—"), dwt: num(r.dwt), openPort: str(r.openPort), openZone: str(r.openZone), openDate: str(r.openDate),
   freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, geared: r.geared == null ? null : r.geared === true, mine: r.mine === true, fit: facts(r.fit),
+  matchLabel: labelOf(r.matchLabel),
 });
 // the member's own live listings (list_fixture_my_listings: the create rule, organisation seats included)
 const ownCargo = (r: Row): MatchCargoOption => ({ ...cargoCandidate(r), id: String(r.id), candidateKey: undefined, hints: null, rateAligned: null, mine: true, fit: undefined });
@@ -137,6 +143,7 @@ const cargoCandidate = (r: Row): MatchCargoOption => ({
   candidateKey: r.candidateKey == null ? undefined : String(r.candidateKey), hints: hintsOf(r), ref: str(r.ref), commodity: String(r.commodity ?? "Cargo"), type: String(r.type ?? "—"), qtyMin: Number(r.qtyMin ?? 0), qtyMax: Number(r.qtyMax ?? 0),
   loadPort: str(r.loadPort), dischPort: str(r.dischPort), laycanFrom: str(r.laycanFrom), laycanTo: str(r.laycanTo), isSpot: r.isSpot === true,
   freightIdea: num(r.freightIdea), rateAligned: r.rateAligned === true, mine: r.mine === true, fit: facts(r.fit),
+  matchLabel: labelOf(r.matchLabel),
 });
 async function candidatesFor(supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>, kind: "cargo" | "vessel", id: string) {
   const rows = await sdk.listFixtureMatchCandidates(supabase, kind, id);

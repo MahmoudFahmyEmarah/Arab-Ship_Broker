@@ -326,7 +326,7 @@ ok(/export function buildDealSummary\(/.test(fxSummary) && !/email|phone|userId|
 ok(/p\.name \?\? `\$\{p\.label\} \(via ASB, masked\)`/.test(fxSummary) && /vesselIdentityMasked \? " · identity withheld"/.test(fxSummary), "the deal summary keeps the counterparty and TBN masking of the read model");
 const fxGlossary = read("lib/fixture-room/glossary.ts");
 ok(/MOLOO/.test(fxGlossary) && /FIOST/.test(fxGlossary) && /SHINC/.test(fxGlossary) && /export function glossTokens/.test(fxGlossary), "the glossary carries the design's abbreviations");
-ok(/export function assessFit\(/.test(fxUi[3]) && !/rpc\(|fetch\(/.test(fxUi[3].split("export function assessFit")[1].split("\n}")[0]), "the match builder's fit reasons only explain the platform's candidates from listing fields (no scorer of its own)");
+ok(/export function matchFit\(/.test(fxUi[3]) && !/rpc\(|fetch\(|score \+=/.test(fxUi[3].split("export function matchFit")[1].split("\n}")[0]), "the match builder's tier is the server's Rules label; its reasons only explain the governed facts (no scorer of its own)");
 ok(/href=\{pdaHref\}/.test(fxUi[0]) && /new URLSearchParams\(\{ from: "fixture", ref: room\.ref, cargoId: room\.cargoListingId \}\)/.test(fxUi[0]) && !/imo_number/.test(fxUi[0].split("const pdaParams")[1].split("const pdaHref")[0]), "the estimator hand-off follows the frozen contract (from, ref, cargoId, vesselId, vessel, load, disch, mt) and never carries an IMO");
 ok(/if \(!snapshot\.vesselIdentityMasked && vessel\.vessel_name\) pdaParams\.set\("vessel"/.test(fxUi[0]) && /if \(room\.vesselId\) pdaParams\.set\("vesselId"/.test(fxUi[0]), "the hand-off names the vessel only once it is disclosed (vesselId is already null while masked)");
 const fxComposer = read("components/fixture-room/RecapComposer.tsx");
@@ -410,8 +410,11 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(!/getMatchesForCargo|getMatchesForAvailability|vessel_id|vesselId|imo/i.test(act.split("// ── match builder data")[1].split("// ── commands")[0]), "the match builder reads only the governed RPC and maps no vessel identifier");
   ok(/out\.myCargo\.some\(\(c\) => c\.id === params\.cargo\)/.test(act) && /out\.myVessels\.some\(\(v\) => v\.availabilityId === params\.vessel\)/.test(act), "a preselected listing is honoured only when it is the member's own");
   const mb = read("components/fixture-room/MatchBuilder.tsx");
-  const fitFn = mb.split("export function assessFit")[1].split("\n}")[0];
-  ok(/export function assessFit\(c: MatchCargoOption, v: MatchVesselOption, f: MatchFacts \| undefined\)/.test(mb) && !/kind: "no"|Under capacity|Opens after laycan|Gearless/.test(fitFn), "fit reasons state only the governed match facts, never a contradiction of a valid match");
+  const fitFn = mb.split("export function matchFit")[1].split("\n}")[0];
+  ok(/export function matchFit\(label: MatchLabel \| null \| undefined, c: MatchCargoOption, v: MatchVesselOption, f: MatchFacts \| undefined\)/.test(mb) && !/kind: "no"|Under capacity|Opens after laycan|Gearless/.test(fitFn), "fit reasons state only the governed match facts, never a contradiction of a valid match");
+  ok(!/assessFit/.test(mb) && /label \? \(label\.toLowerCase\(\) as Fit\["tier"\]\) : "unrated"/.test(fitFn) && /fit\.label \?\? "not rated"/.test(mb), "B2O-021: the tier is the governed Rules label (or not rated), never a client score");
+  const lm = read("supabase/migrations/20261007100000_fixture_match_label.sql");
+  ok((lm.match(/'matchLabel', \(select mm\.score_label from public\.matches mm where/g) ?? []).length === 2 && !/match_score|'score'/.test(lm.replace(/--.*$/gm, "")), "the candidate RPC returns the governed label word for both directions and never the raw score");
   ok(!/reasons\.slice\(/.test(mb), "every fit reason is shown (no truncation)");
   const h = read("scripts/fixture-room-harness.sh");
   ok(/20260923206000_fixture_room_match_candidates\.sql/.test(h) && /\[candidates\]="FIXTURE CANDIDATES SMOKE"/.test(h) && /drop function if exists public\.list_fixture_match_candidates\(text, uuid\);/.test(read("supabase/rollback/20260923_fixture_room_down.sql")), "the harness applies, tests and reverses the candidates read");

@@ -120,3 +120,29 @@ begin
   perform pg_temp.fx_owner();
   raise notice 'K7 ok: own listings follow the create rule (organisation seats included), with no vessel id or IMO';
 end $$;
+
+-- ── K8 · the governed Rules label (20261007100000, B2O-021): the word from public.matches, never a score ─
+do $$
+declare v jsonb; n int; v_got text; v_want text; v_rank int[];
+begin
+  perform pg_temp.fx_owner();
+  select string_agg(coalesce(score_label, '-'), ',' order by score_label) into v_want from public.matches where cargo_id = pg_temp.fx_id('c6');
+  perform pg_temp.fx_as('u_ch1');
+  v := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
+  select string_agg(coalesce(x->>'matchLabel', '-'), ',' order by x->>'matchLabel') into v_got from jsonb_array_elements(v) x;
+  if v_got is distinct from v_want then raise exception 'K8: cargo-side labels % differ from the Rules cache %', v_got, v_want; end if;
+  if exists (select 1 from jsonb_array_elements(v) x where x ? 'score' or x ? 'matchScore' or x ? 'match_score') then raise exception 'K8: a raw score reached the payload'; end if;
+  select array_agg(case x->>'matchLabel' when 'Strong' then 0 when 'Good' then 1 when 'Possible' then 2 else 3 end order by o) into v_rank
+    from jsonb_array_elements(v) with ordinality t(x, o);
+  if v_rank is distinct from (select array_agg(e order by e) from unnest(v_rank) e) then raise exception 'K8: candidates must be ordered by label strength: %', v_rank; end if;
+  -- the vessel side reads the same cache
+  perform pg_temp.fx_owner();
+  select string_agg(coalesce(score_label, '-'), ',' order by score_label) into v_want from public.matches where vessel_avail_id = pg_temp.fx_id('a1');
+  perform pg_temp.fx_as('u_ow1');
+  v := public.list_fixture_match_candidates('vessel', pg_temp.fx_id('a1'));
+  select string_agg(coalesce(x->>'matchLabel', '-'), ',' order by x->>'matchLabel') into v_got from jsonb_array_elements(v) x;
+  if v_got is distinct from v_want then raise exception 'K8: vessel-side labels % differ from the Rules cache %', v_got, v_want; end if;
+  select count(*) into n from jsonb_array_elements(v) x where x->'fit'->>'zone' not in ('load', 'discharge', 'other');
+  if n > 0 then raise exception 'K8: the zone fact must be load, discharge or other'; end if;
+  raise notice 'K8 ok: each candidate carries the Rules label word of its pair (both directions), ordered by strength, no raw score';
+end $$;
