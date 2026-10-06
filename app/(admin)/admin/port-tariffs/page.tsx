@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
-import { createDraft, createPublisher, decideStagedRule, publishVersion, registerSource, replaceRules, returnVersion, stageImport, submitVersion, upsertTerminal, verifyTerminal } from "./actions";
+import { createDraft, createPublisher, decideStagedRule, publishVersion, recordFxRate, registerSource, replaceRules, returnVersion, stageImport, submitVersion, upsertTerminal, verifyTerminal } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -11,13 +11,14 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
   await requireAdmin({ section: "porttariffs" });
   const db = getSupabaseAdminClient();
   const params = await searchParams;
-  const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }, { data: terminals }] = await Promise.all([
+  const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }, { data: terminals }, { data: fxRates }] = await Promise.all([
     db.from("tariff_publishers").select("id,name,publisher_type,country").order("name"),
     db.from("tariff_sources").select("id,title,source_filename,authority,effective_from,sha256").order("registered_at", { ascending: false }).limit(50),
     db.from("port_tariff_sets").select("id,name,port_locode,terminal_id,publisher_id").order("created_at", { ascending: false }).limit(50),
     db.from("port_tariff_versions").select("id,tariff_set_id,version_no,status,currency,effective_from,effective_to,created_by,approved_by,published_at").order("created_at", { ascending: false }).limit(50),
     db.from("tariff_staged_rules").select("id,batch_id,row_no,raw_text,port_locode,source_page,source_sheet,confidence,validation_errors,decision").eq("decision", "pending").order("created_at").limit(30),
     db.from("port_terminals").select("id,port_locode,name,is_verified,created_by").order("port_locode").order("name").limit(100),
+    db.from("pda_fx_rates").select("id,base_currency,quote_currency,rate,effective_on,source_kind,source_ref,created_at").order("effective_on", { ascending: false }).order("created_at", { ascending: false }).limit(30),
   ]);
 
   return <div className="adm-page">
@@ -42,6 +43,17 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
         <input name="tariffSetId" placeholder="Existing tariff set UUID (optional)"/><input name="portLocode" required placeholder="UN/LOCODE" maxLength={5}/><input name="terminalId" placeholder="Verified terminal UUID (optional)"/><select name="publisherId" required><option value="">Publisher</option>{(publishers ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><input name="name" required placeholder="Tariff set name"/><select name="scope" defaultValue="port_call"><option value="port_call">Port call</option><option value="terminal">Terminal</option><option value="pilotage">Pilotage</option><option value="towage">Towage</option><option value="agency">Agency</option><option value="other">Other</option></select><input name="versionNo" required type="number" min="1" defaultValue="1"/><input name="currency" required maxLength={3} placeholder="USD"/><input name="effectiveFrom" required type="date"/><input name="effectiveTo" type="date"/><select name="roundingMode" defaultValue="half_up"><option value="half_up">Half up</option><option value="up">Up</option><option value="down">Down</option></select><input name="decimalPlaces" type="number" min="0" max="6" defaultValue="2"/><select name="primarySourceId" required><option value="">Primary source</option>{(sources ?? []).map((s) => <option key={s.id} value={s.id}>{s.title} · {s.authority}</option>)}</select><input name="supersedesId" placeholder="Superseded version UUID (for overlap)"/><textarea name="notes" placeholder="Review notes"/><button type="submit">Create draft</button>
       </form></Panel>
     </div>
+
+    <Panel title="FX rates for PDA display">
+      <p className="adm-muted">Append-only. The route estimator converts a tariff currency into the display currency only with a governed rate effective on or before the call date and no older than 31 days; otherwise the leg stays &quot;FX rate required&quot;. A rate is never edited: record a newer date instead.</p>
+      <form action={recordFxRate} className="adm-form">
+        <input name="baseCurrency" required maxLength={3} placeholder="Base (tariff) currency, e.g. EUR"/><input name="quoteCurrency" required maxLength={3} placeholder="Quote (display) currency, e.g. USD"/>
+        <input name="rate" required type="number" step="0.00000001" min="0.00000001" placeholder="1 base = … quote"/><input name="effectiveOn" required type="date"/>
+        <select name="sourceKind" defaultValue="ecb"><option value="ecb">ECB reference rate</option><option value="central_bank">Central bank</option><option value="agent">Agent-quoted</option><option value="manual">Manual</option></select><input name="sourceRef" required minLength={3} maxLength={300} placeholder="Source reference (publication, date, URL)"/>
+        <button type="submit">Record FX rate</button>
+      </form>
+      <div className="adm-version-list">{(fxRates ?? []).length === 0 ? <p className="adm-muted">No FX rate recorded yet.</p> : (fxRates ?? []).map((fx) => <article key={fx.id}><div><strong>1 {fx.base_currency} = {fx.rate} {fx.quote_currency}</strong><span>effective {fx.effective_on} · {fx.source_kind.replace("_", " ")} · {fx.source_ref}</span></div></article>)}</div>
+    </Panel>
 
     <Panel title="Pending extracted rows">
       {(staged ?? []).length === 0 ? <p className="adm-muted">No staged rows need a decision.</p> : (staged ?? []).map((row) => <div key={row.id} className="adm-review-row"><div><strong>#{row.row_no} · {row.port_locode ?? "Port mapping required"}</strong><p>{row.raw_text}</p><small>Evidence {row.source_page ? `page ${row.source_page}` : row.source_sheet ? `sheet ${row.source_sheet}` : "missing"} · confidence {row.confidence ?? "—"}</small></div><form action={decideStagedRule}><input type="hidden" name="ruleId" value={row.id}/><input name="note" placeholder="Decision note"/><button name="decision" value="accepted">Accept</button><button name="decision" value="needs_mapping">Needs mapping</button><button name="decision" value="rejected">Reject</button></form></div>)}

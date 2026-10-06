@@ -124,3 +124,14 @@ export async function returnVersion(form: FormData) {
   });
   rpcError(error, "Tariff returned to its maker");
 }
+
+export async function recordFxRate(form: FormData) {
+  const { actorId, db } = await context();
+  const rate = Number(value(form, "rate"));
+  const { error } = await db.rpc("pda_record_fx_rate", { p_actor: actorId, p_payload: {
+    baseCurrency: value(form, "baseCurrency").toUpperCase(), quoteCurrency: value(form, "quoteCurrency").toUpperCase(),
+    rate: Number.isFinite(rate) ? rate : null, effectiveOn: value(form, "effectiveOn"),
+    sourceKind: value(form, "sourceKind"), sourceRef: value(form, "sourceRef"),
+  }});
+  rpcError(error, "FX rate recorded");
+}

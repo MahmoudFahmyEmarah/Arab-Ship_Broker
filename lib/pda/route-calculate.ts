@@ -194,6 +194,7 @@ export function aggregatePdaRoutePreview(input: {
   load: PdaCalculationResult;
   discharge: PdaCalculationResult;
   timeline: PdaRouteTimelineResult;
+  fxRates?: PdaRoutePreviewResult["fxRates"];
   generatedAt?: string;
 }): PdaRoutePreviewResult {
   const requiredInclusiveServices: PdaRouteServiceCode[] = ["cargo_handling", "agency"];
@@ -253,6 +254,7 @@ export function aggregatePdaRoutePreview(input: {
 
   return {
     displayCurrency: input.displayCurrency,
+    fxRates: input.fxRates ?? [],
     allocation: input.allocation,
     canonical: input.canonical,
     legs: { load: input.load, discharge: input.discharge },

@@ -4,7 +4,7 @@ import { getAppUserRow } from "@/lib/app-user";
 import { calculatePda } from "@/lib/pda/calculate";
 import { aggregatePdaRoutePreview, derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
 import { pdaRoutePreviewSchema } from "@/lib/pda/route-schema";
-import type { PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
+import type { PdaRouteFxRate, PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
 import { pdaRequestSchema } from "@/lib/pda/schemas";
 import type { PdaCalculationResult, PdaRequest } from "@/lib/pda/types";
 import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
@@ -191,15 +191,32 @@ function canonicalRouteLeg(input: {
   };
 }
 
-function forDisplayCurrency(
+/**
+ * FX (Wave 3 groundwork): when the tariff currency differs from the display currency,
+ * the server resolves one governed rate (public.fn_pda_fx_rate: latest on or before the
+ * call date, within 31 days, direct or inverse pair). No governed rate = no conversion,
+ * so the leg keeps FX_RATE_REQUIRED; a member-typed rate is never used on this path.
+ */
+async function forDisplayCurrency(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
   request: PdaRequest,
   nativeCurrency: string | null,
   displayCurrency: string,
-): PdaRequest {
-  if (nativeCurrency === displayCurrency) {
-    return { ...request, convertedCurrency: null, fxRate: null };
+): Promise<{ request: PdaRequest; fx: PdaRouteFxRate | null }> {
+  if (!nativeCurrency || nativeCurrency === displayCurrency) {
+    return { request: { ...request, convertedCurrency: null, fxRate: null }, fx: null };
   }
-  return { ...request, convertedCurrency: displayCurrency };
+  const { data, error } = await supabase.rpc("fn_pda_fx_rate", {
+    p_base: nativeCurrency,
+    p_quote: displayCurrency,
+    p_on: request.callDate,
+  });
+  const fx = !error && data && typeof data === "object" ? (data as PdaRouteFxRate) : null;
+  const rate = fx && Number.isFinite(Number(fx.rate)) && Number(fx.rate) > 0 ? Number(fx.rate) : null;
+  return {
+    request: { ...request, convertedCurrency: displayCurrency, fxRate: rate },
+    fx: rate ? { ...fx!, rate } : null,
+  };
 }
 
 async function requireRouteSelections(
@@ -323,16 +340,12 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
       getPdaCalculationContext(supabase, loadRequest),
       getPdaCalculationContext(supabase, dischargeRequest),
     ]);
-    loadRequest = forDisplayCurrency(
-      loadRequest,
-      loadContext.tariffVersion?.currency ?? null,
-      input.displayCurrency,
-    );
-    dischargeRequest = forDisplayCurrency(
-      dischargeRequest,
-      dischargeContext.tariffVersion?.currency ?? null,
-      input.displayCurrency,
-    );
+    const [loadFx, dischargeFx] = await Promise.all([
+      forDisplayCurrency(supabase, loadRequest, loadContext.tariffVersion?.currency ?? null, input.displayCurrency),
+      forDisplayCurrency(supabase, dischargeRequest, dischargeContext.tariffVersion?.currency ?? null, input.displayCurrency),
+    ]);
+    loadRequest = loadFx.request;
+    dischargeRequest = dischargeFx.request;
     const load = calculatePda(loadRequest, loadContext.tariffVersion ?? null);
     const discharge = calculatePda(dischargeRequest, dischargeContext.tariffVersion ?? null);
 
@@ -352,6 +365,10 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
         load,
         discharge,
         timeline,
+        fxRates: [
+          ...(loadFx.fx ? [{ ...loadFx.fx, leg: "load" as const }] : []),
+          ...(dischargeFx.fx ? [{ ...dischargeFx.fx, leg: "discharge" as const }] : []),
+        ],
       }),
     };
   } catch (error) {

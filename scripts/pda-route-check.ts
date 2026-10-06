@@ -144,6 +144,19 @@ assert.deepEqual(
   ],
 );
 
+// FX (Wave 3 groundwork): no governed rate supplied = none reported; a supplied rate is carried, with its provenance.
+assert.deepEqual(aggregate.fxRates, []);
+const withFx = aggregatePdaRoutePreview({
+  ...aggregate,
+  canonical,
+  load: result({ nativeCurrency: "USD", native: 15_342 }),
+  discharge: result({ nativeCurrency: "SAR", native: 17_940, converted: 4_784 }),
+  timeline,
+  fxRates: [{ base: "SAR", quote: "USD", rate: 0.26666667, effectiveOn: "2026-09-26", sourceKind: "central_bank", sourceRef: "SAMA peg", inverse: false, leg: "discharge" }],
+});
+assert.equal(withFx.fxRates.length, 1);
+assert.equal(withFx.fxRates[0]?.sourceRef, "SAMA peg");
+
 const missingFx = aggregatePdaRoutePreview({
   ...aggregate,
   canonical,

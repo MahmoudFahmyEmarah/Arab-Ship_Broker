@@ -116,8 +116,22 @@ export interface PdaRouteNotSourcedItem {
   };
 }
 
+/** A governed FX rate used for one leg's display conversion (public.fn_pda_fx_rate). */
+export interface PdaRouteFxRate {
+  base: string;
+  quote: string;
+  rate: number;
+  effectiveOn: string;
+  sourceKind: "central_bank" | "ecb" | "agent" | "manual";
+  sourceRef: string;
+  inverse: boolean;
+  leg?: "load" | "discharge";
+}
+
 export interface PdaRoutePreviewResult {
   displayCurrency: string;
+  /** Governed FX rates applied to the legs (empty when no conversion was needed or none was available). */
+  fxRates: PdaRouteFxRate[];
   allocation: PdaAllocation;
   canonical: {
     vesselAvailabilityId: string;

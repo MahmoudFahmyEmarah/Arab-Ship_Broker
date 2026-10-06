@@ -26,6 +26,7 @@ import { dateTimeLocalUtcIso, formatUtcTimelineInstant } from "@/lib/pda/route-d
 import {
   PDA_ROUTE_SERVICE_OPTIONS,
   type PdaRouteLegInput,
+  type PdaRouteFxRate,
   type PdaRouteManualLineInput,
   type PdaRouteNotSourcedItem,
   type PdaRoutePreviewInput,
@@ -657,6 +658,7 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
                   knownSubtotal={result?.totals.loadPortKnown ?? null}
                   displayCurrency={result?.displayCurrency ?? "USD"}
                   notSourced={result?.notSourced.filter((item) => item.provenance.leg === "load") ?? []}
+                  fx={result?.fxRates?.find((rate) => rate.leg === "load") ?? null}
                   manualLines={loadManualLines}
                   onAddManualLine={() => addManualLine("load")}
                   onUpdateManualLine={(id, field, value) => updateManualLine("load", id, field, value)}
@@ -676,6 +678,7 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
                   knownSubtotal={result?.totals.dischargePortKnown ?? null}
                   displayCurrency={result?.displayCurrency ?? "USD"}
                   notSourced={result?.notSourced.filter((item) => item.provenance.leg === "discharge") ?? []}
+                  fx={result?.fxRates?.find((rate) => rate.leg === "discharge") ?? null}
                   manualLines={dischargeManualLines}
                   onAddManualLine={() => addManualLine("discharge")}
                   onUpdateManualLine={(id, field, value) => updateManualLine("discharge", id, field, value)}
@@ -1062,6 +1065,7 @@ function PortEstimateCard({
   knownSubtotal,
   displayCurrency,
   notSourced,
+  fx,
   manualLines,
   onAddManualLine,
   onUpdateManualLine,
@@ -1080,6 +1084,7 @@ function PortEstimateCard({
   knownSubtotal: number | null;
   displayCurrency: string;
   notSourced: PdaRouteNotSourcedItem[];
+  fx: PdaRouteFxRate | null;
   manualLines: ManualQuoteDraft[];
   onAddManualLine: () => void;
   onUpdateManualLine: (id: string, field: Exclude<keyof ManualQuoteDraft, "id">, value: string) => void;
@@ -1103,7 +1108,7 @@ function PortEstimateCard({
     <article className="pda-port-card asb-card">
       <header>
         <div><span className="pda-port-card__tag">{side === "load" ? "Load port" : "Discharge port"}</span><h2>{port?.name ?? "Port open"}</h2><p>{locode || "No exact port selected"} · {port?.country ?? ""}</p></div>
-        <div className="pda-port-card__total">{busy ? <Loader2 className="is-spinning" size={18} /> : <strong>{money(displayTotal, displayCurrency)}</strong>}<span>{totalProvenance}{displayTotal == null && knownSubtotal != null ? ` · ${money(knownSubtotal, displayCurrency)} display subtotal` : ""}</span></div>
+        <div className="pda-port-card__total">{busy ? <Loader2 className="is-spinning" size={18} /> : <strong>{money(displayTotal, displayCurrency)}</strong>}<span>{totalProvenance}{displayTotal == null && knownSubtotal != null ? ` · ${money(knownSubtotal, displayCurrency)} display subtotal` : ""}</span>{fx && <small className="pda-port-card__fx">Converted at 1 {fx.base} = {fx.rate} {fx.quote} · {fx.sourceRef} ({fx.sourceKind.replace("_", " ")}), effective {fx.effectiveOn}{fx.inverse ? " · inverse of the recorded pair" : ""}</small>}</div>
       </header>
       <div className="pda-port-card__facts">
         <div><span>Days of stay</span><strong>{compactNumber(days, " d")}</strong></div>

@@ -458,6 +458,7 @@
 .pda-port-card__total { min-width: 120px; display: grid; justify-items: end; color: #76889c; font-size: 9px; }
 .pda-port-card__total strong { color: var(--ds-navy); font-size: 19px; line-height: 1.15; }
 .pda-port-card__total .is-spinning { margin: 4px 10px; }
+.pda-port-card__fx { max-width: 260px; margin-top: 3px; text-align: right; color: var(--ds-muted); font-size: 10px; line-height: 1.35; }
 
 .pda-port-card__facts {
   display: grid;
