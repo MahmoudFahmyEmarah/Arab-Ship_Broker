@@ -593,37 +593,48 @@ begin
     if sqlerrm not like '%backdated%' then raise exception 'R8 FAILED: wrong error %', sqlerrm; end if;
   end;
 
-  -- R9 (P2-4): C starting before B ends the whole chain at C's start; cancelling C restores exactly.
+  -- R9 (C2B-011, single scheduled row): C approved while B is still scheduled replaces B
+  -- (withdrawn as "replaced by a newer scheduled price"); A stays live until C starts.
   insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
   values ('${B}', 'CYLCA', 'VLSFO', 620, s3 - interval '2 days', s3 + interval '5 days', 'admin_input', 'submitted', now())
   returning id into v_c;
   perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_c, 'approve', null);
-  execute live_at into p using s3 - interval '1 day';
-  if p is distinct from 620 then raise exception 'R9 FAILED: between C and B starts expected 620, got %', p; end if;
+  if (select status || '/' || coalesce(decision_reason, '') from public.bunker_quotes where id = v_b) <> 'withdrawn/replaced by a newer scheduled price' then
+    raise exception 'R9 FAILED: the older scheduled price was not replaced'; end if;
+  if (select count(*) from public.bunker_quotes where supplier_id = '${B}' and port_locode = 'CYLCA' and product_key = 'VLSFO'
+        and status = 'approved' and valid_from > now()) <> 1 then
+    raise exception 'R11 FAILED: more than one scheduled price on the key'; end if;
+  execute live_at into p using s3 - interval '2 days' - interval '1 hour';
+  if p is distinct from 600 then raise exception 'R9 FAILED: A should stay live until C starts, got %', p; end if;
   execute live_at into p using s3 + interval '1 day';
-  if p is distinct from 620 then raise exception 'R9 FAILED: after B start C should still win (B superseded before starting), got %', p; end if;
+  if p is distinct from 620 then raise exception 'R9 FAILED: C should be live after its start, got %', p; end if;
   perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_c, 'withdraw', 'scheduled in error');
-  if (select superseded_at from public.bunker_quotes where id = v_a) is distinct from s3
-     or (select superseded_at from public.bunker_quotes where id = v_b) is not null then
-    raise exception 'R9 FAILED: cancelling C did not restore A to B''s start and B to open'; end if;
-  execute live_at into p using s3 - interval '1 day';
-  if p is distinct from 600 then raise exception 'R9 FAILED: A should be live before B starts, got %', p; end if;
+  if (select superseded_at from public.bunker_quotes where id = v_a) is not null then
+    raise exception 'R9 FAILED: cancelling C did not give the live price back'; end if;
   execute live_at into p using s3 + interval '1 day';
-  if p is distinct from 610 then raise exception 'R9 FAILED: B should be live after its start, got %', p; end if;
+  if p is distinct from 600 then raise exception 'R9 FAILED: A should be live again after the cancel, got %', p; end if;
 
-  -- R10 (P2-5): a second replacement with the same start; cancelling it restores only B.
+  -- R10: equal starts — B2 replaces nothing scheduled now; schedule B2, then B3 with the
+  -- same start replaces B2; cancelling B3 leaves A live and no scheduled row.
   insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
   values ('${B}', 'CYLCA', 'VLSFO', 630, s3, s3 + interval '7 days', 'admin_input', 'submitted', now())
   returning id into v_b2;
   perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_b2, 'approve', null);
-  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_b2, 'withdraw', 'duplicate');
-  if (select superseded_at from public.bunker_quotes where id = v_b) is not null
-     or (select superseded_at from public.bunker_quotes where id = v_a) is distinct from s3 then
-    raise exception 'R10 FAILED: equal-start cancel did not restore exactly'; end if;
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at)
+  values ('${B}', 'CYLCA', 'VLSFO', 640, s3, s3 + interval '7 days', 'admin_input', 'submitted', now())
+  returning id into v_c;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_c, 'approve', null);
+  if (select status from public.bunker_quotes where id = v_b2) <> 'withdrawn' then
+    raise exception 'R10 FAILED: the equal-start older schedule was not replaced'; end if;
+  perform public.admin_bunker_decide_quote('${ADMIN_ID}', v_c, 'withdraw', 'duplicate');
+  if (select superseded_at from public.bunker_quotes where id = v_a) is not null
+     or exists (select 1 from public.bunker_quotes where supplier_id = '${B}' and port_locode = 'CYLCA'
+                  and product_key = 'VLSFO' and status = 'approved' and valid_from > now()) then
+    raise exception 'R10 FAILED: cancel did not return to A alone'; end if;
   execute live_at into p using s3 + interval '1 day';
-  if p is distinct from 610 then raise exception 'R10 FAILED: B should be live again, got %', p; end if;
+  if p is distinct from 600 then raise exception 'R10 FAILED: A should be live, got %', p; end if;
 end $t$;
-select 'R8-R10 ok: no backdating; a chain ends at the new start; a cancel restores exactly, equal starts included';
+select 'R8-R11 ok: no backdating; one scheduled price per key, a newer schedule replaces it; a cancel gives the live price back';
 `);
 
 // Grants: anon reaches nothing; members only the five member RPCs.

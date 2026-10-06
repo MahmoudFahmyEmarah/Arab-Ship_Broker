@@ -344,35 +344,63 @@ test("a retry after a lost response replays instead of duplicating (C2B-003 #2)"
   expect(count).toBe(1);
 });
 
-test("a scheduled replacement shows beside the live price; each has its own action (C2O-049)", async ({ browser }, info) => {
+test("live and scheduled prices: one schedule per key, headline counts live only, admin and supplier cancel (C2O-049, C2B-011)", async ({ browser }, info) => {
   const { url, service } = localKeys();
   const db = createClient(url, service, { auth: { persistSession: false } });
   const day = 86_400_000;
-  const { data: q, error } = await db.from("bunker_quotes").insert({
-    supplier_id: s.supplierId, port_locode: PORT, product_key: "VLSFO", price: PRICE + 20,
-    valid_from: new Date(Date.now() + 2 * day).toISOString(), valid_until: new Date(Date.now() + 9 * day).toISOString(),
-    source: "admin_input", status: "submitted",
-  }).select("id").single();
-  expect(error).toBeNull();
-  const { error: approveError } = await db.rpc("admin_bunker_decide_quote", {
-    p_actor: s.admin.userId, p_quote_id: q!.id, p_decision: "approve", p_reason: null,
-  });
-  expect(approveError).toBeNull();
-
-  // Admin: the live price stays under "Live prices"; the replacement is listed as scheduled.
+  const schedule = async (price: number, startsInDays: number) => {
+    const { data: q, error } = await db.from("bunker_quotes").insert({
+      supplier_id: s.supplierId, port_locode: PORT, product_key: "VLSFO", price,
+      valid_from: new Date(Date.now() + startsInDays * day).toISOString(), valid_until: new Date(Date.now() + 9 * day).toISOString(),
+      source: "admin_input", status: "submitted",
+    }).select("id").single();
+    expect(error).toBeNull();
+    const { error: approveError } = await db.rpc("admin_bunker_decide_quote", {
+      p_actor: s.admin.userId, p_quote_id: q!.id, p_decision: "approve", p_reason: null,
+    });
+    expect(approveError).toBeNull();
+    return q!.id as string;
+  };
   const admin = await signedIn(browser, base(info.project.use), s.admin.email);
-  await gotoStable(admin.page, "/admin/bunker");
+  const liveCount = async () => {
+    await gotoStable(admin.page, "/admin/bunker");
+    const stat = admin.page.locator(".adm-stat", { hasText: "Live quotes" });
+    return Number((await stat.locator(".adm-stat__value").innerText()).replace(/\D/g, ""));
+  };
+  const scheduledRows = () => admin.page.getByRole("region", { name: "Scheduled prices" }).getByRole("row").filter({ hasText: s.supplierName });
+
+  // 1. The headline counts live prices only.
+  const before = await liveCount();
+  const s1 = await schedule(PRICE + 20, 2);
+  expect(await liveCount()).toBe(before);
+  await expect(scheduledRows()).toHaveCount(1);
+  await expect(scheduledRows().first()).toContainText(`$${PRICE + 20}`);
+  await expect(scheduledRows().first()).toContainText("Scheduled · from");
+
+  // 2. A newer schedule replaces the older one: exactly one scheduled row, the new price.
+  const s2 = await schedule(PRICE + 30, 3);
+  const { data: old } = await db.from("bunker_quotes").select("status,decision_reason").eq("id", s1).single();
+  expect(old?.status).toBe("withdrawn");
+  expect(old?.decision_reason).toBe("replaced by a newer scheduled price");
+  expect(await liveCount()).toBe(before);
+  await expect(scheduledRows()).toHaveCount(1);
+  await expect(scheduledRows().first()).toContainText(`$${PRICE + 30}`);
+
+  // 3. Admin cancels it; the live price stays current.
+  const row = scheduledRows().first();
+  await row.getByLabel("Cancellation reason").fill("e2e cancel");
+  await row.getByRole("button", { name: "Cancel" }).click();
+  await expect(admin.page.getByRole("region", { name: "Scheduled prices" })).toHaveCount(0);
   await expect(admin.page.getByRole("row").filter({ hasText: s.supplierName }).filter({ hasText: `$${PRICE}` }).first()).toContainText("Current");
-  const scheduledSection = admin.page.getByRole("region", { name: "Scheduled prices" });
-  await expect(scheduledSection).toBeVisible();
-  await expect(scheduledSection.getByRole("row").filter({ hasText: s.supplierName })).toContainText(`$${PRICE + 20}`);
-  await expect(scheduledSection.getByText("Scheduled · from").first()).toBeVisible();
+  expect((await db.from("bunker_quotes").select("status").eq("id", s2).single()).data?.status).toBe("withdrawn");
   await admin.context.close();
 
-  // Supplier: both are visible; cancelling the scheduled one keeps the live price.
+  // 4. The supplier sees live + scheduled and cancels the scheduled one.
+  await schedule(PRICE + 40, 2);
   const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
   await gotoStable(page, "/dashboard/bunker-supplier");
-  await expect(page.getByTestId("scheduled-price")).toContainText(`$${PRICE + 20}`);
+  await expect(page.getByTestId("scheduled-price")).toHaveCount(1);
+  await expect(page.getByTestId("scheduled-price")).toContainText(`$${PRICE + 40}`);
   await expect(page.getByText(`$${PRICE} · Current`)).toBeVisible();
   await page.getByRole("button", { name: new RegExp(`Cancel the scheduled VLSFO price at ${escapeRe(s.portLabel)}`) }).click();
   await expect(page.getByRole("status")).toContainText("the current price stays live");
@@ -380,7 +408,9 @@ test("a scheduled replacement shows beside the live price; each has its own acti
   await expect(page.getByText(`$${PRICE} · Current`)).toBeVisible();
   await context.close();
 
-  const { data: rows } = await db.from("bunker_quotes").select("price,status,superseded_at")
+  const { data: rows } = await db.from("bunker_quotes").select("price,superseded_at")
     .eq("supplier_id", s.supplierId).eq("product_key", "VLSFO").eq("status", "approved");
-  expect(rows?.find((r) => Number(r.price) === PRICE)?.superseded_at ?? null).toBeNull();
+  expect(rows?.length).toBe(1);
+  expect(Number(rows?.[0]?.price)).toBe(PRICE);
+  expect(rows?.[0]?.superseded_at ?? null).toBeNull();
 });

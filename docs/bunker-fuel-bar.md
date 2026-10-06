@@ -5,7 +5,7 @@ first-hand physical bunker suppliers publish their price tables; the platform
 shows each sponsor on a ticker (their exposure) and computes an index whose
 **average** feeds the Voyage estimator.
 
-## Data model (migrations `20261003100000`–`110000`)
+## Data model (migrations `20261003100000`–`111000`)
 
 | Table | Purpose | Member access |
 |---|---|---|
@@ -101,8 +101,11 @@ at once (`20261003109000`).
   does not restore the previous price; republish it instead. Production never
   ran 109000 without 110000, so this affects only local and staging data from
   5–6 Oct 2026.
-- **Live and scheduled together.** A key can hold the price live now and one
-  scheduled replacement. The supplier portal shows both, with "Withdraw" for the
+- **Live and scheduled together (111000).** A key holds the price live now and
+  **at most one** scheduled replacement: approving a newer future price withdraws
+  the older unstarted one ("replaced by a newer scheduled price") and the live
+  price is re-scheduled to end at the new start. The headline "Live quotes"
+  counts only prices live now. The supplier portal shows both, with "Withdraw" for the
   live (or pending) price and "Cancel scheduled" for the replacement; the console
   lists them under "Live prices" and "Scheduled to go live".
 

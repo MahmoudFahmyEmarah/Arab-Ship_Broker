@@ -42,7 +42,8 @@ export default async function AdminBunkerPage({
     );
   }
 
-  const live = dash.quotes.filter((q) => q.status === "approved");
+  // Headline counts only prices live now (C2B-011): a scheduled replacement is not live.
+  const live = dash.quotes.filter((q) => q.status === "approved" && (q.liveNow ?? q.validNow));
   const pending = dash.quotes.filter((q) => q.status === "submitted");
   const sponsors = dash.suppliers.filter((s) => !s.isPlatform);
   const supplierAlerts = dash.alerts.filter((a) => a.kind !== "pending_approval");
