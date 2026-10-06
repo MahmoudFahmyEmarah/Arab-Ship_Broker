@@ -38,17 +38,13 @@ import { engineOrigin } from "@/lib/dq/origin";
 import { digestSlot, nightlySlot, SLOT_GRACE_MS } from "@/lib/dq/schedule";
 import { deliverOutbox } from "@/lib/dq/notify";
 import { withJobRun } from "@/lib/jobs/runs";
-import { CronBudget } from "@/lib/dq/cron-budget";
+import { BUDGET_MS, CronBudget, RESERVE_MS } from "@/lib/dq/cron-budget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const RETENTION_MAX_SLICES = 20;
-/** The synchronous work must be finished by here, leaving the rest of maxDuration for the response and the deferred kicks. */
-export const BUDGET_MS = 48_000;
-/** No step begins with less than this left: a step that cannot finish is worse than a step not started. */
-export const RESERVE_MS = 10_000;
 /** Runs handed to the engine endpoint in one invocation (each becomes its own invocation). */
 const MAX_KICKS = 6;
 /** What one run would like, if the clock allows it. */

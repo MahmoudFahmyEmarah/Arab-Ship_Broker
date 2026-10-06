@@ -22,6 +22,11 @@
 // order the steps come in and however long each one takes, the sum of what is
 // granted can never push the invocation past `total`.
 
+/** Synchronous cron work allowance, kept below the route's 60 s maxDuration. */
+export const BUDGET_MS = 48_000;
+/** Time reserved for writing the response and scheduling deferred work. */
+export const RESERVE_MS = 10_000;
+
 export interface CronBudgetOptions {
   /** the whole allowance in ms (default 48 000, under a 60 s maxDuration) */
   totalMs?: number;
@@ -55,8 +60,8 @@ export class CronBudget {
   private committedMs = 0;
 
   constructor(opts: CronBudgetOptions = {}) {
-    this.totalMs = opts.totalMs ?? 48_000;
-    this.reserveMs = opts.reserveMs ?? 10_000;
+    this.totalMs = opts.totalMs ?? BUDGET_MS;
+    this.reserveMs = opts.reserveMs ?? RESERVE_MS;
     this.minGrantMs = opts.minGrantMs ?? 5_000;
     this.now = opts.now ?? Date.now;
     this.t0 = this.now();

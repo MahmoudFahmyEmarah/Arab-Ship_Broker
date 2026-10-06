@@ -14,8 +14,7 @@
  * arrives in and however long each unit takes, the invocation cannot be
  * pushed past its allowance.
  */
-import { CronBudget } from "@/lib/dq/cron-budget";
-import { BUDGET_MS, RESERVE_MS } from "@/app/api/cron/dq-nightly/route";
+import { BUDGET_MS, CronBudget, RESERVE_MS } from "@/lib/dq/cron-budget";
 
 let pass = 0, fail = 0;
 const ok = (c: boolean, label: string) => { if (c) { pass++; console.log(`  ok   ${label}`); } else { fail++; console.error(` FAIL  ${label}`); } };
