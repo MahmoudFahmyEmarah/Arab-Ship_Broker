@@ -46,6 +46,7 @@ const routeLegSchema = z.object({
     cargoStatus: z.enum(["laden", "ballast"]),
     voyageScope: z.enum(["domestic", "international"]),
     location: z.enum(["alongside", "anchorage"]),
+    settlementMode: z.enum(["cash", "agent_account"]).nullable().optional(),
     requestedServices: z.array(z.enum(PDA_ROUTE_SERVICE_CODES)).min(1).max(PDA_ROUTE_SERVICE_CODES.length),
     hours: nonNegative.nullable().optional(),
     units: nonNegative.nullable().optional(),

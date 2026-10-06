@@ -150,6 +150,7 @@ function canonicalRouteLeg(input: {
       cargoStatus: input.leg.call.cargoStatus,
       voyageScope: input.leg.call.voyageScope,
       location: input.leg.call.location,
+      settlementMode: input.leg.call.settlementMode ?? null,
       requestedServices: input.leg.call.requestedServices,
     },
     manualLines: input.leg.manualLines?.map((line) => ({

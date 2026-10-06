@@ -71,4 +71,10 @@ assert.doesNotMatch(ingestion, /update public\.port_tariff_versions/i);
 assert.match(actions, /is_market_partner[\s\S]+appUser\.is_market_partner === true/i);
 assert.match(estimator, /React\.useEffect\(\(\) => \{[\s\S]+setResult\(null\)[\s\S]+loadManualLines[\s\S]+dischargeManualLines|React\.useEffect\(\(\) => \{[\s\S]+setResult\(null\)[\s\S]+dischargeManualLines[\s\S]+loadManualLines/i);
 
+// C2B-013: "New" clears both settlement modes with the other call facts.
+const resetStart = estimator.indexOf("function reset()");
+const resetBody = estimator.slice(resetStart, estimator.indexOf("setBusy(false);", resetStart));
+assert.match(resetBody, /setLoadSettlement\(""\)/);
+assert.match(resetBody, /setDischargeSettlement\(""\)/);
+
 console.log("PDA SQL CONTRACT: ALL ASSERTIONS PASSED");

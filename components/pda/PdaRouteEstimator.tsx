@@ -117,6 +117,7 @@ function routeLeg(input: {
   cargoStatus: "laden" | "ballast";
   voyageScope: "domestic" | "international";
   location: "alongside" | "anchorage";
+  settlementMode: "" | "cash" | "agent_account";
   requestedServices: PdaRouteServiceCode[];
   manualLines: PdaRouteManualLineInput[];
 }): PdaRouteLegInput {
@@ -128,6 +129,8 @@ function routeLeg(input: {
       cargoStatus: input.cargoStatus,
       voyageScope: input.voyageScope,
       location: input.location,
+      // No default: an unanswered settlement leaves rules that depend on it as MISSING_INPUT.
+      settlementMode: input.settlementMode || null,
       requestedServices: input.requestedServices,
     },
     ...(input.manualLines.length ? { manualLines: input.manualLines } : {}),
@@ -159,6 +162,9 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
   const [voyageScope, setVoyageScope] = React.useState<"" | "domestic" | "international">("");
   const [loadLocation, setLoadLocation] = React.useState<"" | "alongside" | "anchorage">("");
   const [dischargeLocation, setDischargeLocation] = React.useState<"" | "alongside" | "anchorage">("");
+  // Settlement per port call (C2B-009): separate from the payer allocation, never defaulted.
+  const [loadSettlement, setLoadSettlement] = React.useState<"" | "cash" | "agent_account">("");
+  const [dischargeSettlement, setDischargeSettlement] = React.useState<"" | "cash" | "agent_account">("");
   const [loadRequestedServices, setLoadRequestedServices] = React.useState<PdaRouteServiceCode[]>([]);
   const [dischargeRequestedServices, setDischargeRequestedServices] = React.useState<PdaRouteServiceCode[]>([]);
   const [loadManualLines, setLoadManualLines] = React.useState<ManualQuoteDraft[]>([]);
@@ -265,6 +271,7 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
       cargoStatus,
       voyageScope,
       location: loadLocation,
+      settlementMode: loadSettlement,
       requestedServices: loadRequestedServices,
       manualLines: parsedLoadManualLines,
     });
@@ -275,6 +282,7 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
       cargoStatus,
       voyageScope,
       location: dischargeLocation,
+      settlementMode: dischargeSettlement,
       requestedServices: dischargeRequestedServices,
       manualLines: parsedDischargeManualLines,
     });
@@ -329,6 +337,7 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
     dischargeCallDate,
     dischargeCallDateValue,
     dischargeLocation,
+    dischargeSettlement,
     dischargeManualLines,
     dischargePort,
     dischargeRate,
@@ -342,6 +351,7 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
     loadCallDate,
     loadCallDateValue,
     loadLocation,
+    loadSettlement,
     loadManualLines,
     loadPort,
     loadRate,
@@ -383,6 +393,9 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
     setVoyageScope("");
     setLoadLocation("");
     setDischargeLocation("");
+    // Settlement is restated for every estimate (C2B-013): never carried into a new one.
+    setLoadSettlement("");
+    setDischargeSettlement("");
     setLoadRequestedServices([]);
     setDischargeRequestedServices([]);
     setLoadManualLines([]);
@@ -569,6 +582,10 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
                 onLoadLocation={setLoadLocation}
                 dischargeLocation={dischargeLocation}
                 onDischargeLocation={setDischargeLocation}
+                loadSettlement={loadSettlement}
+                onLoadSettlement={setLoadSettlement}
+                dischargeSettlement={dischargeSettlement}
+                onDischargeSettlement={setDischargeSettlement}
                 loadRequestedServices={loadRequestedServices}
                 onToggleLoadService={(service) => setLoadRequestedServices((current) => (
                   current.includes(service)
@@ -832,6 +849,10 @@ function CallFactsPanel(props: {
   onLoadLocation: (value: "" | "alongside" | "anchorage") => void;
   dischargeLocation: "" | "alongside" | "anchorage";
   onDischargeLocation: (value: "" | "alongside" | "anchorage") => void;
+  loadSettlement: "" | "cash" | "agent_account";
+  onLoadSettlement: (value: "" | "cash" | "agent_account") => void;
+  dischargeSettlement: "" | "cash" | "agent_account";
+  onDischargeSettlement: (value: "" | "cash" | "agent_account") => void;
   loadRequestedServices: PdaRouteServiceCode[];
   onToggleLoadService: (service: PdaRouteServiceCode) => void;
   dischargeRequestedServices: PdaRouteServiceCode[];
@@ -882,6 +903,22 @@ function CallFactsPanel(props: {
             <option value="">Choose location</option>
             <option value="alongside">Alongside</option>
             <option value="anchorage">Anchorage</option>
+          </select>
+        </label>
+        <label>
+          Load-port settlement
+          <select className="asb-control" value={props.loadSettlement} onChange={(event) => props.onLoadSettlement(event.target.value as typeof props.loadSettlement)}>
+            <option value="">Not stated</option>
+            <option value="cash">Cash</option>
+            <option value="agent_account">Agent account</option>
+          </select>
+        </label>
+        <label>
+          Discharge-port settlement
+          <select className="asb-control" value={props.dischargeSettlement} onChange={(event) => props.onDischargeSettlement(event.target.value as typeof props.dischargeSettlement)}>
+            <option value="">Not stated</option>
+            <option value="cash">Cash</option>
+            <option value="agent_account">Agent account</option>
           </select>
         </label>
       </div>

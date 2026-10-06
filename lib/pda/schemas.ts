@@ -13,6 +13,7 @@ export const pdaApplicabilitySchema = z.object({
   cargoStatuses: z.array(z.enum(["laden", "ballast"])).max(2).optional(),
   voyageScopes: z.array(z.enum(["domestic", "international"])).max(2).optional(),
   locations: z.array(z.enum(["alongside", "anchorage"])).max(2).optional(),
+  settlementModes: z.array(z.enum(["cash", "agent_account"])).max(2).optional(),
   minGt: nonNegative.optional(), maxGt: nonNegative.optional(),
   minNt: nonNegative.optional(), maxNt: nonNegative.optional(),
   minScnrt: nonNegative.optional(), maxScnrt: nonNegative.optional(),
@@ -22,6 +23,13 @@ export const pdaApplicabilitySchema = z.object({
   minCargoQuantityMt: nonNegative.optional(), maxCargoQuantityMt: nonNegative.optional(),
   percentageBaseCodes: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,79}$/)).min(1).max(100).optional(),
 }).strict().superRefine((value, ctx) => {
+  // C2B-009: same rule as pda_replace_tariff_rules — each value at most once.
+  for (const key of ["cargoStatuses", "voyageScopes", "locations", "settlementModes"] as const) {
+    const list = value[key] as string[] | undefined;
+    if (list && new Set(list).size !== list.length) {
+      ctx.addIssue({ code: "custom", path: [key], message: `${key} lists a value more than once` });
+    }
+  }
   for (const [minimum, maximum] of [
     ["minGt", "maxGt"], ["minNt", "maxNt"], ["minScnrt", "maxScnrt"],
     ["minDwt", "maxDwt"], ["minLoaM", "maxLoaM"], ["minDraftM", "maxDraftM"],
@@ -60,6 +68,7 @@ export const pdaRequestSchema = z.object({
     cargoStatus: z.enum(["laden", "ballast"]).nullable().optional(),
     voyageScope: z.enum(["domestic", "international"]).nullable().optional(),
     location: z.enum(["alongside", "anchorage"]).nullable().optional(),
+    settlementMode: z.enum(["cash", "agent_account"]).nullable().optional(),
     requestedServices: z.array(z.string().trim().min(1).max(80)).max(100),
   }),
   convertedCurrency: z.string().trim().regex(/^[A-Z]{3}$/).nullable().optional(),
@@ -100,6 +109,8 @@ export const pdaTariffVersionSchema = z.object({
       priority: z.number().int(),
       unit: bandUnitSchema.nullable().optional(),
       includedUnits: nonNegative.nullable().optional(),
+      rounding: z.enum(["exact", "started"]).nullable().optional(),
+      unitSize: positive.nullable().optional(),
       minimumAmount: nonNegative.nullable().optional(),
       maximumAmount: nonNegative.nullable().optional(),
       taxPercent: nonNegative.max(1000).nullable().optional(),

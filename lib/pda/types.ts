@@ -9,6 +9,9 @@ export const PDA_BASES = [
   "per_dwt",
   "per_loa",
   "per_cargo_mt",
+  "per_gt_day",
+  "per_loa_day",
+  "per_loa_hour",
   "per_unit",
   "percentage",
   "tiered_flat",
@@ -20,6 +23,9 @@ export const PDA_BASES = [
 export type PdaBasis = (typeof PDA_BASES)[number];
 export type PdaCoverage = "published" | "partial" | "manual_required";
 export type RoundingMode = "half_up" | "up" | "down";
+/** How a rule counts a duration (PR-10): exact, or every started unit counts as a whole one. */
+export type DurationRounding = "exact" | "started";
+export type SettlementMode = "cash" | "agent_account";
 
 export interface PdaVesselFacts {
   vesselId?: string | null;
@@ -43,6 +49,8 @@ export interface PdaCallFacts {
   cargoStatus?: "laden" | "ballast" | null;
   voyageScope?: "domestic" | "international" | null;
   location?: "alongside" | "anchorage" | null;
+  /** Typed settlement mode (PR-10); used by applicability, never inferred. */
+  settlementMode?: SettlementMode | null;
   requestedServices: string[];
 }
 
@@ -72,6 +80,7 @@ export interface PdaApplicability {
   cargoStatuses?: Array<"laden" | "ballast">;
   voyageScopes?: Array<"domestic" | "international">;
   locations?: Array<"alongside" | "anchorage">;
+  settlementModes?: SettlementMode[];
   minGt?: number;
   maxGt?: number;
   minNt?: number;
@@ -107,6 +116,10 @@ export interface PdaTariffRule {
   priority: number;
   unit?: string | null;
   includedUnits?: number | null;
+  /** Duration rounding for per_day/per_hour and the compound bases (default exact). */
+  rounding?: DurationRounding | null;
+  /** Duration unit size in days or hours (default 1). */
+  unitSize?: number | null;
   minimumAmount?: number | null;
   maximumAmount?: number | null;
   taxPercent?: number | null;

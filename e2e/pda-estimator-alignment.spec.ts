@@ -392,6 +392,19 @@ test("desktop, tablet and mobile: exact empty and selected Estimate structure", 
         await expect(page.locator(".pda-summary__tiles")).toHaveAttribute("aria-busy", "false");
         await assertNoPageOverflow(page);
         await page.screenshot({ path: `test-results/pda-alignment/selected-${viewport.name}.png`, fullPage: true });
+        if (viewport.name === "desktop") {
+          // C2B-013: "New" must not carry settlement modes into the next estimate.
+          await page.getByLabel("Load-port settlement").selectOption("cash");
+          await page.getByLabel("Discharge-port settlement").selectOption("agent_account");
+          await page.getByRole("button", { name: "New" }).click();
+          await page.getByRole("combobox", { name: "Vessel" }).fill(activeSeed.vesselName);
+          await page.getByRole("option", { name: new RegExp(activeSeed.vesselName) }).click();
+          await page.getByRole("combobox", { name: "Cargo" }).fill(activeSeed.cargoName);
+          await page.getByRole("option", { name: new RegExp(activeSeed.cargoName) }).click();
+          await expect(page.getByLabel("Load-port settlement")).toHaveValue("");
+          await expect(page.getByLabel("Discharge-port settlement")).toHaveValue("");
+          await expect(page.getByLabel("Load-port settlement").locator("option:checked")).toHaveText("Not stated");
+        }
       });
     }
   } finally {
