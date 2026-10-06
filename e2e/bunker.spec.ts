@@ -322,7 +322,10 @@ test("a retry after a lost response replays instead of duplicating (C2B-003 #2)"
   // Let the first server action reach the server, then drop its response.
   let dropped = false;
   await page.route("**/dashboard/bunker-supplier", async (route) => {
-    if (route.request().method() === "POST" && !dropped) {
+    // Drop only the publish server action carrying this price, not any other POST
+    // the page makes first (on staging another request reached the page earlier).
+    const body = route.request().postData() ?? "";
+    if (route.request().method() === "POST" && !dropped && body.includes("533")) {
       dropped = true;
       await route.fetch();
       await route.abort("connectionreset");
