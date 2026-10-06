@@ -116,6 +116,15 @@ export interface PdaRouteNotSourcedItem {
   };
 }
 
+/** The measured port-to-port passage (public.get_port_route), offered to prefill the passage distance. */
+export interface PdaMeasuredPassage {
+  nm: number;
+  source: string;
+  verified: boolean;
+  chokepoints: string[];
+  reversed: boolean;
+}
+
 /** A governed FX rate used for one leg's display conversion (public.fn_pda_fx_rate). */
 export interface PdaRouteFxRate {
   base: string;

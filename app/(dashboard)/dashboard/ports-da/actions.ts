@@ -4,7 +4,7 @@ import { getAppUserRow } from "@/lib/app-user";
 import { calculatePda } from "@/lib/pda/calculate";
 import { aggregatePdaRoutePreview, derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
 import { pdaRoutePreviewSchema } from "@/lib/pda/route-schema";
-import type { PdaRouteFxRate, PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
+import type { PdaMeasuredPassage, PdaRouteFxRate, PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
 import { pdaRequestSchema } from "@/lib/pda/schemas";
 import type { PdaCalculationResult, PdaRequest } from "@/lib/pda/types";
 import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
@@ -12,6 +12,7 @@ import type { CargoView, VesselView } from "@/lib/portal/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaCalculationContext, savePdaEstimate } from "@/sdk/app/pda";
+import { getPortRoute } from "@/sdk/app/routes";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -373,5 +374,26 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Unable to calculate route PDA") };
+  }
+}
+
+/**
+ * The measured passage between two ports (public.get_port_route: ECDIS voyage plans,
+ * symmetric and alias-aware). It only offers a distance to prefill; the member can
+ * overwrite it, and no route means the field stays theirs to fill.
+ */
+export async function measuredPdaPassage(pol: string, pod: string): Promise<ActionResult<PdaMeasuredPassage | null>> {
+  try {
+    const from = String(pol ?? "").trim().toUpperCase();
+    const to = String(pod ?? "").trim().toUpperCase();
+    if (!/^[A-Z]{2}[A-Z0-9]{3}$/.test(from) || !/^[A-Z]{2}[A-Z0-9]{3}$/.test(to) || from === to) return { ok: true, data: null };
+    const { supabase } = await viewer();
+    const route = await getPortRoute(supabase, from, to);
+    return {
+      ok: true,
+      data: route ? { nm: route.totalNm, source: route.source, verified: route.verified, chokepoints: route.chokepoints, reversed: route.reversed } : null,
+    };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Unable to look up the measured passage") };
   }
 }

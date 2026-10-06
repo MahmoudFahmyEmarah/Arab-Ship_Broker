@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 
-import { previewPdaRoute } from "@/app/(dashboard)/dashboard/ports-da/actions";
+import { measuredPdaPassage, previewPdaRoute } from "@/app/(dashboard)/dashboard/ports-da/actions";
 import type {
   PdaEstimatorBootstrap,
   PdaEstimatorCargoOption,
@@ -26,6 +26,7 @@ import { dateTimeLocalUtcIso, formatUtcTimelineInstant } from "@/lib/pda/route-d
 import {
   PDA_ROUTE_SERVICE_OPTIONS,
   type PdaRouteLegInput,
+  type PdaMeasuredPassage,
   type PdaRouteFxRate,
   type PdaRouteManualLineInput,
   type PdaRouteNotSourcedItem,
@@ -157,6 +158,9 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
   const [loadRate, setLoadRate] = React.useState(initialCargo?.loadRateMtPerDay == null ? "" : String(initialCargo.loadRateMtPerDay));
   const [dischargeRate, setDischargeRate] = React.useState(initialCargo?.dischargeRateMtPerDay == null ? "" : String(initialCargo.dischargeRateMtPerDay));
   const [passageDistance, setPassageDistance] = React.useState("");
+  const [measuredPassage, setMeasuredPassage] = React.useState<PdaMeasuredPassage | null>(null);
+  // True while the distance field holds the measured value the page filled in itself.
+  const passageFromRoute = React.useRef(false);
   const [passageSpeed, setPassageSpeed] = React.useState("");
   const [dailyOpex, setDailyOpex] = React.useState("");
   const [cargoStatus, setCargoStatus] = React.useState<"" | "laden" | "ballast">("");
@@ -231,6 +235,24 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
   React.useEffect(() => {
     setLoadTerminal("");
   }, [loadPort]);
+
+  React.useEffect(() => {
+    let current = true;
+    setMeasuredPassage(null);
+    if (!loadPort || !dischargePort || loadPort === dischargePort) return () => { current = false; };
+    void measuredPdaPassage(loadPort, dischargePort).then((answer) => {
+      if (!current || !answer.ok) return;
+      setMeasuredPassage(answer.data);
+      if (answer.data) {
+        setPassageDistance((existing) => {
+          if (existing.trim() !== "" && !passageFromRoute.current) return existing;
+          passageFromRoute.current = true;
+          return String(Math.round(answer.data!.nm));
+        });
+      }
+    });
+    return () => { current = false; };
+  }, [loadPort, dischargePort]);
 
   React.useEffect(() => {
     setDischargeTerminal("");
@@ -630,7 +652,8 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
                 loadRate={loadRate}
                 onLoadRate={setLoadRate}
                 passageDistance={passageDistance}
-                onPassageDistance={setPassageDistance}
+                onPassageDistance={(value) => { passageFromRoute.current = false; setPassageDistance(value); }}
+                measuredPassage={measuredPassage}
                 passageSpeed={passageSpeed}
                 onPassageSpeed={setPassageSpeed}
                 suggestedSpeed={vessel.serviceSpeed}
@@ -1018,6 +1041,7 @@ function TimelinePanel(props: {
   loadTurn: string; onLoadTurn: (value: string) => void;
   loadRate: string; onLoadRate: (value: string) => void;
   passageDistance: string; onPassageDistance: (value: string) => void;
+  measuredPassage: PdaMeasuredPassage | null;
   passageSpeed: string; onPassageSpeed: (value: string) => void;
   suggestedSpeed: number | null;
   dailyOpex: string; onDailyOpex: (value: string) => void;
@@ -1042,6 +1066,7 @@ function TimelinePanel(props: {
         <span className="is-turn">Turn {compactNumber(timeline?.dischargeTurnDays ?? numberFromText(props.dischargeTurn), "d")}</span>
         <span className="is-work">Discharge {compactNumber(timeline?.dischargeWorkingDays ?? null, "d")}</span>
       </div>
+      {props.measuredPassage ? <p className="pda-timeline__hint">Measured passage {Math.round(props.measuredPassage.nm).toLocaleString("en-US")} nm · {props.measuredPassage.source}{props.measuredPassage.verified ? " (verified)" : ""}{props.measuredPassage.chokepoints.length ? ` · via ${props.measuredPassage.chokepoints.join(", ")}` : ""}{props.measuredPassage.reversed ? " · surveyed the other way" : ""}. {Number(props.passageDistance) === Math.round(props.measuredPassage.nm) ? "Used as the passage distance; type over it to change." : "Your typed distance is used instead."}</p> : null}
       {!props.etaLoad ? <p className="pda-timeline__hint">Type the UTC ETA at {props.loadName} to put the voyage on the calendar.</p> : null}
       <div className="pda-timeline__inputs">
         <fieldset><legend>{props.loadName}</legend><label>ETA (UTC)<input className="asb-control" type="datetime-local" required value={props.etaLoad} onChange={(event) => props.onEtaLoad(event.target.value)} /></label><label>Load<input className="asb-control" inputMode="decimal" required placeholder="MT/day" value={props.loadRate} onChange={(event) => props.onLoadRate(event.target.value)} /><span>MT/day</span></label><label>Turn<input className="asb-control" inputMode="decimal" required placeholder="days" value={props.loadTurn} onChange={(event) => props.onLoadTurn(event.target.value)} /><span>days</span></label></fieldset>
