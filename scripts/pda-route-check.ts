@@ -376,6 +376,10 @@ const explicitInput: PdaRoutePreviewInput = {
   },
 };
 assert.equal(pdaRoutePreviewSchema.safeParse(explicitInput).success, true);
+// PR-10a (C2B-009 ruling): settlement is an explicit per-call fact, separate from the payer allocation.
+assert.equal(pdaRoutePreviewSchema.safeParse({ ...explicitInput, load: { ...explicitInput.load, call: { ...explicitInput.load.call, settlementMode: "agent_account" } } }).success, true);
+assert.equal(pdaRoutePreviewSchema.safeParse({ ...explicitInput, load: { ...explicitInput.load, call: { ...explicitInput.load.call, settlementMode: null } } }).success, true, "not stated is allowed");
+assert.equal(pdaRoutePreviewSchema.safeParse({ ...explicitInput, load: { ...explicitInput.load, call: { ...explicitInput.load.call, settlementMode: "vessel" } } }).success, false, "a payer value is not a settlement mode");
 assert.deepEqual(explicitInput.load.call.requestedServices, ["port_dues", "cargo_handling", "agency"]);
 assert.deepEqual(explicitInput.discharge.call.requestedServices, ["port_dues", "agency"]);
 const cairoMidnightInput: PdaRoutePreviewInput = {

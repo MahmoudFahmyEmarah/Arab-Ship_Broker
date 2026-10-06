@@ -155,6 +155,20 @@ begin
   exception when others then if sqlerrm like 'PDA_APPLICABILITY:%' then denied := true; else raise; end if; end;
   if not denied then raise exception 'PDA PR10 TEST: an unknown settlement mode was accepted'; end if;
 
+  -- C2B-009: SQL matches the TypeScript schema for two-value lists.
+  denied := false;
+  begin perform public.pda_replace_tariff_rules(maker, version, jsonb_build_array(jsonb_build_object(
+    'code','three_modes','label','Three modes','basis','per_call','amount',1,'priority',10,
+    'applicability',jsonb_build_object('settlementModes',jsonb_build_array('cash','agent_account','cash')),'sourceId',source,'sourcePage','4')));
+  exception when others then if sqlerrm like 'PDA_APPLICABILITY:%' then denied := true; else raise; end if; end;
+  if not denied then raise exception 'PDA PR10 TEST: three settlement modes were accepted'; end if;
+  denied := false;
+  begin perform public.pda_replace_tariff_rules(maker, version, jsonb_build_array(jsonb_build_object(
+    'code','dup_status','label','Duplicate status','basis','per_call','amount',1,'priority',10,
+    'applicability',jsonb_build_object('cargoStatuses',jsonb_build_array('laden','laden')),'sourceId',source,'sourcePage','4')));
+  exception when others then if sqlerrm like 'PDA_APPLICABILITY:%' then denied := true; else raise; end if; end;
+  if not denied then raise exception 'PDA PR10 TEST: a duplicated two-value list was accepted'; end if;
+
   -- the failed calls rolled back their own subtransactions: the good rules are still there
   if (select count(*) from public.port_tariff_rules where tariff_version_id = version) <> 5 then
     raise exception 'PDA PR10 TEST: the accepted rule set changed after refused replacements';

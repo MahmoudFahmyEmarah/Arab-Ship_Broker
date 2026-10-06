@@ -38,6 +38,8 @@ export interface PdaRouteLegInput {
     cargoStatus: "laden" | "ballast";
     voyageScope: "domestic" | "international";
     location: "alongside" | "anchorage";
+    /** How this call is settled (PR-10a, C2B-009 ruling): never inferred from the payer allocation. */
+    settlementMode?: "cash" | "agent_account" | null;
     requestedServices: PdaRouteServiceCode[];
     hours?: number | null;
     units?: number | null;

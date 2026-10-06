@@ -23,6 +23,13 @@ export const pdaApplicabilitySchema = z.object({
   minCargoQuantityMt: nonNegative.optional(), maxCargoQuantityMt: nonNegative.optional(),
   percentageBaseCodes: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,79}$/)).min(1).max(100).optional(),
 }).strict().superRefine((value, ctx) => {
+  // C2B-009: same rule as pda_replace_tariff_rules — each value at most once.
+  for (const key of ["cargoStatuses", "voyageScopes", "locations", "settlementModes"] as const) {
+    const list = value[key] as string[] | undefined;
+    if (list && new Set(list).size !== list.length) {
+      ctx.addIssue({ code: "custom", path: [key], message: `${key} lists a value more than once` });
+    }
+  }
   for (const [minimum, maximum] of [
     ["minGt", "maxGt"], ["minNt", "maxNt"], ["minScnrt", "maxScnrt"],
     ["minDwt", "maxDwt"], ["minLoaM", "maxLoaM"], ["minDraftM", "maxDraftM"],

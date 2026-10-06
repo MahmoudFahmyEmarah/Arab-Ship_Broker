@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { calculatePda } from "../lib/pda/calculate";
+import { pdaApplicabilitySchema } from "../lib/pda/schemas";
 import type { PdaRequest, PdaTariffVersion } from "../lib/pda/types";
 
 const ids = {
@@ -350,6 +351,14 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(calculatePda(call(1, { settlementMode: "agent_account" }), egypt([agentOnly])).lines.length, 1);
   assert.equal(calculatePda(call(1, { settlementMode: "cash" }), egypt([agentOnly])).lines.length, 0);
   assert.equal(calculatePda(call(1), egypt([agentOnly])).warnings.some((w) => w.code === "MISSING_INPUT" && /settlement mode/.test(w.message)), true);
+}
+
+// C2B-009: the TypeScript schema refuses duplicated two-value lists, like the RPC.
+{
+  assert.equal(pdaApplicabilitySchema.safeParse({ settlementModes: ["cash", "agent_account", "cash"] }).success, false);
+  assert.equal(pdaApplicabilitySchema.safeParse({ settlementModes: ["cash", "cash"] }).success, false);
+  assert.equal(pdaApplicabilitySchema.safeParse({ cargoStatuses: ["laden", "laden"] }).success, false);
+  assert.equal(pdaApplicabilitySchema.safeParse({ settlementModes: ["cash", "agent_account"] }).success, true);
 }
 
 console.log("PDA CHECK: ALL ASSERTIONS PASSED");
