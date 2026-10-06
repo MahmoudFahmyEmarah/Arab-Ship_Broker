@@ -21,7 +21,25 @@
 set local lock_timeout = '5s';
 set local statement_timeout = '10min';
 
--- ── commands (20260923203000) ───────────────────────────────────────────────
+-- ── enforcement (20261006100000), in case its own DOWN was not run first ───
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.unschedule(jobid) from cron.job where jobname = 'fixture-room-clock';
+  end if;
+end $$;
+drop function if exists public.run_fixture_room_clock();
+drop function if exists public.sweep_fixture_room_windows(integer);
+drop function if exists public.sweep_fixture_proposal_lapses(integer);
+drop function if exists public.extend_fixture_negotiation_window(uuid, timestamptz, integer, text, uuid);
+drop function if exists public.fix_fixture_on_subjects(uuid, integer, text, uuid, uuid);
+drop function if exists public.fn_fixture_fix_confirmed_sides(public.fixture_rooms);
+drop function if exists public.fn_fixture_require_window(public.fixture_rooms);
+drop function if exists public.fn_fixture_window_closed(public.fixture_rooms);
+drop function if exists public.fn_fixture_require_movable(public.fixture_terms);
+drop function if exists public.fn_fixture_fix_basis(uuid);
+
+-- ── commands (20260923203000)───────────────────────────────────────────────
 drop function if exists public.redact_fixture_message(uuid, uuid, text, integer, text);
 drop function if exists public.close_fixture_room(uuid, text, text, integer, text, uuid, uuid);
 drop function if exists public.agree_fixture_disclosure(uuid, integer, text, uuid, uuid);

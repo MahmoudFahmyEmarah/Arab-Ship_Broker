@@ -35,8 +35,8 @@ export type FixtureEventType =
   | "party.disclosure_agreed" | "room.counterparty_disclosed"
   | "proposal.submitted" | "proposal.withdrawn" | "proposal.lapsed" | "proposal.accepted"
   | "term.agreed" | "term.reopened" | "term.held" | "term.resumed" | "term.referred" | "term.referral_cleared"
-  | "subject.added" | "subject.lifted" | "subject.failed" | "subject.extended"
-  | "room.fixed_on_subjects" | "room.fixed" | "room.returned_to_negotiation"
+  | "subject.added" | "subject.lifted" | "subject.failed" | "subject.extended" | "subject.reinstated"
+  | "room.fix_confirmed" | "room.fixed_on_subjects" | "room.fixed" | "room.returned_to_negotiation" | "room.window_extended"
   | "recap.published" | "recap.acknowledged" | "recap.invalidated"
   | "message.posted" | "message.redacted"
   | "listing_sync.required" | "listing_sync.applied" | "pda.linked" | "room.closed";
@@ -205,6 +205,11 @@ export interface FixtureCapabilities {
   canFailSubject: boolean;
   canExtendSubject: boolean;
   canFixOnSubjects: boolean;
+  /** PR-07: the principal sides whose fix confirmation still matches the agreed terms and subjects */
+  fixConfirmedSides: ("cargo" | "vessel")[];
+  /** PR-08: the room is invited / negotiating and its negotiation window has closed */
+  windowClosed: boolean;
+  canExtendWindow: boolean;
   canPublishRecap: boolean;
   canAcknowledgeRecap: boolean;
   canMessage: boolean;

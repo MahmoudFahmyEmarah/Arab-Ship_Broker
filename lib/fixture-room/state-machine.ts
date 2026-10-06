@@ -10,7 +10,8 @@ export type FixtureCommand =
   | "reopen_fixture_term" | "set_fixture_term_flag"
   | "add_fixture_subject" | "lift_fixture_subject" | "fail_fixture_subject" | "extend_fixture_subject"
   | "fix_fixture_on_subjects" | "publish_fixture_recap" | "acknowledge_fixture_recap"
-  | "post_fixture_message" | "agree_fixture_disclosure" | "close_fixture_room" | "redact_fixture_message";
+  | "post_fixture_message" | "agree_fixture_disclosure" | "close_fixture_room" | "redact_fixture_message"
+  | "extend_fixture_negotiation_window";
 
 export const FIXTURE_ROOM_STATUSES: readonly FixtureRoomStatus[] = [
   "draft", "invited", "negotiating", "on_subjects", "fixed", "withdrawn", "failed", "expired",
@@ -41,6 +42,7 @@ export const COMMAND_STATUSES: Record<FixtureCommand, readonly FixtureRoomStatus
   agree_fixture_disclosure: ["draft", "invited", "negotiating", "on_subjects", "fixed"],
   close_fixture_room: ["draft", "invited", "negotiating", "on_subjects"],
   redact_fixture_message: ["draft", "invited", "negotiating", "on_subjects", "fixed", "withdrawn", "failed", "expired"],
+  extend_fixture_negotiation_window: ["invited", "negotiating"],
 };
 
 export function commandAllowedIn(command: FixtureCommand, status: FixtureRoomStatus): boolean {
@@ -48,9 +50,12 @@ export function commandAllowedIn(command: FixtureCommand, status: FixtureRoomSta
 }
 
 /**
- * The transitions a command can cause. `fix_fixture_on_subjects` lands on
- * `fixed` directly when no subject is open; the last `lift_fixture_subject`
- * fixes the room in the same statement.
+ * The transitions a command can cause. `fix_fixture_on_subjects` moves the
+ * room only on the SECOND side's confirmation of the same terms and subjects
+ * (PR-07), landing on `fixed` directly when no subject is open; the last
+ * `lift_fixture_subject` fixes the room in the same statement. The clock
+ * (run_fixture_room_clock, not a member command) expires an invited or
+ * negotiating room whose negotiation window closed (PR-08).
  */
 export const TRANSITIONS: readonly { from: FixtureRoomStatus; to: FixtureRoomStatus; by: FixtureCommand }[] = [
   { from: "draft", to: "invited", by: "invite_fixture_party" },

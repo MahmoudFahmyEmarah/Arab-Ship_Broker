@@ -134,6 +134,15 @@ export function countdown(expiresAt: string | null | undefined, now: number): st
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** A negotiation window that may be days long: "13d 4h", "5h 12m", then the minute countdown. */
+export function windowLeftLabel(endsAt: string | null | undefined, now: number): string | null {
+  if (!endsAt || !now) return null;
+  const s = Math.max(0, Math.floor((Date.parse(endsAt) - now) / 1000));
+  if (s >= 86_400) return `${Math.floor(s / 86_400)}d ${Math.floor((s % 86_400) / 3600)}h`;
+  if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  return countdown(endsAt, now);
+}
+
 /** "2m ago", "just now", "in 3h". */
 export function relativeTime(iso: string | null | undefined, now: number): string {
   if (!iso || !now) return "";

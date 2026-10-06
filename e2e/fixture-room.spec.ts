@@ -190,3 +190,44 @@ test("a returning member sees what changed since their last visit", async ({ bro
   await expect(page.getByTestId("new-since-banner")).toHaveCount(0);
   await context.close();
 });
+
+// PR-07 (6 Oct 2026): one side's confirmation never fixes the deal; the second side's does.
+test("both sides confirm before the deal is fixed", async ({ browser, baseURL }) => {
+  const roomId = roomUrl.split("/").pop()!;
+  const chApi = await apiClientAs(seed.charterer.email);
+  const owApi = await apiClientAs(seed.owner.email);
+  const values: Record<string, unknown> = {
+    cargo_grade: { text: "Wheat in bulk" }, quantity: { num: 26000 },
+    ports: { load: "ZZFXA", disch: "ZZFXB", load_name: "Fixture Load Port", disch_name: "Fixture Disch Port" },
+    laycan: { spot: true }, ld_rates: { load: 8000, disch: 6000 },
+  };
+  const version = async () => ((await chApi.rpc("get_fixture_room_version", { p_room_id: roomId })).data as number);
+  const room = (await chApi.rpc("get_fixture_room", { p_room_id: roomId, p_events_after: 0 })).data as { terms: { id: string; code: string; status: string }[] };
+  for (const t of room.terms.filter((x) => x.status !== "agreed")) {
+    const bid = await chApi.rpc("submit_fixture_proposal", { p_room_id: roomId, p_term_id: t.id, p_value: values[t.code], p_comment: null, p_is_final: false, p_expires_in_minutes: null, p_expected_version: await version(), p_idempotency_key: `e2e-two-sided-bid-${t.code}-${seed.stamp}`, p_as_party_id: null, p_on_behalf_of_party_id: null });
+    expect(bid.error, bid.error?.message).toBeNull();
+    const acc = await owApi.rpc("accept_fixture_proposal", { p_room_id: roomId, p_proposal_id: (bid.data as { data: { proposalId: string } }).data.proposalId, p_expected_version: await version(), p_idempotency_key: `e2e-two-sided-acc-${t.code}-${seed.stamp}`, p_as_party_id: null, p_on_behalf_of_party_id: null });
+    expect(acc.error, acc.error?.message).toBeNull();
+  }
+
+  const ch = await signInAs(browser, baseURL!, seed.charterer.email);
+  const ow = await signInAs(browser, baseURL!, seed.owner.email);
+  await ch.page.goto(roomUrl);
+  await ow.page.goto(roomUrl);
+  await dismissOverlays(ch.page);
+  await dismissOverlays(ow.page);
+
+  // the charterer confirms: the room waits for the owner
+  await ch.page.getByTestId("fix-on-subs").click();
+  await expect(ch.page.getByTestId("fix-awaiting")).toContainText(/awaiting the owner side/i);
+  await expect(ch.page.getByTestId("room-status")).toHaveText(/negotiating/i);
+
+  // the owner sees the charterer's confirmation; the owner's confirmation fixes the deal
+  await expect(ow.page.getByTestId("fix-on-subs")).toContainText(/charterer side confirmed/i, { timeout: 120_000 });
+  await ow.page.getByTestId("fix-on-subs").click();
+  await expect(ow.page.getByTestId("room-status")).toHaveText(/fixed/i);
+  await expect(ch.page.getByTestId("room-status")).toHaveText(/fixed/i, { timeout: 120_000 });
+  await expect(ch.page.getByTestId("activity-feed")).toContainText(/confirmed the fixture/i);
+  await ch.context.close();
+  await ow.context.close();
+});

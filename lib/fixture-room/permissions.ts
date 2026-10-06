@@ -1,7 +1,9 @@
 // Fixture Room · capability matrix (23 Sep 2026).
 //
 // A pure mirror of fn_fixture_capabilities in
-// supabase/migrations/20260923201000_fixture_room_helpers.sql. The server
+// supabase/migrations/20261006100000_fixture_room_enforcement.sql (first
+// defined in 20260923201000; PR-07/PR-08 added the window and the fix
+// confirmations). The server
 // computes `viewer.capabilities` on every read and every command re-checks;
 // this module exists so the UI and scripts/fixture-room-check.ts can reason
 // about the same table without a database.
@@ -20,6 +22,7 @@ export function computeCapabilities(
   parties: readonly ViewerParty[],
   isAdmin: boolean,
   relayedPartyIds: readonly string[] = [],
+  clock: { windowClosed?: boolean; fixConfirmedSides?: ("cargo" | "vessel")[] } = {},
 ): FixtureCapabilities {
   const terminal = FIXTURE_TERMINAL_STATUSES.includes(status);
   let side: FixtureSide | null = null;
@@ -43,7 +46,8 @@ export function computeCapabilities(
   }
   if (mediator && relayedPartyIds.length > 0) commercial = true;
   if (side === null && mediator) side = "mediator";
-  const open = status === "invited" || status === "negotiating";
+  const windowClosed = (status === "invited" || status === "negotiating") && clock.windowClosed === true;
+  const open = (status === "invited" || status === "negotiating") && !windowClosed;
   const reviewing = status === "negotiating" || status === "on_subjects" || status === "fixed";
   return {
     viewerSide: side,
@@ -52,13 +56,16 @@ export function computeCapabilities(
     canPropose: open && commercial,
     canAccept: open && commercial,
     canWithdrawProposal: open && commercial,
-    canReopen: (status === "negotiating" || status === "on_subjects") && commercial,
+    canReopen: ((status === "negotiating" && !windowClosed) || status === "on_subjects") && commercial,
     canFlagTerm: open && (commercial || mediator),
-    canAddSubject: (status === "negotiating" || status === "on_subjects") && (commercial || mediator),
+    canAddSubject: ((status === "negotiating" && !windowClosed) || status === "on_subjects") && (commercial || mediator),
     canLiftSubject: status === "on_subjects" && (commercial || mediator),
     canFailSubject: status === "on_subjects" && (commercial || mediator),
     canExtendSubject: status === "on_subjects" && (commercial || mediator),
-    canFixOnSubjects: status === "negotiating" && (commercial || mediator),
+    canFixOnSubjects: status === "negotiating" && !windowClosed && commercial,
+    fixConfirmedSides: status === "negotiating" ? [...(clock.fixConfirmedSides ?? [])].sort() : [],
+    windowClosed,
+    canExtendWindow: (status === "invited" || status === "negotiating") && mediator,
     canPublishRecap: reviewing && (commercial || mediator),
     canAcknowledgeRecap: reviewing && commercial,
     canMessage: any && !terminal,
@@ -66,8 +73,8 @@ export function computeCapabilities(
     canFail: !terminal && status !== "fixed" && (mediator || isAdmin),
     canExpire: !terminal && status !== "fixed" && (mediator || isAdmin),
     canAgreeDisclosure: !terminal && (canDisclose || (mediator && relayedPartyIds.length > 0)),
-    canInvite: !terminal && (commercial || mediator),
-    canRespondInvitation: invited,
+    canInvite: !terminal && !windowClosed && (commercial || mediator),
+    canRespondInvitation: invited && !terminal && !windowClosed,
     canRedact: isAdmin,
     actForPartyIds: mediator ? [...relayedPartyIds] : [],
   };

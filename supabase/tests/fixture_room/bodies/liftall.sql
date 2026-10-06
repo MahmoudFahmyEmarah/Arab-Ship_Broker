@@ -27,6 +27,8 @@ begin
   e := pg_temp.fx_err(format('select public.lift_all_fixture_subjects(%L, %s, %L)', v_room, pg_temp.fx_ver(v_room), 'lift-early'));
   if e <> 'FX_STATE' then raise exception 'L0: lift all while negotiating must be FX_STATE, got %', e; end if;
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'lift-fix');
+  perform pg_temp.fx_as('u_ch1');
+  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'lift-fix-c');
   if v->'data'->>'roomStatus' <> 'on_subjects' then raise exception 'L0: on subjects expected: %', v; end if;
   raise notice 'L0 ok: lift all is refused until the room is on subjects';
 
@@ -73,7 +75,7 @@ begin
   raise notice 'L4 ok: lifting the last subjects clean-fixes the room with the listing sync, as a single lift does';
 
   -- L5 · with the shared notification core present: no subject title in any notification
-  if to_regclass('public.notifications') is not null and to_regprocedure('public.fn_fixture_notify_project()') is not null then
+  if to_regclass('public.notifications') is not null and exists (select 1 from pg_trigger g where g.tgrelid = 'public.fixture_events'::regclass and not g.tgisinternal and g.tgfoid = to_regprocedure('public.fn_fixture_notify_project()')) then
     select string_agg(x.title || ' ' || x.body || ' ' || x.payload::text, E'\n') into t from public.notifications x where x.payload->>'roomId' = v_room::text;
     if t is null then raise exception 'L5: the lifts must notify the other side'; end if;
     if t ~* '(Tasos|\+30 690|seed-owners\.test|Sub details|Sub stem)' then raise exception 'L5: a subject title reached a notification: %', t; end if;

@@ -117,6 +117,8 @@ begin
   v := public.add_fixture_subject(v_room, 'Sub owners'' approval', null, 'vessel', null, pg_temp.fx_ver(v_room), 'mask-tbn-c2-sub');
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'mask-tbn-c2-fix');
   perform pg_temp.fx_as('u_t1');
+  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'mask-tbn-c2-fix-c');
+  perform pg_temp.fx_as('u_t1');
   r := public.get_fixture_room(v_room);
   if (r->'snapshot'->>'vesselIdentityMasked')::boolean is not true or (r->'room'->'listingSync'->>'outstanding')::boolean is not true then raise exception 'M3b: masked room on subjects expected: %', r->'room'; end if;
   if (r->'room'->'listingSync'->'vessel'->>'vesselId') is not null or (r->'room'->>'vesselId') is not null then
