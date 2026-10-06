@@ -173,6 +173,9 @@ begin
   perform pg_temp.fx_as('u_ow1');
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-fix-1-owner');
   if v->'data'->>'roomStatus' <> 'fixed' then raise exception 'S4: with both sides confirmed and no subjects the fix must land clean (fixed), got %', v; end if;
+  -- the clean fix replays as fixed, byte-for-byte (C2O-055)
+  r := public.fix_fixture_on_subjects(v_room, 1, 'state-fix-1-owner');
+  if (r->>'replayed')::boolean is not true or (r - 'replayed') <> (v - 'replayed') then raise exception 'S4: the clean-fix replay differs: % vs %', r, v; end if;
   if pg_temp.fx_event_types(v_room) not like '%room.fix_confirmed,room.fix_confirmed,room.fixed_on_subjects,listing_sync.required,room.fixed%' then raise exception 'S4: ledger %', pg_temp.fx_event_types(v_room); end if;
   r := public.get_fixture_room(v_room);
   if r->'room'->>'status' <> 'fixed' or (r->'room'->>'fixedAt') is null or (r->'room'->>'fixedOnSubsAt') is null then raise exception 'S4: fixed marks %', r->'room'; end if;

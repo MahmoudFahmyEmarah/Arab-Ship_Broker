@@ -645,6 +645,7 @@ drop function if exists public.fn_fixture_require_window(public.fixture_rooms);
 drop function if exists public.fn_fixture_window_closed(public.fixture_rooms);
 drop function if exists public.fn_fixture_require_movable(public.fixture_terms);
 drop function if exists public.fn_fixture_fix_basis(uuid);
+drop function if exists public.fn_fixture_backfill_windows();
 
 alter table public.fixture_rooms drop column if exists fix_confirmations;
 alter table public.fixture_rooms alter column negotiation_window_ends_at drop default;

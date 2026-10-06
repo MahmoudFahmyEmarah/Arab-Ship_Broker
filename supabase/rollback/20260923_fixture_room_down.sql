@@ -38,6 +38,7 @@ drop function if exists public.fn_fixture_require_window(public.fixture_rooms);
 drop function if exists public.fn_fixture_window_closed(public.fixture_rooms);
 drop function if exists public.fn_fixture_require_movable(public.fixture_terms);
 drop function if exists public.fn_fixture_fix_basis(uuid);
+drop function if exists public.fn_fixture_backfill_windows();
 
 -- ── commands (20260923203000)───────────────────────────────────────────────
 drop function if exists public.redact_fixture_message(uuid, uuid, text, integer, text);

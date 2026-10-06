@@ -349,9 +349,9 @@ begin
   if r->'viewer'->'capabilities'->'fixConfirmedSides' <> '["vessel"]'::jsonb then raise exception 'E2: confirmed sides %', r->'viewer'->'capabilities'->'fixConfirmedSides'; end if;
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'enf-fix-c2');
   if v->'data'->>'roomStatus' <> 'on_subjects' or (v->'data'->>'openSubjects')::int <> 2 then raise exception 'E2: both confirmed → on subjects with 2 open: %', v; end if;
-  -- a replay returns the original result, it does not confirm again
-  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room) - 1, 'enf-fix-c2');
-  if (v->>'replayed')::boolean is not true then raise exception 'E2: same key must replay: %', v; end if;
+  -- a replay returns exactly the original result (C2O-055), it does not confirm again
+  r := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room) - 1, 'enf-fix-c2');
+  if (r->>'replayed')::boolean is not true or (r - 'replayed') <> (v - 'replayed') then raise exception 'E2: the replay differs from the fresh result: % vs %', r, v; end if;
   raise notice 'E2 ok: one confirmation waits; a new subject voids the earlier one; the second side on the same basis fixes on subjects';
 end $$;
 
@@ -368,6 +368,8 @@ begin
   perform pg_temp.fx_as('u_ch1');
   v := public.reopen_fixture_term(v_room, pg_temp.fx_term(v_room, 'laycan'), 'receivers moved the laycan', pg_temp.fx_ver(v_room), 'enf-reopen');
   if v->'data'->>'roomStatus' <> 'negotiating' or (v->'data'->>'subjectsReinstated')::int <> 1 then raise exception 'E3: reopen must return to negotiation and reinstate 1 subject: %', v; end if;
+  r := public.reopen_fixture_term(v_room, pg_temp.fx_term(v_room, 'laycan'), 'receivers moved the laycan', 1, 'enf-reopen');
+  if (r->>'replayed')::boolean is not true or (r - 'replayed') <> (v - 'replayed') then raise exception 'E3: the reopen replay differs from the fresh result: % vs %', r, v; end if;
   perform pg_temp.fx_owner();
   select count(*) into v_n from public.fixture_subjects where room_id = v_room and status = 'open';
   perform pg_temp.fx_as('u_ch1');
@@ -510,6 +512,29 @@ begin
      or has_function_privilege('authenticated', 'public.sweep_fixture_proposal_lapses(integer)', 'execute') then
     raise exception 'E5: the clock must be service-only'; end if;
   raise notice 'E5 ok: one lapse observation per proposal across clock runs and the submit path; the clock is service-only';
+end $$;
+
+-- ── E7 · the migration backfill on a room that pre-dates it: window, System event, version, idempotence (C2O-055) ─
+do $$
+declare v jsonb; v_room uuid; v_ver int; v_n int; v_events bigint;
+begin
+  v_room := pg_temp.fx_room(pg_temp.fx_id('c1'), pg_temp.fx_id('a4'));   -- E5's room, still negotiating
+  perform pg_temp.fx_owner();
+  if pg_temp.fx_status(v_room) <> 'negotiating' then raise exception 'E7: E5''s room should be negotiating, is %', pg_temp.fx_status(v_room); end if;
+  update public.fixture_rooms set negotiation_window_ends_at = null where id = v_room;   -- as before 20261006100000
+  v_ver := pg_temp.fx_ver(v_room); v_events := pg_temp.fx_events(v_room);
+  v_n := public.fn_fixture_backfill_windows();
+  if v_n < 1 then raise exception 'E7: the backfill touched no room'; end if;
+  if (select negotiation_window_ends_at from public.fixture_rooms where id = v_room) not between now() + interval '13 days 23 hours' and now() + interval '14 days 1 hour' then
+    raise exception 'E7: the backfilled window is not 14 days'; end if;
+  if pg_temp.fx_ver(v_room) <> v_ver + 1 or pg_temp.fx_events(v_room) <> v_events + 1 or pg_temp.fx_event_types(v_room) not like '%room.window_extended' then
+    raise exception 'E7: the backfill must append one System event and move the version (% → %)', v_ver, pg_temp.fx_ver(v_room); end if;
+  if (select actor_user_id from public.fixture_events where room_id = v_room order by seq desc limit 1) is not null then raise exception 'E7: the backfill event must be System'; end if;
+  v_n := public.fn_fixture_backfill_windows();
+  if pg_temp.fx_events(v_room) <> v_events + 1 then raise exception 'E7: a second backfill must add nothing'; end if;
+  if has_function_privilege('service_role', 'public.fn_fixture_backfill_windows()', 'execute') or has_function_privilege('authenticated', 'public.fn_fixture_backfill_windows()', 'execute') then
+    raise exception 'E7: the backfill is owner-only'; end if;
+  raise notice 'E7 ok: a pre-migration room gets 14 days, one System room.window_extended and a new version; a re-run adds nothing; owner-only';
 end $$;
 
 do $$ begin raise notice 'FIXTURE ENFORCEMENT SMOKE: ALL ASSERTIONS PASSED'; end $$;

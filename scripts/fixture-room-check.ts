@@ -591,6 +591,14 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const ap = sql.split("create or replace function public.fn_fixture_actor_parties(")[1].split("end $$;")[0];
   ok(/p\.status = 'active' or not exists/.test(ap) && /'withdrawn', 'failed', 'expired'/.test(ap), "C2O-052: a pending invitee loses access to a terminal room");
   ok(/'migration:20261006100000:window'/.test(sql) && /'room\.window_extended'/.test(m.split("12 · backfill")[1] ?? ""), "C2O-052: the backfill records an event per room so clients refresh");
+  // C2O-055 · the stored result is the final result: a replay equals the fresh call
+  const fixBody = sql.split("create or replace function public.fix_fixture_on_subjects(")[1].split("end $$;")[0];
+  ok(/case when v_open_subjects = 0 then 'fixed' else 'on_subjects' end/.test(fixBody) && !/\|\| jsonb_build_object\('data'/.test(fixBody), "C2O-055: the clean fix stores 'fixed' and returns the stored envelope unchanged");
+  const reopenBody = sql.split("create or replace function public.reopen_fixture_term(")[1].split("end $$;")[0];
+  ok(/'subjectsReinstated', v_reinstated\)\);/.test(reopenBody) && !/\|\| jsonb_build_object\('data'/.test(reopenBody), "C2O-055: reopen stores subjectsReinstated in its result and returns it unchanged");
+  ok(/create or replace function public\.fn_fixture_backfill_windows\(\)/.test(sql) && /select public\.fn_fixture_backfill_windows\(\);/.test(sql), "C2O-055: the backfill is a function the suite exercises on a pre-migration room");
+  const enfBody = read("supabase/tests/fixture_room/bodies/enforcement.sql");
+  ok(/\(r - 'replayed'\) <> \(v - 'replayed'\)/.test(enfBody) && /E7 ok/.test(enfBody), "C2O-055: the suite compares replay and fresh results and runs the backfill case");
   ok(!/set negotiation_window_ends_at = null/.test(down) && /Window values are KEPT/.test(down), "C2O-052: the DOWN keeps window values");
   const late2 = computeCapabilities("negotiating", [P2("cargo", "principal")], false, [], { windowClosed: true });
   ok(!late2.canAddSubject && !late2.canInvite, "a closed window stops subjects and invitations");

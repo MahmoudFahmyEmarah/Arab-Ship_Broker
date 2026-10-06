@@ -318,13 +318,17 @@ begin
     raise exception 'FX_VALIDATION: reason must be at most 500 characters' using errcode = '22023';
   end if;
   select * into ap from public.fixture_proposals x where x.id = t.agreed_proposal_id;
+  -- the result is complete before it is stored, so a replay returns exactly what this call returns (C2O-055)
+  if r.status = 'on_subjects' then
+    select count(*) into v_reinstated from public.fixture_subjects x where x.room_id = r.id and x.status = 'lifted';
+  end if;
 
   v_first := public.fn_fixture_event(r.id, 'term.reopened', v_actor, acting.id, case when rep.id <> acting.id then rep.id end, rep.id <> acting.id,
     'reopen_fixture_term', p_idempotency_key, v_hash,
     jsonb_build_object('termId', t.id, 'termCode', t.code, 'termLabel', t.label, 'reason', nullif(btrim(coalesce(p_reason, '')), ''),
                        'previousProposalId', ap.id, 'previousAgreedValue', ap.display_value, 'reopenCount', t.reopen_count + 1,
                        'previousRoomStatus', r.status, 'roomStatus', 'negotiating'),
-    jsonb_build_object('termId', t.id, 'termStatus', 'open', 'roomStatus', 'negotiating'));
+    jsonb_build_object('termId', t.id, 'termStatus', 'open', 'roomStatus', 'negotiating', 'subjectsReinstated', v_reinstated));
   update public.fixture_terms
      set status = 'open', agreed_proposal_id = null, agreed_at = null, agreed_by_party_id = null, agreed_event_id = null,
          cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, reopen_count = reopen_count + 1, updated_at = now()
@@ -344,14 +348,12 @@ begin
       update public.fixture_subjects set status = 'open', resolved_at = null, resolved_by_party_id = null, resolved_event_id = null where id = s.id;
       perform public.fn_fixture_event(r.id, 'subject.reinstated', v_actor, acting.id, null, false, 'reopen_fixture_term', p_idempotency_key, v_hash,
         jsonb_build_object('subjectId', s.id, 'seq', s.seq, 'title', s.title, 'reason', 'term reopened: ' || t.label), null);
-      v_reinstated := v_reinstated + 1;
     end loop;
     perform public.fn_fixture_listing_sync_require(r.id, jsonb_build_object('cargo_status', 'IN', 'vessel_status', 'OPEN'),
       'returned to negotiation', v_actor, acting.id, p_idempotency_key, v_hash);
   end if;
   perform public.fn_fixture_invalidate_recap(r.id, v_actor, acting.id, 'term reopened: ' || t.label, p_idempotency_key, v_hash);
-  return (v_first || jsonb_build_object('version', (select max(e.seq) from public.fixture_events e where e.room_id = r.id)))
-         || jsonb_build_object('data', (v_first->'data') || jsonb_build_object('subjectsReinstated', v_reinstated));
+  return v_first || jsonb_build_object('version', (select max(e.seq) from public.fixture_events e where e.room_id = r.id));
 end $$;
 revoke all on function public.reopen_fixture_term(uuid, uuid, text, integer, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.reopen_fixture_term(uuid, uuid, text, integer, text, uuid, uuid) to authenticated, service_role;
@@ -494,7 +496,9 @@ begin
   v_first := public.fn_fixture_event(r.id, 'room.fixed_on_subjects', v_actor, acting.id, null, false, 'fix_fixture_on_subjects', p_idempotency_key, v_hash,
     jsonb_build_object('fixedOnSubsAt', now(), 'agreedTerms', v_agreed, 'openSubjects', v_open_subjects,
                        'confirmedAt', jsonb_build_object('cargo', v_conf->'cargo'->>'at', 'vessel', v_conf->'vessel'->>'at')),
-    jsonb_build_object('roomStatus', 'on_subjects', 'openSubjects', v_open_subjects, 'confirmedSides', jsonb_build_array('cargo', 'vessel')));
+    -- the final result, stored once: a clean fix (no open subject) is 'fixed' in the replay too (C2O-055)
+    jsonb_build_object('roomStatus', case when v_open_subjects = 0 then 'fixed' else 'on_subjects' end, 'openSubjects', v_open_subjects,
+                       'confirmedSides', jsonb_build_array('cargo', 'vessel'), 'awaitingSide', null));
   perform public.fn_fixture_listing_sync_require(r.id, jsonb_build_object('cargo_status', 'OUT', 'vessel_status', 'ON SUBS'), 'on_subjects', v_actor, acting.id, p_idempotency_key, v_hash);
   if v_open_subjects = 0 then
     update public.fixture_rooms set status = 'fixed', fixed_at = now() where id = r.id;
@@ -504,9 +508,7 @@ begin
     v_status := 'fixed';
   end if;
   perform public.fn_fixture_invalidate_recap(r.id, v_actor, acting.id, 'fixed on subjects', p_idempotency_key, v_hash);
-  return (v_first || jsonb_build_object('version', (select max(e.seq) from public.fixture_events e where e.room_id = r.id)))
-         || jsonb_build_object('data', jsonb_build_object('roomStatus', v_status, 'openSubjects', v_open_subjects,
-                                                          'confirmedSides', jsonb_build_array('cargo', 'vessel'), 'awaitingSide', null));
+  return v_first || jsonb_build_object('version', (select max(e.seq) from public.fixture_events e where e.room_id = r.id));
 end $$;
 revoke all on function public.fix_fixture_on_subjects(uuid, integer, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.fix_fixture_on_subjects(uuid, integer, text, uuid, uuid) to authenticated, service_role;
@@ -953,15 +955,21 @@ comment on function public.run_fixture_room_clock() is
 -- A System room.window_extended per room moves the room version, so a client
 -- holding the old view refreshes instead of acting on a deadline it never saw
 -- (C2O-052). Only rooms without a window are touched, so a re-run adds nothing.
-do $$
-declare rec record; v_ends timestamptz := now() + interval '14 days';
+create or replace function public.fn_fixture_backfill_windows()
+ returns integer language plpgsql volatile security definer set search_path to 'public'
+as $$
+declare rec record; v_ends timestamptz := now() + interval '14 days'; v_n integer := 0;
 begin
   for rec in select id from public.fixture_rooms where status in ('draft', 'invited', 'negotiating') and negotiation_window_ends_at is null order by created_at for update loop
     update public.fixture_rooms set negotiation_window_ends_at = v_ends where id = rec.id;
     perform public.fn_fixture_event(rec.id, 'room.window_extended', null, null, null, false, 'migration_20261006100000',
       'migration:20261006100000:window', null, jsonb_build_object('previousEndsAt', null, 'endsAt', v_ends, 'source', 'migration'), null);
+    v_n := v_n + 1;
   end loop;
+  return v_n;
 end $$;
+revoke all on function public.fn_fixture_backfill_windows() from public, anon, authenticated, service_role;
+select public.fn_fixture_backfill_windows();
 
 do $$
 begin
