@@ -701,8 +701,15 @@ begin
    where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'MGO05';
   if p is distinct from 730 then raise exception 'R13 FAILED: D must be live after its start, got %', p; end if;
   if public.fn_bunker_normalise_schedules() <> 0 then raise exception 'R13 FAILED: not idempotent'; end if;
+  -- C2B-017: cancelling the kept D afterwards gives A back its pre-chain state (open).
+  update public.bunker_quotes set status = 'withdrawn', decided_at = now(), decision_reason = 'R13 cancel', superseded_at = now() where id = v_d;
+  if (select superseded_at from public.bunker_quotes where id = v_a) is not null then
+    raise exception 'R13 FAILED: cancelling D left A ended at %', (select superseded_at from public.bunker_quotes where id = v_a); end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(td + interval '1 hour', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'MGO05';
+  if p is distinct from 700 then raise exception 'R13 FAILED: A must be live after D''s former start, got %', p; end if;
 end $t$;
-select 'R13 ok: A->B->C->D normalised regardless of id order; A until D; idempotent';
+select 'R13 ok: A->B->C->D normalised regardless of id order; A until D; idempotent; cancelling D reopens A';
 
 -- R14: equal starts (B and D both start at tb; the restore value equals the new end).
 do $t$ declare
@@ -724,8 +731,13 @@ begin
   select l.normalised_usd_mt into p from public.fn_bunker_live_prices(tb + interval '1 hour', 500) l
    where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'ULSFO';
   if p is distinct from 820 then raise exception 'R14 FAILED: D must be live after the shared start, got %', p; end if;
+  update public.bunker_quotes set status = 'withdrawn', decided_at = now(), decision_reason = 'R14 cancel', superseded_at = now() where id = v_d;
+  if (select superseded_at from public.bunker_quotes where id = v_a) is not null then raise exception 'R14 FAILED: cancelling D left A ended'; end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(tb + interval '1 hour', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'ULSFO';
+  if p is distinct from 800 then raise exception 'R14 FAILED: A must be live after the cancelled start, got %', p; end if;
 end $t$;
-select 'R14 ok: equal starts normalised without reopening A';
+select 'R14 ok: equal starts normalised without reopening A; cancelling D reopens A';
 `);
 
 // Grants: anon reaches nothing; members only the five member RPCs.
