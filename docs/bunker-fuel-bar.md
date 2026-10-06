@@ -5,7 +5,7 @@ first-hand physical bunker suppliers publish their price tables; the platform
 shows each sponsor on a ticker (their exposure) and computes an index whose
 **average** feeds the Voyage estimator.
 
-## Data model (migrations `20261003100000`–`109000`)
+## Data model (migrations `20261003100000`–`111000`)
 
 | Table | Purpose | Member access |
 |---|---|---|
@@ -88,6 +88,26 @@ at once (`20261003109000`).
   super tier or `admin_perms.bunker`): suppliers and ports, member links,
   overrides (or staff input under the platform supplier, approved at once, reason
   required), approve/reject/withdraw, `admin_bunker_dashboard`.
+
+## Known limits (C2O-049 P2)
+
+- **Historical `as_of` uses today's served ports.** The index and the ticker
+  join the current `bunker_supplier_ports`; a port removed later also
+  disappears from a past `as_of`. Port-membership history is not kept.
+- **Scheduled chains approved before 110000.** 110000 records every supersession
+  an approval makes in `bunker_quote_supersessions`, and cancelling an unstarted
+  approval restores exactly those rows. A chain scheduled under 109000 (before
+  the ledger existed) has no ledger rows: cancelling its unstarted replacement
+  does not restore the previous price; republish it instead. Production never
+  ran 109000 without 110000, so this affects only local and staging data from
+  5–6 Oct 2026.
+- **Live and scheduled together (111000).** A key holds the price live now and
+  **at most one** scheduled replacement: approving a newer future price withdraws
+  the older unstarted one ("replaced by a newer scheduled price") and the live
+  price is re-scheduled to end at the new start. The headline "Live quotes"
+  counts only prices live now. The supplier portal shows both, with "Withdraw" for the
+  live (or pending) price and "Cancel scheduled" for the replacement; the console
+  lists them under "Live prices" and "Scheduled to go live".
 
 ## Pilot suppliers (owner ruling, 4 Oct 2026)
 

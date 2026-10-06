@@ -27,6 +27,8 @@ export interface SupplierPortalQuote {
   source: "supplier" | "admin_override" | "admin_input";
   submittedAt: string;
   decisionReason: string | null;
+  /** Approved, started and not yet superseded (110000); a scheduled replacement is false. */
+  liveNow?: boolean;
 }
 
 export interface SupplierPortalHistory {

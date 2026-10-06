@@ -14,6 +14,7 @@ import {
 } from "../sdk/app/bunker";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { attemptFor } from "../lib/bunker/supplier";
+import { isBetaOpenPath } from "../lib/portal/beta-open";
 import { createHash } from "node:crypto";
 
 // Verbatim copy of Stream S lib/voyage/snapshots.ts#canonicalJson + sealSnapshot
@@ -165,6 +166,11 @@ check("age runs from when a price takes effect, not from submission", () => {
   assert.equal(r.products.length, 1, "18 days since submission, 1 day in effect: still counts");
   assert.equal(r.products[0].freshness, "current");
   assert.equal(r.products[0].latestQuoteAt, "2026-10-02T12:00:00Z");
+});
+
+check("Beta mode leaves the invitation-only tools open, nothing else", () => {
+  for (const p of ["/dashboard/bunker-supplier", "/dashboard/fixture-room", "/dashboard/fixture-room/abc"]) assert.equal(isBetaOpenPath(p), true, p);
+  for (const p of ["/dashboard/bunker-supplierx", "/dashboard/voyage-estimator", "/dashboard/cargo", "/admin/bunker"]) assert.equal(isBetaOpenPath(p), false, p);
 });
 
 // ── SDK boundary: runtime parsing and argument rules (fake client) ─────────

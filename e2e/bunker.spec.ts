@@ -12,7 +12,7 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PASSWORD, apiClientAs, signInAs } from "./fixture-room.helpers";
@@ -26,6 +26,8 @@ const PRICE = 612;
 interface Seed {
   stamp: string;
   supplierName: string;
+  /** The port as the portal labels it: trade name, else the LOCODE. */
+  portLabel: string;
   supplierId: string;
   editor: { email: string; userId: string };
   outsider: { email: string; userId: string };
@@ -41,21 +43,42 @@ function localKeys() {
     url = out.match(/^API_URL="?([^"\n]+)"?/m)?.[1] ?? url;
   }
   if (!service) throw new Error("No local service key");
-  if (/rezfejaxbmdzkslrrefr/.test(url)) throw new Error("Refusing to seed bunker data against production");
-  // Hosted staging only when named explicitly (owner instruction, 5 Oct 2026).
-  const staging = STAGING_REF !== "" && url.includes(STAGING_REF);
-  if (!staging && !/127\.0\.0\.1|localhost/.test(url)) throw new Error(`Refusing to seed bunker data against ${url}`);
+  assertTarget(url);
   return { url, service };
 }
 
-// E2E_STAGING_REF=sidcsytgqalqacsgyguz allows the staging project; cleanup then
-// runs through `supabase db query --linked` from E2E_STAGING_WORKDIR.
-const STAGING_REF = process.env.E2E_STAGING_REF === "sidcsytgqalqacsgyguz" ? process.env.E2E_STAGING_REF : "";
+// Target guard (O2B-010 P0). Local by default; hosted staging only when
+// E2E_STAGING_REF names it, the API host is exactly that project, and the
+// cleanup workdir is linked to it. Production is refused by ref everywhere.
+const PROD_REF = "rezfejaxbmdzkslrrefr";
+const STAGING_PROJECT = "sidcsytgqalqacsgyguz";
+const STAGING_REF = process.env.E2E_STAGING_REF === STAGING_PROJECT ? STAGING_PROJECT : "";
+
+function linkedRef(dir: string): string {
+  try { return readFileSync(path.join(dir, "supabase", ".temp", "project-ref"), "utf8").trim(); } catch { return ""; }
+}
+
+function assertTarget(url: string) {
+  const host = new URL(url).hostname;
+  if (url.includes(PROD_REF)) throw new Error("Refusing to seed bunker data against production");
+  if (!STAGING_REF) {
+    if (host !== "127.0.0.1" && host !== "localhost") throw new Error(`Refusing to seed bunker data against ${host}`);
+    return;
+  }
+  if (host !== `${STAGING_REF}.supabase.co`) throw new Error(`E2E_STAGING_REF is set but the API host is ${host}`);
+  const dir = process.env.E2E_STAGING_WORKDIR ?? "";
+  const ref = dir ? linkedRef(dir) : "";
+  if (ref === PROD_REF) throw new Error("The cleanup workdir is linked to production");
+  if (ref !== STAGING_REF) throw new Error(`The cleanup workdir must be linked to ${STAGING_REF} (found "${ref}")`);
+}
 
 async function seed(): Promise<Seed> {
   const { url, service } = localKeys();
   const db: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
   const stamp = Date.now().toString(36);
+  const createdUsers: string[] = [];
+  let createdSupplier: string | null = null;
+  try {
   const mk = async (prefix: string, admin: boolean) => {
     const email = `e2e-bk-${prefix}-${stamp}@arabshipbroker.test`;
     const { data, error } = await db.auth.admin.createUser({
@@ -63,6 +86,7 @@ async function seed(): Promise<Seed> {
     });
     if (error || !data.user) throw new Error(`auth ${prefix}: ${error?.message}`);
     const userId = data.user.id;
+    createdUsers.push(userId);
     const { error: e2 } = await db.from("users").insert({
       id: userId, supabase_user_id: userId, email, full_name: `src:bunker-e2e ${prefix}`,
       company: "src:bunker-e2e", role: admin ? "admin" : "vessel_owner", admin_tier: admin ? "super" : null,
@@ -81,34 +105,65 @@ async function seed(): Promise<Seed> {
                   ports: [{ locode: PORT, isPrimary: true }] },
   });
   if (error) throw new Error(`supplier: ${error.message}`);
+  createdSupplier = supplierId as string;
   const { error: e3 } = await db.rpc("admin_bunker_set_member", {
     p_actor: admin.userId, p_supplier_id: supplierId, p_user_id: editor.userId, p_role: "editor",
   });
   if (e3) throw new Error(`member: ${e3.message}`);
-  return { stamp, supplierName, supplierId: supplierId as string, editor, outsider, admin };
+  // The portal labels prices by the port's trade name ("Piraeus" on production
+  // data), falling back to the LOCODE when the ports row has none (local stack).
+  const { data: portRow } = await db.from("ports").select("trade_name").eq("locode", PORT).maybeSingle();
+  const portLabel = (portRow?.trade_name as string | null | undefined) || PORT;
+  return { stamp, supplierName, portLabel, supplierId: supplierId as string, editor, outsider, admin };
+  } catch (e) {
+    // A seed that fails half-way removes what it created before failing the run.
+    cleanupIds(stamp, createdUsers, createdSupplier);
+    throw e;
+  }
 }
 
 function cleanup(s: Seed) {
-  const ids = [s.editor.userId, s.outsider.userId, s.admin.userId].map((x) => `'${x}'`).join(",");
+  cleanupIds(s.stamp, [s.editor.userId, s.outsider.userId, s.admin.userId], s.supplierId);
+}
+
+// Removes exactly what a seed created, also a partial seed (C2O-049): users by id,
+// the supplier and everything hanging off it when it exists.
+function cleanupIds(stamp: string, userIds: string[], supplierId: string | null) {
+  if (!userIds.length && !supplierId) return;
+  const ids = userIds.length ? userIds.map((x) => `'${x}'`).join(",") : "null";
+  const supplierSql = supplierId ? `
+delete from public.bunker_quote_supersessions where approved_quote_id in (select id from public.bunker_quotes where supplier_id = '${supplierId}')
+   or superseded_quote_id in (select id from public.bunker_quotes where supplier_id = '${supplierId}');
+delete from public.bunker_quote_events where supplier_id = '${supplierId}';
+delete from public.bunker_quotes where supplier_id = '${supplierId}';
+delete from public.bunker_supplier_members where supplier_id = '${supplierId}';
+delete from public.bunker_supplier_ports where supplier_id = '${supplierId}';
+delete from public.bunker_suppliers where id = '${supplierId}';` : "";
   // Quotes and events are append-only by trigger; replica mode bypasses it for test teardown.
   const sql = `
-set session_replication_role = replica;
-delete from public.bunker_quote_events where supplier_id = '${s.supplierId}';
-delete from public.bunker_quotes where supplier_id = '${s.supplierId}';
-delete from public.bunker_supplier_members where supplier_id = '${s.supplierId}';
-delete from public.bunker_supplier_ports where supplier_id = '${s.supplierId}';
-delete from public.bunker_suppliers where id = '${s.supplierId}';
+set session_replication_role = replica;${supplierSql}
 delete from public.profiles where account_id in (${ids});
 delete from public.users where id in (${ids});
 delete from auth.users where id in (${ids});
 `;
   if (STAGING_REF) {
     // Hosted staging: one linked query; a failure must be visible, not swallowed.
-    const dir = process.env.E2E_STAGING_WORKDIR;
-    if (!dir) throw new Error("E2E_STAGING_WORKDIR is required to clean staging");
-    const file = path.join(os.tmpdir(), `bunker-e2e-cleanup-${s.stamp}.sql`);
-    writeFileSync(file, `begin;\n${sql}\ncommit;\n`);
-    execSync(`supabase db query --linked --workdir "${dir}" --file "${file}"`, { stdio: ["ignore", "ignore", "inherit"] });
+    const dir = process.env.E2E_STAGING_WORKDIR ?? "";
+    if (linkedRef(dir) !== STAGING_REF) throw new Error("Refusing to clean: the workdir is not linked to staging");
+    // Hosted postgres is not a superuser: instead of replica mode, the table owner
+    // disables only the two append-only guards for this one transaction (O2ALL-001 §D).
+    const hosted = sql.replace("set session_replication_role = replica;",
+      "alter table public.bunker_quotes disable trigger trg_bunker_quote_append_only;\n" +
+      "alter table public.bunker_quote_events disable trigger trg_bunker_event_immutable;");
+    const file = path.join(os.tmpdir(), `bunker-e2e-cleanup-${stamp}.sql`);
+    writeFileSync(file, `begin;\n${hosted}\n` +
+      "alter table public.bunker_quotes enable trigger trg_bunker_quote_append_only;\n" +
+      "alter table public.bunker_quote_events enable trigger trg_bunker_event_immutable;\ncommit;\n");
+    try {
+      execSync(`supabase db query --linked --workdir "${dir}" --file "${file}"`, { stdio: ["ignore", "ignore", "inherit"] });
+    } finally {
+      rmSync(file, { force: true });
+    }
     return;
   }
   try {
@@ -119,6 +174,7 @@ delete from auth.users where id in (${ids});
   }
 }
 
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 let s: Seed;
 const base = (b: { baseURL?: string }) => b.baseURL ?? "http://127.0.0.1:3102";
 
@@ -164,7 +220,7 @@ test("supplier publishes; the quote waits for approval and stays out of the inde
   await gotoStable(page, "/dashboard/bunker-supplier");
   await expect(page.getByRole("heading", { name: s.supplierName })).toBeVisible();
   await expect(page.getByText("Prices are reviewed before going live")).toBeVisible();
-  await page.getByLabel(new RegExp(`New VLSFO price at ${PORT}`)).fill(String(PRICE));
+  await page.getByLabel(new RegExp(`New VLSFO price at ${escapeRe(s.portLabel)}`)).fill(String(PRICE));
   await page.getByRole("button", { name: "Publish new prices" }).click();
   await expect(page.getByRole("status")).toContainText("go live after Arab ShipBroker approves");
   await expect(page.getByText(`$${PRICE} awaiting approval`)).toBeVisible();
@@ -255,7 +311,7 @@ test("supplier portal fits a phone screen", async ({ browser }, info) => {
     return main.scrollWidth - main.clientWidth;
   });
   expect(overflow).toBeLessThanOrEqual(1);
-  await expect(page.getByLabel(new RegExp(`New VLSFO price at ${PORT}`))).toBeVisible();
+  await expect(page.getByLabel(new RegExp(`New VLSFO price at ${escapeRe(s.portLabel)}`))).toBeVisible();
   await context.close();
 });
 
@@ -274,7 +330,7 @@ test("a retry after a lost response replays instead of duplicating (C2B-003 #2)"
     }
     await route.continue();
   });
-  await page.getByLabel(new RegExp(`New HSFO 380 price at ${PORT}`)).fill("533");
+  await page.getByLabel(new RegExp(`New HSFO 380 price at ${escapeRe(s.portLabel)}`)).fill("533");
   await page.getByRole("button", { name: "Publish new prices" }).click();
   await expect(page.locator(".bks-notice--error")).toContainText("will not be duplicated");
   await page.getByRole("button", { name: "Publish new prices" }).click();
@@ -286,4 +342,75 @@ test("a retry after a lost response replays instead of duplicating (C2B-003 #2)"
   const { count } = await db.from("bunker_quotes").select("id", { count: "exact", head: true })
     .eq("supplier_id", s.supplierId).eq("product_key", "HSFO380").eq("price", 533);
   expect(count).toBe(1);
+});
+
+test("live and scheduled prices: one schedule per key, headline counts live only, admin and supplier cancel (C2O-049, C2B-011)", async ({ browser }, info) => {
+  const { url, service } = localKeys();
+  const db = createClient(url, service, { auth: { persistSession: false } });
+  const day = 86_400_000;
+  const schedule = async (price: number, startsInDays: number) => {
+    const { data: q, error } = await db.from("bunker_quotes").insert({
+      supplier_id: s.supplierId, port_locode: PORT, product_key: "VLSFO", price,
+      valid_from: new Date(Date.now() + startsInDays * day).toISOString(), valid_until: new Date(Date.now() + 9 * day).toISOString(),
+      source: "admin_input", status: "submitted",
+    }).select("id").single();
+    expect(error).toBeNull();
+    const { error: approveError } = await db.rpc("admin_bunker_decide_quote", {
+      p_actor: s.admin.userId, p_quote_id: q!.id, p_decision: "approve", p_reason: null,
+    });
+    expect(approveError).toBeNull();
+    return q!.id as string;
+  };
+  const admin = await signedIn(browser, base(info.project.use), s.admin.email);
+  const liveCount = async () => {
+    await gotoStable(admin.page, "/admin/bunker");
+    const stat = admin.page.locator(".adm-stat", { hasText: "Live quotes" });
+    return Number((await stat.locator(".adm-stat__value").innerText()).replace(/\D/g, ""));
+  };
+  const scheduledRows = () => admin.page.getByRole("region", { name: "Scheduled prices" }).getByRole("row").filter({ hasText: s.supplierName });
+
+  // 1. The headline counts live prices only.
+  const before = await liveCount();
+  const s1 = await schedule(PRICE + 20, 2);
+  expect(await liveCount()).toBe(before);
+  await expect(scheduledRows()).toHaveCount(1);
+  await expect(scheduledRows().first()).toContainText(`$${PRICE + 20}`);
+  await expect(scheduledRows().first()).toContainText("Scheduled · from");
+
+  // 2. A newer schedule replaces the older one: exactly one scheduled row, the new price.
+  const s2 = await schedule(PRICE + 30, 3);
+  const { data: old } = await db.from("bunker_quotes").select("status,decision_reason").eq("id", s1).single();
+  expect(old?.status).toBe("withdrawn");
+  expect(old?.decision_reason).toBe("replaced by a newer scheduled price");
+  expect(await liveCount()).toBe(before);
+  await expect(scheduledRows()).toHaveCount(1);
+  await expect(scheduledRows().first()).toContainText(`$${PRICE + 30}`);
+
+  // 3. Admin cancels it; the live price stays current.
+  const row = scheduledRows().first();
+  await row.getByLabel("Cancellation reason").fill("e2e cancel");
+  await row.getByRole("button", { name: "Cancel" }).click();
+  await expect(admin.page.getByRole("region", { name: "Scheduled prices" })).toHaveCount(0);
+  await expect(admin.page.getByRole("row").filter({ hasText: s.supplierName }).filter({ hasText: `$${PRICE}` }).first()).toContainText("Current");
+  expect((await db.from("bunker_quotes").select("status").eq("id", s2).single()).data?.status).toBe("withdrawn");
+  await admin.context.close();
+
+  // 4. The supplier sees live + scheduled and cancels the scheduled one.
+  await schedule(PRICE + 40, 2);
+  const { context, page } = await signedIn(browser, base(info.project.use), s.editor.email);
+  await gotoStable(page, "/dashboard/bunker-supplier");
+  await expect(page.getByTestId("scheduled-price")).toHaveCount(1);
+  await expect(page.getByTestId("scheduled-price")).toContainText(`$${PRICE + 40}`);
+  await expect(page.getByText(`$${PRICE} · Current`)).toBeVisible();
+  await page.getByRole("button", { name: new RegExp(`Cancel the scheduled VLSFO price at ${escapeRe(s.portLabel)}`) }).click();
+  await expect(page.getByRole("status")).toContainText("the current price stays live");
+  await expect(page.getByTestId("scheduled-price")).toHaveCount(0);
+  await expect(page.getByText(`$${PRICE} · Current`)).toBeVisible();
+  await context.close();
+
+  const { data: rows } = await db.from("bunker_quotes").select("price,superseded_at")
+    .eq("supplier_id", s.supplierId).eq("product_key", "VLSFO").eq("status", "approved");
+  expect(rows?.length).toBe(1);
+  expect(Number(rows?.[0]?.price)).toBe(PRICE);
+  expect(rows?.[0]?.superseded_at ?? null).toBeNull();
 });
