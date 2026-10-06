@@ -15,6 +15,7 @@ import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage
 import { canalDirection, canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "../lib/voyage/canal";
 import { reconcileLinks, suezFactReasons, type GovernedSuezFacts } from "../lib/voyage/save-rules";
 import { createRequestGate } from "../lib/voyage/request-gate";
+import { assumptionsFor, legArea } from "../lib/voyage/assumption-badges";
 import { acceptedLegResult, bindLegResult, currentLegResult, legEndpoints, legLookupKey, matchesLegEndpoints, matchesLegLookup, rebindManualLeg, voyagePdaHref } from "../lib/voyage/leg-state";
 import { voyageFuelProducts } from "../lib/voyage/fuel-source";
 import { estimateSuezTransit } from "../lib/suez/engine";
@@ -381,6 +382,17 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(pa.platformAssumptions.some((p) => p.key === "opex.crewUsdDay" && p.label.includes("1,450")) && pa.assumptions.some((a) => a.startsWith("Platform assumption")), "unconfirmed constants are labelled platform assumption");
   const conf = estimateVoyage(base({ settings: { ...S, confirmed: ["opex.crewUsdDay", "opex.maintenanceUsdDay", "classMultipliers", "seaMargin.defaultPct", "speeds", "portTimeDays", "suez.days"] } }));
   eq(conf.platformAssumptions, [], "confirmed constants carry no label");
+  // B2O-020 P2 · the badge sits on every figure that rests on an unconfirmed constant
+  {
+    const pa2 = estimateVoyage(base({ settings: { ...S, confirmed: [] }, seaMarginPct: null, vessel: { ...base().vessel, speedLadenKn: null, speedBallastKn: null } }));
+    ok(assumptionsFor("sea", pa2.platformAssumptions).some((p) => p.key === "speeds") && assumptionsFor("seaMargin", pa2.platformAssumptions).length === 1, "sea legs carry the speed and sea-margin assumptions");
+    ok(assumptionsFor("running", pa2.platformAssumptions).length >= 2 && assumptionsFor("port", pa2.platformAssumptions).every((p) => p.key === "portTimeDays"), "running cost and port time are badged from their own constants");
+    eq(assumptionsFor("sea", estimateVoyage(base()).platformAssumptions), [], "confirmed constants put no badge on any figure");
+    eq([legArea("sea"), legArea("port"), legArea("canal"), legArea("anchorage")], ["sea", "port", "canal", null], "legs map to their assumption areas");
+    const v2b = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
+    ok(v2b.includes('legArea(l.kind) ? assumed(legArea(l.kind)!)') && v2b.includes('Running cost{assumed("running")}') && v2b.includes('assumed("seaMargin")'), "the page badges leg days, sea margin, total days and running cost");
+  }
+  ok(!readFileSync(new URL("../lib/portal/data.ts", import.meta.url), "utf8").includes("vlsfo: 585"), "the dead 585/725 fuel fallback is gone (no invented price anywhere)");
   // C2O-050 #4 · an unconfirmed constant is an assumption: the estimate is never trusted on it
   eq(pa.status, "partial", "an unconfirmed platform constant keeps the estimate partial");
   const wait = estimateVoyage(base({ anchorageDays: 1.5, anchorageInEca: false }));

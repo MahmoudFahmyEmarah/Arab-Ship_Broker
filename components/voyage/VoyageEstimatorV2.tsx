@@ -25,6 +25,7 @@ import { loadSuezContextAction, loadVesselEconomicsAction, saveVesselEconomicsAc
 import { routeLegAction, saveVoyageEstimateAction, type RouteLegResult } from "@/app/(dashboard)/dashboard/voyage-estimator/actions";
 import { canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "@/lib/voyage/canal";
 import { suezFactReasons } from "@/lib/voyage/save-rules";
+import { assumptionsFor, legArea, type AssumptionArea } from "@/lib/voyage/assumption-badges";
 import { createRequestGate, type RequestGate } from "@/lib/voyage/request-gate";
 import { acceptedLegResult, bindLegResult, legLookupKey, matchesLegEndpoints, matchesLegLookup, rebindManualLeg, voyagePdaHref, type BoundLegResult, type LegEndpoints, type LegLookupKey } from "@/lib/voyage/leg-state";
 import "@/lib/portal/voyage-estimator.css";
@@ -563,22 +564,27 @@ function statusSummary(e: VoyageEstimate): string {
 function Results({ estimate, settings }: { estimate: VoyageEstimate; settings: VoyageSettings }) {
   const c = estimate.costs;
   const money = (v: { usd: number | null; status: ComponentStatus }, missingText: string) => v.usd == null ? <span className="is-unavailable">{missingText}</span> : <span className={v.status === "trusted" ? "is-auto" : v.status === "manual" ? "is-manual" : "is-fallback"}>{fmtUSD2(v.usd)}{v.status !== "trusted" ? ` · ${v.status}` : ""}</span>;
+  // the "platform assumption" badge on every figure that rests on an unconfirmed constant (B2O-020 P2)
+  const assumed = (area: AssumptionArea) => {
+    const used = assumptionsFor(area, estimate.platformAssumptions);
+    return used.length ? <span className="vy-badge vy-badge--fallback" title={`Platform assumption, not yet confirmed by the owner: ${used.map((u) => u.label).join("; ")}`}>platform assumption</span> : null;
+  };
   return (
     <>
       <div className={`vy-status vy-status--${estimate.status}`}><span className="vy-status__k">{estimate.status}</span><span>{statusSummary(estimate)}</span></div>
       {estimate.status === "invalid" && estimate.errors && <div className="vy-unavailable"><b>Fix the input:</b><ul className="vy-unavailable-list">{estimate.errors.map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
       {estimate.unavailable.length > 0 && <div className="vy-unavailable"><b>Not priced:</b><ul className="vy-unavailable-list">{estimate.unavailable.map((u) => <li key={u.code}>{u.reason}</li>)}</ul></div>}
       <div className="ve-results">
-        <div className="ve-result"><div className="ve-result__k">Total voyage days</div><div className="ve-result__v ve-result__v--navy">{fmtDays(estimate.days.total)}</div><div className="ve-note-sub">sea {fmtDays(estimate.days.seaBallast + estimate.days.seaLaden)} · port {fmtDays(estimate.days.portLoad + estimate.days.portDisch)} · canal {fmtDays(estimate.days.canalTransit + estimate.days.canalAnchorage)} · wait {fmtDays(estimate.days.anchorage)} · margin {estimate.seaMarginPct}%</div></div>
+        <div className="ve-result"><div className="ve-result__k">Total voyage days{assumed("sea") ?? assumed("port") ?? assumed("canal")}</div><div className="ve-result__v ve-result__v--navy">{fmtDays(estimate.days.total)}</div><div className="ve-note-sub">sea {fmtDays(estimate.days.seaBallast + estimate.days.seaLaden)} · port {fmtDays(estimate.days.portLoad + estimate.days.portDisch)} · canal {fmtDays(estimate.days.canalTransit + estimate.days.canalAnchorage)} · wait {fmtDays(estimate.days.anchorage)} · margin {estimate.seaMarginPct}%</div></div>
         <div className="ve-result"><div className="ve-result__k">Fuel cost</div><div className="ve-result__v ve-result__v--amber">{fmtUSD(c.fuel.usd)}</div><div className="ve-note-sub">{fmtMT(estimate.fuel.pricedMt)} of {fmtMT(estimate.fuel.totalMt)} MT priced{estimate.fuel.ecaMt > 0 ? ` · ${fmtMT(estimate.fuel.ecaMt)} MT in ECA` : ""} · {c.fuel.status}</div></div>
         <div className="ve-result"><div className="ve-result__k">Total voyage cost</div><div className="ve-result__v ve-result__v--navy">{fmtUSD(c.totalUsd)}</div><div className="ve-note-sub">{c.complete ? <>voyage costs {fmtUSD(c.voyageCostsUsd)} + running {fmtUSD(c.opexUsd)}</> : <span className="is-unavailable">incomplete: {estimate.unavailable.length} part{estimate.unavailable.length > 1 ? "s" : ""} excluded</span>}</div></div>
         <div className="ve-result ve-result--tce"><div className="ve-result__k">{estimate.revenue ? "TCE estimate" : "Running cost / day"}</div><div className="ve-result__v">{estimate.revenue ? fmtUSD(estimate.revenue.tceUsdDay) : fmtUSD(estimate.opex.usdDay)}<span className="ve-result__unit">/day</span></div><div className="ve-note-sub">{estimate.revenue ? `net freight ${fmtUSD(estimate.revenue.netFreightUsd)}${c.complete ? "" : " · on an incomplete cost base"}` : `class ${estimate.opex.vesselClass}${estimate.opex.classAssumed ? " (assumed)" : ""} × ${estimate.opex.multiplier}`}</div></div>
       </div>
 
       <div className="ve-pl-card" style={{ marginTop: 16 }}>
-        <div className="ve-pl-card__title">Legs <span className="sz-muted">· sea margin {estimate.seaMarginPct}% — {estimate.seaMarginBasis}</span></div>
+        <div className="ve-pl-card__title">Legs <span className="sz-muted">· sea margin {estimate.seaMarginPct}% — {estimate.seaMarginBasis}</span>{assumed("seaMargin")}</div>
         <table className="vy-table"><thead><tr><th>Leg</th><th>From → To</th><th className="num">NM</th><th className="num">ECA NM</th><th className="num">Days</th><th>Fuel</th><th>Status</th></tr></thead>
-          <tbody>{estimate.legs.map((l) => <tr key={l.key}><td>{l.label}<small>{l.note}</small></td><td>{l.from ?? "—"}{l.to && l.to !== l.from ? ` → ${l.to}` : ""}</td><td className="num">{l.kind === "sea" || l.kind === "canal" ? fmtNM(l.nm) : "—"}</td><td className="num">{l.ecaShareKnown ? (l.ecaNm ? fmtNM(l.ecaNm) : "0") : "?"}</td><td className="num">{fmtDays(l.days)}</td><td>{l.burns.map((b) => `${b.productKey} ${fmtMT(b.mt)}`).join(" · ") || "—"}</td><td><span className={`vy-badge vy-badge--${BADGE[l.status]}`}>{l.status}</span></td></tr>)}
+          <tbody>{estimate.legs.map((l) => <tr key={l.key}><td>{l.label}<small>{l.note}</small></td><td>{l.from ?? "—"}{l.to && l.to !== l.from ? ` → ${l.to}` : ""}</td><td className="num">{l.kind === "sea" || l.kind === "canal" ? fmtNM(l.nm) : "—"}</td><td className="num">{l.ecaShareKnown ? (l.ecaNm ? fmtNM(l.ecaNm) : "0") : "?"}</td><td className="num">{fmtDays(l.days)}{legArea(l.kind) ? assumed(legArea(l.kind)!) : null}</td><td>{l.burns.map((b) => `${b.productKey} ${fmtMT(b.mt)}`).join(" · ") || "—"}</td><td><span className={`vy-badge vy-badge--${BADGE[l.status]}`}>{l.status}</span></td></tr>)}
             <tr><td><b>Total</b></td><td /><td className="num"><b>{fmtNM(estimate.legs.reduce((a, l) => a + (l.kind === "sea" || l.kind === "canal" ? l.nm ?? 0 : 0), 0))}</b></td><td className="num"><b>{fmtNM(estimate.legs.reduce((a, l) => a + (l.ecaNm ?? 0), 0))}</b></td><td className="num"><b>{fmtDays(estimate.days.total)}</b></td><td><b>{fmtMT(estimate.fuel.totalMt)} MT</b></td><td /></tr></tbody></table>
       </div>
 
@@ -599,7 +605,7 @@ function Results({ estimate, settings }: { estimate: VoyageEstimate; settings: V
           <div className="ve-pl-row"><span>Discharge port DA</span>{money(c.pdaDisch, "not entered — unavailable")}</div>
           <div className="ve-pl-row"><span>Insurance, stevedoring, other</span><span>{fmtUSD2(c.extrasUsd)}</span></div>
           <div className="ve-pl-row is-subtotal"><span>Voyage costs{c.complete ? "" : " (computable parts)"}</span><span>{fmtUSD2(c.voyageCostsUsd)}</span></div>
-          <div className="ve-pl-row ve-pl-row--linked"><span>Running cost{estimate.platformAssumptions.some((p) => p.key.startsWith("opex") || p.key === "classMultipliers") ? <span className="vy-badge vy-badge--fallback">platform assumption</span> : null}<small className="sz-muted">crew ${settings.opex.crewUsdDay} + maintenance ${settings.opex.maintenanceUsdDay} = ${estimate.opex.baseUsdDay}/day × class {estimate.opex.vesselClass} ({estimate.opex.multiplier}) × {fmtDays(estimate.days.total)} days</small></span><span>{fmtUSD2(c.opexUsd)}</span></div>
+          <div className="ve-pl-row ve-pl-row--linked"><span>Running cost{assumed("running")}<small className="sz-muted">crew ${settings.opex.crewUsdDay} + maintenance ${settings.opex.maintenanceUsdDay} = ${estimate.opex.baseUsdDay}/day × class {estimate.opex.vesselClass} ({estimate.opex.multiplier}) × {fmtDays(estimate.days.total)} days</small></span><span>{fmtUSD2(c.opexUsd)}</span></div>
           <div className="ve-pl-row is-grand"><span>Total voyage cost</span><span>{fmtUSD2(c.totalUsd)}{c.complete ? "" : <small className="is-unavailable"> incomplete</small>}</span></div>
         </div>
         {estimate.revenue && (
