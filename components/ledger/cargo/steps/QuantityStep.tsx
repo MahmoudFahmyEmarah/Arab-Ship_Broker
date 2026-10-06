@@ -18,7 +18,7 @@ export function QuantityStep({ state, patch }: StepCtx<CargoState>) {
     <div className="pp2-qty">
       {extraCount > 0 && (
         <InlineNote style={{ marginTop: 0 }}>
-          This is <strong>Parcel 1</strong>'s quantity — the other {extraCount === 1 ? "parcel carries its own" : extraCount + " parcels carry their own"} quantity in the Commodity section.
+          This is <strong>Parcel 1</strong>&apos;s quantity — the other {extraCount === 1 ? "parcel carries its own" : extraCount + " parcels carry their own"} quantity in the Commodity section.
         </InlineNote>
       )}
       <div className="pp2-grid" style={extraCount > 0 ? { marginTop: 12 } : undefined}>
