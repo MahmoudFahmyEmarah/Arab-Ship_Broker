@@ -635,6 +635,109 @@ begin
   if p is distinct from 600 then raise exception 'R10 FAILED: A should be live, got %', p; end if;
 end $t$;
 select 'R8-R11 ok: no backdating; one scheduled price per key, a newer schedule replaces it; a cancel gives the live price back';
+
+-- R12 (C2B-012): a chain left by 110000 (A live, B and C both scheduled) is brought to
+-- one schedule per key by the 111000 normaliser; the newest approval is kept.
+do $t$ declare v_a uuid; v_b uuid; v_c uuid; t1 timestamptz := date_trunc('second', now()) + interval '2 days';
+  t2 timestamptz := date_trunc('second', now()) + interval '4 days'; p numeric; n int;
+begin
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at, decided_at, superseded_at)
+  values ('${C}', 'CYLCA', 'HSFO380', 500, now() - interval '1 day', now() + interval '20 days', 'admin_input', 'approved', now() - interval '1 day', now() - interval '1 day', t1)
+  returning id into v_a;
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at, decided_at, superseded_at)
+  values ('${C}', 'CYLCA', 'HSFO380', 510, t1, t1 + interval '10 days', 'admin_input', 'approved', now() - interval '2 hours', now() - interval '2 hours', t2)
+  returning id into v_b;
+  insert into public.bunker_quotes (supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at, decided_at)
+  values ('${C}', 'CYLCA', 'HSFO380', 520, t2, t2 + interval '10 days', 'admin_input', 'approved', now() - interval '1 hour', now() - interval '1 hour')
+  returning id into v_c;
+  insert into public.bunker_quote_supersessions (approved_quote_id, superseded_quote_id, previous_superseded_at, applied_superseded_at)
+  values (v_b, v_a, null, t1), (v_c, v_b, null, t2);
+  n := public.fn_bunker_normalise_schedules();
+  if n <> 1 then raise exception 'R12 FAILED: expected 1 replaced schedule, got %', n; end if;
+  if (select status from public.bunker_quotes where id = v_b) <> 'withdrawn' then raise exception 'R12 FAILED: the older schedule B was kept'; end if;
+  if (select count(*) from public.bunker_quotes where supplier_id = '${C}' and port_locode = 'CYLCA' and product_key = 'HSFO380'
+        and status = 'approved' and valid_from > now()) <> 1 then
+    raise exception 'R12 FAILED: not exactly one schedule left'; end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(t1 + interval '1 day', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'HSFO380';
+  if p is distinct from 500 then raise exception 'R12 FAILED: A must stay live until C starts (B is gone), got %', p; end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(t2 + interval '1 day', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'HSFO380';
+  if p is distinct from 520 then raise exception 'R12 FAILED: C must be live after its start, got %', p; end if;
+  if public.fn_bunker_normalise_schedules() <> 0 then raise exception 'R12 FAILED: the normaliser is not idempotent'; end if;
+end $t$;
+select 'R12 ok: a 110000 chain is normalised to one schedule per key; idempotent';
+
+-- R13 (C2B-015): A live -> B -> C -> D scheduled, as 110000 leaves it, with ids chosen so
+-- that id order would withdraw C before B. One schedule remains (D), A runs until D starts.
+do $t$ declare
+  v_a uuid := '00000000-0000-4000-c000-0000000013a0';
+  v_c uuid := '00000000-0000-4000-c000-0000000013b1';  -- C sorts before B
+  v_b uuid := '00000000-0000-4000-c000-0000000013b2';
+  v_d uuid := '00000000-0000-4000-c000-0000000013b3';
+  tb timestamptz := date_trunc('second', now()) + interval '2 days';
+  tc timestamptz := date_trunc('second', now()) + interval '3 days';
+  td timestamptz := date_trunc('second', now()) + interval '4 days';
+  p numeric; n int;
+begin
+  insert into public.bunker_quotes (id, supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at, decided_at, superseded_at) values
+    (v_a, '${C}', 'CYLCA', 'MGO05', 700, now() - interval '1 day', now() + interval '20 days', 'admin_input', 'approved', now() - interval '1 day', now() - interval '1 day', tb),
+    (v_b, '${C}', 'CYLCA', 'MGO05', 710, tb, tb + interval '10 days', 'admin_input', 'approved', now() - interval '3 hours', now() - interval '3 hours', tc),
+    (v_c, '${C}', 'CYLCA', 'MGO05', 720, tc, tc + interval '10 days', 'admin_input', 'approved', now() - interval '2 hours', now() - interval '2 hours', td),
+    (v_d, '${C}', 'CYLCA', 'MGO05', 730, td, td + interval '10 days', 'admin_input', 'approved', now() - interval '1 hour', now() - interval '1 hour', null);
+  insert into public.bunker_quote_supersessions (approved_quote_id, superseded_quote_id, previous_superseded_at, applied_superseded_at)
+  values (v_b, v_a, null, tb), (v_c, v_b, null, tc), (v_d, v_c, null, td);
+  n := public.fn_bunker_normalise_schedules();
+  if n <> 2 then raise exception 'R13 FAILED: expected 2 replaced schedules, got %', n; end if;
+  if (select string_agg(status, ',' order by price) from public.bunker_quotes where id in (v_b, v_c, v_d)) <> 'withdrawn,withdrawn,approved' then
+    raise exception 'R13 FAILED: B and C must be withdrawn, D kept'; end if;
+  if (select count(*) from public.bunker_quotes where supplier_id = '${C}' and port_locode = 'CYLCA' and product_key = 'MGO05'
+        and status = 'approved' and valid_from > now()) <> 1 then raise exception 'R13 FAILED: not exactly one schedule'; end if;
+  if (select superseded_at from public.bunker_quotes where id = v_d) is not null then raise exception 'R13 FAILED: D left parked'; end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(tc + interval '1 hour', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'MGO05';
+  if p is distinct from 700 then raise exception 'R13 FAILED: A must run until D starts, got %', p; end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(td + interval '1 hour', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'MGO05';
+  if p is distinct from 730 then raise exception 'R13 FAILED: D must be live after its start, got %', p; end if;
+  if public.fn_bunker_normalise_schedules() <> 0 then raise exception 'R13 FAILED: not idempotent'; end if;
+  -- C2B-017: cancelling the kept D afterwards gives A back its pre-chain state (open).
+  update public.bunker_quotes set status = 'withdrawn', decided_at = now(), decision_reason = 'R13 cancel', superseded_at = now() where id = v_d;
+  if (select superseded_at from public.bunker_quotes where id = v_a) is not null then
+    raise exception 'R13 FAILED: cancelling D left A ended at %', (select superseded_at from public.bunker_quotes where id = v_a); end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(td + interval '1 hour', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'MGO05';
+  if p is distinct from 700 then raise exception 'R13 FAILED: A must be live after D''s former start, got %', p; end if;
+end $t$;
+select 'R13 ok: A->B->C->D normalised regardless of id order; A until D; idempotent; cancelling D reopens A';
+
+-- R14: equal starts (B and D both start at tb; the restore value equals the new end).
+do $t$ declare
+  v_a uuid := '00000000-0000-4000-c000-0000000014a0';
+  v_b uuid := '00000000-0000-4000-c000-0000000014b2';
+  v_d uuid := '00000000-0000-4000-c000-0000000014b1';
+  tb timestamptz := date_trunc('second', now()) + interval '2 days';
+  p numeric;
+begin
+  insert into public.bunker_quotes (id, supplier_id, port_locode, product_key, price, valid_from, valid_until, source, status, submitted_at, decided_at, superseded_at) values
+    (v_a, '${C}', 'CYLCA', 'ULSFO', 800, now() - interval '1 day', now() + interval '20 days', 'admin_input', 'approved', now() - interval '1 day', now() - interval '1 day', tb),
+    (v_b, '${C}', 'CYLCA', 'ULSFO', 810, tb, tb + interval '10 days', 'admin_input', 'approved', now() - interval '2 hours', now() - interval '2 hours', tb),
+    (v_d, '${C}', 'CYLCA', 'ULSFO', 820, tb, tb + interval '10 days', 'admin_input', 'approved', now() - interval '1 hour', now() - interval '1 hour', null);
+  insert into public.bunker_quote_supersessions (approved_quote_id, superseded_quote_id, previous_superseded_at, applied_superseded_at)
+  values (v_b, v_a, null, tb), (v_d, v_b, null, tb);
+  if public.fn_bunker_normalise_schedules() <> 1 then raise exception 'R14 FAILED: expected 1 replaced schedule'; end if;
+  if (select status from public.bunker_quotes where id = v_b) <> 'withdrawn' then raise exception 'R14 FAILED: B kept'; end if;
+  if (select superseded_at from public.bunker_quotes where id = v_a) is distinct from tb then raise exception 'R14 FAILED: A must end at D''s start'; end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(tb + interval '1 hour', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'ULSFO';
+  if p is distinct from 820 then raise exception 'R14 FAILED: D must be live after the shared start, got %', p; end if;
+  update public.bunker_quotes set status = 'withdrawn', decided_at = now(), decision_reason = 'R14 cancel', superseded_at = now() where id = v_d;
+  if (select superseded_at from public.bunker_quotes where id = v_a) is not null then raise exception 'R14 FAILED: cancelling D left A ended'; end if;
+  select l.normalised_usd_mt into p from public.fn_bunker_live_prices(tb + interval '1 hour', 500) l
+   where l.supplier_id = '${C}' and l.port_locode = 'CYLCA' and l.product_key = 'ULSFO';
+  if p is distinct from 800 then raise exception 'R14 FAILED: A must be live after the cancelled start, got %', p; end if;
+end $t$;
+select 'R14 ok: equal starts normalised without reopening A; cancelling D reopens A';
 `);
 
 // Grants: anon reaches nothing; members only the five member RPCs.

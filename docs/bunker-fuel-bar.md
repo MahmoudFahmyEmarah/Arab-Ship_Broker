@@ -153,7 +153,7 @@ node --import tsx scripts/bunker-check.ts                       # 70 pure + SDK 
 node --import tsx scripts/bunker-sql-suite.ts | docker exec -i supabase_db_arab-ship-broker \
   psql -U postgres -d <db> -v ON_ERROR_STOP=1 -q                  # rolled-back SQL suite, same fixtures
 HARNESS_PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_bunker" \
-  bash scripts/migration-harness.sh --chain supabase/migrations/2026100310*.sql \
+  bash scripts/migration-harness.sh --chain supabase/migrations/2026100310*.sql supabase/migrations/2026100311*.sql \
   --smokes <generated suite file> --downs supabase/rollback/20261003_bunker_down.sql
 bash scripts/bunker-race.sh asb_bunker                           # idempotency + disable-vs-submit races (isolated DB only)
 E2E_BASE_URL=http://127.0.0.1:3102 npx playwright test --config=playwright.bunker.config.ts

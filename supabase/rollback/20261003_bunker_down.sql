@@ -5,6 +5,9 @@
 -- explicit approval. Runs as one transaction (psql -1 / the migration harness).
 
 
+-- 111000
+drop function if exists public.fn_bunker_normalise_schedules();
+
 -- 110000 (functions it replaced are dropped below with their originals)
 drop table if exists public.bunker_quote_supersessions;
 
