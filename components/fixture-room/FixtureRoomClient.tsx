@@ -20,7 +20,7 @@ import { FIXTURE_ERROR_TITLE, isFixtureError } from "@/lib/fixture-room/errors";
 import { ROOM_STATUS_LABEL, isTerminal, timelineSteps } from "@/lib/fixture-room/state-machine";
 import { listingSyncNotice } from "@/lib/fixture-room/listing-sync";
 import { GestureKeys, UNCERTAIN_MESSAGE, runGesture, useNow, useRoomVersionPoll } from "@/lib/fixture-room/client";
-import { countdown, relativeTime } from "@/lib/fixture-room/format";
+import { relativeTime, windowLeftLabel } from "@/lib/fixture-room/format";
 import { sidePresence } from "@/lib/fixture-room/presence";
 import { newSince, readLastSeen, termsTouched, writeLastSeen } from "@/lib/fixture-room/last-seen";
 import { BunkerTicker } from "@/components/portal/BunkerTicker";
@@ -30,12 +30,13 @@ import {
   recreateFixtureRoomAction,
   pollFixtureRoomVersion, postFixtureMessageAction, publishFixtureRecapAction, reopenFixtureTermAction, respondFixtureInvitationAction,
   setFixtureTermFlagAction, submitFixtureProposalAction, withdrawFixtureProposalAction,
-  syncFixtureListingStatusAction,
+  syncFixtureListingStatusAction, extendFixtureWindowAction,
 } from "@/app/(dashboard)/dashboard/fixture-room/actions";
 import { TermRow } from "./TermRow";
 import { ActivityFeed, CounterpartyCard, MessagesPanel, RecapRail, SubjectsRail, eventText } from "./RoomRails";
 import { phaseClass } from "./RoomInbox";
 import { RecapComposer } from "./RecapComposer";
+import { PromptDialog, type PromptConfig } from "./PromptDialog";
 import { IcAnchor, IcBarrel, IcDownload, IcMail, IcRefresh, IcVolume, IcVolumeOff } from "./icons";
 
 const ACTIONS = {
@@ -58,6 +59,7 @@ const ACTIONS = {
   respond: respondFixtureInvitationAction,
   invite: inviteFixturePartyAction,
   syncListing: syncFixtureListingStatusAction,
+  extendWindow: extendFixtureWindowAction,
 } as const;
 export type CommandName = keyof typeof ACTIONS;
 export interface CommandBaseArgs { roomId: string; expectedVersion: number; idempotencyKey: string }
@@ -105,6 +107,8 @@ export function FixtureRoomClient({ initial, viewerId }: { initial: FixtureRoomV
   const [recapOpen, setRecapOpen] = React.useState(false);
   // stable across the per-second clock re-renders, so the open dialog never re-runs its focus effect (C2O-012 item 1)
   const closeRecap = React.useCallback(() => setRecapOpen(false), []);
+  const [prompt, setPrompt] = React.useState<PromptConfig | null>(null);
+  const closePrompt = React.useCallback(() => setPrompt(null), []);
   const [justAgreed, setJustAgreed] = React.useState<Set<string>>(() => new Set());
   const prevStatus = React.useRef<Record<string, string>>(Object.fromEntries(initial.terms.map((t) => [t.id, t.status])));
   // sound starts off for everyone; only an explicit click turns it on (C2O-012 item 6)
@@ -276,6 +280,36 @@ export function FixtureRoomClient({ initial, viewerId }: { initial: FixtureRoomV
   const freshTerms = termsTouched(freshEvents, view.terms);
   const freshSeqs = new Set(freshEvents.map((e) => e.seq));
   const windowLeft = room.negotiationWindowEndsAt && now > 0 ? Date.parse(room.negotiationWindowEndsAt) - now : null;
+  // PR-07: each principal side confirms the fix; the side this viewer confirms for
+  const fixSide = ((actFor ? view.parties.find((p) => p.id === actFor)?.side : viewer.side) ?? null) as string | null;
+  const sideName = (s: string) => (s === "cargo" ? "charterer" : "owner");
+  const confirmed = caps.fixConfirmedSides ?? [];
+  const mineConfirmed = fixSide != null && (confirmed as string[]).includes(fixSide);
+  const otherConfirmed = confirmed.find((s) => s !== fixSide) ?? null;
+  const mediatorNeedsParty = viewer.isMediator && (viewer.side === "mediator" || viewer.side == null) && !actFor;
+  const openExtendWindow = () => {
+    // never shorter than the current deadline (C2O-052): the earliest choice is the day after it
+    const current = room.negotiationWindowEndsAt ? Date.parse(room.negotiationWindowEndsAt) : 0;
+    const min = new Date(Math.max(Date.now(), current) + 86_400_000).toISOString().slice(0, 10);
+    const max = new Date(Date.now() + 59 * 86_400_000).toISOString().slice(0, 10);
+    setPrompt({
+      title: "Extend the negotiation window", testId: "extend-window",
+      description: "Terms move and the deal can be fixed until 17:00 UTC on the chosen day. It can only be lengthened, up to 60 days from now.",
+      fields: [{ name: "date", label: "New end date", kind: "date", required: true, min, max }],
+      confirmLabel: "Extend window",
+      onSubmit: (v) => { void run("extendWindow", (b) => ({ ...b, endsAt: `${v.date}T17:00:00Z` })); },
+    });
+  };
+  const openCloseRoom = () => setPrompt({
+    title: "Close the room", testId: "close-room", danger: true,
+    description: "The mediator records why the negotiation ended. The room becomes read-only.",
+    fields: [
+      { name: "reason", label: "Outcome", kind: "select", options: [{ value: "failed", label: "Failed" }, { value: "expired", label: "Expired" }] },
+      { name: "note", label: "Note for the record", kind: "textarea", required: true, maxLength: 500 },
+    ],
+    confirmLabel: "Close the room",
+    onSubmit: (v) => { void run("close", (b) => ({ ...b, reason: v.reason === "expired" ? "expired" : "failed", note: v.note })); },
+  });
   // the estimator's frozen hand-off contract (C2O-007): ids, ports and quantity; the vessel
   // name only once the owner has disclosed it; the estimator re-resolves every value
   const pdaParams = new URLSearchParams({ from: "fixture", ref: room.ref, cargoId: room.cargoListingId });
@@ -338,8 +372,13 @@ export function FixtureRoomClient({ initial, viewerId }: { initial: FixtureRoomV
               {ROOM_STATUS_LABEL[room.status]}
             </span>
             <div className="nr-clock">
-              <div className="nr-clock__lbl">Reply window</div>
-              <div className={`nr-clock__val${windowLeft != null && windowLeft < 300_000 ? " is-urgent" : ""}`}>{windowLeft == null ? "no limit" : windowLeft <= 0 ? "0:00" : countdown(room.negotiationWindowEndsAt, now)}</div>
+              <div className="nr-clock__lbl">Negotiation window
+                {caps.canExtendWindow && <button type="button" className="nr-clock__ext" disabled={busy} data-testid="extend-window-open" onClick={openExtendWindow}>extend</button>}
+              </div>
+              <div className={`nr-clock__val${caps.windowClosed || (windowLeft != null && windowLeft < 3_600_000) ? " is-urgent" : ""}`} data-testid="window-left"
+                title={room.negotiationWindowEndsAt ? `Ends ${new Date(room.negotiationWindowEndsAt).toUTCString()}` : undefined}>
+                {room.status !== "invited" && room.status !== "negotiating" ? "—" : caps.windowClosed ? "closed" : windowLeft == null ? "no limit" : windowLeftLabel(room.negotiationWindowEndsAt, now)}
+              </div>
             </div>
           </div>
         </div>
@@ -464,6 +503,7 @@ export function FixtureRoomClient({ initial, viewerId }: { initial: FixtureRoomV
       </div>
 
       {recapOpen && <RecapComposer view={view} onClose={closeRecap} />}
+      {prompt && <PromptDialog config={prompt} onClose={closePrompt} />}
 
       {/* ── footer state machine ───────────────────────────────────── */}
       <div className={`nr-foot${room.status === "fixed" ? " is-fixed" : terminal ? " is-void" : requiredOpen.length === 0 && room.status === "negotiating" ? " is-ready" : ""}`} data-testid="room-footer">
@@ -473,7 +513,9 @@ export function FixtureRoomClient({ initial, viewerId }: { initial: FixtureRoomV
             {room.status === "fixed" ? "Clean fixed · congratulations"
               : terminal ? `Negotiation ${ROOM_STATUS_LABEL[room.status].toLowerCase()}`
               : room.status === "on_subjects" ? `Fixed on subs · ${liftedCount}/${view.subjects.length} subjects lifted`
-              : requiredOpen.length === 0 ? "All terms agreed · ready to fix on subs"
+              : caps.windowClosed ? "Negotiation window closed · the mediator can extend it"
+              : requiredOpen.length === 0 && confirmed.length > 0 ? `All terms agreed · the ${confirmed.map(sideName).join(" and ")} side confirmed`
+              : requiredOpen.length === 0 ? "All terms agreed · both sides confirm to fix"
               : `${requiredOpen.length} term${requiredOpen.length === 1 ? "" : "s"} still open`}
           </div>
         </div>
@@ -489,12 +531,16 @@ export function FixtureRoomClient({ initial, viewerId }: { initial: FixtureRoomV
               {caps.canWithdraw && <button type="button" className="nr-foot__walk" data-testid="withdraw" onClick={() => setConfirmWithdraw(true)}>Withdraw</button>}
               {(caps.canFail || caps.canExpire) && (
                 <button type="button" className="nr-foot__walk" disabled={busy} data-testid="mark-failed"
-                  onClick={() => { const note = window.prompt("Reason (failed / expired)?") ?? ""; if (note) void run("close", (b) => ({ ...b, reason: "failed", note })); }}>Mark failed</button>
+                  onClick={openCloseRoom}>Close as failed / expired</button>
               )}
-              {caps.canFixOnSubjects && (
-                <button type="button" className="asb-btn primary" disabled={busy || requiredOpen.length > 0} data-testid="fix-on-subs" title={requiredOpen.length ? `Still open: ${requiredOpen.join(", ")}` : "Record the fixture on subjects"}
-                  onClick={() => run("fix", (b) => ({ ...b }))}>
-                  {openSubjects > 0 ? "Fix on subs →" : "Fix clean (no subjects) →"}
+              {caps.canFixOnSubjects && mineConfirmed && (
+                <span className="nr-foot__wait" data-testid="fix-awaiting">Confirmed · awaiting the {otherConfirmed ? "" : `${sideName(fixSide === "cargo" ? "vessel" : "cargo")} `}side</span>
+              )}
+              {caps.canFixOnSubjects && !mineConfirmed && (
+                <button type="button" className="asb-btn primary" disabled={busy || requiredOpen.length > 0 || mediatorNeedsParty} data-testid="fix-on-subs"
+                  title={requiredOpen.length ? `Still open: ${requiredOpen.join(", ")}` : mediatorNeedsParty ? "Choose the relayed party under “Acting for” to confirm for it" : "Both sides confirm the same terms and subjects; the second confirmation fixes the deal"}
+                  onClick={() => run("fix", (b) => ({ ...b, onBehalfOfPartyId: actFor }))}>
+                  {otherConfirmed ? `Confirm fixture · the ${sideName(otherConfirmed)} side confirmed →` : openSubjects > 0 ? "Confirm fix on subs →" : "Confirm clean fix (no subjects) →"}
                 </button>
               )}
               {room.status === "on_subjects" && caps.canLiftSubject && liftable > 0 && (

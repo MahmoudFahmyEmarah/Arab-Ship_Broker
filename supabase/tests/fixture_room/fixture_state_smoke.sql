@@ -434,7 +434,20 @@ begin
   v := public.publish_fixture_recap(v_room, pg_temp.fx_ver(v_room), 'state-recap-1');
   v_recap := (v->'data'->>'recapVersionId')::uuid;
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-fix-1');
-  if v->'data'->>'roomStatus' <> 'fixed' then raise exception 'S4: with no subjects recorded the fix must land clean (fixed), got %', v; end if;
+  -- PR-07: one side's confirmation never fixes the room
+  if v->'data'->>'roomStatus' <> 'negotiating' or v->'data'->>'awaitingSide' <> 'vessel' or pg_temp.fx_status(v_room) <> 'negotiating' then
+    raise exception 'S4: the charterer alone must not fix the room, got %', v; end if;
+  e := pg_temp.fx_err(format('select public.fix_fixture_on_subjects(%L, %s, %L)', v_room, pg_temp.fx_ver(v_room), 'state-fix-1-again'));
+  if e <> 'FX_STATE' then raise exception 'S4: confirming twice must be FX_STATE, got %', e; end if;
+  r := public.get_fixture_room(v_room);
+  if r->'viewer'->'capabilities'->'fixConfirmedSides' <> '["cargo"]'::jsonb then raise exception 'S4: confirmed sides %', r->'viewer'->'capabilities'->'fixConfirmedSides'; end if;
+  perform pg_temp.fx_as('u_ow1');
+  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-fix-1-owner');
+  if v->'data'->>'roomStatus' <> 'fixed' then raise exception 'S4: with both sides confirmed and no subjects the fix must land clean (fixed), got %', v; end if;
+  -- the clean fix replays as fixed, byte-for-byte (C2O-055)
+  r := public.fix_fixture_on_subjects(v_room, 1, 'state-fix-1-owner');
+  if (r->>'replayed')::boolean is not true or (r - 'replayed') <> (v - 'replayed') then raise exception 'S4: the clean-fix replay differs: % vs %', r, v; end if;
+  if pg_temp.fx_event_types(v_room) not like '%room.fix_confirmed,room.fix_confirmed,room.fixed_on_subjects,listing_sync.required,room.fixed%' then raise exception 'S4: ledger %', pg_temp.fx_event_types(v_room); end if;
   r := public.get_fixture_room(v_room);
   if r->'room'->>'status' <> 'fixed' or (r->'room'->>'fixedAt') is null or (r->'room'->>'fixedOnSubsAt') is null then raise exception 'S4: fixed marks %', r->'room'; end if;
   if r->'room'->'listingSync'->'vessel'->>'target' <> 'FIXED' or r->'room'->'listingSync'->'cargo'->>'target' <> 'OUT'
@@ -479,6 +492,9 @@ begin
   e := pg_temp.fx_err(format('select public.lift_fixture_subject(%L, %L, %s, %L)', v_room, v_sub2, pg_temp.fx_ver(v_room), 'state-a4-lift-early'));
   if e <> 'FX_STATE' then raise exception 'S5: lifting while negotiating must be FX_STATE, got %', e; end if;
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-a4-fix');
+  perform pg_temp.fx_as('u_ch1');
+  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-a4-fix-c');
+  perform pg_temp.fx_as('u_solo');
   if v->'data'->>'roomStatus' <> 'on_subjects' or (v->'data'->>'openSubjects')::int <> 2 then raise exception 'S5: on_subjects with 2 open expected: %', v; end if;
   r := public.get_fixture_room(v_room);
   if r->'room'->'listingSync'->'vessel'->>'target' <> 'ON SUBS' then raise exception 'S5: on_subjects must require vessel ON SUBS: %', r->'room'->'listingSync'; end if;
@@ -501,12 +517,20 @@ begin
   perform pg_temp.fx_as('u_ch1');
   v := public.accept_fixture_proposal(v_room, v_pid, pg_temp.fx_ver(v_room), 'state-a4-accept-freight-2');
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-a4-fix-2');
+  perform pg_temp.fx_as('u_solo');
+  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-a4-fix-2-o');
+  perform pg_temp.fx_as('u_ch1');
   if v->'data'->>'roomStatus' <> 'on_subjects' then raise exception 'S5: second fix must be on_subjects: %', v; end if;
   v := public.lift_fixture_subject(v_room, v_sub, pg_temp.fx_ver(v_room), 'state-a4-lift-1');
   if v->'data'->>'roomStatus' <> 'on_subjects' or (v->'data'->>'openSubjects')::int <> 1 then raise exception 'S5: one subject left expected: %', v; end if;
+  -- a retried lift returns exactly the original result (replay == fresh)
+  t := public.lift_fixture_subject(v_room, v_sub, 1, 'state-a4-lift-1');
+  if (t->>'replayed')::boolean is not true or (t - 'replayed') <> (v - 'replayed') then raise exception 'S5: the lift replay differs: % vs %', t, v; end if;
   perform pg_temp.fx_as('u_solo');
   v := public.lift_fixture_subject(v_room, v_sub2, pg_temp.fx_ver(v_room), 'state-a4-lift-2');
   if v->'data'->>'roomStatus' <> 'fixed' or (v->'data'->>'openSubjects')::int <> 0 then raise exception 'S5: last lift must fix: %', v; end if;
+  t := public.lift_fixture_subject(v_room, v_sub2, 1, 'state-a4-lift-2');
+  if (t - 'replayed') <> (v - 'replayed') then raise exception 'S5: the fixing lift replay differs (it must say fixed): % vs %', t, v; end if;
   if pg_temp.fx_status(v_room) <> 'fixed' then raise exception 'S5: room not fixed after last lift'; end if;
   if pg_temp.fx_event_types(v_room) not like '%subject.lifted,room.fixed,listing_sync.required%' then raise exception 'S5: ledger %', pg_temp.fx_event_types(v_room); end if;
   raise notice 'S5 ok: subjects added/extended, wrong side refused, reopen → negotiating (+ sync back to market), last lift → fixed atomically';
@@ -557,6 +581,11 @@ begin
   v := public.add_fixture_subject(v_room, 'Sub stem', null, 'cargo', null, pg_temp.fx_ver(v_room), 'state-c4-sub');
   v_sub := (v->'data'->>'subjectId')::uuid;
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-c4-fix');
+  -- the mediator confirms only for the relayed side it represents
+  perform pg_temp.fx_as('u_adm', true);
+  e := pg_temp.fx_err(format('select public.fix_fixture_on_subjects(%L, %s, %L)', v_room, pg_temp.fx_ver(v_room), 'state-c4-fix-adm-noparty'));
+  if e <> 'FX_AUTH' then raise exception 'S6: the mediator confirming for nobody must be FX_AUTH, got %', e; end if;
+  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'state-c4-fix-relayed', null, v_relayed);
   if v->'data'->>'roomStatus' <> 'on_subjects' then raise exception 'S6: on_subjects expected: %', v; end if;
   perform pg_temp.fx_as('u_adm', true);
   v := public.fail_fixture_subject(v_room, v_sub, 'stem not approved', pg_temp.fx_ver(v_room), 'state-c4-fail', null, v_relayed);

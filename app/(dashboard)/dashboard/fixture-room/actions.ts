@@ -14,7 +14,7 @@ import { buildTermCatalogue, type ListingFigures } from "@/lib/fixture-room/term
 import { findMaskingLeaks } from "@/lib/fixture-room/masking-view";
 import type { FixtureError } from "@/lib/fixture-room/errors";
 import {
-  addSubjectSchema, closeRoomSchema, createFromCandidateSchema, recreateRoomSchema, extendSubjectSchema, failSubjectSchema, invitePartySchema, postMessageSchema,
+  addSubjectSchema, closeRoomSchema, extendWindowSchema, createFromCandidateSchema, recreateRoomSchema, extendSubjectSchema, failSubjectSchema, invitePartySchema, postMessageSchema,
   proposalRefSchema, reopenTermSchema, recapRefSchema, redactMessageSchema, respondInvitationSchema, submitProposalSchema, subjectRefSchema,
   termFlagSchema, commandBaseSchema, listRoomsSchema,
 } from "@/lib/fixture-room/schemas";
@@ -315,6 +315,12 @@ export async function fixFixtureOnSubjectsAction(input: unknown) {
   const p = parse(commandBaseSchema, input);
   if (!p.ok) return p.error;
   return sdk.fixFixtureOnSubjects(await getSupabaseServerClient(), p.value);
+}
+
+export async function extendFixtureWindowAction(input: unknown) {
+  const p = parse(extendWindowSchema, input);
+  if (!p.ok) return p.error;
+  return sdk.extendFixtureNegotiationWindow(await getSupabaseServerClient(), p.value);
 }
 
 /** D4: one server-authoritative action, scoped by the listing ownership row. */

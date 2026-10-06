@@ -216,12 +216,35 @@ tools.
 - A relayed party never becomes direct: if the organisation behind it later
   gains a seat, the mediator invites that organisation explicitly.
 - A room cannot pair two listings owned by the same organisation or member.
-- Proposal expiry is observed lazily, not enforced by a clock: a lapsed
-  proposal is refused on acceptance, reported by the read model, and recorded
-  when its own side replaces it. The optional `204000` sweep is deliberately
-  absent from this release and no expiry job is scheduled.
-- `expired` is a mediator / admin close reason; `negotiation_window_ends_at`
-  is informational.
+- Enforcement (6 Oct 2026, `20261006100000_fixture_room_enforcement.sql`,
+  release audit PR-07 / PR-08):
+  - **Two-sided fix.** `fix_fixture_on_subjects` records the acting side's
+    confirmation with a fingerprint of the agreed terms and the subjects. The
+    room moves to on subjects (or straight to fixed with no subjects) only
+    when the charterer side and the owner side have confirmed the same
+    fingerprint. An accept, a reopen or a new subject voids an earlier
+    confirmation. The mediator confirms only for a relayed party it names.
+    The read model reports `viewer.capabilities.fixConfirmedSides`.
+  - **Hold and refer.** A held or referred term takes no proposal and no
+    acceptance. A fix waits until no term is held or referred. Only the
+    holder resumes and only the referring side clears a referral; the
+    mediator may do both.
+  - **Reopen from on subjects** reinstates every lifted subject
+    (`subject.reinstated`) and leaves at least three days of window.
+  - **Negotiation window.** Every room gets 14 days from creation; open rooms
+    at the migration got 14 days from then. Moves and fixes are refused once
+    it closes. The mediator extends it (one hour to 60 days ahead) with
+    `extend_fixture_negotiation_window`.
+  - **The clock.** `run_fixture_room_clock()` (service role only) observes
+    each lapsed proposal once and expires invited / negotiating rooms whose
+    window closed, as a System `room.closed` with reason `expired`. pg_cron
+    runs it every five minutes as `fixture-room-clock`.
+  - DOWN: `supabase/rollback/20261006_fixture_room_enforcement_down.sql`.
+- The notification projector (`205000` on the fixture branch) still needs the
+  shared notification core, which is not on `dev`; parties learn of moves by
+  polling the room until it ships.
+- Subject deadlines are shown, not enforced: a subject past its deadline
+  stays open until a side lifts or fails it.
 - Recap invalidation follows agreed content changes (accept, reopen, subject
   changes, fix, close), not new proposals.
 - The tier gate reads `users.subscription_tier` (T3 / T4) and, when the column

@@ -114,6 +114,8 @@ export const closeRoomSchema = commandBaseSchema.extend({
   note: z.string().max(500).nullable().optional(),
 });
 
+export const extendWindowSchema = commandBaseSchema.extend({ endsAt: z.string().datetime({ offset: true }) });
+
 export const redactMessageSchema = z.object({ roomId: uuid, messageId: uuid, reason: z.string().min(4).max(500), expectedVersion, idempotencyKey });
 
 export const listRoomsSchema = z.object({

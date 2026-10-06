@@ -195,7 +195,14 @@ export function extendFixtureSubject(supabase: SupabaseClient, input: CommandBas
 }
 
 export function fixFixtureOnSubjects(supabase: SupabaseClient, input: CommandBase) {
-  return command<{ roomStatus: FixtureRoomStatus; openSubjects: number }>(supabase, "fix_fixture_on_subjects", base(input));
+  // PR-07: each principal side confirms; the mediator confirms for the relayed party it names
+  return command<{ roomStatus: FixtureRoomStatus; openSubjects: number; confirmedSides: ("cargo" | "vessel")[]; awaitingSide: "cargo" | "vessel" | null }>(
+    supabase, "fix_fixture_on_subjects", behalf(input));
+}
+
+/** PR-08: the mediator moves the negotiation window (one hour to 60 days from now). */
+export function extendFixtureNegotiationWindow(supabase: SupabaseClient, input: CommandBase & { endsAt: string }) {
+  return command<{ endsAt: string }>(supabase, "extend_fixture_negotiation_window", { ...base(input), p_ends_at: input.endsAt });
 }
 
 /** Applies only the caller-owned marketplace listing targets recorded by the room (decision D4). */

@@ -12,6 +12,7 @@ import { roleLabel } from "@/lib/fixture-room/permissions";
 import type { RunCommand } from "./FixtureRoomClient";
 import { Gloss } from "./Gloss";
 import { IcLock } from "./icons";
+import { PromptDialog, type PromptConfig } from "./PromptDialog";
 
 const initials = (s: string) => s.split(/\s+/).slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase();
 
@@ -169,6 +170,8 @@ export function SubjectsRail({ view, run, busy, actForPartyId, now }: { view: Fi
   const [side, setSide] = React.useState<"" | "cargo" | "vessel" | "mediator">("");
   const lifted = view.subjects.filter((s) => s.status === "lifted").length;
   const onSubs = view.room.status === "on_subjects";
+  const [prompt, setPrompt] = React.useState<PromptConfig | null>(null);
+  const closePrompt = React.useCallback(() => setPrompt(null), []);
   return (
     <div className="nr-rail__sec" data-testid="subjects-rail">
       <div className="nr-rail__hd">Subjects <span className="cnt">{lifted}/{view.subjects.length} lifted</span></div>
@@ -192,8 +195,18 @@ export function SubjectsRail({ view, run, busy, actForPartyId, now }: { view: Fi
             </button>
             {s.status === "open" && onSubs && (caps.canExtendSubject || caps.canFailSubject) && (
               <div className="fx-acts2" style={{ margin: "2px 0 6px 28px" }}>
-                {caps.canExtendSubject && <button type="button" className="fx-link" disabled={busy} onClick={() => { const d = window.prompt("New deadline (YYYY-MM-DD)"); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) void run("extendSubject", (b) => ({ ...b, subjectId: s.id, deadlineAt: `${d}T17:00:00Z` })); }}>Extend</button>}
-                {caps.canFailSubject && <button type="button" className="fx-link" disabled={busy} onClick={() => { const r = window.prompt("Why did this subject fail? (this fails the fixture)"); if (r) void run("failSubject", (b) => ({ ...b, subjectId: s.id, reason: r, onBehalfOfPartyId: actForPartyId })); }}>Mark failed</button>}
+                {caps.canExtendSubject && <button type="button" className="fx-link" disabled={busy} data-testid={`subject-extend-${s.id}`} onClick={() => setPrompt({
+                  title: "Extend the subject deadline", testId: "extend-subject", description: s.title,
+                  fields: [{ name: "date", label: "New deadline (17:00 UTC)", kind: "date", required: true, min: new Date().toISOString().slice(0, 10) }],
+                  confirmLabel: "Extend",
+                  onSubmit: (v) => { void run("extendSubject", (b) => ({ ...b, subjectId: s.id, deadlineAt: `${v.date}T17:00:00Z` })); },
+                })}>Extend</button>}
+                {caps.canFailSubject && <button type="button" className="fx-link" disabled={busy} data-testid={`subject-fail-${s.id}`} onClick={() => setPrompt({
+                  title: "Mark the subject failed", testId: "fail-subject", danger: true, description: `${s.title} · failing a subject fails the whole fixture.`,
+                  fields: [{ name: "reason", label: "Why did it fail?", kind: "textarea", required: true, maxLength: 500 }],
+                  confirmLabel: "Fail the subject and the fixture",
+                  onSubmit: (v) => { void run("failSubject", (b) => ({ ...b, subjectId: s.id, reason: v.reason, onBehalfOfPartyId: actForPartyId })); },
+                })}>Mark failed</button>}
               </div>
             )}
           </div>
@@ -214,6 +227,7 @@ export function SubjectsRail({ view, run, busy, actForPartyId, now }: { view: Fi
           </div>
         </div>
       )}
+      {prompt && <PromptDialog config={prompt} onClose={closePrompt} />}
     </div>
   );
 }
@@ -275,6 +289,9 @@ export const EVENT_TEXT: Record<string, (p: Record<string, unknown>) => string> 
   "subject.lifted": (p) => `lifted “${p.title}”`,
   "subject.failed": (p) => `failed “${p.title}”${p.reason ? ` · ${p.reason}` : ""}`,
   "subject.extended": (p) => `extended “${p.title}”`,
+  "subject.reinstated": (p) => `“${p.title}” is open again · a term was reopened`,
+  "room.fix_confirmed": (p) => p.awaitingSide ? `confirmed the fixture · awaiting the ${p.awaitingSide === "cargo" ? "charterer" : "owner"} side` : "confirmed the fixture · both sides agree",
+  "room.window_extended": () => "extended the negotiation window",
   "room.fixed_on_subjects": () => "recorded FIXED ON SUBS",
   "room.fixed": () => "all subjects lifted · CLEAN FIXED",
   "room.returned_to_negotiation": () => "returned the room to negotiation",

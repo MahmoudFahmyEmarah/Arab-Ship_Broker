@@ -628,6 +628,10 @@
   resize: vertical; background: var(--asb-gray-50); font-variant-numeric: tabular-nums;}
 .nrx__ta:focus {outline: none; border-color: var(--asb-blue); box-shadow: 0 0 0 2px rgba(24,95,165,.12); background: var(--asb-white);}
 .nrx__ft {display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: var(--bd); background: var(--asb-gray-50);}
+.nrx.nrx--small {width: 420px;}
+.nrx__err {color: var(--asb-red); background: var(--asb-red-bg); font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px;}
+.nr-clock__ext {margin-left: 6px; font-size: 10px; font-weight: 700; color: var(--asb-navy); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline;}
+.nr-foot__wait {font-size: 12px; font-weight: 600; color: var(--asb-amber);}
 .nrx__note {font-size: 10.5px; color: var(--asb-gray-500);}
 .nrx__actions {display: flex; gap: 8px;}
 .nrx__sent {padding: 44px 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;}

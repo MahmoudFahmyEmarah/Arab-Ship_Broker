@@ -331,6 +331,9 @@ begin
   perform pg_temp.fx_as('u_ow1');
   v := public.add_fixture_subject(v_room, 'Sub stem', null, 'cargo', null, pg_temp.fx_ver(v_room), 'snap2-sub');
   v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'snap2-fix');
+  perform pg_temp.fx_as('u_t1');
+  v := public.fix_fixture_on_subjects(v_room, pg_temp.fx_ver(v_room), 'snap2-fix-c');
+  perform pg_temp.fx_as('u_ow1');
   r := public.get_fixture_room(v_room);
   if r->'room'->'listingSync'->'cargo'->>'target' <> 'OUT' or r->'room'->'listingSync'->'vessel'->>'target' <> 'ON SUBS' then raise exception 'N2: targets %', r->'room'->'listingSync'; end if;
   if r->'room'->'listingSync'->'cargo'->>'current' <> 'IN' or r->'room'->'listingSync'->'vessel'->>'current' <> 'OPEN' then raise exception 'N2: current statuses %', r->'room'->'listingSync'; end if;

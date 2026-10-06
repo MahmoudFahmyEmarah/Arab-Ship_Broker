@@ -549,3 +549,61 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const body = read("supabase/tests/fixture_room/bodies/handles.sql");
   ok(/'HELD'/.test(body) && /'AB'/.test(body) && /H18 ok/.test(body) && /H19 ok/.test(body) && /statement_timeout = '5s'/.test(body), "the suite proves bounded, masked member reads for hulls named HELD and AB");
 }
+
+// -- PR-07 / PR-08 . enforcement (20261006100000) --
+{
+  const m = read("supabase/migrations/20261006100000_fixture_room_enforcement.sql");
+  const sql = m.replace(/--.*$/gm, "");
+  const fix = sql.split("create or replace function public.fix_fixture_on_subjects(")[1].split("end $$;")[0];
+  ok(/v_conf->v_other->>'basis' is distinct from v_basis/.test(fix) && /'room\.fix_confirmed'/.test(fix) && fix.indexOf("'room.fix_confirmed'") < fix.indexOf("set status = 'on_subjects'"), "PR-07: the room moves only after the other side confirmed the same basis");
+  ok(/acting\.side = 'mediator' and p_on_behalf_of_party_id is null/.test(fix) && /fn_fixture_rep\(acting, p_on_behalf_of_party_id, true\)/.test(fix), "PR-07: the mediator confirms only for a relayed party it names");
+  ok(/held_by_party_id is not null or t\.referred_at is not null/.test(fix) && /fn_fixture_require_window\(r\)/.test(fix), "a fix waits for held / referred terms and an open window");
+  for (const fn of ["submit_fixture_proposal", "accept_fixture_proposal"]) {
+    const body = sql.split(`create or replace function public.${fn}(`)[1].split("end $$;")[0];
+    ok(/fn_fixture_require_movable\(t\)/.test(body) && /fn_fixture_require_window\(r\)/.test(body), `PR-08: ${fn} refuses held / referred terms and a closed window`);
+  }
+  const reopen = sql.split("create or replace function public.reopen_fixture_term(")[1].split("end $$;")[0];
+  ok(/x\.status = 'lifted'/.test(reopen) && /'subject\.reinstated'/.test(reopen) && /fix_confirmations = '\{\}'::jsonb/.test(reopen), "PR-08: reopening from on subjects reinstates lifted subjects and voids confirmations");
+  const flag = sql.split("create or replace function public.set_fixture_term_flag(")[1].split("end $$;")[0];
+  ok(/referred_by_party_id is distinct from rep\.id and acting\.side <> 'mediator'/.test(flag), "only the referring side (or the mediator) clears a referral");
+  ok(/set default \(now\(\) \+ interval '14 days'\)/.test(sql) && /cron\.schedule\('fixture-room-clock', '\*\/5 \* \* \* \*'/.test(sql), "every room gets a 14-day window; the clock runs every five minutes");
+  ok(["run_fixture_room_clock()", "sweep_fixture_room_windows(integer)", "sweep_fixture_proposal_lapses(integer)"].every((f) => sql.includes(`grant execute on function public.${f} to service_role;`) && !sql.includes(`grant execute on function public.${f} to authenticated`)), "the clock is service-only");
+  const down = read("supabase/rollback/20261006_fixture_room_enforcement_down.sql");
+  ok(/cron\.unschedule/.test(down) && /drop function if exists public\.fix_fixture_on_subjects\(uuid, integer, text, uuid, uuid\)/.test(down) && /create or replace function public\.fix_fixture_on_subjects\(p_room_id uuid, p_expected_version integer, p_idempotency_key text, p_as_party_id uuid default null\)/.test(down) && /drop column if exists fix_confirmations/.test(down), "the DOWN restores the released commands and removes the clock and the column");
+  ok(down.includes(read("supabase/migrations/20260923203000_fixture_room_commands.sql").split("create or replace function public.submit_fixture_proposal(")[1].split("end $$;")[0]), "the DOWN carries the released submit_fixture_proposal verbatim");
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20261006100000_fixture_room_enforcement\.sql/.test(h) && /20261006_fixture_room_enforcement_down\.sql" "supabase\/rollback\/20260923_fixture_room_down\.sql"/.test(h) && /\[enforcement\]=/.test(h), "the harness applies the enforcement migration, runs its suite and rolls it back first");
+  const P2 = (side: ViewerParty["side"], capacity: ViewerParty["capacity"]): ViewerParty => ({ id: `${side}-${capacity}`, side, capacity, status: "active", disclosureAgreed: false });
+  const late = computeCapabilities("negotiating", [P2("cargo", "principal")], false, [], { windowClosed: true });
+  ok(late.windowClosed && !late.canPropose && !late.canAccept && !late.canFixOnSubjects && !late.canReopen && late.canMessage, "a closed window stops every move but messages");
+  const med = computeCapabilities("negotiating", [P2("mediator", "broker")], false);
+  ok(!med.canFixOnSubjects && med.canExtendWindow, "the mediator without a relayed party cannot confirm a fix, and extends the window");
+  ok(computeCapabilities("negotiating", [P2("cargo", "principal")], false, [], { fixConfirmedSides: ["vessel"] }).fixConfirmedSides.join() === "vessel" && computeCapabilities("on_subjects", [P2("cargo", "principal")], false, [], { fixConfirmedSides: ["vessel"] }).fixConfirmedSides.length === 0, "confirmations are reported only while negotiating");
+  ok(!/window\.prompt/.test(["FixtureRoomClient.tsx", "RoomRails.tsx", "TermRow.tsx"].map((f) => read(`components/fixture-room/${f}`)).join("\n")), "the room asks for reasons and dates in its own dialog, never window.prompt");
+  ok(/reason: v\.reason === "expired" \? "expired" : "failed"/.test(read("components/fixture-room/FixtureRoomClient.tsx")), "closing the room sends the outcome the mediator chose (failed or expired)");
+  // C2O-052 · the deadline on every commercial command, extension never shorter, terminal retention
+  for (const fn of ["invite_fixture_party", "respond_fixture_invitation", "withdraw_fixture_proposal", "add_fixture_subject", "set_fixture_term_flag", "reopen_fixture_term"]) {
+    const body = sql.split(`create or replace function public.${fn}(`)[1].split("end $$;")[0];
+    ok(/fn_fixture_require_window\(r\)/.test(body), `C2O-052: ${fn} refuses after the deadline`);
+  }
+  const ext = sql.split("create or replace function public.extend_fixture_negotiation_window(")[1].split("end $$;")[0];
+  ok(/p_ends_at <= r\.negotiation_window_ends_at/.test(ext), "C2O-052: an extension never shortens the window");
+  const ap = sql.split("create or replace function public.fn_fixture_actor_parties(")[1].split("end $$;")[0];
+  ok(/p\.status = 'active' or not exists/.test(ap) && /'withdrawn', 'failed', 'expired'/.test(ap), "C2O-052: a pending invitee loses access to a terminal room");
+  ok(/'migration:20261006100000:window'/.test(sql) && /'room\.window_extended'/.test(m.split("12 · backfill")[1] ?? ""), "C2O-052: the backfill records an event per room so clients refresh");
+  // C2O-055 · the stored result is the final result: a replay equals the fresh call
+  const fixBody = sql.split("create or replace function public.fix_fixture_on_subjects(")[1].split("end $$;")[0];
+  ok(/case when v_open_subjects = 0 then 'fixed' else 'on_subjects' end/.test(fixBody) && !/\|\| jsonb_build_object\('data'/.test(fixBody), "C2O-055: the clean fix stores 'fixed' and returns the stored envelope unchanged");
+  const reopenBody = sql.split("create or replace function public.reopen_fixture_term(")[1].split("end $$;")[0];
+  ok(/'subjectsReinstated', v_reinstated\)\);/.test(reopenBody) && !/\|\| jsonb_build_object\('data'/.test(reopenBody), "C2O-055: reopen stores subjectsReinstated in its result and returns it unchanged");
+  ok(/create or replace function public\.fn_fixture_backfill_windows\(\)/.test(sql) && /select public\.fn_fixture_backfill_windows\(\);/.test(sql), "C2O-055: the backfill is a function the suite exercises on a pre-migration room");
+  const enfBody = read("supabase/tests/fixture_room/bodies/enforcement.sql");
+  ok(/\(r - 'replayed'\) <> \(v - 'replayed'\)/.test(enfBody) && /E7 ok/.test(enfBody), "C2O-055: the suite compares replay and fresh results and runs the backfill case");
+  const liftBody = sql.split("create or replace function public.lift_fixture_subject(")[1].split("end $$;")[0];
+  ok(liftBody.includes("'subjectStatus', 'lifted', 'roomStatus', case when v_fixed then 'fixed' else 'on_subjects' end, 'openSubjects', v_open") && !liftBody.includes("|| jsonb_build_object('data'"), "lift_fixture_subject stores its final result; a retry returns it exactly");
+  ok(read("supabase/rollback/20261006_fixture_room_enforcement_down.sql").includes("create or replace function public.lift_fixture_subject("), "the DOWN restores the released lift_fixture_subject");
+  ok(!/set negotiation_window_ends_at = null/.test(down) && /Window values are KEPT/.test(down), "C2O-052: the DOWN keeps window values");
+  const late2 = computeCapabilities("negotiating", [P2("cargo", "principal")], false, [], { windowClosed: true });
+  ok(!late2.canAddSubject && !late2.canInvite, "a closed window stops subjects and invitations");
+  ok(!computeCapabilities("negotiating", [{ ...P2("vessel", "principal"), status: "invited" }], false, [], { windowClosed: true }).canRespondInvitation && !computeCapabilities("expired", [{ ...P2("vessel", "principal"), status: "invited" }], false).canRespondInvitation, "no invitation answer after the deadline or in a terminal room");
+}

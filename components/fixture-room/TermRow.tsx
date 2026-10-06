@@ -14,6 +14,7 @@ import type { SidePresence } from "@/lib/fixture-room/presence";
 import type { RunCommand } from "./FixtureRoomClient";
 import { Gloss } from "./Gloss";
 import { IcAlert, IcLock } from "./icons";
+import { PromptDialog, type PromptConfig } from "./PromptDialog";
 
 function figuresFromSnapshot(view: FixtureRoomView): ListingFigures {
   const c = view.snapshot.cargo;
@@ -122,6 +123,8 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
   const standing = [term.cargoPosition, term.vesselPosition].filter((p): p is FixtureProposalView => !!p).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const canWork = caps.canPropose && !!mySide && !agreed && term.status !== "withdrawn";
   const commonBase = { asPartyId: null as string | null, onBehalfOfPartyId: actForPartyId };
+  const [prompt, setPrompt] = React.useState<PromptConfig | null>(null);
+  const closePrompt = React.useCallback(() => setPrompt(null), []);
 
   // composer
   const [fields, setFields] = React.useState<Record<string, string>>({});
@@ -236,7 +239,13 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
               <span><IcLock /> Agreed · {term.agreed?.displayValue} · accepted by {term.agreedByLabel ?? "—"}</span>
               {caps.canReopen && (
                 <button type="button" className="fx-link" disabled={busy} data-testid={`reopen-${term.code}`}
-                  onClick={() => { const reason = window.prompt("Why reopen this term? (optional)") ?? ""; void run("reopen", (base) => ({ ...base, ...commonBase, termId: term.id, reason: reason || null })); }}>
+                  onClick={() => setPrompt({
+                    title: `Reopen ${term.label.toLowerCase()}`, testId: "reopen-term",
+                    description: view.room.status === "on_subjects" ? "The room returns to negotiation and any lifted subject opens again." : "The agreed figure is cleared and the term is negotiated again.",
+                    fields: [{ name: "reason", label: "Reason (optional)", kind: "textarea", maxLength: 500 }],
+                    confirmLabel: "Reopen term",
+                    onSubmit: (v) => { void run("reopen", (base) => ({ ...base, ...commonBase, termId: term.id, reason: v.reason || null })); },
+                  })}>
                   Flag re-open
                 </button>
               )}
@@ -344,6 +353,7 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
           )}
         </div>
       )}
+      {prompt && <PromptDialog config={prompt} onClose={closePrompt} />}
     </div>
   );
 }

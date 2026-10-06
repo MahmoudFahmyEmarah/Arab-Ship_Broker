@@ -91,8 +91,14 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
       return { audience: "both_sides", importance: "normal", title: `${room}: ${termOf(p)} reopened`, body: `${who} reopened ${termOf(p)}.`, href: base, deadlineAt: null };
     case "term.referred":
       return { audience: "mediator", importance: "urgent", title: `${room}: ${termOf(p)} referred to principal`, body: `${who} referred ${termOf(p)}. The item waits for a decision.`, href: base, deadlineAt: null };
+    case "room.fix_confirmed":
+      // PR-07: the first side's confirmation is what the other side must act on; the second fixes the room
+      if (!p.awaitingSide) return null;
+      return { audience: "other_side", importance: "urgent", title: `${room}: fixture confirmed by the other side`, body: `${who} confirmed the fixture on the agreed terms. Your confirmation fixes it.`, href: base, deadlineAt: null };
     case "room.fixed_on_subjects":
-      return { audience: "all", importance: "urgent", title: `${room}: fixed on subjects`, body: `Every required term is agreed. The fixture is recorded on subjects.`, href: base, deadlineAt: null };
+      return { audience: "all", importance: "urgent", title: `${room}: fixed on subjects`, body: `Both sides confirmed every required term. The fixture is recorded on subjects.`, href: base, deadlineAt: null };
+    case "subject.reinstated":
+      return { audience: "both_sides", importance: "normal", title: `${room}: subject open again`, body: `A term was reopened, so ${subjectRef(p)} is open again.`, href: base, deadlineAt: null };
     case "subject.lifted":
       // a subject's title is free text a member typed: it stays in the room, never in a
       // notification (C2O-012 item 2); the governed subject number identifies it
