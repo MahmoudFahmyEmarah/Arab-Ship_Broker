@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { calculatePda } from "../lib/pda/calculate";
+import { calculatePda, flagTreatment } from "../lib/pda/calculate";
 import { pdaApplicabilitySchema } from "../lib/pda/schemas";
 import type { PdaRequest, PdaTariffVersion } from "../lib/pda/types";
 
@@ -351,6 +351,26 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(calculatePda(call(1, { settlementMode: "agent_account" }), egypt([agentOnly])).lines.length, 1);
   assert.equal(calculatePda(call(1, { settlementMode: "cash" }), egypt([agentOnly])).lines.length, 0);
   assert.equal(calculatePda(call(1), egypt([agentOnly])).warnings.some((w) => w.code === "MISSING_INPUT" && /settlement mode/.test(w.message)), true);
+}
+
+// Wave 2: flag treatment is derived from the flag state against the port country (UN/LOCODE prefix);
+// it is used by applicability, and a rule that names one while the flag state is unknown raises MISSING_INPUT.
+{
+  const portVersion = { ...version, portLocode: "EGALY", rules: [{ ...version.rules[0]!, applicability: { flagTreatments: ["foreign" as const] } }] };
+  const at = (flagState: string | null | undefined) =>
+    calculatePda({ ...request, portLocode: "EGALY", vessel: { ...request.vessel, flagState } }, portVersion);
+  assert.equal(flagTreatment({ ...request, portLocode: "EGALY", vessel: { flagState: "pa" } }), "foreign");
+  assert.equal(flagTreatment({ ...request, portLocode: "EGALY", vessel: { flagState: "EG" } }), "national");
+  assert.equal(flagTreatment({ ...request, portLocode: "EGALY", vessel: { flagState: "Egypt" } }), null, "a name is not a flag state");
+  assert.equal(at("PA").lines.length, 1, "foreign vessel: foreign rule applies");
+  assert.equal(at("EG").lines.length, 0, "national vessel: foreign rule does not apply");
+  assert.equal(at("EG").warnings.some((w) => w.code === "MISSING_INPUT"), false);
+  const unknown = at(null);
+  assert.equal(unknown.lines.length, 0, "never guessed");
+  assert.equal(unknown.warnings.some((w) => w.code === "MISSING_INPUT" && /flag state/.test(w.message)), true);
+  assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["foreign", "foreign"] }).success, false);
+  assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["domestic"] }).success, false);
+  assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["foreign", "national"] }).success, true);
 }
 
 // C2B-009: the TypeScript schema refuses duplicated two-value lists, like the RPC.

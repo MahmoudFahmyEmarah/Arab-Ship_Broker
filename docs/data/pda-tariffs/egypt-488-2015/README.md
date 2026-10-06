@@ -6,10 +6,15 @@ Prepared by Stream B from the owner's source documents in `tmp/Data` (catalogue:
 database. It feeds the PDA module's governed path (register sources → draft
 version → replace rules → submit → publish, maker ≠ checker).
 
-**Status: not publishable.** `manifest.json` lists the open blocker: the PDA
-request has no governed flag/tariff-treatment input, and these are the
-foreign-flag USD tables (audit C2B-007 #2). The package must not be loaded
-until the PDA owner adds that input and the rules carry the matching condition.
+**Status: publishable (PDA Wave 2, 7 Oct 2026).** The former blocker (audit
+C2B-007 #2: no governed flag/tariff-treatment input) is resolved by migration
+`20261007300000_pda_flag_treatment.sql`. Every rule declares
+`applicability.flagTreatments: ["foreign"]`; the route flow resolves the
+vessel's flag state server-side through `public.flag_states`, and the engine
+compares it with the port's country (UN/LOCODE prefix). A national (EG) vessel
+gets no line from this foreign-USD set; an unknown flag raises MISSING_INPUT.
+The load is proven in `supabase/tests/pda/flag_treatment.sql` (all 17 rules
+through `pda_replace_tariff_rules`, published maker ≠ checker, rolled back).
 
 | File | Content |
 |---|---|
@@ -38,7 +43,7 @@ registered `tariff_sources.id`, never one id for all.
 ## Values: base-year face values
 
 - **Owner ruling (5 Oct 2026): publish the 2015/2016 face values until fresh
-  data is provided** (once the blocker above is cleared). The version must say
+  data is provided**. The version must say
   so where members see it: name it along the lines of "Decree 488/2015 +
   800/2016 base rates (not escalated)". When the owner supplies a current
   proforma or circular, publish a new version with the rates in force; the
@@ -79,7 +84,7 @@ default: clinker, coal, phosphate rock or petcoke are unclean bulk).
 
 ## Engine gaps this package exposes (for the PDA owner)
 
-A flag/tariff-treatment input (the blocker); a confirmed tariff cargo class;
+A flag/tariff-treatment input (done in Wave 2); a confirmed tariff cargo class;
 compound bases (rate × GT × days, rate × LOA × days or hours, with "part unit =
 unit" rounding); call patterns (two ports, Suez transit, days beyond 5);
 conditional modifiers (night/holiday +30 %, outside-port +100 %, Suez-transit

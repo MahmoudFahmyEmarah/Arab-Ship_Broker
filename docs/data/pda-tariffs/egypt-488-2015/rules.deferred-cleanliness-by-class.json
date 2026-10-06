@@ -8,6 +8,9 @@
     "applicability": {
       "cargoTypes": [
         "container"
+      ],
+      "flagTreatments": [
+        "foreign"
       ]
     },
     "bands": [
@@ -85,6 +88,9 @@
     "applicability": {
       "cargoTypes": [
         "general_cargo"
+      ],
+      "flagTreatments": [
+        "foreign"
       ]
     },
     "bands": [
@@ -162,6 +168,9 @@
     "applicability": {
       "cargoTypes": [
         "clean_bulk"
+      ],
+      "flagTreatments": [
+        "foreign"
       ]
     },
     "bands": [
@@ -239,6 +248,9 @@
     "applicability": {
       "cargoTypes": [
         "unclean_bulk"
+      ],
+      "flagTreatments": [
+        "foreign"
       ]
     },
     "bands": [

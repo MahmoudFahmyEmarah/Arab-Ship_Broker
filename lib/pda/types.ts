@@ -26,6 +26,8 @@ export type RoundingMode = "half_up" | "up" | "down";
 /** How a rule counts a duration (PR-10): exact, or every started unit counts as a whole one. */
 export type DurationRounding = "exact" | "started";
 export type SettlementMode = "cash" | "agent_account";
+/** Flag treatment at the port (Wave 2): the flag state equals the port country = national, otherwise foreign. */
+export type FlagTreatment = "foreign" | "national";
 
 export interface PdaVesselFacts {
   vesselId?: string | null;
@@ -38,6 +40,8 @@ export interface PdaVesselFacts {
   loaM?: number | null;
   draftM?: number | null;
   vesselType?: string | null;
+  /** Flag state, ISO 3166-1 alpha-2. For an owned vessel the server resolves it from public.flag_states; otherwise it is a declared fact, like GT. */
+  flagState?: string | null;
 }
 
 export interface PdaCallFacts {
@@ -81,6 +85,7 @@ export interface PdaApplicability {
   voyageScopes?: Array<"domestic" | "international">;
   locations?: Array<"alongside" | "anchorage">;
   settlementModes?: SettlementMode[];
+  flagTreatments?: FlagTreatment[];
   minGt?: number;
   maxGt?: number;
   minNt?: number;

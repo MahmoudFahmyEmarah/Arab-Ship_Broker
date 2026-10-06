@@ -179,6 +179,7 @@ export interface VesselView extends GovernedListingAccess {
   gt?: number | null;    // registered Gross Tonnage (real; estimator falls back to DWT×0.54)
   scnrt?: number | null; // Suez Canal Net Registered Tonnage (from the SC certificate)
   loaM?: number | null;  // LOA in metres (numeric, for calculators)
+  draftM?: number | null; // registered maximum draft in metres (numeric, for calculators)
   dwtBale?: string;
   loa?: string;
   beam?: string;

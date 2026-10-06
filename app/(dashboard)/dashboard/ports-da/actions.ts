@@ -77,7 +77,33 @@ function numberFromDisplay(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function authoritativeVesselFacts(vessel: VesselView): PdaRequest["vessel"] {
+/**
+ * Wave 2: the flag state (ISO 3166-1 alpha-2) of a vessel's registered flag, resolved
+ * through the governed public.flag_states registry by name or alias. Unknown or
+ * unregistered flags resolve to null, so a rule that needs the treatment raises
+ * MISSING_INPUT instead of guessing.
+ */
+async function flagStateOf(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  flag: string | null | undefined,
+): Promise<string | null> {
+  const wanted = flag?.trim().toLowerCase();
+  if (!wanted || wanted === "—") return null;
+  const { data, error } = await supabase
+    .from("flag_states")
+    .select("iso2, name, aliases")
+    .eq("is_active", true);
+  if (error || !data) return null;
+  const hit = data.find(
+    (row) =>
+      row.name?.trim().toLowerCase() === wanted ||
+      (row.aliases ?? []).some((alias: string) => alias.trim().toLowerCase() === wanted),
+  );
+  const iso2 = hit?.iso2?.trim().toUpperCase() ?? null;
+  return iso2 && /^[A-Z]{2}$/.test(iso2) ? iso2 : null;
+}
+
+function authoritativeVesselFacts(vessel: VesselView, flagState: string | null): PdaRequest["vessel"] {
   const vesselId =
     vessel.isOwned === true &&
     vessel.canManage === true &&
@@ -95,6 +121,9 @@ function authoritativeVesselFacts(vessel: VesselView): PdaRequest["vessel"] {
     scnrt: vessel.scnrt ?? null,
     dwt: numberFromDisplay(vessel.dwt),
     loaM: vessel.loaM ?? null,
+    // The registered maximum (summer) draft: a conservative stand-in for the call draft.
+    draftM: vessel.draftM ?? null,
+    flagState,
   };
 }
 
@@ -117,11 +146,12 @@ async function canonicalStandaloneRequest(request: PdaRequest): Promise<PdaReque
       "The selected vessel is not available to this account",
     );
   }
+  const supabase = await getSupabaseServerClient();
   return {
     ...request,
     vessel: {
       ...request.vessel,
-      ...authoritativeVesselFacts(vessel),
+      ...authoritativeVesselFacts(vessel, await flagStateOf(supabase, vessel.flag)),
     },
   };
 }
@@ -133,6 +163,7 @@ function canonicalRouteLeg(input: {
   quantityMt: number;
   days: number;
   manualActorLabel: string;
+  flagState: string | null;
 }): PdaRequest {
   return {
     portLocode: input.leg.portLocode,
@@ -140,7 +171,7 @@ function canonicalRouteLeg(input: {
     // Tariff effectiveness is governed by the explicit calendar date at this
     // port. Voyage timeline instants are presentation/operations data only.
     callDate: input.leg.callDate,
-    vessel: authoritativeVesselFacts(input.vessel),
+    vessel: authoritativeVesselFacts(input.vessel, input.flagState),
     call: {
       days: input.days,
       hours: input.leg.call.hours ?? null,
@@ -269,6 +300,7 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
       requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
     ]);
     const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
+    const flagState = await flagStateOf(supabase, vessel.flag);
     let loadRequest = canonicalRouteLeg({
       leg: input.load,
       vessel,
@@ -276,6 +308,7 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
       quantityMt: input.selection.quantityMt,
       days: timeline.loadPortDays,
       manualActorLabel,
+      flagState,
     });
     let dischargeRequest = canonicalRouteLeg({
       leg: input.discharge,
@@ -284,6 +317,7 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
       quantityMt: input.selection.quantityMt,
       days: timeline.dischargePortDays,
       manualActorLabel,
+      flagState,
     });
     const [loadContext, dischargeContext] = await Promise.all([
       getPdaCalculationContext(supabase, loadRequest),

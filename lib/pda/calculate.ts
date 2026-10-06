@@ -33,6 +33,13 @@ function inList(value: string | null | undefined, allowed?: string[]): boolean {
   return !allowed?.length || (!!value && allowed.some((item) => item.toLowerCase() === value.toLowerCase()));
 }
 
+/** Wave 2: national when the flag state equals the port's country (UN/LOCODE prefix), foreign otherwise; null when unknown. */
+export function flagTreatment(request: PdaRequest): "foreign" | "national" | null {
+  const flag = request.vessel.flagState?.trim().toUpperCase();
+  if (!flag || !/^[A-Z]{2}$/.test(flag)) return null;
+  return flag === request.portLocode.slice(0, 2).toUpperCase() ? "national" : "foreign";
+}
+
 function inRange(value: number | null | undefined, min?: number, max?: number): boolean {
   if (min == null && max == null) return true;
   if (value == null) return false;
@@ -56,6 +63,7 @@ function missingFacts(rule: PdaTariffRule, request: PdaRequest): string[] {
   list("voyage scope", request.call.voyageScope, a.voyageScopes);
   list("location", request.call.location, a.locations);
   list("settlement mode", request.call.settlementMode, a.settlementModes);
+  list("flag state", flagTreatment(request), a.flagTreatments);
   range("GT", request.vessel.gt, a.minGt, a.maxGt);
   range("NT", request.vessel.nt, a.minNt, a.maxNt);
   range("SCNRT", request.vessel.scnrt, a.minScnrt, a.maxScnrt);
@@ -80,6 +88,7 @@ function applies(rule: PdaTariffRule, request: PdaRequest): boolean {
   if (!inList(request.call.voyageScope, a.voyageScopes)) return false;
   if (!inList(request.call.location, a.locations)) return false;
   if (!inList(request.call.settlementMode, a.settlementModes)) return false;
+  if (!inList(flagTreatment(request), a.flagTreatments)) return false;
   return (
     inRange(request.vessel.gt, a.minGt, a.maxGt) &&
     inRange(request.vessel.nt, a.minNt, a.maxNt) &&
