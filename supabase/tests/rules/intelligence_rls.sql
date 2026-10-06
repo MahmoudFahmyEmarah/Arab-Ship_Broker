@@ -34,12 +34,12 @@ begin
     raise exception 'INTELLIGENCE RLS: anonymous active-read grant leaked';
   end if;
   if has_function_privilege('authenticated','public.admin_intelligence_create_rule_set(uuid,jsonb,jsonb,text,text,uuid,uuid)','execute')
-     or has_function_privilege('authenticated','public.admin_intelligence_activate_rule_set(uuid,uuid,bigint,uuid)','execute')
+     or has_function_privilege('authenticated','public.admin_intelligence_activate_rule_set(uuid,uuid,bigint,uuid,text)','execute')
      or has_function_privilege('authenticated','public.admin_intelligence_get_rule_set(uuid,uuid)','execute') then
     raise exception 'INTELLIGENCE RLS: administration RPC leaked to authenticated';
   end if;
   if not has_function_privilege('service_role','public.admin_intelligence_create_rule_set(uuid,jsonb,jsonb,text,text,uuid,uuid)','execute')
-     or not has_function_privilege('service_role','public.admin_intelligence_activate_rule_set(uuid,uuid,bigint,uuid)','execute') then
+     or not has_function_privilege('service_role','public.admin_intelligence_activate_rule_set(uuid,uuid,bigint,uuid,text)','execute') then
     raise exception 'INTELLIGENCE RLS: service-role administration grant missing';
   end if;
   if has_function_privilege('service_role','public.fn_intelligence_rule_set_document(uuid)','execute')
@@ -130,5 +130,7 @@ begin
 end;
 $rls$;
 
-select 'INTELLIGENCE RLS: ALL ASSERTIONS PASSED' as result;
+do $marker$ begin
+  raise notice 'INTELLIGENCE RLS: ALL ASSERTIONS PASSED';
+end $marker$;
 rollback;

@@ -5,7 +5,8 @@
  * one T3 member plus enough governed cargo/vessel rows to exercise the real
  * admin consoles, member intelligence flags and authoritative Top Matches.
  * Every write goes through a service-role client whose URL is checked as an
- * exact loopback host; cleanup uses the same API and never shells into Postgres.
+ * exact disposable loopback host or the one approved staging project; cleanup
+ * uses the same API and never shells into Postgres.
  */
 import {
   expect as baseExpect,
@@ -21,6 +22,9 @@ import { randomBytes } from "node:crypto";
 const expect = baseExpect.configure({ timeout: 90_000 });
 const PASSWORD = "e2e-Rules-Passw0rd!";
 const MATCH_RPC_GLOB = "**/rest/v1/rpc/list_market_matches";
+const FORCE_INTELLIGENCE_FAILURE_COOKIE = "asb-e2e-force-intelligence-failure";
+const APPROVED_STAGING_SUPABASE_ORIGIN = "https://sidcsytgqalqacsgyguz.supabase.co";
+const PRODUCTION_SUPABASE_ORIGIN = "https://rezfejaxbmdzkslrrefr.supabase.co";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "serial", timeout: 720_000 });
@@ -56,6 +60,10 @@ interface MutableSeed {
   vesselNames: string[];
 }
 
+type BetaModeSnapshot =
+  | { exists: false }
+  | { exists: true; value: unknown; updatedAt: string };
+
 function exactLoopbackUrl(raw: string, label: string): string {
   let value: URL;
   try {
@@ -73,13 +81,28 @@ function exactLoopbackUrl(raw: string, label: string): string {
   return value.toString().replace(/\/$/, "");
 }
 
+function approvedSupabaseUrl(raw: string, label: string): string {
+  const normalized = new URL(raw).toString().replace(/\/$/, "");
+  const origin = new URL(normalized).origin;
+  if (origin === PRODUCTION_SUPABASE_ORIGIN) {
+    throw new Error(`${label} must never target the production Supabase project.`);
+  }
+  if (process.env.E2E_ALLOW_REMOTE === "1" && origin === APPROVED_STAGING_SUPABASE_ORIGIN) {
+    return normalized;
+  }
+  return exactLoopbackUrl(raw, label);
+}
+
 function localEnvironment() {
   const rawUrl = process.env.E2E_SUPABASE_URL;
   const anon = process.env.E2E_SUPABASE_ANON_KEY;
   const service = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
   const nonce = process.env.E2E_RULES_STACK_NONCE;
-  if (process.env.E2E_RULES_DISPOSABLE_STACK !== "1") {
-    throw new Error("Set E2E_RULES_DISPOSABLE_STACK=1 only for the disposable Stream R stack.");
+  if (
+    process.env.E2E_RULES_DISPOSABLE_STACK !== "1"
+    && process.env.E2E_ALLOW_REMOTE !== "1"
+  ) {
+    throw new Error("Select either the disposable Stream R stack or the approved staging target.");
   }
   if (!rawUrl || !anon || !service || !nonce) {
     throw new Error(
@@ -89,8 +112,8 @@ function localEnvironment() {
   if (nonce.length < 32) {
     throw new Error("E2E_RULES_STACK_NONCE must contain at least 32 characters.");
   }
-  const url = exactLoopbackUrl(rawUrl, "E2E_SUPABASE_URL");
-  if (new URL(url).port === "54321") {
+  const url = approvedSupabaseUrl(rawUrl, "E2E_SUPABASE_URL");
+  if (new URL(url).hostname !== "sidcsytgqalqacsgyguz.supabase.co" && new URL(url).port === "54321") {
     throw new Error("The Stream R suite refuses the shared local Supabase API on port 54321.");
   }
   return {
@@ -176,13 +199,27 @@ async function within<T>(promise: Promise<T>, label: string, timeoutMs = 30_000)
 async function cleanupRulesSeed(input: MutableSeed | RulesSeed): Promise<void> {
   const admin = serviceClient();
   const errors: string[] = [];
-  const attempt = async (label: string, action: () => PromiseLike<{ error: { message: string } | null }>) => {
-    try {
-      const { error } = await action();
-      if (error) errors.push(`${label}: ${error.message}`);
-    } catch (error) {
-      errors.push(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+  const attempt = async (
+    label: string,
+    action: () => PromiseLike<{ error: { message: string } | null }>,
+  ): Promise<boolean> => {
+    for (let tryNumber = 1; tryNumber <= 3; tryNumber += 1) {
+      try {
+        const { error } = await action();
+        if (!error) return true;
+        const transient = /statement timeout|request timeout|gateway timeout|temporarily unavailable/i.test(error.message);
+        if (transient && tryNumber < 3) continue;
+        errors.push(`${label}: ${error.message}`);
+        return false;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const transient = /statement timeout|request timeout|gateway timeout|temporarily unavailable/i.test(message);
+        if (transient && tryNumber < 3) continue;
+        errors.push(`${label}: ${message}`);
+        return false;
+      }
     }
+    return false;
   };
 
   // `matches` and `matching_candidates` are governed caches: service_role may
@@ -203,10 +240,23 @@ async function cleanupRulesSeed(input: MutableSeed | RulesSeed): Promise<void> {
   }
 
   const userIds = [input.admin?.userId, input.member?.userId].filter((id): id is string => Boolean(id));
+  const authDeletionReady = new Set<string>();
   if (userIds.length) {
     await attempt("delete profiles", () => admin.from("profiles").delete().in("account_id", userIds));
     await attempt("delete memberships", () => admin.from("organization_members").delete().in("user_id", userIds));
-    await attempt("delete app users", () => admin.from("users").delete().in("id", userIds));
+  }
+  if (input.admin?.userId) {
+    const anonymized = await attempt("anonymize admin account", () => admin.rpc("fn_anonymize_account", {
+      p_auth_user_id: input.admin!.userId,
+    }));
+    if (anonymized) authDeletionReady.add(input.admin.userId);
+  }
+  if (input.member?.userId) {
+    const deleted = await attempt("delete member app user", () => admin
+      .from("users")
+      .delete()
+      .eq("id", input.member!.userId));
+    if (deleted) authDeletionReady.add(input.member.userId);
   }
   if (input.orgIds.length) {
     await attempt("delete organization", () => admin.from("organizations").delete().in("id", input.orgIds));
@@ -219,12 +269,25 @@ async function cleanupRulesSeed(input: MutableSeed | RulesSeed): Promise<void> {
       .like("trade_name", `E2E Rules ${input.stamp} %`));
   }
   for (const userId of userIds) {
-    try {
-      const { error } = await admin.auth.admin.deleteUser(userId);
-      if (error) errors.push(`delete auth user ${userId}: ${error.message}`);
-    } catch (error) {
-      errors.push(`delete auth user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+    if (!authDeletionReady.has(userId)) continue;
+    let deleted = false;
+    let lastDeleteError = "unknown Auth error";
+    for (let tryNumber = 1; tryNumber <= 3 && !deleted; tryNumber += 1) {
+      try {
+        // The production erasure path soft-deletes Auth only after the stable
+        // public.users audit anchor has been anonymized successfully.
+        const { error } = await admin.auth.admin.deleteUser(userId, userId === input.admin?.userId);
+        if (!error) {
+          deleted = true;
+          break;
+        }
+        lastDeleteError = error.message || JSON.stringify(error);
+      } catch (error) {
+        lastDeleteError = error instanceof Error ? error.message : String(error);
+      }
+      if (tryNumber < 3) await new Promise((resolveDelay) => setTimeout(resolveDelay, tryNumber * 500));
     }
+    if (!deleted) errors.push(`delete auth user ${userId}: ${lastDeleteError}`);
   }
 
   const residueChecks = await Promise.all([
@@ -240,11 +303,89 @@ async function cleanupRulesSeed(input: MutableSeed | RulesSeed): Promise<void> {
     else if ((result.count ?? 0) !== 0) errors.push(`${residueLabels[index]} residue: ${result.count}`);
   });
 
+  if (input.admin?.userId && authDeletionReady.has(input.admin.userId)) {
+    const { data: tombstone, error: tombstoneError } = await admin
+      .from("users")
+      .select("full_name,email,supabase_user_id,is_active,erased_at")
+      .eq("id", input.admin.userId)
+      .maybeSingle();
+    if (tombstoneError) errors.push(`check admin tombstone: ${tombstoneError.message}`);
+    else if (
+      !tombstone
+      || tombstone.full_name !== "Deleted account"
+      || tombstone.email !== null
+      || tombstone.supabase_user_id !== null
+      || tombstone.is_active !== false
+      || !tombstone.erased_at
+    ) {
+      errors.push("admin tombstone is missing or retains identity/access data");
+    }
+  }
+
   const { data: authUsers, error: authListError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1_000 });
   if (authListError) errors.push(`check auth residue: ${authListError.message}`);
   else if (authUsers.users.some((user) => user.email?.includes(input.stamp))) errors.push("auth user residue remains");
 
   if (errors.length) throw new Error(`Stream R cleanup failed:\n${errors.join("\n")}`);
+}
+
+async function captureBetaMode(): Promise<BetaModeSnapshot> {
+  const { data, error } = await serviceClient()
+    .from("app_settings")
+    .select("value,updated_at")
+    .eq("key", "beta_mode")
+    .maybeSingle();
+  if (error) throw new Error(`capture beta_mode: ${error.message}`);
+  if (!data) return { exists: false };
+  if (typeof data.updated_at !== "string" || !Number.isFinite(Date.parse(data.updated_at))) {
+    throw new Error("capture beta_mode: stored updated_at is invalid");
+  }
+  return { exists: true, value: data.value, updatedAt: data.updated_at };
+}
+
+async function disableBetaModeForSuite(): Promise<void> {
+  await assertMutation(serviceClient().from("app_settings").upsert({
+    key: "beta_mode",
+    value: false,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "key" }), "disable beta_mode for guarded browser proof");
+}
+
+let betaModeSnapshot: BetaModeSnapshot | undefined;
+
+async function restoreBetaModeOnce(): Promise<void> {
+  const snapshot = betaModeSnapshot;
+  if (!snapshot) return;
+  const admin = serviceClient();
+  if (snapshot.exists) {
+    await assertMutation(admin.from("app_settings").upsert({
+      key: "beta_mode",
+      value: snapshot.value,
+      updated_at: snapshot.updatedAt,
+    }, { onConflict: "key" }), "restore beta_mode row");
+  } else {
+    await assertMutation(
+      admin.from("app_settings").delete().eq("key", "beta_mode"),
+      "remove test-created beta_mode row",
+    );
+  }
+
+  const { data, error } = await admin
+    .from("app_settings")
+    .select("value,updated_at")
+    .eq("key", "beta_mode")
+    .maybeSingle();
+  if (error) throw new Error(`verify beta_mode restoration: ${error.message}`);
+  if (!snapshot.exists) {
+    if (data) throw new Error("verify beta_mode restoration: test-created row remains");
+  } else if (
+    !data
+    || JSON.stringify(data.value) !== JSON.stringify(snapshot.value)
+    || Date.parse(String(data.updated_at)) !== Date.parse(snapshot.updatedAt)
+  ) {
+    throw new Error("verify beta_mode restoration: original row was not restored exactly");
+  }
+  betaModeSnapshot = undefined;
 }
 
 async function seedRulesData(): Promise<RulesSeed> {
@@ -525,10 +666,25 @@ async function signInAs(
   await page.goto("/auth/login");
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /sign in|log in/i }).first().click();
-  await expect(page).toHaveURL(/\/(?:admin\/)?dashboard/, { timeout: 90_000 });
-  await dismissOverlays(page);
-  return { context, page };
+  const signIn = page.getByRole("button", { name: /sign in|log in/i }).first();
+  let lastAuthStatus = "no token response";
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const tokenResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST"
+      && response.url().startsWith(`${localEnvironment().url}/auth/v1/token`),
+    { timeout: 60_000 });
+    await signIn.click();
+    const response = await tokenResponse;
+    lastAuthStatus = `${response.status()} ${response.statusText()}`;
+    if (response.ok()) {
+      await expect(page).toHaveURL(/\/(?:admin\/)?dashboard/, { timeout: 90_000 });
+      await dismissOverlays(page);
+      return { context, page };
+    }
+    if (attempt < 3) await expect(signIn).toBeEnabled({ timeout: 30_000 });
+  }
+  await context.close();
+  throw new Error(`Disposable Supabase password sign-in failed after 3 attempts (${lastAuthStatus}).`);
 }
 
 function topMatchesPanel(page: Page) {
@@ -658,16 +814,56 @@ async function expectedMemberBoardSourceKeys(input: RulesSeed): Promise<{
 }
 
 let seed: RulesSeed;
+let seedNeedsCleanup = false;
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}
+
+async function cleanupSuiteState(): Promise<void> {
+  const errors: Error[] = [];
+  if (seedNeedsCleanup) {
+    try {
+      await cleanupRulesSeed(seed);
+      seedNeedsCleanup = false;
+    } catch (error) {
+      errors.push(asError(error));
+    }
+  }
+  try {
+    await restoreBetaModeOnce();
+  } catch (error) {
+    errors.push(asError(error));
+  }
+  if (errors.length) throw new AggregateError(errors, "Stream R suite cleanup failed");
+}
 
 test.beforeAll(async () => {
-  // Verify the out-of-band database nonce before the first write.
-  localEnvironment();
-  await rulesEnvironmentSnapshot();
-  seed = await seedRulesData();
+  try {
+    // Verify the out-of-band database nonce before the first write. Staging may
+    // be in Beta mode, which intentionally blocks member pages. Preserve that
+    // shared setting byte-for-byte and open it only for this guarded proof.
+    localEnvironment();
+    await rulesEnvironmentSnapshot();
+    betaModeSnapshot = await captureBetaMode();
+    await disableBetaModeForSuite();
+    seed = await seedRulesData();
+    seedNeedsCleanup = true;
+  } catch (setupError) {
+    try {
+      await cleanupSuiteState();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [asError(setupError), asError(cleanupError)],
+        "Stream R suite setup and rollback failed",
+      );
+    }
+    throw setupError;
+  }
 });
 
 test.afterAll(async () => {
-  if (seed) await cleanupRulesSeed(seed);
+  await cleanupSuiteState();
 });
 
 test("invalid admin matching and intelligence inputs cannot mutate governed state", async ({ browser, baseURL }) => {
@@ -698,6 +894,87 @@ test("invalid admin matching and intelligence inputs cannot mutate governed stat
   await context.close();
 });
 
+test("typed release confirmations gate and execute matching and intelligence activation and rollback", async ({ browser, baseURL }) => {
+  const { context, page } = await signInAs(browser, baseURL!, seed.admin.email);
+
+  await page.goto("/admin/matching-rules");
+  const rateAlignment = page.locator("#matching-rateAlignmentUsd");
+  const currentRate = Number(await rateAlignment.inputValue());
+  const changedRate = currentRate < 1_000 ? currentRate + 0.01 : currentRate - 0.01;
+  await rateAlignment.fill(changedRate.toFixed(2));
+  await page.locator("#matching-change-note").fill(`E2E typed release proof ${seed.stamp}`);
+  await page.getByRole("button", { name: "Preview impact" }).click();
+  await expect(page.getByText("Publication preview", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create immutable version" }).click();
+
+  const activateMatching = page.getByRole("button", { name: /^Activate v\d+$/ });
+  await expect(activateMatching).toBeVisible();
+  const matchingVersion = (await activateMatching.textContent())?.match(/v(\d+)/)?.[1];
+  expect(matchingVersion).toBeTruthy();
+  const matchingActivationInput = page.locator("#matching-activation-confirmation");
+  await matchingActivationInput.fill(`ACTIVATE v${Number(matchingVersion) + 1}`);
+  await expect(activateMatching).toBeDisabled();
+  await matchingActivationInput.fill(`ACTIVATE v${matchingVersion}`);
+  await expect(activateMatching).toBeEnabled();
+  await activateMatching.click();
+  await expect(page.getByRole("status")).toContainText(`Version v${matchingVersion} is live`);
+
+  await page.getByRole("button", { name: "Version history" }).click();
+  const openMatchingRollback = page.getByRole("button", { name: "Roll back", exact: true });
+  await expect(openMatchingRollback).toHaveCount(1);
+  await openMatchingRollback.click();
+  const matchingRollbackGroup = page.getByRole("group", { name: /^Roll back to v\d+$/ });
+  const matchingRollbackButton = matchingRollbackGroup.getByRole("button", { name: /^Roll back to v\d+$/ });
+  const matchingRollbackVersion = (await matchingRollbackButton.textContent())?.match(/v(\d+)/)?.[1];
+  expect(matchingRollbackVersion).toBeTruthy();
+  const matchingRollbackInput = matchingRollbackGroup.getByRole("textbox");
+  await matchingRollbackInput.fill(`ROLLBACK v${Number(matchingRollbackVersion) + 1}`);
+  await expect(matchingRollbackButton).toBeDisabled();
+  await matchingRollbackInput.fill(`ROLLBACK v${matchingRollbackVersion}`);
+  await expect(matchingRollbackButton).toBeEnabled();
+  await matchingRollbackButton.click();
+  await expect(page.getByRole("status")).toContainText(`Matching rules rolled back to v${matchingRollbackVersion}`);
+
+  await page.goto("/admin/intelligence-rules");
+  await page.getByRole("button", { name: "Create from this version" }).click();
+  const intelligenceLabel = `E2E typed release ${seed.stamp}`;
+  await page.getByLabel("Version label").fill(intelligenceLabel);
+  await page.getByLabel("Change note").fill("E2E typed activation and rollback proof.");
+  await page.getByRole("button", { name: "Create version" }).click();
+  await expect(page.getByRole("status")).toContainText("remains inactive pending separate review and activation");
+
+  const intelligenceRow = page.getByRole("row").filter({ hasText: intelligenceLabel });
+  await intelligenceRow.getByRole("button", { name: "Activate", exact: true }).click();
+  const intelligenceReleaseGroup = page.getByRole("group", { name: /^Activate v\d+/ });
+  const intelligenceActivate = intelligenceReleaseGroup.getByRole("button", { name: /^Activate v\d+$/ });
+  const intelligenceVersion = (await intelligenceActivate.textContent())?.match(/v(\d+)/)?.[1];
+  expect(intelligenceVersion).toBeTruthy();
+  const intelligenceConfirmation = intelligenceReleaseGroup.getByRole("textbox");
+  await intelligenceConfirmation.fill(`ACTIVATE v${Number(intelligenceVersion) + 1}`);
+  await expect(intelligenceActivate).toBeDisabled();
+  await intelligenceConfirmation.fill(`ACTIVATE v${intelligenceVersion}`);
+  await expect(intelligenceActivate).toBeEnabled();
+  await intelligenceActivate.click();
+  await expect(page.getByRole("status")).toContainText(`Version ${intelligenceVersion} was activated`);
+
+  const openIntelligenceRollback = page.getByRole("button", { name: "Roll back", exact: true });
+  await expect(openIntelligenceRollback).toHaveCount(1);
+  await openIntelligenceRollback.click();
+  const intelligenceRollbackGroup = page.getByRole("group", { name: /^Roll back v\d+/ });
+  const intelligenceRollback = intelligenceRollbackGroup.getByRole("button", { name: /^Roll back v\d+$/ });
+  const intelligenceRollbackVersion = (await intelligenceRollback.textContent())?.match(/v(\d+)/)?.[1];
+  expect(intelligenceRollbackVersion).toBeTruthy();
+  const intelligenceRollbackConfirmation = intelligenceRollbackGroup.getByRole("textbox");
+  await intelligenceRollbackConfirmation.fill(`ROLLBACK v${Number(intelligenceRollbackVersion) + 1}`);
+  await expect(intelligenceRollback).toBeDisabled();
+  await intelligenceRollbackConfirmation.fill(`ROLLBACK v${intelligenceRollbackVersion}`);
+  await expect(intelligenceRollback).toBeEnabled();
+  await intelligenceRollback.click();
+  await expect(page.getByRole("status")).toContainText(`Version ${intelligenceRollbackVersion} was rolled back`);
+
+  await context.close();
+});
+
 test("a live match-RPC failure preserves listings and renders the exact neutral unavailable copy", async ({ browser, baseURL }) => {
   let failedCalls = 0;
   const { context, page } = await signInAs(
@@ -724,6 +1001,38 @@ test("a live match-RPC failure preserves listings and renders the exact neutral 
   ).toBeVisible();
   expect(failedCalls).toBeGreaterThan(0);
   expect(failedCalls).toBeLessThanOrEqual(6);
+
+  await context.close();
+});
+
+test("a live intelligence-RPC failure preserves every cargo and vessel row with the exact neutral notice", async ({ browser, baseURL }) => {
+  const { nonce } = localEnvironment();
+  const { context, page } = await signInAs(browser, baseURL!, seed.member.email);
+  await context.addCookies([{
+    name: FORCE_INTELLIGENCE_FAILURE_COOKIE,
+    value: nonce,
+    url: baseURL!,
+    httpOnly: true,
+    sameSite: "Strict",
+  }]);
+
+  await page.goto("/dashboard/cargo");
+  await dismissOverlays(page);
+  for (const cargoName of seed.cargoNames) {
+    await expect(page.locator(".cargo-card").filter({ hasText: cargoName })).toHaveCount(1);
+  }
+  await expect(
+    page.getByText("Intelligence checks unavailable.", { exact: true }),
+  ).toHaveCount(seed.cargoNames.length);
+
+  await page.goto("/dashboard/vessels/browse");
+  await dismissOverlays(page);
+  for (const vesselName of seed.vesselNames) {
+    await expect(page.locator(".vessel-card").filter({ hasText: vesselName })).toHaveCount(1);
+  }
+  await expect(
+    page.getByText("Intelligence checks unavailable.", { exact: true }),
+  ).toHaveCount(seed.vesselNames.length);
 
   await context.close();
 });
@@ -851,15 +1160,12 @@ test("390px market cards do not overflow and intelligence tooltips work from the
   expect(tooltipId).toBeTruthy();
   await expect(trigger).toHaveAttribute("aria-describedby", tooltipId!);
 
-  const tooltipBounds = await tooltip.evaluate(async (element) => {
+  const tooltipBounds = await tooltip.evaluate((element) => {
     const rect = element.getBoundingClientRect();
-    const intersectionRatio = await new Promise<number>((resolve) => {
-      const observer = new IntersectionObserver((entries) => {
-        resolve(entries[0]?.intersectionRatio ?? 0);
-        observer.disconnect();
-      }, { threshold: [0, 1] });
-      observer.observe(element);
-    });
+    const intersectionWidth = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(rect.left, 0));
+    const intersectionHeight = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
+    const area = rect.width * rect.height;
+    const intersectionRatio = area > 0 ? (intersectionWidth * intersectionHeight) / area : 0;
     const style = getComputedStyle(element);
     return {
       left: rect.left,

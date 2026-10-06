@@ -58,17 +58,19 @@ with active as (
         else (a.params->>'rateAlignmentUsd')::numeric - 0.01 end
     )) as params
   ) changed
-  returning id
+  returning id, version_no
 )
 select jsonb_build_object(
   'active', (select active_version_id from public.matching_rule_state where singleton),
-  'target', (select id from inserted)
+  'target', (select id from inserted),
+  'targetVersionNo', (select version_no from inserted)
 )::text;
 commit;
 `);
 const setupData = JSON.parse(setup.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "null") as {
-  active: string; target: string;
+  active: string; target: string; targetVersionNo: number;
 };
+assert.equal(Number.isSafeInteger(setupData.targetVersionNo), true, "setup omitted a numeric target version");
 
 async function holdConflictingLock(): Promise<ReturnType<typeof spawn>> {
   const child = spawn("docker", psqlArgs, { stdio: ["pipe", "pipe", "pipe"] });
@@ -98,7 +100,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const blocked = psql(`set role service_role; select public.matching_activate_rule_version(
       ${quote(ids.actor)}::uuid, ${quote(ids.failRequest)}::uuid, ${quote(setupData.target)}::uuid,
-      ${quote(setupData.active)}::uuid);`, true);
+      ${quote(setupData.active)}::uuid, ${quote(`ACTIVATE v${setupData.targetVersionNo}`)});`, true);
     const elapsedMs = Date.now() - started;
     assert.notEqual(blocked.status, 0, "activation unexpectedly waited through the conflicting writer");
     assert.match(blocked.stderr, /MATCHING_BUSY:/);
@@ -122,7 +124,7 @@ async function main(): Promise<void> {
     const success = psql(`begin; set local role service_role;
       select (public.matching_activate_rule_version(
         ${quote(ids.actor)}::uuid, ${quote(ids.successRequest)}::uuid, ${quote(setupData.target)}::uuid,
-        ${quote(setupData.active)}::uuid
+        ${quote(setupData.active)}::uuid, ${quote(`ACTIVATE v${setupData.targetVersionNo}`)}
       )->>'versionId')::uuid;
       rollback;`);
     assert.match(success.stdout, new RegExp(setupData.target, "i"));

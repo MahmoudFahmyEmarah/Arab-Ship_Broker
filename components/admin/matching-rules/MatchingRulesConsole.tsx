@@ -7,6 +7,7 @@ import {
   createMatchingRuleVersionAction,
   getMatchingRulesBootstrap,
   previewMatchingRulesAction,
+  rollbackMatchingRuleVersionAction,
 } from "@/app/(admin)/admin/matching-rules/actions";
 import {
   MATCHING_RULES_V1_DEFAULTS,
@@ -24,7 +25,7 @@ import { AccessibleIdentifier } from "@/components/admin/AccessibleIdentifier";
 import styles from "./MatchingRulesConsole.module.css";
 
 type Tab = "parameters" | "versions" | "audit";
-type Busy = "preview" | "create" | "activate" | "reload" | null;
+type Busy = "preview" | "create" | "activate" | "rollback" | "reload" | null;
 type Notice = { kind: "success" | "error" | "info"; text: string } | null;
 type RootNumericKey =
   | "dwtTolerancePct"
@@ -315,10 +316,14 @@ export function MatchingRulesConsole({
   const [preview, setPreview] = useState<MatchingRulesPreview | null>(null);
   const [previewSignature, setPreviewSignature] = useState<string | null>(null);
   const [target, setTarget] = useState<ActivationTarget | null>(null);
+  const [activationConfirmation, setActivationConfirmation] = useState("");
+  const [rollbackTarget, setRollbackTarget] = useState<ActivationTarget | null>(null);
+  const [rollbackConfirmation, setRollbackConfirmation] = useState("");
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const createGesture = useRef<{ signature: string; requestId: string } | null>(null);
   const activateGesture = useRef<{ signature: string; requestId: string } | null>(null);
+  const rollbackGesture = useRef<{ signature: string; requestId: string } | null>(null);
 
   const active = dashboard.activeVersion;
   const signature = rulesSignature(rules);
@@ -336,6 +341,8 @@ export function MatchingRulesConsole({
   const targetVersion = target
     ? dashboard.versionHistory.find((version) => version.id === target.versionId) ?? null
     : null;
+  const activationExpected = target ? `ACTIVATE v${target.versionNo}` : "";
+  const rollbackExpected = rollbackTarget ? `ROLLBACK v${rollbackTarget.versionNo}` : "";
   const latestActivation = dashboard.recentEvents.find(
     (event) => event.eventType === "version_activated" && event.versionId === dashboard.state.activeVersionId,
   );
@@ -353,6 +360,7 @@ export function MatchingRulesConsole({
     setPreview(null);
     setPreviewSignature(null);
     setTarget(null);
+    setActivationConfirmation("");
   }
 
   function updateRoot(key: RootNumericKey, value: number) {
@@ -387,6 +395,9 @@ export function MatchingRulesConsole({
       setPreview(null);
       setPreviewSignature(null);
       setTarget(null);
+      setActivationConfirmation("");
+      setRollbackTarget(null);
+      setRollbackConfirmation("");
       setNotice({ kind: "success", text: "Matching-rule state reloaded." });
     } catch (error) {
       setNotice({ kind: "error", text: error instanceof Error ? error.message : "Could not reload matching rules." });
@@ -451,6 +462,7 @@ export function MatchingRulesConsole({
       });
       if (!response.success) throw new Error(response.error);
       setTarget({ versionId: response.data.versionId, versionNo: response.data.versionNo });
+      setActivationConfirmation("");
       setNotice({
         kind: "success",
         text: `Version v${response.data.versionNo} was created and remains inactive. Activate it explicitly after the final review.`,
@@ -483,13 +495,14 @@ export function MatchingRulesConsole({
       });
       return;
     }
-    if (!window.confirm(
-      `Activate matching rules v${target.versionNo}? This will atomically rebuild the live candidate cache for members.`,
-    )) return;
+    if (activationConfirmation !== activationExpected) {
+      setNotice({ kind: "error", text: `Type ${activationExpected} exactly to confirm activation.` });
+      return;
+    }
 
     setBusy("activate");
     setNotice(null);
-    const gestureSignature = `${target.versionId}\u0000${dashboard.state.activeVersionId}`;
+    const gestureSignature = `${target.versionId}\u0000${dashboard.state.activeVersionId}\u0000${activationExpected}`;
     if (activateGesture.current?.signature !== gestureSignature) {
       activateGesture.current = { signature: gestureSignature, requestId: crypto.randomUUID() };
     }
@@ -497,7 +510,9 @@ export function MatchingRulesConsole({
     try {
       const response = await activateMatchingRuleVersionAction({
         versionId: target.versionId,
+        versionNo: target.versionNo,
         expectedActiveVersionId: dashboard.state.activeVersionId,
+        confirmation: activationConfirmation,
         requestId,
       });
       if (!response.success) throw new Error(response.error);
@@ -509,6 +524,7 @@ export function MatchingRulesConsole({
         const fresh = await reloadDashboard();
         activateGesture.current = null;
         setTarget(null);
+        setActivationConfirmation("");
         setPreview(null);
         setPreviewSignature(null);
         setChangeNote("");
@@ -529,6 +545,62 @@ export function MatchingRulesConsole({
     }
   }
 
+  async function handleRollback() {
+    if (!rollbackTarget || dashboard.state.previousVersionId !== rollbackTarget.versionId) {
+      setNotice({ kind: "error", text: "The previous matching-rule version changed. Reload before rolling back." });
+      return;
+    }
+    if (rollbackConfirmation !== rollbackExpected) {
+      setNotice({ kind: "error", text: `Type ${rollbackExpected} exactly to confirm rollback.` });
+      return;
+    }
+
+    setBusy("rollback");
+    setNotice(null);
+    const gestureSignature = `${rollbackTarget.versionId}\u0000${dashboard.state.activeVersionId}\u0000${rollbackExpected}`;
+    if (rollbackGesture.current?.signature !== gestureSignature) {
+      rollbackGesture.current = { signature: gestureSignature, requestId: crypto.randomUUID() };
+    }
+    const requestId = rollbackGesture.current.requestId;
+    try {
+      const response = await rollbackMatchingRuleVersionAction({
+        targetVersionNo: rollbackTarget.versionNo,
+        expectedActiveVersionId: dashboard.state.activeVersionId,
+        confirmation: rollbackConfirmation,
+        requestId,
+      });
+      if (!response.success) throw new Error(response.error);
+      setNotice({
+        kind: "success",
+        text: `Matching rules rolled back to v${response.data.versionNo}; ${formatCount(response.data.candidateCount)} candidates were rebuilt from current source data.`,
+      });
+      try {
+        const fresh = await reloadDashboard();
+        rollbackGesture.current = null;
+        setRollbackTarget(null);
+        setRollbackConfirmation("");
+        setPreview(null);
+        setPreviewSignature(null);
+        setTarget(null);
+        setActivationConfirmation("");
+        setChangeNote("");
+        setRules(cloneRules(fresh.activeVersion.params));
+      } catch (reloadError) {
+        setNotice({
+          kind: "info",
+          text: `Rollback to v${response.data.versionNo} succeeded, but the page state could not be reconciled. Retry Rollback to replay the same request, or reload before making another change. ${reloadError instanceof Error ? reloadError.message : ""}`.trim(),
+        });
+      }
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: `${error instanceof Error ? error.message : "Could not roll back the version."} Reload if the active version changed or retry if the matcher was busy.`,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function loadVersion(versionId: string) {
     const version = dashboard.versionHistory.find((entry) => entry.id === versionId);
     if (!version) return;
@@ -539,6 +611,7 @@ export function MatchingRulesConsole({
     setTarget(version.versionNo > active.versionNo
       ? { versionId: version.id, versionNo: version.versionNo }
       : null);
+    setActivationConfirmation("");
     setTab("parameters");
     setNotice({
       kind: "info",
@@ -764,6 +837,27 @@ export function MatchingRulesConsole({
                   />
                   <span className={styles.characterCount}>{Array.from(changeNote).length}/1,000</span>
                 </label>
+                {target && (
+                  <label className={`adm-field ${styles.confirmationField}`} htmlFor="matching-activation-confirmation">
+                    <span className="adm-field__label">Typed activation confirmation</span>
+                    <span className={styles.confirmationHelp}>
+                      Type <code>{activationExpected}</code> exactly. Activation rebuilds the live candidate cache synchronously.
+                    </span>
+                    <input
+                      id="matching-activation-confirmation"
+                      className="adm-input"
+                      value={activationConfirmation}
+                      onChange={(event) => setActivationConfirmation(event.currentTarget.value)}
+                      disabled={busy !== null}
+                      autoComplete="off"
+                      spellCheck={false}
+                      aria-describedby="matching-activation-confirmation-help"
+                    />
+                    <span className={styles.srOnly} id="matching-activation-confirmation-help">
+                      Activation is available only when the phrase exactly matches {activationExpected}.
+                    </span>
+                  </label>
+                )}
                 <div className={styles.releaseRow}>
                   <div>
                     <strong>{modifiedCount} parameter{modifiedCount === 1 ? "" : "s"} modified</strong>
@@ -787,7 +881,7 @@ export function MatchingRulesConsole({
                       type="button"
                       className="adm-btn approve"
                       onClick={() => void handleActivate()}
-                      disabled={busy !== null || !previewIsCurrent || !hasEffectivePublicationChange}
+                      disabled={busy !== null || !previewIsCurrent || !hasEffectivePublicationChange || activationConfirmation !== activationExpected}
                     >
                       {busy === "activate" ? "Activating…" : `Activate v${target.versionNo}`}
                     </button>
@@ -804,7 +898,7 @@ export function MatchingRulesConsole({
                 </div>
                 {target && (
                   <p className={styles.targetNote}>
-                    Target v{target.versionNo} ({targetVersion?.note ?? "newly created"}) remains inactive until you confirm activation.
+                    Target v{target.versionNo} ({targetVersion?.note ?? "newly created"}) remains inactive until the exact typed confirmation is accepted.
                   </p>
                 )}
               </section>
@@ -819,7 +913,7 @@ export function MatchingRulesConsole({
             <div className="adm-card__head">
               <div>
                 <span className="adm-card__title" id="matching-version-title">Version history</span>
-                <span className="adm-card__sub">Versions are immutable. Activation is forward-only; reuse older values by creating a new version.</span>
+                <span className="adm-card__sub">Versions are immutable. Only the immediately previous live version can be rolled back, with a distinct audited command.</span>
               </div>
               <button type="button" className="adm-btn small" onClick={() => void handleReload()} disabled={busy !== null}>
                 {busy === "reload" ? "Reloading…" : "Reload"}
@@ -852,14 +946,30 @@ export function MatchingRulesConsole({
                         <td><AccessibleIdentifier label={`Version ${version.versionNo} parameter SHA-256`} value={version.paramsSha256} /></td>
                         <td>{formatDate(version.createdAt)}</td>
                         <td>{canEdit ? (
-                          <button
-                            type="button"
-                            className="adm-btn small"
-                            onClick={() => loadVersion(version.id)}
-                            disabled={busy !== null}
-                          >
-                            {version.versionNo > active.versionNo ? "Review for activation" : "Load parameters"}
-                          </button>
+                          <div className={styles.rowActions}>
+                            <button
+                              type="button"
+                              className="adm-btn small"
+                              onClick={() => loadVersion(version.id)}
+                              disabled={busy !== null}
+                            >
+                              {version.versionNo > active.versionNo ? "Review for activation" : "Load parameters"}
+                            </button>
+                            {isPrevious && (
+                              <button
+                                type="button"
+                                className="adm-btn warn small"
+                                onClick={() => {
+                                  setRollbackTarget({ versionId: version.id, versionNo: version.versionNo });
+                                  setRollbackConfirmation("");
+                                  setNotice(null);
+                                }}
+                                disabled={busy !== null}
+                              >
+                                Roll back
+                              </button>
+                            )}
+                          </div>
                         ) : "—"}</td>
                       </tr>
                     );
@@ -867,6 +977,44 @@ export function MatchingRulesConsole({
                 </tbody>
               </table>
             </div>
+            {rollbackTarget && (
+              <div className={styles.confirmationPanel} role="group" aria-labelledby="matching-rollback-title">
+                <div>
+                  <strong id="matching-rollback-title">Roll back to v{rollbackTarget.versionNo}</strong>
+                  <span>
+                    This audited command rebuilds candidates from current source rows. Type <code>{rollbackExpected}</code> exactly.
+                  </span>
+                </div>
+                <input
+                  className="adm-input"
+                  aria-label={`Type ${rollbackExpected} to confirm rollback`}
+                  value={rollbackConfirmation}
+                  onChange={(event) => setRollbackConfirmation(event.currentTarget.value)}
+                  disabled={busy !== null}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  className="adm-btn warn"
+                  onClick={() => void handleRollback()}
+                  disabled={busy !== null || rollbackConfirmation !== rollbackExpected}
+                >
+                  {busy === "rollback" ? "Rolling back…" : `Roll back to v${rollbackTarget.versionNo}`}
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn"
+                  onClick={() => {
+                    setRollbackTarget(null);
+                    setRollbackConfirmation("");
+                  }}
+                  disabled={busy !== null}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </section>
         )}
 

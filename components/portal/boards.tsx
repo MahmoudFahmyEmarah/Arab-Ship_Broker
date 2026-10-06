@@ -56,12 +56,6 @@ type LiveTopMatchesState =
   | { status: "idle"; queryKey: null; cargo: DashMatch[]; vessel: DashMatch[] }
   | { status: "loading" | "unavailable" | "ready"; queryKey: string; cargo: DashMatch[]; vessel: DashMatch[] };
 
-function fmtTce(tce: number): string {
-  if (!tce) return "—";
-  const k = tce / 1000;
-  return Math.abs(k) >= 1 ? `$${k.toFixed(1)}k/d` : `$${Math.round(tce)}/d`;
-}
-
 function MatchModeSwitch({ mode, setMode }: { mode: "cargo" | "vessel"; setMode: (m: "cargo" | "vessel") => void }) {
   return (
     <div className="mm-switch" role="group" aria-label="Match mode">
@@ -103,7 +97,13 @@ function DashMatchCard({ m, mode, focused, onClick }: {
       <div className="dash-match__econ">
         <span>Laycan {m.laycan != null ? `${m.laycan}d` : "—"}</span>
         <span className="dm-sep">·</span>
-        <span>TCE <span className="dm-tce">{fmtTce(m.tce)}</span></span>
+        <Link
+          className="dm-voyage-link"
+          href={`/dashboard/voyage-estimator?cargo=${encodeURIComponent(m.cargoId)}&vessel=${encodeURIComponent(m.vesselId)}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          Open Voyage Estimator <span aria-hidden="true">↗</span>
+        </Link>
       </div>
     </div>
   );

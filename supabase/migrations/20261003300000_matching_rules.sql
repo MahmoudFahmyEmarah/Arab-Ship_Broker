@@ -261,7 +261,7 @@ create table if not exists public.matching_rule_state (
 
 create table if not exists public.matching_rule_events (
   id bigint generated always as identity primary key,
-  event_type text not null check (event_type in ('version_created', 'version_activated')),
+  event_type text not null check (event_type in ('version_created', 'version_activated', 'version_rolled_back')),
   version_id uuid not null references public.matching_rule_versions(id),
   prior_version_id uuid references public.matching_rule_versions(id),
   request_id uuid unique,
@@ -275,13 +275,13 @@ create table if not exists public.matching_rule_events (
   occurred_at timestamptz not null default now(),
   check (
     (event_type = 'version_created' and evaluation_as_of_year is null)
-    or (event_type = 'version_activated' and evaluation_as_of_year is not null)
+    or (event_type in ('version_activated', 'version_rolled_back') and evaluation_as_of_year is not null)
   )
 );
 
 create table if not exists public.matching_rule_requests (
   request_id uuid primary key,
-  operation text not null check (operation in ('create_version', 'activate_version')),
+  operation text not null check (operation in ('create_version', 'activate_version', 'rollback_version')),
   actor_id uuid references public.users(id) on delete set null,
   request_sha256 text not null check (request_sha256 ~ '^[a-f0-9]{64}$'),
   result jsonb not null,
@@ -808,7 +808,7 @@ declare
   v_count integer;
   v_digest text;
   v_source_digest text;
-  v_as_of_year integer := extract(year from current_date)::integer;
+  v_as_of_year integer := extract(year from (current_timestamp at time zone 'UTC'))::integer;
 begin
   if not exists (select 1 from public.matching_rule_state where singleton) then
     perform public.fn_matching_lock_sources_nowait();
@@ -911,7 +911,7 @@ begin
 end;
 $matches_fk$;
 
-delete from public.matches;
+delete from public.matches where true;
 insert into public.matches(
   cargo_id, vessel_avail_id, score_label, computed_at,
   matching_rule_version_id, match_score, is_rate_aligned, dwt_delta, matching_as_of_year
@@ -952,16 +952,38 @@ $matches_governance_constraints$;
 revoke all on table public.matches from public, anon, authenticated, service_role;
 grant select on table public.matches to service_role;
 
-do $mirror_seed$
+create or replace function public.fn_matching_write_settings_mirror(p_params jsonb)
+returns void
+language plpgsql
+security definer
+set search_path to ''
+as $function$
 begin
   perform set_config('asb.matching_mirror_write', 'on', true);
   insert into public.app_settings(key, value, updated_at)
-  select 'matching_rules', v.params, now()
+  values ('matching_rules', p_params, now())
+  on conflict (key) do update
+    set value = excluded.value, updated_at = excluded.updated_at;
+  perform set_config('asb.matching_mirror_write', 'off', true);
+exception
+  when others then
+    perform set_config('asb.matching_mirror_write', 'off', true);
+    raise;
+end;
+$function$;
+
+revoke all on function public.fn_matching_write_settings_mirror(jsonb)
+  from public, anon, authenticated, service_role;
+
+do $mirror_seed$
+declare
+  v_params jsonb;
+begin
+  select v.params into v_params
   from public.matching_rule_state s
   join public.matching_rule_versions v on v.id = s.active_version_id
-  where s.singleton
-  on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at;
-  perform set_config('asb.matching_mirror_write', 'off', true);
+  where s.singleton;
+  perform public.fn_matching_write_settings_mirror(v_params);
 end;
 $mirror_seed$;
 
@@ -976,9 +998,16 @@ declare
     when 'DELETE' then old.key = 'matching_rules'
     else old.key = 'matching_rules' or new.key = 'matching_rules'
   end;
+  v_writer_owner name;
 begin
+  select pg_get_userbyid(p.proowner)::name into v_writer_owner
+  from pg_proc p
+  where p.oid = 'public.fn_matching_write_settings_mirror(jsonb)'::regprocedure;
   if v_touches_mirror
-     and coalesce(current_setting('asb.matching_mirror_write', true), '') <> 'on' then
+     and (
+       coalesce(current_setting('asb.matching_mirror_write', true), '') <> 'on'
+       or current_user <> v_writer_owner
+     ) then
     raise exception 'MATCHING_MIRROR: matching_rules is generated from the active rule version'
       using errcode = '55000';
   end if;
@@ -999,7 +1028,19 @@ returns trigger
 language plpgsql
 set search_path to ''
 as $function$
+declare
+  v_rebuilder_owner name;
 begin
+  if tg_table_name = 'matching_candidate_snapshots' then
+    select pg_get_userbyid(p.proowner)::name into v_rebuilder_owner
+    from pg_proc p
+    where p.oid = to_regprocedure('public.fn_matching_replace_candidate_snapshot(uuid,integer,text,text,integer,uuid)');
+    if coalesce(current_setting('asb.matching_snapshot_rebuild', true), '') = 'on'
+       and current_user = v_rebuilder_owner then
+      if tg_op = 'DELETE' then return old; end if;
+      return new;
+    end if;
+  end if;
   if tg_op = 'DELETE' then
     raise exception 'MATCHING_IMMUTABLE: governed history cannot be deleted' using errcode = '55000';
   end if;
@@ -1037,6 +1078,51 @@ create trigger trg_matching_snapshots_immutable
 before update or delete on public.matching_candidate_snapshots
 for each row execute function public.fn_matching_immutable_guard();
 
+-- A version that becomes the rollback target already has an activation-time
+-- snapshot. Rollback must rebuild it from today's locked source universe, not
+-- reuse stale candidate rows. Only this non-executable definer helper may
+-- replace that snapshot; the append-only event preserves both build records.
+create or replace function public.fn_matching_replace_candidate_snapshot(
+  p_version_id uuid,
+  p_candidate_count integer,
+  p_candidate_sha256 text,
+  p_source_sha256 text,
+  p_as_of_year integer,
+  p_actor uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+begin
+  perform set_config('asb.matching_snapshot_rebuild', 'on', true);
+  insert into public.matching_candidate_snapshots(
+    version_id, candidate_count, candidate_sha256, source_sha256,
+    as_of_year, built_by, built_at
+  ) values (
+    p_version_id, p_candidate_count, p_candidate_sha256, p_source_sha256,
+    p_as_of_year, p_actor, now()
+  )
+  on conflict (version_id) do update
+    set candidate_count = excluded.candidate_count,
+        candidate_sha256 = excluded.candidate_sha256,
+        source_sha256 = excluded.source_sha256,
+        as_of_year = excluded.as_of_year,
+        built_by = excluded.built_by,
+        built_at = excluded.built_at;
+  perform set_config('asb.matching_snapshot_rebuild', 'off', true);
+exception
+  when others then
+    perform set_config('asb.matching_snapshot_rebuild', 'off', true);
+    raise;
+end;
+$function$;
+
+revoke all on function public.fn_matching_replace_candidate_snapshot(
+  uuid, integer, text, text, integer, uuid
+) from public, anon, authenticated, service_role;
+
 create or replace function public.fn_matching_params()
 returns jsonb
 language sql
@@ -1056,21 +1142,34 @@ $function$;
 -- exposing candidate rows or raw listing identifiers.
 create or replace function public.get_matching_rules_snapshot()
 returns jsonb
-language sql
+language plpgsql
 stable
 security definer
 set search_path to ''
 as $function$
+declare
+  v_actor uuid;
+  v_result jsonb;
+begin
+  v_actor := public.fn_app_user_id();
+  if v_actor is null or not exists (
+    select 1 from public.users u where u.id = v_actor and u.is_active
+  ) then
+    raise exception 'MATCHING_AUTH: active authenticated application user required'
+      using errcode = '42501';
+  end if;
   select jsonb_build_object(
     'schemaVersion', v.schema_version,
     'params', v.params,
     'asOfYear', s.cache_as_of_year,
     'activeVersionId', s.active_version_id,
     'paramsSha256', v.params_sha256
-  )
+  ) into v_result
   from public.matching_rule_state s
   join public.matching_rule_versions v on v.id = s.active_version_id
   where s.singleton;
+  return v_result;
+end;
 $function$;
 
 create or replace function public.admin_matching_rules_dashboard(p_actor uuid)
@@ -1154,7 +1253,7 @@ set search_path to ''
 as $function$
 declare
   v_params jsonb;
-  v_as_of_year integer := extract(year from current_date)::integer;
+  v_as_of_year integer := extract(year from (current_timestamp at time zone 'UTC'))::integer;
   v_result jsonb;
 begin
   perform public.fn_matching_assert_super_actor(p_actor);
@@ -1303,7 +1402,7 @@ begin
   from public.fn_matching_evaluate(v_params, v_as_of_year, null, null) e;
   get diagnostics v_count = row_count;
 
-  delete from public.matches;
+  delete from public.matches where true;
   insert into public.matches(
     cargo_id, vessel_avail_id, score_label, computed_at,
     matching_rule_version_id, match_score, is_rate_aligned, dwt_delta, matching_as_of_year
@@ -1506,7 +1605,8 @@ create or replace function public.matching_activate_rule_version(
   p_actor uuid,
   p_request_id uuid,
   p_version_id uuid,
-  p_expected_active_version_id uuid
+  p_expected_active_version_id uuid,
+  p_confirmation text
 )
 returns jsonb
 language plpgsql
@@ -1534,7 +1634,8 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('matching-request:' || p_request_id::text, 0));
   v_request_hash := encode(extensions.digest(
     'activate_version|' || p_version_id::text || '|'
-      || coalesce(p_expected_active_version_id::text, 'null'), 'sha256'), 'hex');
+      || coalesce(p_expected_active_version_id::text, 'null') || '|'
+      || coalesce(p_confirmation, 'null'), 'sha256'), 'hex');
 
   select * into v_existing from public.matching_rule_requests where request_id = p_request_id;
   if found then
@@ -1557,11 +1658,15 @@ begin
   if not found then
     raise exception 'MATCHING_NOT_FOUND: rule version not found' using errcode = 'P0002';
   end if;
+  if p_confirmation is distinct from ('ACTIVATE v' || v_target.version_no::text) then
+    raise exception 'MATCHING_CONFIRMATION: type ACTIVATE v% exactly', v_target.version_no
+      using errcode = '22023';
+  end if;
   select * into v_current from public.matching_rule_versions where id = v_state.active_version_id;
   if v_target.version_no <= v_current.version_no then
     raise exception 'MATCHING_DIRECTION: only a newer version may be activated' using errcode = '55000';
   end if;
-  v_as_of_year := extract(year from current_date)::integer;
+  v_as_of_year := extract(year from (current_timestamp at time zone 'UTC'))::integer;
   -- An identical rules document may be republished only after the calendar
   -- year changes, so age gates advance through a new immutable publication.
   if v_target.params_sha256 = v_current.params_sha256
@@ -1618,7 +1723,7 @@ begin
   );
 
   -- Cache replacement and pointer switch are deliberately in this transaction.
-  delete from public.matches;
+  delete from public.matches where true;
   delete from public.matching_candidates
   where version_id not in (p_version_id, v_state.active_version_id);
   insert into public.matches(
@@ -1641,11 +1746,7 @@ begin
     raise exception 'MATCHING_CAS: active version changed during activation' using errcode = '40001';
   end if;
 
-  perform set_config('asb.matching_mirror_write', 'on', true);
-  insert into public.app_settings(key, value, updated_at)
-  values ('matching_rules', v_target.params, now())
-  on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at;
-  perform set_config('asb.matching_mirror_write', 'off', true);
+  perform public.fn_matching_write_settings_mirror(v_target.params);
 
   v_result := jsonb_build_object(
     'requestId', p_request_id, 'versionId', p_version_id,
@@ -1678,34 +1779,228 @@ begin
 end;
 $function$;
 
+create or replace function public.matching_rollback_rule_version(
+  p_actor uuid,
+  p_request_id uuid,
+  p_expected_active_version_id uuid,
+  p_confirmation text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_request_hash text;
+  v_existing public.matching_rule_requests%rowtype;
+  v_target public.matching_rule_versions%rowtype;
+  v_current public.matching_rule_versions%rowtype;
+  v_state public.matching_rule_state%rowtype;
+  v_expected_count integer;
+  v_expected_digest text;
+  v_actual_count integer;
+  v_actual_digest text;
+  v_source_digest text;
+  v_as_of_year integer;
+  v_result jsonb;
+begin
+  perform public.fn_matching_assert_super_actor(p_actor);
+  if p_request_id is null or p_expected_active_version_id is null then
+    raise exception 'MATCHING_INPUT: request id and expected active version id are required'
+      using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('matching-request:' || p_request_id::text, 0));
+  v_request_hash := encode(extensions.digest(
+    'rollback_version|' || p_expected_active_version_id::text || '|'
+      || coalesce(p_confirmation, 'null'), 'sha256'), 'hex');
+
+  select * into v_existing
+  from public.matching_rule_requests
+  where request_id = p_request_id;
+  if found then
+    if v_existing.operation <> 'rollback_version'
+       or v_existing.actor_id is distinct from p_actor
+       or v_existing.request_sha256 <> v_request_hash then
+      raise exception 'MATCHING_IDEMPOTENCY: request id was used with different input'
+        using errcode = '22023';
+    end if;
+    return v_existing.result;
+  end if;
+
+  select * into v_state
+  from public.matching_rule_state
+  where singleton
+  for update;
+  if not found then
+    raise exception 'MATCHING_STATE: active rule state is missing' using errcode = '55000';
+  end if;
+  if v_state.active_version_id is distinct from p_expected_active_version_id then
+    raise exception 'MATCHING_CAS: active version changed; reload before rollback'
+      using errcode = '40001';
+  end if;
+  if v_state.previous_version_id is null then
+    raise exception 'MATCHING_STATE: there is no previous version to roll back to'
+      using errcode = '55000';
+  end if;
+
+  select * into v_current
+  from public.matching_rule_versions
+  where id = v_state.active_version_id;
+  select * into v_target
+  from public.matching_rule_versions
+  where id = v_state.previous_version_id;
+  if not found then
+    raise exception 'MATCHING_STATE: previous rule version is missing' using errcode = '55000';
+  end if;
+  if p_confirmation is distinct from ('ROLLBACK v' || v_target.version_no::text) then
+    raise exception 'MATCHING_CONFIRMATION: type ROLLBACK v% exactly', v_target.version_no
+      using errcode = '22023';
+  end if;
+
+  v_as_of_year := extract(year from (current_timestamp at time zone 'UTC'))::integer;
+  perform public.fn_matching_lock_sources_nowait();
+  perform pg_advisory_xact_lock(hashtextextended('matching-cache-write', 0));
+  v_source_digest := public.fn_matching_source_sha256(v_as_of_year);
+
+  select
+    count(*)::integer,
+    encode(extensions.digest(coalesce(string_agg(
+      e.cargo_id::text || '|' || e.vessel_avail_id::text || '|' || e.score::text || '|'
+      || e.score_label || '|' || e.is_rate_aligned::text || '|' || e.dwt_delta::text || '|'
+      || v_as_of_year::text,
+      E'\n' order by e.cargo_id, e.vessel_avail_id
+    ), ''), 'sha256'), 'hex')
+  into v_expected_count, v_expected_digest
+  from public.fn_matching_evaluate(v_target.params, v_as_of_year, null, null) e;
+
+  if v_expected_count = 0 then
+    raise exception 'MATCHING_EMPTY: rollback would publish zero candidates' using errcode = '55000';
+  end if;
+
+  -- Per-row source refreshes intentionally maintain only the active version.
+  -- Rebuild the rollback target in full from the same locked source snapshot.
+  delete from public.matching_candidates where version_id = v_target.id;
+  insert into public.matching_candidates(
+    version_id, cargo_id, vessel_avail_id, score, score_label,
+    is_rate_aligned, dwt_delta, as_of_year
+  )
+  select v_target.id, e.cargo_id, e.vessel_avail_id, e.score, e.score_label,
+         e.is_rate_aligned, e.dwt_delta, v_as_of_year
+  from public.fn_matching_evaluate(v_target.params, v_as_of_year, null, null) e;
+
+  select d.candidate_count, d.candidate_sha256
+    into v_actual_count, v_actual_digest
+  from public.fn_matching_candidate_digest(v_target.id) d;
+  if v_actual_count <> v_expected_count or v_actual_digest <> v_expected_digest then
+    raise exception 'MATCHING_COMPLETENESS: rollback build does not match the deterministic evaluator'
+      using errcode = '55000';
+  end if;
+
+  perform public.fn_matching_replace_candidate_snapshot(
+    v_target.id, v_actual_count, v_actual_digest,
+    v_source_digest, v_as_of_year, p_actor
+  );
+
+  delete from public.matches where true;
+  delete from public.matching_candidates
+  where version_id not in (v_target.id, v_current.id);
+  insert into public.matches(
+    cargo_id, vessel_avail_id, score_label, computed_at,
+    matching_rule_version_id, match_score, is_rate_aligned,
+    dwt_delta, matching_as_of_year
+  )
+  select c.cargo_id, c.vessel_avail_id, c.score_label, c.computed_at,
+         c.version_id, c.score, c.is_rate_aligned, c.dwt_delta, c.as_of_year
+  from public.matching_candidates c
+  where c.version_id = v_target.id;
+
+  update public.matching_rule_state
+  set previous_version_id = v_current.id,
+      active_version_id = v_target.id,
+      activation_sequence = activation_sequence + 1,
+      activated_by = p_actor,
+      activated_at = now(),
+      cache_as_of_year = v_as_of_year
+  where singleton
+    and active_version_id = p_expected_active_version_id
+    and previous_version_id = v_target.id;
+  if not found then
+    raise exception 'MATCHING_CAS: active or previous version changed during rollback'
+      using errcode = '40001';
+  end if;
+
+  perform public.fn_matching_write_settings_mirror(v_target.params);
+
+  v_result := jsonb_build_object(
+    'requestId', p_request_id,
+    'versionId', v_target.id,
+    'rolledBackFromVersionId', v_current.id,
+    'previousVersionId', v_current.id,
+    'versionNo', v_target.version_no,
+    'candidateCount', v_actual_count,
+    'candidateSha256', v_actual_digest,
+    'sourceSha256', v_source_digest,
+    'asOfYear', v_as_of_year,
+    'paramsSha256', v_target.params_sha256
+  );
+  insert into public.matching_rule_requests(
+    request_id, operation, actor_id, request_sha256, result
+  ) values (
+    p_request_id, 'rollback_version', p_actor, v_request_hash, v_result
+  );
+  insert into public.matching_rule_events(
+    event_type, version_id, prior_version_id, request_id, actor_id,
+    params_sha256, candidate_count, candidate_sha256, source_sha256,
+    evaluation_as_of_year, detail
+  ) values (
+    'version_rolled_back', v_target.id, v_current.id, p_request_id, p_actor,
+    v_target.params_sha256, v_actual_count, v_actual_digest, v_source_digest,
+    v_as_of_year,
+    jsonb_build_object(
+      'versionNo', v_target.version_no,
+      'expectedActiveVersionId', p_expected_active_version_id,
+      'evaluatorVersion', v_target.evaluator_version,
+      'asOfYear', v_as_of_year
+    )
+  );
+  return v_result;
+end;
+$function$;
+
 -- Private-by-default function ACLs.  The only member-visible contract is the
 -- active canonical parameter document; raw listing-id matchers stay behind the
 -- market/Fixture server-side firewalls.
-revoke all on function public.fn_matching_validate_params(jsonb) from public, anon, authenticated;
-revoke all on function public.fn_matching_canonical_params_text(jsonb) from public, anon, authenticated;
-revoke all on function public.fn_matching_params_sha256(jsonb) from public, anon, authenticated;
-revoke all on function public.fn_matching_assert_super_actor(uuid) from public, anon, authenticated;
-revoke all on function public.fn_matching_lock_sources_nowait() from public, anon, authenticated;
-revoke all on function public.fn_matching_source_sha256(integer) from public, anon, authenticated;
-revoke all on function public.fn_matching_validate_as_of_year(integer) from public, anon, authenticated;
-revoke all on function public.fn_matching_evaluate(jsonb, integer, uuid, uuid) from public, anon, authenticated;
-revoke all on function public.fn_matching_candidate_digest(uuid) from public, anon, authenticated;
-revoke all on function public.fn_matching_guard_settings_mirror() from public, anon, authenticated;
-revoke all on function public.fn_matching_immutable_guard() from public, anon, authenticated;
-revoke all on function public.fn_refresh_matches() from public, anon, authenticated;
-revoke all on function public.fn_refresh_matches_for_cargo(uuid) from public, anon, authenticated;
-revoke all on function public.fn_refresh_matches_for_availability(uuid) from public, anon, authenticated;
-revoke all on function public.trg_refresh_matches_cargo() from public, anon, authenticated;
-revoke all on function public.trg_refresh_matches_availability() from public, anon, authenticated;
-revoke all on function public.trg_refresh_matches_vessel() from public, anon, authenticated;
-revoke all on function public.get_matches_for_cargo(uuid) from public, anon, authenticated;
-revoke all on function public.get_matches_for_availability(uuid) from public, anon, authenticated;
-revoke all on function public.admin_matching_rules_dashboard(uuid) from public, anon, authenticated;
-revoke all on function public.admin_matching_preview(uuid, jsonb) from public, anon, authenticated;
-revoke all on function public.matching_create_rule_version(uuid, uuid, jsonb, text) from public, anon, authenticated;
-revoke all on function public.matching_activate_rule_version(uuid, uuid, uuid, uuid) from public, anon, authenticated;
-revoke all on function public.fn_matching_params() from public, anon;
-revoke all on function public.get_matching_rules_snapshot() from public, anon;
+revoke all on function public.fn_matching_validate_params(jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_canonical_params_text(jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_params_sha256(jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_assert_super_actor(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_lock_sources_nowait() from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_source_sha256(integer) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_validate_as_of_year(integer) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_evaluate(jsonb, integer, uuid, uuid) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_candidate_digest(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_guard_settings_mirror() from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_immutable_guard() from public, anon, authenticated, service_role;
+revoke all on function public.fn_refresh_matches() from public, anon, authenticated, service_role;
+revoke all on function public.fn_refresh_matches_for_cargo(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.fn_refresh_matches_for_availability(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.trg_refresh_matches_cargo() from public, anon, authenticated, service_role;
+revoke all on function public.trg_refresh_matches_availability() from public, anon, authenticated, service_role;
+revoke all on function public.trg_refresh_matches_vessel() from public, anon, authenticated, service_role;
+revoke all on function public.get_matches_for_cargo(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.get_matches_for_availability(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.admin_matching_rules_dashboard(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.admin_matching_preview(uuid, jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.matching_create_rule_version(uuid, uuid, jsonb, text) from public, anon, authenticated, service_role;
+revoke all on function public.matching_activate_rule_version(uuid, uuid, uuid, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.matching_rollback_rule_version(uuid, uuid, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.fn_matching_params() from public, anon, service_role;
+revoke all on function public.get_matching_rules_snapshot() from public, anon, service_role;
+
+revoke all on sequence public.matching_rule_versions_version_no_seq
+  from public, anon, authenticated, service_role;
+revoke all on sequence public.matching_rule_events_id_seq
+  from public, anon, authenticated, service_role;
 
 grant execute on function public.fn_matching_params() to authenticated, service_role;
 grant execute on function public.get_matching_rules_snapshot() to authenticated, service_role;
@@ -1724,6 +2019,7 @@ grant execute on function public.get_matches_for_availability(uuid) to service_r
 grant execute on function public.admin_matching_rules_dashboard(uuid) to service_role;
 grant execute on function public.admin_matching_preview(uuid, jsonb) to service_role;
 grant execute on function public.matching_create_rule_version(uuid, uuid, jsonb, text) to service_role;
-grant execute on function public.matching_activate_rule_version(uuid, uuid, uuid, uuid) to service_role;
+grant execute on function public.matching_activate_rule_version(uuid, uuid, uuid, uuid, text) to service_role;
+grant execute on function public.matching_rollback_rule_version(uuid, uuid, uuid, text) to service_role;
 
 notify pgrst, 'reload schema';

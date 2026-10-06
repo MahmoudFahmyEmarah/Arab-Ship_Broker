@@ -11,6 +11,7 @@ import {
   createMatchingRuleVersion,
   getMatchingRulesDashboard,
   previewMatchingRules,
+  rollbackMatchingRuleVersion,
   type MatchingRuleActivationResult,
   type MatchingRuleCreateResult,
   type MatchingRulesDashboard,
@@ -29,7 +30,16 @@ export interface CreateMatchingRuleVersionInput {
 
 export interface ActivateMatchingRuleVersionInput {
   versionId: string;
+  versionNo: number;
   expectedActiveVersionId: string;
+  confirmation: string;
+  requestId: string;
+}
+
+export interface RollbackMatchingRuleVersionInput {
+  targetVersionNo: number;
+  expectedActiveVersionId: string;
+  confirmation: string;
   requestId: string;
 }
 
@@ -56,6 +66,15 @@ function changeNote(value: string): string {
     throw new TypeError("A change note is required and must be at most 1,000 characters.");
   }
   return normalized;
+}
+
+function releaseConfirmation(value: string, operation: "activate" | "rollback", versionNo: number): string {
+  if (!Number.isSafeInteger(versionNo) || versionNo < 1) {
+    throw new TypeError("The matching-rule version number is invalid.");
+  }
+  const expected = `${operation.toUpperCase()} v${versionNo}`;
+  if (value !== expected) throw new TypeError(`Type ${expected} exactly to confirm this release.`);
+  return value;
 }
 
 export async function getMatchingRulesBootstrap(): Promise<MatchingActionResult<MatchingRulesDashboard>> {
@@ -109,11 +128,32 @@ export async function activateMatchingRuleVersionAction(
       actorId: actor.rowId,
       requestId: validUuid(input.requestId, "Request id"),
       versionId: validUuid(input.versionId, "Rule version"),
+      versionNo: input.versionNo,
       expectedActiveVersionId: validUuid(input.expectedActiveVersionId, "Expected active version"),
+      confirmation: releaseConfirmation(input.confirmation, "activate", input.versionNo),
     });
     revalidatePath("/admin/matching-rules");
     return { success: true, data };
   } catch (error) {
     return fail(error, "Could not activate the matching-rule version.");
+  }
+}
+
+export async function rollbackMatchingRuleVersionAction(
+  input: RollbackMatchingRuleVersionInput,
+): Promise<MatchingActionResult<MatchingRuleActivationResult>> {
+  try {
+    const actor = await requireAdmin({ section: "matching", edit: true });
+    const data = await rollbackMatchingRuleVersion(getSupabaseAdminClient(), {
+      actorId: actor.rowId,
+      requestId: validUuid(input.requestId, "Request id"),
+      expectedActiveVersionId: validUuid(input.expectedActiveVersionId, "Expected active version"),
+      targetVersionNo: input.targetVersionNo,
+      confirmation: releaseConfirmation(input.confirmation, "rollback", input.targetVersionNo),
+    });
+    revalidatePath("/admin/matching-rules");
+    return { success: true, data };
+  } catch (error) {
+    return fail(error, "Could not roll back the matching-rule version.");
   }
 }

@@ -57,5 +57,7 @@ begin
 end;
 $after_down$;
 
-select 'MATCHING UNCHANGED ROLLBACK: ALL ASSERTIONS PASSED' as result;
+do $marker$ begin
+  raise notice 'MATCHING UNCHANGED ROLLBACK: ALL ASSERTIONS PASSED';
+end $marker$;
 rollback;

@@ -15,6 +15,7 @@ import {
   pairEligible,
   selectCargoVesselMatches,
   selectUniqueAuthoritativeBatchPairs,
+  LIVE_TOP_MATCH_CONCURRENCY_LIMIT,
   LIVE_TOP_MATCH_REQUEST_LIMIT,
 } from "../lib/portal/matching";
 import type { CargoView, VesselView } from "../lib/portal/types";
@@ -148,7 +149,8 @@ const batchPromise = loadBoundedAuthoritativeMatchBatches(manySources, async (li
   calls.push(listingKey);
   concurrent += 1;
   maxConcurrent = Math.max(maxConcurrent, concurrent);
-  await Promise.resolve();
+  const sourceIndex = Number(listingKey.split("-").at(-1));
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, (10 - sourceIndex) * 2));
   concurrent -= 1;
   return [`row-${listingKey}`];
 });
@@ -156,23 +158,35 @@ const batchPromise = loadBoundedAuthoritativeMatchBatches(manySources, async (li
 const asynchronousChecks = batchPromise.then(async (batchResult) => {
   check(batchResult.status === "ready" && batchResult.batches.length === LIVE_TOP_MATCH_REQUEST_LIMIT,
     "the behavioral loader makes no more than the fixed number of RPC calls");
-  check(calls.length === LIVE_TOP_MATCH_REQUEST_LIMIT && maxConcurrent === LIVE_TOP_MATCH_REQUEST_LIMIT,
-    "the fixed requests execute as one parallel batch");
+  check(calls.length === LIVE_TOP_MATCH_REQUEST_LIMIT
+    && maxConcurrent === LIVE_TOP_MATCH_CONCURRENCY_LIMIT,
+  "the fixed requests use the bounded authoritative RPC pool");
   check(batchResult.status === "ready"
-    && batchResult.batches.map((batch) => batch.source.listingKey).join(",") === calls.join(","),
-  "batch results preserve source order");
+    && batchResult.batches.map((batch) => batch.source.listingKey).join(",")
+      === boundedSources.map((source) => source.listingKey).join(","),
+  "out-of-order completions preserve governed source order");
 
+  let rejectionCalls = 0;
   const rejected = await loadBoundedAuthoritativeMatchBatches(
     manySources,
-    async () => { throw new Error("RPC unavailable"); },
+    async (listingKey) => {
+      rejectionCalls += 1;
+      if (listingKey === boundedSources[0]?.listingKey) throw new Error("RPC unavailable");
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 5));
+      return [];
+    },
   );
   check(rejected.status === "unavailable" && rejected.batches.length === 0,
     "one rejected authoritative RPC fails the whole batch closed");
+  check(rejectionCalls <= LIVE_TOP_MATCH_CONCURRENCY_LIMIT,
+    "a rejected RPC prevents later authoritative work from being scheduled");
 
   let obsolete = false;
+  let discardedCalls = 0;
   const discarded = await loadBoundedAuthoritativeMatchBatches(
     manySources,
     async () => {
+      discardedCalls += 1;
       obsolete = true;
       return [];
     },
@@ -180,6 +194,19 @@ const asynchronousChecks = batchPromise.then(async (batchResult) => {
   );
   check(discarded.status === "discarded" && discarded.batches.length === 0,
     "a mode or filter change discards the completed stale batch");
+  check(discardedCalls <= LIVE_TOP_MATCH_CONCURRENCY_LIMIT,
+    "a stale batch stops scheduling later authoritative requests");
+
+  let emptyCalls = 0;
+  const empty = await loadBoundedAuthoritativeMatchBatches(
+    [],
+    async () => {
+      emptyCalls += 1;
+      return [];
+    },
+  );
+  check(empty.status === "ready" && empty.batches.length === 0 && emptyCalls === 0,
+    "an empty governed source set is ready without an RPC");
 
   const uniquePairs = selectUniqueAuthoritativeBatchPairs(
     [
@@ -228,6 +255,7 @@ check(selectCargoVesselMatches(
 const popover = readFileSync(resolve("components/portal/MatchesPopover.tsx"), "utf8");
 const boards = readFileSync(resolve("components/portal/boards.tsx"), "utf8");
 const map = readFileSync(resolve("components/portal/MarketMap.tsx"), "utf8");
+const matchingSource = readFileSync(resolve("lib/portal/matching.ts"), "utf8");
 const dealCard = map.slice(map.indexOf("function DealCard"));
 const mapLines = map.slice(map.indexOf("// Match lines (P4)"), map.indexOf("// Trade-lane flows (P5)"));
 
@@ -242,6 +270,11 @@ check(/boundedAuthoritativeMatchSourcesForMode/.test(boards)
 "live Top Matches uses the behaviorally tested active-mode batch coordinator");
 check(!/for \(const (?:cargo|vessel) of filtered(?:Cargos|Vessels)\)[\s\S]{0,180}await listMarketMatches/.test(boards),
   "live Top Matches has no unbounded serial RPC loop");
+check(!/calcVoyage|\btce\b/i.test(matchingSource) && !/fmtTce|>TCE\b/.test(boards),
+  "match cards contain no legacy voyage or TCE calculation");
+check(/Open Voyage Estimator/.test(boards)
+  && /voyage-estimator\?cargo=\$\{encodeURIComponent\(m\.cargoId\)\}&vessel=\$\{encodeURIComponent\(m\.vesselId\)\}/.test(boards),
+"match cards link visible cargo and vessel handles to the governed estimator");
 check(/liveTopMatchesAreCurrent[\s\S]*?: "loading"/.test(boards),
   "Top Matches hides stale results while a changed filter query reloads");
 check(!/pairEligible|buildTopMatches/.test(dealCard) && /matches: readonly SurfaceVesselMatch\[\]/.test(dealCard),

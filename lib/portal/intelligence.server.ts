@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 
 import {
   evaluateIntelligence,
@@ -32,12 +33,36 @@ const INTELLIGENCE_UNAVAILABLE: IntelligenceSignalsView = Object.freeze({
   signals: Object.freeze([]) as readonly [],
 });
 
+const E2E_FORCE_FAILURE_COOKIE = "asb-e2e-force-intelligence-failure";
+
+async function disposableE2EFailureNonce(): Promise<string | null> {
+  if (process.env.E2E_RULES_DISPOSABLE_STACK !== "1") return null;
+  const nonce = process.env.E2E_RULES_STACK_NONCE?.trim();
+  if (!nonce) return null;
+  const cookieStore = await cookies();
+  return cookieStore.get(E2E_FORCE_FAILURE_COOKIE)?.value === nonce ? nonce : null;
+}
+
 /** Request-scoped by React on the server, so dashboard cargo/vessel loaders
  * share one governed RPC read without introducing a process-wide stale cache. */
 const loadActiveEnvelope = cache(async (): Promise<ActiveEnvelopeLoad> => {
   if (!isSupabaseConfigured()) return { status: "disabled" };
   try {
     const supabase = await getSupabaseServerClient();
+    // This test seam is inert unless both disposable-stack environment guards
+    // and the per-run nonce are present. The extra argument deliberately makes
+    // the real get_intelligence_rules PostgREST call fail at the RPC boundary,
+    // proving that this catch path preserves every market listing.
+    const failureNonce = await disposableE2EFailureNonce();
+    if (failureNonce) {
+      const { error } = await supabase.rpc("get_intelligence_rules", {
+        p_e2e_force_failure_nonce: failureNonce,
+      } as never);
+      if (!error) {
+        throw new Error("Disposable Stream R intelligence RPC unexpectedly succeeded.");
+      }
+      throw error;
+    }
     return {
       status: "available",
       envelope: await getEffectiveIntelligenceRuleSet(supabase),

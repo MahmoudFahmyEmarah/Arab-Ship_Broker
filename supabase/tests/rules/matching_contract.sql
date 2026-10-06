@@ -42,7 +42,8 @@ begin
     raise exception 'MATCHING TEST: member matching snapshot read is missing';
   end if;
   if has_function_privilege('authenticated', 'public.matching_create_rule_version(uuid,uuid,jsonb,text)', 'execute')
-     or has_function_privilege('authenticated', 'public.matching_activate_rule_version(uuid,uuid,uuid,uuid)', 'execute')
+     or has_function_privilege('authenticated', 'public.matching_activate_rule_version(uuid,uuid,uuid,uuid,text)', 'execute')
+     or has_function_privilege('authenticated', 'public.matching_rollback_rule_version(uuid,uuid,uuid,text)', 'execute')
      or has_function_privilege('authenticated', 'public.fn_matching_evaluate(jsonb,integer,uuid,uuid)', 'execute')
      or has_function_privilege('authenticated', 'public.fn_matching_rollback_source_sha256()', 'execute')
      or has_function_privilege('authenticated', 'public.admin_matching_rules_dashboard(uuid)', 'execute')
@@ -55,7 +56,8 @@ begin
     raise exception 'MATCHING TEST: rollback source fingerprint helper is externally executable';
   end if;
   if not has_function_privilege('service_role', 'public.matching_create_rule_version(uuid,uuid,jsonb,text)', 'execute')
-     or not has_function_privilege('service_role', 'public.matching_activate_rule_version(uuid,uuid,uuid,uuid)', 'execute')
+     or not has_function_privilege('service_role', 'public.matching_activate_rule_version(uuid,uuid,uuid,uuid,text)', 'execute')
+     or not has_function_privilege('service_role', 'public.matching_rollback_rule_version(uuid,uuid,uuid,text)', 'execute')
      or not has_function_privilege('service_role', 'public.fn_matching_evaluate(jsonb,integer,uuid,uuid)', 'execute')
      or not has_function_privilege('service_role', 'public.admin_matching_rules_dashboard(uuid)', 'execute')
      or not has_function_privilege('service_role', 'public.admin_matching_preview(uuid,jsonb)', 'execute')
@@ -63,18 +65,47 @@ begin
      or not has_function_privilege('service_role', 'public.get_matches_for_availability(uuid)', 'execute') then
     raise exception 'MATCHING TEST: a required server-only grant is missing';
   end if;
+  if has_function_privilege('service_role', 'public.fn_matching_write_settings_mirror(jsonb)', 'execute')
+     or has_function_privilege('service_role', 'public.fn_matching_replace_candidate_snapshot(uuid,integer,text,text,integer,uuid)', 'execute')
+     or has_sequence_privilege('service_role', 'public.matching_rule_versions_version_no_seq', 'usage')
+     or has_sequence_privilege('service_role', 'public.matching_rule_events_id_seq', 'usage') then
+    raise exception 'MATCHING TEST: an internal writer or identity sequence is externally usable';
+  end if;
 end;
 $grants$;
 
 do $shape$
 declare
   p jsonb := public.fn_matching_params();
-  v_snapshot jsonb := public.get_matching_rules_snapshot();
+  v_snapshot jsonb;
+  v_member uuid := gen_random_uuid();
   v_active uuid;
   v_as_of_year integer;
   v_hash text;
   v_mirror jsonb;
+  v_denied boolean;
 begin
+  insert into auth.users (
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+  ) values (
+    '00000000-0000-0000-0000-000000000000'::uuid, v_member,
+    'authenticated', 'authenticated', 'matching-contract-' || v_member || '@example.test',
+    crypt('MatchingContract1!', gen_salt('bf')), now(), '{}'::jsonb, '{}'::jsonb, now(), now()
+  );
+  insert into public.users(
+    id, supabase_user_id, email, full_name, role, is_active, subscription_tier
+  ) values (
+    v_member, v_member, 'matching-contract-' || v_member || '@example.test',
+    'Matching Contract Member', 'member', true, 'T3'
+  );
+  perform set_config('request.jwt.claim.sub', v_member::text, true);
+  perform set_config(
+    'request.jwt.claims',
+    jsonb_build_object('sub', v_member, 'role', 'authenticated')::text,
+    true
+  );
+  v_snapshot := public.get_matching_rules_snapshot();
   if (select array_agg(key order by key) from jsonb_object_keys(v_snapshot) as keys(key))
        is distinct from array['activeVersionId','asOfYear','params','paramsSha256','schemaVersion']::text[]
      or v_snapshot->'params' is distinct from p
@@ -135,6 +166,25 @@ begin
   ) then
     raise exception 'MATCHING TEST: active as-of year/snapshot/event evidence is inconsistent';
   end if;
+
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  update public.users set is_active = false where id = v_member;
+  perform set_config(
+    'request.jwt.claims',
+    jsonb_build_object('sub', v_member, 'role', 'authenticated')::text,
+    true
+  );
+  v_denied := false;
+  begin
+    perform public.get_matching_rules_snapshot();
+  exception when others then
+    if sqlerrm like 'MATCHING_AUTH:%' then v_denied := true; else raise; end if;
+  end;
+  if not v_denied then
+    raise exception 'MATCHING TEST: inactive application user read the member snapshot';
+  end if;
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  update public.users set is_active = true where id = v_member;
 end;
 $shape$;
 
@@ -315,5 +365,7 @@ begin
 end;
 $catalog$;
 
-select 'MATCHING DATABASE CONTRACT: ALL ASSERTIONS PASSED' as result;
+do $marker$ begin
+  raise notice 'MATCHING DATABASE CONTRACT: ALL ASSERTIONS PASSED';
+end $marker$;
 rollback;

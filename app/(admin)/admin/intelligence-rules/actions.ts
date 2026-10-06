@@ -25,6 +25,7 @@ import {
   type IntelligenceRuleSetDetail,
   type IntelligenceRuleSetDiff,
   type IntelligenceRuleSetsOverview,
+  type IntelligenceReleaseOperation,
 } from "@/sdk/app/intelligence";
 
 type Result<T> = { success: true; data: T } | { success: false; error: string };
@@ -43,7 +44,7 @@ export interface CreateIntelligenceVersionInput {
   provenanceJson: string;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function fail(error: unknown, fallback: string): { success: false; error: string } {
   unstable_rethrow(error);
@@ -62,6 +63,18 @@ function boundedText(value: string, label: string, maximum: number): string {
     throw new TypeError(`${label} is required and must be at most ${maximum} characters.`);
   }
   return normalized;
+}
+
+function releaseConfirmation(value: string, operation: IntelligenceReleaseOperation, version: number): string {
+  if (operation !== "activate" && operation !== "rollback") {
+    throw new TypeError("The intelligence release operation is invalid.");
+  }
+  if (!Number.isSafeInteger(version) || version < 1) {
+    throw new TypeError("The intelligence rule-set version is invalid.");
+  }
+  const expected = `${operation.toUpperCase()} v${version}`;
+  if (value !== expected) throw new TypeError(`Type ${expected} exactly to confirm this release.`);
+  return value;
 }
 
 function parseJson(value: string, label: string): unknown {
@@ -183,7 +196,14 @@ export async function createIntelligenceVersionAction(
 }
 
 export async function activateIntelligenceVersionAction(
-  input: { ruleSetId: string; expectedRevision: number; requestId: string },
+  input: {
+    ruleSetId: string;
+    expectedRevision: number;
+    requestId: string;
+    operation: IntelligenceReleaseOperation;
+    version: number;
+    confirmation: string;
+  },
 ): Promise<Result<IntelligenceActivationResult>> {
   try {
     const actor = await requireAdmin({ section: "intelligence", edit: true });
@@ -195,6 +215,9 @@ export async function activateIntelligenceVersionAction(
       ruleSetId: validUuid(input.ruleSetId, "Rule-set version"),
       expectedRevision: input.expectedRevision,
       requestId: validUuid(input.requestId, "Request id"),
+      operation: input.operation,
+      version: input.version,
+      confirmation: releaseConfirmation(input.confirmation, input.operation, input.version),
     });
     revalidatePath("/admin/intelligence-rules");
     return { success: true, data };

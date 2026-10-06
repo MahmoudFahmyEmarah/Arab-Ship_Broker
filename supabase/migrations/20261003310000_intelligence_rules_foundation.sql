@@ -721,7 +721,8 @@ create or replace function public.admin_intelligence_activate_rule_set(
   p_actor uuid,
   p_rule_set_id uuid,
   p_expected_revision bigint,
-  p_request_id uuid
+  p_request_id uuid,
+  p_confirmation text
 )
 returns jsonb
 language plpgsql volatile security definer set search_path to ''
@@ -736,13 +737,16 @@ declare
   v_replay jsonb;
   v_result jsonb;
   v_action text;
+  v_expected_confirmation text;
 begin
   perform public.fn_intelligence_assert_admin_actor(p_actor, true);
   if p_rule_set_id is null or p_expected_revision is null or p_expected_revision < 0 then
     raise exception 'INTELLIGENCE_INPUT: rule set and expected revision are required' using errcode = '22023';
   end if;
   v_request_hash := public.fn_intelligence_sha256(jsonb_build_object(
-    'ruleSetId', p_rule_set_id, 'expectedRevision', p_expected_revision
+    'ruleSetId', p_rule_set_id,
+    'expectedRevision', p_expected_revision,
+    'confirmation', p_confirmation
   ));
   perform pg_advisory_xact_lock(hashtextextended('asb:intelligence-rules', 0));
   v_replay := public.fn_intelligence_request_begin(p_actor, 'activate_rule_set', p_request_id, v_request_hash);
@@ -756,6 +760,18 @@ begin
   select * into v_state from public.intelligence_rule_state where singleton for update;
   if v_state.revision <> p_expected_revision then
     raise exception 'INTELLIGENCE_CONFLICT: expected revision %, current revision %', p_expected_revision, v_state.revision using errcode = '40001';
+  end if;
+  select s.version_no into v_old_version
+  from public.intelligence_rule_sets s
+  where s.id = v_state.active_rule_set_id;
+  v_expected_confirmation := case
+    when v_old_version is not null and v_set.version_no < v_old_version
+      then 'ROLLBACK v' || v_set.version_no::text
+    else 'ACTIVATE v' || v_set.version_no::text
+  end;
+  if p_confirmation is distinct from v_expected_confirmation then
+    raise exception 'INTELLIGENCE_CONFIRMATION: type % exactly', v_expected_confirmation
+      using errcode = '22023';
   end if;
 
   select count(distinct g.code), count(r.rule_code)
@@ -777,7 +793,6 @@ begin
     v_result := jsonb_build_object('ruleSetId',v_set.id,'version',v_set.version_no,
       'contentHash',v_set.content_hash,'revision',v_state.revision,'status','already_active');
   else
-    select s.version_no into v_old_version from public.intelligence_rule_sets s where s.id = v_state.active_rule_set_id;
     v_action := case when v_old_version is not null and v_set.version_no < v_old_version
       then 'version.rolled_back' else 'version.activated' end;
     update public.intelligence_rule_state
@@ -999,14 +1014,14 @@ revoke all on function public.fn_intelligence_request_begin(uuid,text,uuid,text)
 revoke all on function public.fn_intelligence_request_finish(uuid,text,uuid,jsonb) from public, anon, authenticated, service_role;
 
 revoke all on function public.admin_intelligence_create_rule_set(uuid,jsonb,jsonb,text,text,uuid,uuid) from public, anon, authenticated;
-revoke all on function public.admin_intelligence_activate_rule_set(uuid,uuid,bigint,uuid) from public, anon, authenticated;
+revoke all on function public.admin_intelligence_activate_rule_set(uuid,uuid,bigint,uuid,text) from public, anon, authenticated, service_role;
 revoke all on function public.admin_intelligence_list_rule_sets(uuid) from public, anon, authenticated;
 revoke all on function public.admin_intelligence_get_rule_set(uuid,uuid) from public, anon, authenticated;
 revoke all on function public.admin_intelligence_get_clone_input(uuid,uuid) from public, anon, authenticated;
 revoke all on function public.admin_intelligence_diff_rule_sets(uuid,uuid,uuid) from public, anon, authenticated;
 revoke all on function public.admin_intelligence_list_events(uuid,integer) from public, anon, authenticated;
 grant execute on function public.admin_intelligence_create_rule_set(uuid,jsonb,jsonb,text,text,uuid,uuid) to service_role;
-grant execute on function public.admin_intelligence_activate_rule_set(uuid,uuid,bigint,uuid) to service_role;
+grant execute on function public.admin_intelligence_activate_rule_set(uuid,uuid,bigint,uuid,text) to service_role;
 grant execute on function public.admin_intelligence_list_rule_sets(uuid) to service_role;
 grant execute on function public.admin_intelligence_get_rule_set(uuid,uuid) to service_role;
 grant execute on function public.admin_intelligence_get_clone_input(uuid,uuid) to service_role;

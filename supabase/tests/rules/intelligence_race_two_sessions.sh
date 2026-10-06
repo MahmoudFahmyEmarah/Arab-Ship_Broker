@@ -116,6 +116,8 @@ TARGET_A="$(q "select id from public.intelligence_rule_sets where created_by='$A
   create_call "$LABEL_B" "$CREATE_B_REQUEST"
 } | "${PSQL[@]}" >/dev/null
 TARGET_B="$(q "select id from public.intelligence_rule_sets where created_by='$ACTOR'::uuid and label='$LABEL_B'")"
+TARGET_A_VERSION="$(q "select version_no from public.intelligence_rule_sets where id='$TARGET_A'::uuid")"
+TARGET_B_VERSION="$(q "select version_no from public.intelligence_rule_sets where id='$TARGET_B'::uuid")"
 
 # Race 2: two different targets start from one expected revision. The global
 # advisory lock serializes them; after the winner commits, the loser observes
@@ -124,7 +126,8 @@ TARGET_B="$(q "select id from public.intelligence_rule_sets where created_by='$A
 set role service_role;
 begin;
 select public.admin_intelligence_activate_rule_set(
-  '$ACTOR'::uuid, '$TARGET_A'::uuid, $ORIGINAL_REVISION, '$ACTIVATE_A_REQUEST'::uuid
+  '$ACTOR'::uuid, '$TARGET_A'::uuid, $ORIGINAL_REVISION, '$ACTIVATE_A_REQUEST'::uuid,
+  'ACTIVATE v$TARGET_A_VERSION'
 );
 select pg_sleep(4);
 commit;
@@ -134,7 +137,8 @@ sleep 1
 "${PSQL[@]}" >"$LOG_D" 2>&1 <<SQL &
 set role service_role;
 select public.admin_intelligence_activate_rule_set(
-  '$ACTOR'::uuid, '$TARGET_B'::uuid, $ORIGINAL_REVISION, '$ACTIVATE_B_REQUEST'::uuid
+  '$ACTOR'::uuid, '$TARGET_B'::uuid, $ORIGINAL_REVISION, '$ACTIVATE_B_REQUEST'::uuid,
+  'ACTIVATE v$TARGET_B_VERSION'
 );
 SQL
 PID_D=$!

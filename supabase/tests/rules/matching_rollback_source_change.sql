@@ -168,5 +168,7 @@ begin
 end;
 $assert_recomputed_legacy_cache$;
 
-select 'MATCHING CHANGED-SOURCE ROLLBACK: ALL ASSERTIONS PASSED' as result;
+do $marker$ begin
+  raise notice 'MATCHING CHANGED-SOURCE ROLLBACK: ALL ASSERTIONS PASSED';
+end $marker$;
 rollback;
