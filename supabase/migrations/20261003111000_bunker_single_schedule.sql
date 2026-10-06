@@ -85,9 +85,10 @@ revoke all on function public.fn_bunker_approve_quote(uuid, uuid, text) from pub
 -- C2B-012: bring chains scheduled under 110000 to the invariant at install time.
 -- On every key with more than one unstarted approved price, the end of the chain
 -- (the one no other row supersedes, i.e. the most recently approved) is kept and the older ones are withdrawn ("replaced by a newer
--- scheduled price"). Every other open price on the key first ends at the kept
--- price's start (recorded in the ledger), then the older schedules are withdrawn,
--- so the key never holds two open prices during the change. Idempotent:
+-- scheduled price"). The older schedules are first closed as of now and every
+-- other open price ends at the kept price's start (ledgered); only then are they
+-- withdrawn, so no withdrawal order can reopen a price and the key never holds two
+-- open prices during the change. Idempotent:
 -- a database already at the invariant is left unchanged. Returns the number of
 -- prices withdrawn.
 create or replace function public.fn_bunker_normalise_schedules()
@@ -98,6 +99,7 @@ declare
   k      record;
   keep   public.bunker_quotes;
   r      public.bunker_quotes;
+  v_drop uuid[];
   v_at   timestamptz;
   v_n    integer := 0;
 begin
@@ -118,15 +120,33 @@ begin
      order by (superseded_at is null) desc, decided_at desc nulls last, valid_from desc, submitted_at desc, id desc
      limit 1;
     v_at := greatest(now(), keep.valid_from);
-    -- 1) every other price on the key that is still open (live, or scheduled and not
-    --    being removed) ends at the kept price's start, recorded in the ledger. Doing
-    --    this first means the restore trigger finds nothing to give back in step 2, so
-    --    the key never holds two open prices (bunker_quotes_one_live).
+
+    -- The older unstarted prices to remove, fixed before anything changes.
+    select coalesce(array_agg(q.id order by q.id), '{}') into v_drop
+      from public.bunker_quotes q
+     where q.supplier_id = k.supplier_id and q.port_locode = k.port_locode and q.product_key = k.product_key
+       and q.status = 'approved' and q.valid_from > now()
+       and (q.superseded_at is null or q.superseded_at > now()) and q.id <> keep.id;
+
+    -- 0) Close every one of them as of now (they never start). A row closed at now()
+    --    no longer matches the restore trigger (it restores only supersessions still
+    --    in the future), so withdrawing them in any order cannot reopen one of them
+    --    (C2B-015: A->B->C->D chains, withdrawal order independent).
+    update public.bunker_quotes set superseded_at = now()
+     where id = any (v_drop);
+
+    -- While the key is being rewritten, the kept price is parked as "ends at
+    -- infinity" so that any price the restore trigger might reopen during step 2
+    -- (e.g. equal start times) cannot collide with it on bunker_quotes_one_live.
+    update public.bunker_quotes set superseded_at = 'infinity' where id = keep.id;
+
+    -- 1) Every other price on the key that is still open (the live one) ends at the
+    --    kept price's start, recorded in the ledger. It no longer matches the restore
+    --    trigger either, so the key never holds two open prices.
     for r in
       select * from public.bunker_quotes
        where supplier_id = keep.supplier_id and port_locode = keep.port_locode and product_key = keep.product_key
-         and status = 'approved' and id <> keep.id
-         and not (valid_from > now())
+         and status = 'approved' and id <> keep.id and not (id = any (v_drop))
          and (superseded_at is null or superseded_at > now())
        order by id
        for update
@@ -138,18 +158,13 @@ begin
       do update set applied_superseded_at = excluded.applied_superseded_at;
       update public.bunker_quotes set superseded_at = v_at where id = r.id;
     end loop;
-    -- 2) the older unstarted prices are withdrawn
-    for r in
-      select * from public.bunker_quotes
-       where supplier_id = k.supplier_id and port_locode = k.port_locode and product_key = k.product_key
-         and status = 'approved' and valid_from > now() and (superseded_at is null or superseded_at > now())
-         and id <> keep.id
-       order by id
-       for update
+
+    -- 2) Withdraw the older schedules.
+    for r in select * from public.bunker_quotes where id = any (v_drop) order by id for update
     loop
       update public.bunker_quotes
          set status = 'withdrawn', decided_at = now(),
-             decision_reason = 'replaced by a newer scheduled price', superseded_at = now()
+             decision_reason = 'replaced by a newer scheduled price'
        where id = r.id;
       insert into public.bunker_quote_events
         (quote_id, supplier_id, port_locode, product_key, action, old_price, reason)
@@ -157,6 +172,24 @@ begin
               'replaced by a newer scheduled price (111000 normalisation)');
       v_n := v_n + 1;
     end loop;
+
+    -- 3) Re-point again whatever step 2 may have reopened, then un-park the kept price.
+    for r in
+      select * from public.bunker_quotes
+       where supplier_id = keep.supplier_id and port_locode = keep.port_locode and product_key = keep.product_key
+         and status = 'approved' and id <> keep.id and not (id = any (v_drop))
+         and (superseded_at is null or superseded_at > now())
+       order by id
+       for update
+    loop
+      insert into public.bunker_quote_supersessions
+        (approved_quote_id, superseded_quote_id, previous_superseded_at, applied_superseded_at)
+      values (keep.id, r.id, r.superseded_at, v_at)
+      on conflict (approved_quote_id, superseded_quote_id)
+      do update set applied_superseded_at = excluded.applied_superseded_at;
+      update public.bunker_quotes set superseded_at = v_at where id = r.id;
+    end loop;
+    update public.bunker_quotes set superseded_at = null where id = keep.id;
   end loop;
   return v_n;
 end;
