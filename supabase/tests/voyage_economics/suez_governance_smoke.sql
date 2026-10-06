@@ -497,6 +497,42 @@ begin
   raise notice 'S14 ok: profile carries build year, cranes, beam, double bottom (validated); escort and contingent params validated in SQL; no admin event labelled system; evidence table private';
 end $$;
 
+-- ── S15 · 205700: listing-key resolver and link facts authorise before they read ─
+do $$
+declare v_a uuid; v_m uuid; v_av uuid; v_key uuid; v_err text; r jsonb;
+begin
+  select id into v_av from public.vessel_availability order by created_at limit 1;
+  if v_av is null then raise notice 'S15 skipped: no vessel positions in this database'; return; end if;
+  insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s15-admin@arabshipbroker.test') returning id into v_a;
+  insert into public.users (id, supabase_user_id, role, full_name, is_active) values (v_a, v_a, 'admin', 'smoke S15 admin (rolled back)', true)
+    on conflict (id) do update set role = 'admin', is_active = true;
+  insert into auth.users (id, email) values (gen_random_uuid(), 'smoke-s15-member@arabshipbroker.test') returning id into v_m;
+  insert into public.users (id, supabase_user_id, role, full_name, is_active) values (v_m, v_m, 'vessel_owner', 'smoke S15 member (rolled back)', true)
+    on conflict (id) do update set role = 'vessel_owner', is_active = true;
+  -- the admin's own key resolves to the position
+  perform set_config('request.jwt.claim.sub', v_a::text, true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_a, 'role', 'authenticated', 'app_metadata', json_build_object('role', 'admin'))::text, true);
+  select h.key into v_key from public.fn_market_issue_handle(v_a, 'vessel_match', 'vessel_availability', v_av) h;
+  if public.resolve_voyage_vessel_link(v_key) is distinct from v_av then raise exception 'S15: the admin''s own key must resolve to the position'; end if;
+  if public.resolve_voyage_vessel_link(gen_random_uuid()) is not null then raise exception 'S15: an unknown key must resolve to null'; end if;
+  r := public.voyage_link_facts(null, v_av);
+  if (r -> 'position' ->> 'vesselId') is null then raise exception 'S15: the admin must read the linked position facts: %', r; end if;
+  -- a member who does not own the position: its key resolves to null, its facts are refused before any read
+  perform set_config('request.jwt.claim.sub', v_m::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_m, 'role', 'authenticated', 'app_metadata', json_build_object('role', 'member'))::text, true);
+  select h.key into v_key from public.fn_market_issue_handle(v_m, 'vessel_match', 'vessel_availability', v_av) h;
+  if public.resolve_voyage_vessel_link(v_key) is not null then raise exception 'S15: another member''s position must not resolve'; end if;
+  v_err := null; begin r := public.voyage_link_facts(null, v_av); exception when others then v_err := sqlerrm; end;
+  if v_err is null or v_err not like 'VOYAGE_FORBIDDEN%' then raise exception 'S15: a foreign position must be refused generically (%)', v_err; end if;
+  if has_function_privilege('anon', 'public.voyage_link_facts(uuid, uuid)', 'execute') or has_function_privilege('anon', 'public.resolve_voyage_vessel_link(uuid)', 'execute') then
+    raise exception 'S15: anonymous visitors must not reach the link functions'; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claim.role', '', true);
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'S15 ok: own key resolves, unknown/foreign keys resolve to null, foreign link facts refused before any read, anon excluded';
+end $$;
+
 select set_config('asb.stream_s_down', 'export-taken:smoke rows of this rolled-back transaction', true);
 
 do $$ begin raise notice 'SUEZ GOVERNANCE SMOKE: ALL ASSERTIONS PASSED'; end $$;

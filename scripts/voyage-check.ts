@@ -409,6 +409,21 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(!L({ openPort: "GRPIR", position: { id: "p1", row: { vessel_id: "v1", open_port_locode: "EGALY" } } }).ok, "an open port that is not the position's is refused");
   const adopt = L({ vesselId: null, position: { id: "p1", row: { vessel_id: "v9", open_port_locode: "EGALY" } } });
   ok(adopt.ok && adopt.vesselId === "v9", "a position without a vessel id adopts the position's vessel");
+  // C2O-058 #6 · both port calls are the linked cargo's, with one quantity (forged discharge refused)
+  const PC = { loadPort: "EGALY", dischPort: "SAJED", loadQtyMt: 26000, dischQtyMt: 26000 };
+  ok(L({ cargo: { id: "c1", row: cargoRow }, portCalls: PC }).ok, "port calls equal to the cargo's are accepted");
+  ok(!L({ cargo: { id: "c1", row: cargoRow }, portCalls: { ...PC, dischPort: "SAYNB" } }).ok, "a forged discharge port call is refused");
+  ok(!L({ cargo: { id: "c1", row: cargoRow }, portCalls: { ...PC, dischQtyMt: 20000 } }).ok, "a forged discharge quantity is refused");
+  ok(!L({ cargo: { id: "c1", row: cargoRow }, portCalls: { ...PC, loadPort: "TRMER" } }).ok, "a forged load port call is refused");
+  // C2O-058 #7 / #9 · authorise before reading, refuse malformed links; #1 resolve keys; #2 / #3 / #8 the preview
+  const act2 = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
+  ok(act2.includes("getVoyageLinkFacts(supabase, cargoListingId, availabilityId)") && !/admin\.from\("(cargo_listings|vessel_availability)"\)/.test(act2), "linked cargo/position facts come from the governed member RPC, never a service-role read of caller ids");
+  ok(act2.includes("A linked id is malformed") && act2.includes("is not available to you"), "malformed links are refused; unauthorised links get one generic refusal");
+  const pg = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/page.tsx", import.meta.url), "utf8");
+  ok(pg.includes("resolveVoyageVesselLink(supabase, linkVessel)") && pg.includes("vessels.some((v) => v.id === resolved)"), "a market listing key is resolved as the member, to one of their own options only");
+  const v2 = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
+  ok(!v2.includes("detectSuezDirection") && !v2.includes("zoneDir") && v2.includes('measured(laden) ? (laden.auto?.suezDirection ?? null)'), "the preview never invents a Suez direction from zones");
+  ok(v2.includes("routeLegAction(from, to, asOf)") && v2.includes("suezFactReasons(suezInput?.vessel"), "the preview reads routes at the voyage date and reuses the server's fact comparison");
 
   // C2O-050 #1 / #5 · adversarial Suez facts: anything not governed, a draft, or undeclared conditions is a reason
   const GOV: GovernedSuezFacts = { scnt: 16070, scgt: 21000, gt: 21500, category: "dry_bulk", buildYear: 2012, craneCount: 4, craneSwlMt: 30, mooringCranesOk: true, searchlightCompliant: true, firstTransit: false, beamFt: 105, doubleBottom: true };

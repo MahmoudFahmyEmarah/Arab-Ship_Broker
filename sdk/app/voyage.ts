@@ -47,6 +47,23 @@ export async function getVoyageEstimate(supabase: SupabaseClient, runId: string)
 }
 
 // Service-role write after the server action verified the session (p_actor = public.users.id).
+/** C2O-058 #7: the member's linked cargo / position facts, authorised before anything is read. */
+export interface VoyageLinkFacts {
+  cargo: { loadPort: string | null; dischPort: string | null; laycanFrom: string | null; loadRate: string | null; dischRate: string | null; qtyMin: number | null; qtyMax: number | null } | null;
+  position: { vesselId: string; openPort: string | null } | null;
+}
+export async function getVoyageLinkFacts(supabase: SupabaseClient, cargoListingId: string | null, availabilityId: string | null): Promise<VoyageLinkFacts> {
+  const { data, error } = await supabase.rpc("voyage_link_facts", { p_cargo_listing_id: cargoListingId, p_availability_id: availabilityId });
+  if (error) throw new Error(error.message);
+  return (data ?? { cargo: null, position: null }) as VoyageLinkFacts;
+}
+/** C2O-058 #1: a market listing key → the member's own position id, or null (never a foreign raw id). */
+export async function resolveVoyageVesselLink(supabase: SupabaseClient, key: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc("resolve_voyage_vessel_link", { p_key: key });
+  if (error) return null;
+  return typeof data === "string" ? data : null;
+}
+
 export async function saveVoyageEstimate(adminClient: SupabaseClient, actorUserId: string, payload: Record<string, unknown>): Promise<string> {
   const { data, error } = await adminClient.rpc("save_voyage_estimate", { p_actor: actorUserId, p_payload: payload });
   if (error) throw new Error(error.message);

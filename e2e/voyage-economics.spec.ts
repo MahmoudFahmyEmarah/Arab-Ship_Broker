@@ -97,7 +97,9 @@ test("admin records an SDR rate, loads toll bands into a draft and publishes it"
     expect(versionId).toBeTruthy();
 
     await page.goto(`/admin/voyage-data?tab=tiers&version=${versionId}`);
-    await expect(page.locator(".vd-alert--error")).toContainText("No toll bands in this version");
+    // the draft copies the bands of the version in force: none on a fresh database, the official set once v3+ is
+    // loaded (staging since 6 Oct) — either way the replacement below must leave exactly the test's bands
+    await expect(page.locator(".vd-alert--error", { hasText: "No toll bands in this version" }).or(page.locator(".vd-panel", { hasText: /Toll bands of v\d+/ })).first()).toBeVisible();
     await page.locator('textarea[name="csv"]').fill(BANDS);
     await page.getByRole("button", { name: /Replace bands of v\d+/ }).click();
     await expect(page.locator(".vd-alert--success")).toContainText("4 toll bands saved for 1 categories (official)");

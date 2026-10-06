@@ -22,6 +22,8 @@ export interface LinkedPositionRow {
  */
 export function reconcileLinks(args: {
   ladenFrom: string | null; ladenTo: string | null; openPort: string | null; qtyMt: number | null; freightQtyMt: number | null;
+  /** the two port calls as sent: with a cargo link they must be the cargo's ports and carry one quantity */
+  portCalls?: { loadPort: string | null; dischPort: string | null; loadQtyMt: number | null; dischQtyMt: number | null } | null;
   vesselId: string | null;
   cargo?: { id: string; row: LinkedCargoRow | null } | null;
   position?: { id: string; row: LinkedPositionRow | null } | null;
@@ -39,6 +41,11 @@ export function reconcileLinks(args: {
       return { ok: false, error: `The quantity (${q == null || !Number.isFinite(q) ? "none" : q} MT) is outside the linked cargo's range (${qMin ?? "?"}–${qMax ?? "?"} MT).` };
     }
     if (args.freightQtyMt != null && args.freightQtyMt !== q) return { ok: false, error: "The freight quantity differs from the cargo quantity." };
+    const pc = args.portCalls;
+    if (pc) {
+      if (pc.loadPort !== c.load_port_locode || pc.dischPort !== c.disch_port_locode) return { ok: false, error: "A port call names another port than the linked cargo's; change the port or remove the cargo link." };
+      if (pc.loadQtyMt !== q || pc.dischQtyMt !== q) return { ok: false, error: "The load and discharge quantities must both be the cargo quantity." };
+    }
   }
   if (args.position) {
     const a = args.position.row;

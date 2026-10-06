@@ -23,7 +23,7 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPortRoute } from "@/sdk/app/routes";
 import { getPointEcaZones, getRouteEcaSplit, getSuezTariffContext, getVesselEconomicsProfile, listEcaZones, type VesselEconomicsProfile } from "@/sdk/app/suez";
-import { getVoyageSettings, saveVoyageEstimate } from "@/sdk/app/voyage";
+import { getVoyageLinkFacts, getVoyageSettings, saveVoyageEstimate } from "@/sdk/app/voyage";
 import { estimateVoyage } from "@/lib/voyage/engine";
 import { parseVoyageInput } from "@/lib/voyage/schemas";
 import { loadFuelIndex, voyageFuelProducts } from "@/lib/voyage/fuel-source";
@@ -163,17 +163,28 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     const clientFrom = typeof client.legs.laden?.from === "string" && LOCODE.test(client.legs.laden.from) ? client.legs.laden.from : null;
     const clientTo = typeof client.legs.laden?.to === "string" && LOCODE.test(client.legs.laden.to) ? client.legs.laden.to : null;
     const clientOpen = typeof client.legs.ballast?.from === "string" && LOCODE.test(client.legs.ballast.from) ? client.legs.ballast.from : clientFrom;
-    const vesselIdIn = typeof payload.vesselId === "string" && UUID.test(payload.vesselId) ? payload.vesselId : null;
-    const availabilityId = typeof payload.availabilityId === "string" && UUID.test(payload.availabilityId) ? payload.availabilityId : null;
-    const cargoListingId = typeof payload.cargoListingId === "string" && UUID.test(payload.cargoListingId) ? payload.cargoListingId : null;
-    const cargoRow = cargoListingId
-      ? (await admin.from("cargo_listings").select("load_port_locode, disch_port_locode, laycan_from, load_rate, disch_rate, qty_min_mt, qty_max_mt").eq("id", cargoListingId).maybeSingle()).data
-      : null;
-    const positionRow = availabilityId ? (await admin.from("vessel_availability").select("vessel_id, open_port_locode").eq("id", availabilityId).maybeSingle()).data : null;
+    // a link id that is present but not a UUID is refused, never dropped (C2O-058 #9)
+    const linkId = (v: unknown, what: string): { id: string | null; bad: boolean } =>
+      v == null || v === "" ? { id: null, bad: false } : typeof v === "string" && UUID.test(v) ? { id: v, bad: false } : { id: null, bad: (notes.push(what), true) };
+    const vIn = linkId(payload.vesselId, "vessel"), aIn = linkId(payload.availabilityId, "position"), cIn = linkId(payload.cargoListingId, "cargo");
+    if (vIn.bad || aIn.bad || cIn.bad) return { ok: false, error: "A linked id is malformed; reload the page and link again." };
+    const vesselIdIn = vIn.id, availabilityId = aIn.id, cargoListingId = cIn.id;
+    // authorised through the member's own session before anything is read (C2O-058 #7): one generic refusal
+    let linkFacts;
+    try { linkFacts = await getVoyageLinkFacts(supabase, cargoListingId, availabilityId); }
+    catch { return { ok: false, error: "A linked listing is not available to you; remove the link to save." }; }
+    if (vesselIdIn && !(await supabase.rpc("get_vessel_economics_profile", { p_vessel_id: vesselIdIn })).data?.allowed) {
+      return { ok: false, error: "The linked vessel is not available to you; remove the link to save." };
+    }
+    const fc = linkFacts.cargo, fp = linkFacts.position;
+    const cargoRow = fc ? { load_port_locode: fc.loadPort, disch_port_locode: fc.dischPort, laycan_from: fc.laycanFrom, load_rate: fc.loadRate, disch_rate: fc.dischRate, qty_min_mt: fc.qtyMin, qty_max_mt: fc.qtyMax } : null;
+    const positionRow = fp ? { vessel_id: fp.vesselId, open_port_locode: fp.openPort } : null;
     const linkCheck = reconcileLinks({
       ladenFrom: clientFrom, ladenTo: clientTo, openPort: clientOpen,
       qtyMt: client.ports?.load?.qtyMt == null ? null : Number(client.ports.load.qtyMt),
       freightQtyMt: client.revenue ? Number(client.revenue.qtyMt) : null,
+      portCalls: { loadPort: client.ports?.load?.port ?? null, dischPort: client.ports?.disch?.port ?? null,
+                   loadQtyMt: client.ports?.load?.qtyMt == null ? null : Number(client.ports.load.qtyMt), dischQtyMt: client.ports?.disch?.qtyMt == null ? null : Number(client.ports.disch.qtyMt) },
       vesselId: vesselIdIn,
       cargo: cargoListingId ? { id: cargoListingId, row: cargoRow } : null,
       position: availabilityId ? { id: availabilityId, row: positionRow ? { vessel_id: String(positionRow.vessel_id), open_port_locode: positionRow.open_port_locode ?? null } : null } : null,

@@ -24,8 +24,9 @@ values (3, 'draft', date '2026-10-05', null,
         'v3 = v2 accompanying/conditional/waste layers + the official SCA base toll bands + IMF SDR rate. Temporary surcharges in force since 15 Jul 2026 (dry bulk 22 %, tankers 37/27 %, containers 12 % …) are not modelled in this version.', :'actor'::uuid)
 returning id \gset v3_
 \set v3 :v3_id
-insert into public.suez_tariff_items (version_id, code, label_en, label_ar, layer, basis, currency, params, direction_scope, cargo_status_scope, condition_key, payer_party, sort_order, is_active, notes)
-select :'v3'::uuid, code, label_en, label_ar, layer, basis, currency, params, direction_scope, cargo_status_scope, condition_key, payer_party, sort_order, is_active, notes
+-- every governed column is carried, category_scope and confidence included (C2O-058 #11)
+insert into public.suez_tariff_items (version_id, code, label_en, label_ar, layer, basis, currency, params, direction_scope, cargo_status_scope, category_scope, confidence, condition_key, payer_party, sort_order, is_active, notes)
+select :'v3'::uuid, code, label_en, label_ar, layer, basis, currency, params, direction_scope, cargo_status_scope, category_scope, confidence, condition_key, payer_party, sort_order, is_active, notes
   from public.suez_tariff_items where version_id = :'v2'::uuid;
 insert into public.suez_tariff_version_sources (version_id, source_id)
 select :'v3'::uuid, source_id from public.suez_tariff_version_sources where version_id = :'v2'::uuid;
@@ -224,7 +225,8 @@ values (1.354080, date '2026-10-02', 'IMF', 'IMF representative rate, "currency 
 
 -- 5 · publish: close v2 the day before, then publish v3 (trigger validates params + bands)
 select public.admin_suez_set_window(:'v2'::uuid, :'actor'::uuid, date '2026-10-04', null);
-select public.admin_suez_set_status(:'v3'::uuid, :'actor'::uuid, 'published');
+-- publishing goes through admin_suez_publish since 20261003205500 (set_status refuses 'published')
+select public.admin_suez_publish(:'v3'::uuid, :'actor'::uuid, 'PUBLISH');
 
 -- 6 · what the member context now returns for today
 select (c ->> 'found') as found, (c -> 'version' ->> 'versionNo') as version_no, jsonb_array_length(c -> 'tiers') as tiers, (c -> 'sdr' ->> 'rateUsd') as sdr, jsonb_array_length(c -> 'sources') as sources, c ->> 'algorithmVersion' as algo

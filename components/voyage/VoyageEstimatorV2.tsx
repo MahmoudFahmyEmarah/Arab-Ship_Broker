@@ -18,12 +18,13 @@ import { estimateSuezTransit } from "@/lib/suez/engine";
 import { suezCategoryFromVesselType, type SuezEstimate, type SuezInput, type SuezTariffContextResult } from "@/lib/suez/types";
 import type { VoyageVesselOption } from "@/lib/voyage/vessel-options";
 import type { CargoView } from "@/lib/portal/types";
-import { detectSuezDirection, needsSuez } from "@/lib/portal/econ";
+import { needsSuez } from "@/lib/portal/econ";
 import { logEvent } from "@/lib/portal/events";
 import type { VesselEconomicsProfile } from "@/sdk/app/suez";
 import { loadSuezContextAction, loadVesselEconomicsAction, saveVesselEconomicsAction } from "@/app/(dashboard)/dashboard/suez-toll/actions";
 import { routeLegAction, saveVoyageEstimateAction, type RouteLegResult } from "@/app/(dashboard)/dashboard/voyage-estimator/actions";
 import { canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "@/lib/voyage/canal";
+import { suezFactReasons } from "@/lib/voyage/save-rules";
 import "@/lib/portal/voyage-estimator.css";
 import "./voyage-estimator-v2.css";
 
@@ -79,7 +80,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   const [voy, setVoy] = React.useState({
     seaMargin: "", anchorageDays: str(settings.anchorageDaysDefault), anchorageInEca: false, suezOverride: "auto" as "auto" | "yes" | "no",
     canalManualUsd: "", canalManualReason: "", ballastCanalManualUsd: "", ballastCanalManualReason: "",
-    suezConditionsDeclared: false, arrivalDraftFt: "",
+    suezConditionsDeclared: false, arrivalDraftFt: "", manualSuezDir: "" as "" | "SB" | "NB",
     loadAllowance: "0.5", dischAllowance: "0.5", loadInEca: false, dischInEca: false, loadOpenLoopBan: false, dischOpenLoopBan: false, loadEuBerth: false, dischEuBerth: false,
     pdaLoad: "", pdaLoadReason: "", pdaDisch: "", pdaDischReason: "", freight: "", commission: "", insurance: "", stevedoring: "", other: "",
   });
@@ -113,8 +114,10 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   const polCode = cargo?.route.polCode ?? null;
   const podCode = cargo?.route.podCode ?? null;
   const openCode = vessel?.openPortLocode ?? null;
-  React.useEffect(() => { fetchLeg(openCode, polCode, setBallast); }, [openCode, polCode]);
-  React.useEffect(() => { fetchLeg(polCode, podCode, setLaden); }, [polCode, podCode]);
+  // the voyage date: the cargo's laycan, else today — routes and ECA splits are read as of it, as on the save (C2O-058 #8)
+  const voyageDate = cargo?.laycanFrom && /^\d{4}-\d{2}-\d{2}/.test(cargo.laycanFrom) ? cargo.laycanFrom.slice(0, 10) : suezContext.date;
+  React.useEffect(() => { fetchLeg(openCode, polCode, setBallast, voyageDate); }, [openCode, polCode, voyageDate]);
+  React.useEffect(() => { fetchLeg(polCode, podCode, setLaden, voyageDate); }, [polCode, podCode, voyageDate]);
 
   React.useEffect(() => { if (vesselId && cargoId) logEvent("voyage_estimate", { target: vesselId, meta: { cargo: cargoId } }); }, [vesselId, cargoId]);
 
@@ -190,14 +193,15 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   const pre: VoyageEstimate | null = React.useMemo(() => (baseInput ? estimateVoyage(baseInput) : null), [baseInput]);
 
   // ── Suez: one transit per leg that crosses the canal, priced on its own transit date ──
-  const startDate = cargo?.laycanFrom && /^\d{4}-\d{2}-\d{2}/.test(cargo.laycanFrom) ? cargo.laycanFrom.slice(0, 10) : suezContext.date;
-  const zoneDir: "SB" | "NB" = cargo && detectSuezDirection(cargo.route.polZone, cargo.route.podZone) === "Northbound" ? "NB" : "SB";
+  const startDate = voyageDate;
   // A measured track decides; the override speaks only for a manual or missing laden leg (an assertion the server stamps).
   const ladenSuez = measured(laden) ? !!laden.auto?.chokepoints.includes("SUEZ") : voy.suezOverride === "auto" ? (cargo ? needsSuez(cargo.route.polZone, cargo.route.podZone) : false) : voy.suezOverride === "yes";
   const ballastSuez = hasBallast && measured(ballast) && !!ballast.auto?.chokepoints.includes("SUEZ");
   const suezRequired = ladenSuez || ballastSuez;
-  const ladenDir: "SB" | "NB" = laden.auto?.suezDirection ?? zoneDir;
-  const ballastDir: "SB" | "NB" = ballast.auto?.suezDirection ?? zoneDir;
+  // C2O-058 #2: no direction from zones; a measured track without in-canal waypoints, or a manual leg without the
+  // broker's explicit direction, leaves the canal unpriced (as the save does)
+  const ladenDir: "SB" | "NB" | null = measured(laden) ? (laden.auto?.suezDirection ?? null) : (voy.manualSuezDir === "SB" || voy.manualSuezDir === "NB" ? voy.manualSuezDir : null);
+  const ballastDir: "SB" | "NB" | null = ballast.auto?.suezDirection ?? null;
   const ladenDate = pre ? suezTransitDate(startDate, pre.days.portLoad + pre.days.seaLaden / 2) : startDate;
   const ballastDate = pre ? suezTransitDate(startDate, -pre.days.seaBallast / 2) : startDate;
   const [ctxByDate, setCtxByDate] = React.useState<Record<string, SuezTariffContextResult>>(() => ({ [suezContext.date]: suezContext }));
@@ -207,8 +211,8 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     }
   }, [ladenSuez, ballastSuez, ladenDate, ballastDate, ctxByDate]);
   const suezCategory = profile?.suezCategory ?? suezCategoryFromVesselType(vessel?.type);
-  const suezFor = React.useCallback((which: "laden" | "ballast", date: string, direction: "SB" | "NB"): { input: SuezInput | null; estimate: SuezEstimate | null } => {
-    if (!suezCategory) return { input: null, estimate: null };
+  const suezFor = React.useCallback((which: "laden" | "ballast", date: string, direction: "SB" | "NB" | null): { input: SuezInput | null; estimate: SuezEstimate | null } => {
+    if (!suezCategory || !direction) return { input: null, estimate: null };
     const input: SuezInput = {
       vessel: {
         scnt: num(form.scnt), gt: num(form.gt), scgt: profile?.scgt ?? null, category: suezCategory, buildYear: profile?.buildYear ?? vessel?.built ?? null,
@@ -231,19 +235,25 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     const v = num(usd);
     return v != null && reason.trim().length >= 3 ? { usd: v, manual: { actorUserId: actor, reason: reason.trim(), at: sessionAt } } : null;
   }, [actor, sessionAt]);
-  const anch = React.useCallback((d: "SB" | "NB") => (anchorageEca[d] == null ? { anchorageInEca: d === "SB", anchorageInEcaSource: "manual" as const } : { anchorageInEca: !!anchorageEca[d], anchorageInEcaSource: anchorageEcaConfidence === "official" ? ("governed" as const) : ("coarse" as const) }), [anchorageEca, anchorageEcaConfidence]);
+  const anch = React.useCallback((d: "SB" | "NB" | null) => (d == null ? { anchorageInEca: false, anchorageInEcaSource: "manual" as const } : anchorageEca[d] == null ? { anchorageInEca: d === "SB", anchorageInEcaSource: "manual" as const } : { anchorageInEca: !!anchorageEca[d], anchorageInEcaSource: anchorageEcaConfidence === "official" ? ("governed" as const) : ("coarse" as const) }), [anchorageEca, anchorageEcaConfidence]);
   // the server also compares every typed Suez fact with the governed profile; the preview shows the reasons it can see
-  const suezFactReasons = React.useMemo(() => [
-    ...(num(voy.arrivalDraftFt) != null ? ["arrival draft typed for this voyage"] : []),
-    ...(voy.suezConditionsDeclared ? [] : ["voyage conditions (special services, surcharges) not declared"]),
-  ], [voy.arrivalDraftFt, voy.suezConditionsDeclared]);
+  // the same comparison the save runs (C2O-058 #3): every typed Suez fact against the governed profile
+  const suezFactsPreview = React.useMemo(() => {
+    const gp = profile?.found && profile.allowed ? profile : null;
+    const n = (v: unknown) => (v == null ? null : Number(v));
+    return suezFactReasons(suezInput?.vessel, {
+      scnt: n(gp?.scnt), scgt: n(gp?.scgt), gt: n(gp?.gt), category: gp?.suezCategory ?? null, buildYear: n(gp?.buildYear) ?? vessel?.built ?? null,
+      craneCount: n(gp?.craneCount), craneSwlMt: n(gp?.craneSwlMt), mooringCranesOk: gp?.mooringCranesOk ?? null, searchlightCompliant: gp?.searchlightCompliant ?? null,
+      firstTransit: gp?.firstTransit ?? null, beamFt: n(gp?.beamFt), doubleBottom: gp?.doubleBottom ?? null,
+    }, voy.suezConditionsDeclared);
+  }, [profile, suezInput, vessel?.built, voy.suezConditionsDeclared]);
   const canal: CanalInput | null = React.useMemo(
-    () => (ladenSuez ? downgradeCanalForFacts(canalFromSuez(suezLaden.estimate, settings, { leg: "laden", ...anch(ladenDir), manualCost: manualCost(voy.canalManualUsd, voy.canalManualReason) }), suezFactReasons, { actorUserId: actor, at: sessionAt }) : null),
-    [ladenSuez, suezLaden.estimate, settings, ladenDir, anch, manualCost, voy.canalManualUsd, voy.canalManualReason, suezFactReasons, actor, sessionAt],
+    () => (ladenSuez ? downgradeCanalForFacts(canalFromSuez(suezLaden.estimate, settings, { leg: "laden", ...anch(ladenDir), manualCost: manualCost(voy.canalManualUsd, voy.canalManualReason) }), suezFactsPreview, { actorUserId: actor, at: sessionAt }) : null),
+    [ladenSuez, suezLaden.estimate, settings, ladenDir, anch, manualCost, voy.canalManualUsd, voy.canalManualReason, suezFactsPreview, actor, sessionAt],
   );
   const ballastCanal: CanalInput | null = React.useMemo(
-    () => (ballastSuez ? downgradeCanalForFacts(canalFromSuez(suezBallast.estimate, settings, { leg: "ballast", ...anch(ballastDir), manualCost: manualCost(voy.ballastCanalManualUsd, voy.ballastCanalManualReason) }), suezFactReasons, { actorUserId: actor, at: sessionAt }) : null),
-    [ballastSuez, suezBallast.estimate, settings, ballastDir, anch, manualCost, voy.ballastCanalManualUsd, voy.ballastCanalManualReason, suezFactReasons, actor, sessionAt],
+    () => (ballastSuez ? downgradeCanalForFacts(canalFromSuez(suezBallast.estimate, settings, { leg: "ballast", ...anch(ballastDir), manualCost: manualCost(voy.ballastCanalManualUsd, voy.ballastCanalManualReason) }), suezFactsPreview, { actorUserId: actor, at: sessionAt }) : null),
+    [ballastSuez, suezBallast.estimate, settings, ballastDir, anch, manualCost, voy.ballastCanalManualUsd, voy.ballastCanalManualReason, suezFactsPreview, actor, sessionAt],
   );
   const input: VoyageInput | null = React.useMemo(() => (baseInput ? { ...baseInput, canal, ballastCanal } : null), [baseInput, canal, ballastCanal]);
   const estimate: VoyageEstimate | null = React.useMemo(() => (input ? estimateVoyage(input) : null), [input]);
@@ -374,6 +384,14 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
                         {(ladenSuez ? ctxByDate[ladenDate] : ctxByDate[ballastDate])?.found === false ? <span className="vy-error">No published Suez tariff for {ladenSuez ? ladenDate : ballastDate}: the canal cost is unavailable unless you enter it below.</span>
                           : !suezCategory ? <span className="vy-error">SCA vessel category unknown for this vessel type: set it on the Suez calculator; the canal cost is unavailable.</span>
                           : suezEstimate ? <>Suez: {canal?.complete ? <b>{fmtUSD(canal.costUsd)}</b> : <span className="vy-error">unavailable</span>} <span className={`vy-badge vy-badge--${canal ? BADGE[canal.status] : "missing"}`}>{canal?.status}</span> · {suezEstimate.direction} · {suezEstimate.cargoStatus} · transit {suezEstimate.transitDate} · tariff v{suezEstimate.tariffVersion.versionNo} · {suezEstimate.transitDays} + {suezEstimate.anchorageDays} days{canal?.anchorageInEcaSource === "governed" ? ` · anchorage ${canal.anchorageInEca ? "inside" : "outside"} ECA` : ""} · <Link href={`/dashboard/suez-toll?vessel=${vesselId}`} className="sz-link">details →</Link>{!canal?.complete && suezEstimate.unavailable[0] ? <div className="vy-error">{suezEstimate.unavailable[0].reason}</div> : null}</> : null}
+                        {ladenSuez && !measured(laden) && (
+                          <label className="vy-field"><span>Suez direction (your assertion for a manual leg)</span>
+                            <select value={voy.manualSuezDir} onChange={(e) => setVoy({ ...voy, manualSuezDir: e.target.value as "" | "SB" | "NB" })} data-testid="manual-suez-dir">
+                              <option value="">Not stated: canal not priced</option><option value="SB">Southbound</option><option value="NB">Northbound</option>
+                            </select>
+                          </label>
+                        )}
+                        {suezRequired && (ladenSuez ? !ladenDir : !ballastDir) && <div className="vy-error">The Suez transit direction is not known for this track: the canal is not priced.</div>}
                         <div className="vy-row2">
                           <label className="vy-check" title="Without this declaration the canal figure is the broker's (manual): omitted conditions are never assumed absent">
                             <input type="checkbox" checked={voy.suezConditionsDeclared} onChange={(e) => setVoy({ ...voy, suezConditionsDeclared: e.target.checked })} data-testid="suez-conditions-declared" />
@@ -466,10 +484,10 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   );
 }
 
-function fetchLeg(from: string | null, to: string | null, set: React.Dispatch<React.SetStateAction<LegState>>) {
+function fetchLeg(from: string | null, to: string | null, set: React.Dispatch<React.SetStateAction<LegState>>, asOf: string) {
   if (!from || !to || from === to) { set((l) => ({ ...l, auto: null, loading: false })); return; }
   set((l) => ({ ...l, loading: true }));
-  routeLegAction(from, to).then((r) => set((l) => ({ ...l, loading: false, auto: r.ok ? r.data : { found: false, nm: null, ecaNm: null, chokepoints: [], method: "none", source: null, reversed: false, verified: false, geometryConfidence: "coarse", startZones: null, endZones: null, suezDirection: null, asOf: null, geometryVersions: [], algorithmVersion: null } })));
+  routeLegAction(from, to, asOf).then((r) => set((l) => ({ ...l, loading: false, auto: r.ok ? r.data : { found: false, nm: null, ecaNm: null, chokepoints: [], method: "none", source: null, reversed: false, verified: false, geometryConfidence: "coarse", startZones: null, endZones: null, suezDirection: null, asOf: null, geometryVersions: [], algorithmVersion: null } })));
 }
 
 function LegEditor({ title, from, to, leg, onChange, hidden }: { title: string; from: string | null; to: string | null; leg: LegState; onChange: (l: LegState) => void; hidden?: boolean }) {

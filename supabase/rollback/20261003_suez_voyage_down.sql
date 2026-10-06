@@ -1,4 +1,4 @@
--- DOWN for Stream S (Voyage Economics): 20261003200000 … 205600.
+-- DOWN for Stream S (Voyage Economics): 20261003200000 … 205700.
 -- Run it as ONE transaction WITH ON_ERROR_STOP (psql -1 -v ON_ERROR_STOP=1, or inside the migration harness): the
 -- first statement refuses otherwise,
 -- so a failure can never leave a partially removed module.
@@ -16,7 +16,7 @@ savepoint stream_s_down_requires_a_transaction;
 release savepoint stream_s_down_requires_a_transaction;
 
 do $used$
-declare v_used text[] := '{}'; v_confirmed boolean; v_ref text;
+declare v_used text[] := '{}'; v_confirmed boolean; v_ref text; v_counts jsonb := '{}'::jsonb; v_preserved jsonb := '{}'::jsonb; v_n bigint;
 begin
   -- The confirmation names the export it rests on (e.g. export-taken:asb-backups/prod-20261005b); it is logged and spent.
   v_ref := nullif(substring(coalesce(current_setting('asb.stream_s_down', true), '') from '^export-taken:(.{3,200})$'), '');
@@ -34,10 +34,24 @@ begin
       using errcode = '55000';
   end if;
   if cardinality(v_used) > 0 then raise notice 'Stream S DOWN on a used database by % at %; export confirmed: %; removed: %', session_user, now(), v_ref, array_to_string(v_used, ', '); end if;
-  -- durable evidence (C2O-050 #6): a NOTICE alone is lost with the session
+  -- durable evidence (C2O-050 #6, C2O-058 #10): what is removed, counted; what is preserved, listed apart
   if cardinality(v_used) > 0 and to_regclass('public.schema_rollback_evidence') is not null then
+    if to_regclass('public.voyage_estimate_runs') is not null then execute 'select count(*) from public.voyage_estimate_runs' into v_n; v_counts := v_counts || jsonb_build_object('voyage_estimate_runs', v_n); end if;
+    if to_regclass('public.voyage_estimate_lines') is not null then execute 'select count(*) from public.voyage_estimate_lines' into v_n; v_counts := v_counts || jsonb_build_object('voyage_estimate_lines', v_n); end if;
+    if to_regclass('public.sdr_rates') is not null then execute 'select count(*) from public.sdr_rates' into v_n; v_counts := v_counts || jsonb_build_object('sdr_rates', v_n); end if;
+    if to_regclass('public.suez_tariff_events') is not null then
+      execute 'select count(*) from public.suez_tariff_events where origin = ''command''' into v_n; v_counts := v_counts || jsonb_build_object('suez_tariff_events_command', v_n);
+      execute 'select count(*) from public.suez_tariff_events' into v_n; v_counts := v_counts || jsonb_build_object('suez_tariff_events_total', v_n);
+    end if;
+    if to_regclass('public.suez_tariff_versions') is not null then execute 'select count(*) from public.suez_tariff_versions' into v_n; v_counts := v_counts || jsonb_build_object('suez_tariff_versions', v_n); end if;
+    if to_regclass('public.vessel_economics_profiles') is not null then execute 'select count(*) from public.vessel_economics_profiles' into v_n; v_counts := v_counts || jsonb_build_object('vessel_economics_profiles', v_n); end if;
+    if to_regclass('public.vessel_economics_profile_events') is not null then execute 'select count(*) from public.vessel_economics_profile_events' into v_n; v_counts := v_counts || jsonb_build_object('vessel_economics_profile_events', v_n); end if;
+    if to_regclass('public.eca_zone_versions') is not null then execute 'select count(*) from public.eca_zone_versions where created_by is not null' into v_n; v_counts := v_counts || jsonb_build_object('eca_zone_versions_admin', v_n); end if;
+    if exists (select 1 from public.app_settings where key = 'voyage_settings' and coalesce(value ->> 'seedMarker', '') <> 'stream-s-20261003') then
+      v_preserved := jsonb_build_object('app_settings.voyage_settings', 'owner-edited row kept (seedMarker = owner-edited)');
+    end if;
     insert into public.schema_rollback_evidence (module, db_user, confirmation, used_state)
-    values ('stream-s', session_user, 'export-taken:' || v_ref, jsonb_build_object('removed', to_jsonb(v_used), 'at', now()));
+    values ('stream-s', session_user, 'export-taken:' || v_ref, jsonb_build_object('removedCounts', v_counts, 'preserved', v_preserved, 'at', now()));
   end if;
 end
 $used$;
@@ -72,6 +86,8 @@ drop function if exists public.fn_suez_lock_draft(uuid);
 drop function if exists public.fn_suez_validate_tiers(uuid);
 drop function if exists public.fn_suez_event(text, uuid, uuid, text, jsonb);
 drop function if exists public.fn_suez_require_admin(uuid);
+drop function if exists public.voyage_link_facts(uuid, uuid);
+drop function if exists public.resolve_voyage_vessel_link(uuid);
 drop function if exists public.fn_voyage_may_reference(uuid, text, uuid);
 -- fn_is_anonymisation is used by guards of tables dropped below; it goes last (see the end of this file).
 drop trigger if exists trg_eca_zone_record_version on public.eca_zones;
