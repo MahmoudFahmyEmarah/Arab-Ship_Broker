@@ -16,6 +16,10 @@
 -- Run in one transaction: psql -v ON_ERROR_STOP=1 -1 -f <this file>
 -- ════════════════════════════════════════════════════════════════════════
 
+-- Fire any deferred checks first: when this DOWN runs inside a transaction that also wrote rooms (the linked
+-- production rehearsal), ALTER TABLE fixture_rooms would otherwise fail with "pending trigger events".
+set constraints all immediate;
+
 do $$
 begin
   if exists (select 1 from pg_extension where extname = 'pg_cron') then
