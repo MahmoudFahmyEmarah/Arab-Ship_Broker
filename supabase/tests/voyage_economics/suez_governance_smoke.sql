@@ -525,8 +525,10 @@ begin
   if public.resolve_voyage_vessel_link(v_key) is not null then raise exception 'S15: another member''s position must not resolve'; end if;
   v_err := null; begin r := public.voyage_link_facts(null, v_av); exception when others then v_err := sqlerrm; end;
   if v_err is null or v_err not like 'VOYAGE_FORBIDDEN%' then raise exception 'S15: a foreign position must be refused generically (%)', v_err; end if;
-  if has_function_privilege('anon', 'public.voyage_link_facts(uuid, uuid)', 'execute') or has_function_privilege('anon', 'public.resolve_voyage_vessel_link(uuid)', 'execute') then
-    raise exception 'S15: anonymous visitors must not reach the link functions'; end if;
+  if has_function_privilege('anon', 'public.voyage_link_facts(uuid, uuid)', 'execute') or has_function_privilege('anon', 'public.resolve_voyage_vessel_link(uuid)', 'execute')
+     or has_function_privilege('service_role', 'public.voyage_link_facts(uuid, uuid)', 'execute') or has_function_privilege('service_role', 'public.resolve_voyage_vessel_link(uuid)', 'execute')
+     or not has_function_privilege('authenticated', 'public.voyage_link_facts(uuid, uuid)', 'execute') or not has_function_privilege('authenticated', 'public.resolve_voyage_vessel_link(uuid)', 'execute') then
+    raise exception 'S15: the link functions are member-session only (authenticated yes; anon and service_role no)'; end if;
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claim.role', '', true);
   perform set_config('request.jwt.claims', '', true);

@@ -14,6 +14,7 @@ import { DEFAULT_VOYAGE_SETTINGS, PLATFORM_CONSTANTS, type VoyageInput, type Voy
 import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage/calculator-policy";
 import { canalDirection, canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "../lib/voyage/canal";
 import { reconcileLinks, suezFactReasons, type GovernedSuezFacts } from "../lib/voyage/save-rules";
+import { createRequestGate } from "../lib/voyage/request-gate";
 import { voyageFuelProducts } from "../lib/voyage/fuel-source";
 import { estimateSuezTransit } from "../lib/suez/engine";
 import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
@@ -424,6 +425,20 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   const v2 = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
   ok(!v2.includes("detectSuezDirection") && !v2.includes("zoneDir") && v2.includes('measured(laden) ? (laden.auto?.suezDirection ?? null)'), "the preview never invents a Suez direction from zones");
   ok(v2.includes("routeLegAction(from, to, asOf)") && v2.includes("suezFactReasons(suezInput?.vessel"), "the preview reads routes at the voyage date and reuses the server's fact comparison");
+  // C2O-061 #2 · out-of-order responses: last request wins; the stale route is cleared and never prices
+  {
+    const gate = createRequestGate();
+    const applied: string[] = [];
+    const t1 = gate.next();            // request for the old date / cargo
+    const t2 = gate.next();            // the newer request
+    const respond = (ticket: number, value: string) => { if (gate.isCurrent(ticket)) applied.push(value); };
+    respond(t2, "new route");          // the newer answer arrives first …
+    respond(t1, "old route");          // … then the slower, older one
+    eq(applied, ["new route"], "a slower older response never overwrites the newer route");
+    const t3 = gate.next(); respond(t2, "late"); respond(t3, "latest");
+    eq(applied, ["new route", "latest"], "each new request makes every earlier ticket stale");
+  }
+  ok(v2.includes("const measured = (l: LegState) => !l.useManual && !l.loading && !!l.auto?.found;") && v2.includes("set((l) => ({ ...l, auto: null, loading: true }))") && v2.includes("if (!gate.isCurrent(ticket)) return;"), "the preview clears the route while loading and applies only the latest response");
 
   // C2O-050 #1 / #5 · adversarial Suez facts: anything not governed, a draft, or undeclared conditions is a reason
   const GOV: GovernedSuezFacts = { scnt: 16070, scgt: 21000, gt: 21500, category: "dry_bulk", buildYear: 2012, craneCount: 4, craneSwlMt: 30, mooringCranesOk: true, searchlightCompliant: true, firstTransit: false, beamFt: 105, doubleBottom: true };

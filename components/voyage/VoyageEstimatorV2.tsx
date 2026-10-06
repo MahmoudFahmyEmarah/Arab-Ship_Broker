@@ -25,6 +25,7 @@ import { loadSuezContextAction, loadVesselEconomicsAction, saveVesselEconomicsAc
 import { routeLegAction, saveVoyageEstimateAction, type RouteLegResult } from "@/app/(dashboard)/dashboard/voyage-estimator/actions";
 import { canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "@/lib/voyage/canal";
 import { suezFactReasons } from "@/lib/voyage/save-rules";
+import { createRequestGate, type RequestGate } from "@/lib/voyage/request-gate";
 import "@/lib/portal/voyage-estimator.css";
 import "./voyage-estimator-v2.css";
 
@@ -116,13 +117,16 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   const openCode = vessel?.openPortLocode ?? null;
   // the voyage date: the cargo's laycan, else today — routes and ECA splits are read as of it, as on the save (C2O-058 #8)
   const voyageDate = cargo?.laycanFrom && /^\d{4}-\d{2}-\d{2}/.test(cargo.laycanFrom) ? cargo.laycanFrom.slice(0, 10) : suezContext.date;
-  React.useEffect(() => { fetchLeg(openCode, polCode, setBallast, voyageDate); }, [openCode, polCode, voyageDate]);
-  React.useEffect(() => { fetchLeg(polCode, podCode, setLaden, voyageDate); }, [polCode, podCode, voyageDate]);
+  // last request wins per leg; the previous route is cleared while the new one loads, so it can never price it (C2O-061 #2)
+  const ballastGate = React.useRef(createRequestGate());
+  const ladenGate = React.useRef(createRequestGate());
+  React.useEffect(() => { fetchLeg(openCode, polCode, setBallast, voyageDate, ballastGate.current); }, [openCode, polCode, voyageDate]);
+  React.useEffect(() => { fetchLeg(polCode, podCode, setLaden, voyageDate, ladenGate.current); }, [polCode, podCode, voyageDate]);
 
   React.useEffect(() => { if (vesselId && cargoId) logEvent("voyage_estimate", { target: vesselId, meta: { cargo: cargoId } }); }, [vesselId, cargoId]);
 
   // ── engine input (the same rules as the server save, so the preview matches what is saved) ──
-  const measured = (l: LegState) => !l.useManual && !!l.auto?.found;
+  const measured = (l: LegState) => !l.useManual && !l.loading && !!l.auto?.found;
   const legInput = React.useCallback((key: "ballast" | "laden", from: string | null, to: string | null, l: LegState): SeaLegInput => {
     if (l.useManual) return { key, from, to, nm: num(l.manualNm), ecaNm: num(l.manualEcaNm) ?? 0, method: "manual", manual: { actorUserId: actor, reason: l.manualReason.trim(), at: sessionAt } };
     const a = l.auto;
@@ -484,10 +488,11 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   );
 }
 
-function fetchLeg(from: string | null, to: string | null, set: React.Dispatch<React.SetStateAction<LegState>>, asOf: string) {
+function fetchLeg(from: string | null, to: string | null, set: React.Dispatch<React.SetStateAction<LegState>>, asOf: string, gate: RequestGate) {
+  const ticket = gate.next();   // any older response in flight is now stale
   if (!from || !to || from === to) { set((l) => ({ ...l, auto: null, loading: false })); return; }
-  set((l) => ({ ...l, loading: true }));
-  routeLegAction(from, to, asOf).then((r) => set((l) => ({ ...l, loading: false, auto: r.ok ? r.data : { found: false, nm: null, ecaNm: null, chokepoints: [], method: "none", source: null, reversed: false, verified: false, geometryConfidence: "coarse", startZones: null, endZones: null, suezDirection: null, asOf: null, geometryVersions: [], algorithmVersion: null } })));
+  set((l) => ({ ...l, auto: null, loading: true }));   // the previous route never prices the new request
+  routeLegAction(from, to, asOf).then((r) => { if (!gate.isCurrent(ticket)) return; set((l) => ({ ...l, loading: false, auto: r.ok ? r.data : { found: false, nm: null, ecaNm: null, chokepoints: [], method: "none", source: null, reversed: false, verified: false, geometryConfidence: "coarse", startZones: null, endZones: null, suezDirection: null, asOf: null, geometryVersions: [], algorithmVersion: null } })); });
 }
 
 function LegEditor({ title, from, to, leg, onChange, hidden }: { title: string; from: string | null; to: string | null; leg: LegState; onChange: (l: LegState) => void; hidden?: boolean }) {

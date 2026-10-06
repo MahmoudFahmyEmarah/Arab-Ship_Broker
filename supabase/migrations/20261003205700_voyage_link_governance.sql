@@ -36,7 +36,7 @@ begin
   return v_id;
 end;
 $resolve$;
-revoke all on function public.resolve_voyage_vessel_link(uuid) from public, anon;
+revoke all on function public.resolve_voyage_vessel_link(uuid) from public, anon, service_role;  -- member session only (C2O-061 #3)
 grant execute on function public.resolve_voyage_vessel_link(uuid) to authenticated;
 comment on function public.resolve_voyage_vessel_link(uuid) is
   'Voyage estimator: resolves a market listing key to a vessel_availability id only when the calling member may reference that position; otherwise null (C2O-058 #1).';
@@ -70,7 +70,7 @@ begin
   return jsonb_build_object('cargo', v_cargo, 'position', v_pos);
 end;
 $facts$;
-revoke all on function public.voyage_link_facts(uuid, uuid) from public, anon;
+revoke all on function public.voyage_link_facts(uuid, uuid) from public, anon, service_role;  -- member session only (C2O-061 #3)
 grant execute on function public.voyage_link_facts(uuid, uuid) to authenticated;
 comment on function public.voyage_link_facts(uuid, uuid) is
   'Voyage estimator save: authorises the linked cargo / position for the calling member, then returns only the facts the save reconciles (C2O-058 #7).';
