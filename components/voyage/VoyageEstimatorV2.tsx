@@ -512,7 +512,7 @@ function fetchLeg(from: string | null, to: string | null, set: React.Dispatch<Re
     if (!gate.isCurrent(ticket)) return;
     set((l) => ({ ...l, loading: false, loadingFor: null, auto: bindLegResult(key, result) }));
   };
-  void routeLegAction(from, to, asOf).then(
+  void routeLegAction(key.from, key.to, key.asOf).then(
     (r) => settle(r.ok ? r.data : NO_ROUTE),
     () => settle(NO_ROUTE),
   );
