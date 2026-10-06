@@ -425,7 +425,7 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(pg.includes("resolveVoyageVesselLink(supabase, linkVessel)") && pg.includes("vessels.some((v) => v.id === resolved)"), "a market listing key is resolved as the member, to one of their own options only");
   const v2 = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
   ok(!v2.includes("detectSuezDirection") && !v2.includes("zoneDir") && v2.includes('measured(laden, ladenAuto, polCode, podCode) ? (ladenAuto?.suezDirection ?? null)'), "the preview never invents a Suez direction from zones");
-  ok(v2.includes("routeLegAction(from, to, asOf)") && v2.includes("suezFactReasons(suezInput?.vessel"), "the preview reads routes at the voyage date and reuses the server's fact comparison");
+  ok(v2.includes("routeLegAction(key.from, key.to, key.asOf)") && v2.includes("suezFactReasons(suezInput?.vessel"), "the preview calls the route action with the validated voyage-date lookup key and reuses the server's fact comparison");
   // C2O-061 #2 / C2O-063 · route facts carry their endpoint/date identity and stale settlements do nothing.
   {
     const lookupKey = legLookupKey("EGALY", "SAJED", "2026-10-03");
