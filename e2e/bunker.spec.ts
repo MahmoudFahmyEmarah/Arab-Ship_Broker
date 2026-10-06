@@ -26,6 +26,8 @@ const PRICE = 612;
 interface Seed {
   stamp: string;
   supplierName: string;
+  /** The port as the portal labels it: trade name, else the LOCODE. */
+  portLabel: string;
   supplierId: string;
   editor: { email: string; userId: string };
   outsider: { email: string; userId: string };
@@ -103,7 +105,11 @@ async function seed(): Promise<Seed> {
     p_actor: admin.userId, p_supplier_id: supplierId, p_user_id: editor.userId, p_role: "editor",
   });
   if (e3) throw new Error(`member: ${e3.message}`);
-  return { stamp, supplierName, supplierId: supplierId as string, editor, outsider, admin };
+  // The portal labels prices by the port's trade name ("Piraeus" on production
+  // data), falling back to the LOCODE when the ports row has none (local stack).
+  const { data: portRow } = await db.from("ports").select("trade_name").eq("locode", PORT).maybeSingle();
+  const portLabel = (portRow?.trade_name as string | null | undefined) || PORT;
+  return { stamp, supplierName, portLabel, supplierId: supplierId as string, editor, outsider, admin };
 }
 
 function cleanup(s: Seed) {
@@ -150,6 +156,7 @@ delete from auth.users where id in (${ids});
   }
 }
 
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 let s: Seed;
 const base = (b: { baseURL?: string }) => b.baseURL ?? "http://127.0.0.1:3102";
 
@@ -195,7 +202,7 @@ test("supplier publishes; the quote waits for approval and stays out of the inde
   await gotoStable(page, "/dashboard/bunker-supplier");
   await expect(page.getByRole("heading", { name: s.supplierName })).toBeVisible();
   await expect(page.getByText("Prices are reviewed before going live")).toBeVisible();
-  await page.getByLabel(new RegExp(`New VLSFO price at ${PORT}`)).fill(String(PRICE));
+  await page.getByLabel(new RegExp(`New VLSFO price at ${escapeRe(s.portLabel)}`)).fill(String(PRICE));
   await page.getByRole("button", { name: "Publish new prices" }).click();
   await expect(page.getByRole("status")).toContainText("go live after Arab ShipBroker approves");
   await expect(page.getByText(`$${PRICE} awaiting approval`)).toBeVisible();
@@ -286,7 +293,7 @@ test("supplier portal fits a phone screen", async ({ browser }, info) => {
     return main.scrollWidth - main.clientWidth;
   });
   expect(overflow).toBeLessThanOrEqual(1);
-  await expect(page.getByLabel(new RegExp(`New VLSFO price at ${PORT}`))).toBeVisible();
+  await expect(page.getByLabel(new RegExp(`New VLSFO price at ${escapeRe(s.portLabel)}`))).toBeVisible();
   await context.close();
 });
 
@@ -305,7 +312,7 @@ test("a retry after a lost response replays instead of duplicating (C2B-003 #2)"
     }
     await route.continue();
   });
-  await page.getByLabel(new RegExp(`New HSFO 380 price at ${PORT}`)).fill("533");
+  await page.getByLabel(new RegExp(`New HSFO 380 price at ${escapeRe(s.portLabel)}`)).fill("533");
   await page.getByRole("button", { name: "Publish new prices" }).click();
   await expect(page.locator(".bks-notice--error")).toContainText("will not be duplicated");
   await page.getByRole("button", { name: "Publish new prices" }).click();
