@@ -30,6 +30,7 @@ import { loadFuelIndex, voyageFuelProducts } from "@/lib/voyage/fuel-source";
 import { canalDirection, canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "@/lib/voyage/canal";
 import { resolveCalculatorAccess } from "@/lib/voyage/calculator-access";
 import { reconcileLinks, suezFactReasons } from "@/lib/voyage/save-rules";
+import { pdaFromEstimate } from "@/lib/voyage/pda-link";
 import { calculatorDenialMessage } from "@/lib/voyage/calculator-policy";
 import { estimateSuezTransit } from "@/lib/suez/engine";
 import { SUEZ_ALGORITHM_VERSION, type SuezEstimate, type SuezInput } from "@/lib/suez/types";
@@ -106,6 +107,22 @@ export async function routeLegAction(pol: string, pod: string, asOf?: string): P
     return { ok: true, data: await lookupLeg(supabase, a, b, asOf) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Route lookup failed." };
+  }
+}
+
+export interface VoyagePdaEstimateOption { id: string; callDate: string | null; coverage: string; terminalName: string | null; usdTotal: number | null; currency: string; generatedAt: string }
+/** The member's own current PDA estimates for one port (the port DA picker), through the governed member RPC. */
+export async function listVoyagePdaEstimatesAction(port: string): Promise<ActionResult<VoyagePdaEstimateOption[]>> {
+  const p = (port ?? "").trim().toUpperCase();
+  if (!LOCODE.test(p)) return { ok: false, error: "The port needs a UN/LOCODE." };
+  try {
+    const { access, supabase } = await resolveCalculatorAccess();
+    if (!access.allowed) return { ok: false, error: calculatorDenialMessage(access.reason) };
+    const { data, error } = await supabase.rpc("list_voyage_pda_estimates", { p_port_locode: p });
+    if (error) return { ok: false, error: "Saved PDA estimates are not available right now." };
+    return { ok: true, data: (Array.isArray(data) ? data : []) as VoyagePdaEstimateOption[] };
+  } catch {
+    return { ok: false, error: "Saved PDA estimates are not available right now." };
   }
 }
 
@@ -241,9 +258,18 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
       stemMt: null,
     });
 
-    // ── port DAs: manual with provenance, or none ─────────────────────────
-    for (const p of [client.ports.load, client.ports.disch]) {
-      if (p?.pda?.source === "tariff") return { ok: false, error: "A tariff-based port DA is not linked to the estimator yet; enter the DA as a manual figure with its reason." };
+    // ── port DAs: a saved PDA estimate (read through the PDA module's authorised get_pda_estimate, as the member),
+    //    manual with provenance, or none. The browser's figure for a tariff DA is never used (B2O-020 P2).
+    const pdaResolved: Record<"load" | "disch", VoyageInput["ports"]["load"]["pda"] | null> = { load: null, disch: null };
+    for (const key of ["load", "disch"] as const) {
+      const p = client.ports?.[key];
+      if (p?.pda?.source !== "tariff") continue;
+      const id = typeof p.pda.estimateId === "string" && UUID.test(p.pda.estimateId) ? p.pda.estimateId.toLowerCase() : null;
+      if (!id) return { ok: false, error: "A PDA-based port DA needs the estimate it comes from; choose it again." };
+      const { data: est, error: estErr } = await supabase.rpc("get_pda_estimate", { p_estimate_id: id });
+      const r = pdaFromEstimate(estErr ? null : (est as Record<string, unknown> | null), typeof p.port === "string" ? p.port : null, id);
+      if (!r.ok) return { ok: false, error: r.error };
+      pdaResolved[key] = { usd: r.usd, source: "tariff", estimateId: r.estimateId, coverage: r.coverage };
     }
 
     // ── vessel facts: the governed profile, or manual for this estimate ───
@@ -287,8 +313,8 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     const listingRate = (v: string | null | undefined) => { const n = v == null ? NaN : Number(String(v).replace(/[^0-9.]/g, "")); return Number.isFinite(n) && n > 0 ? n : null; };
     const rateSource = (typed: number | null | undefined, listed: number | null) => (listed != null && typed === listed ? ("listing" as const) : ("manual" as const));
     const ports: VoyageInput["ports"] = {
-      load: { ...client.ports.load, ...portEca(ladenRoute?.startZones, client.ports.load.inEca), rateSource: rateSource(client.ports.load.rateMtDay, listingRate(listing?.load_rate)), pda: { ...client.ports.load.pda, manual: stamp(client.ports.load.pda?.manual) } },
-      disch: { ...client.ports.disch, ...portEca(ladenRoute?.endZones, client.ports.disch.inEca), rateSource: rateSource(client.ports.disch.rateMtDay, listingRate(listing?.disch_rate)), pda: { ...client.ports.disch.pda, manual: stamp(client.ports.disch.pda?.manual) } },
+      load: { ...client.ports.load, ...portEca(ladenRoute?.startZones, client.ports.load.inEca), rateSource: rateSource(client.ports.load.rateMtDay, listingRate(listing?.load_rate)), pda: pdaResolved.load ?? { ...client.ports.load.pda, estimateId: undefined, coverage: undefined, manual: stamp(client.ports.load.pda?.manual) } },
+      disch: { ...client.ports.disch, ...portEca(ladenRoute?.endZones, client.ports.disch.inEca), rateSource: rateSource(client.ports.disch.rateMtDay, listingRate(listing?.disch_rate)), pda: pdaResolved.disch ?? { ...client.ports.disch.pda, estimateId: undefined, coverage: undefined, manual: stamp(client.ports.disch.pda?.manual) } },
     };
 
     const base: VoyageInput = {
@@ -397,9 +423,10 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     const pdaSources = [parsed.value.ports.load.pda.source, parsed.value.ports.disch.pda.source];
     const portSnapshot = sealSnapshot<PortCostSnapshot>({
       kind: "port_cost",
-      status: pdaSources.some((s) => s === "none") ? "unavailable" : pdaSources.some((s) => s === "manual") ? "manual" : "trusted",
-      load: { port: parsed.value.ports.load.port, usd: parsed.value.ports.load.pda.usd, source: parsed.value.ports.load.pda.source, manual: parsed.value.ports.load.pda.manual },
-      disch: { port: parsed.value.ports.disch.port, usd: parsed.value.ports.disch.pda.usd, source: parsed.value.ports.disch.pda.source, manual: parsed.value.ports.disch.pda.manual },
+      status: pdaSources.some((s) => s === "none") ? "unavailable" : pdaSources.some((s) => s === "manual") || result.costs.pdaLoad.status === "manual" || result.costs.pdaDisch.status === "manual" ? "manual"
+        : result.costs.pdaLoad.status !== "trusted" || result.costs.pdaDisch.status !== "trusted" ? "fallback" : "trusted",
+      load: { port: parsed.value.ports.load.port, usd: parsed.value.ports.load.pda.usd, source: parsed.value.ports.load.pda.source, estimateId: parsed.value.ports.load.pda.estimateId ?? null, coverage: parsed.value.ports.load.pda.coverage ?? null, manual: parsed.value.ports.load.pda.manual },
+      disch: { port: parsed.value.ports.disch.port, usd: parsed.value.ports.disch.pda.usd, source: parsed.value.ports.disch.pda.source, estimateId: parsed.value.ports.disch.pda.estimateId ?? null, coverage: parsed.value.ports.disch.pda.coverage ?? null, manual: parsed.value.ports.disch.pda.manual },
       warnings: result.unavailable.filter((u) => u.code.startsWith("pda_")).map((u) => u.reason),
     });
 

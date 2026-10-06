@@ -67,7 +67,7 @@ const portCall = z.object({
   euBerthOver2h: z.boolean(),
   inEcaSource: z.enum(["governed", "coarse", "manual"]).optional(),
   rateSource: z.enum(["listing", "manual"]).optional(),
-  pda: z.object({ usd: nonNeg(5_000_000).nullable(), source: z.enum(["tariff", "manual", "none"]), manual: manual.optional() }).strict().superRefine((p, ctx) => {
+  pda: z.object({ usd: nonNeg(5_000_000).nullable(), source: z.enum(["tariff", "manual", "none"]), manual: manual.optional(), estimateId: z.string().uuid().nullable().optional(), coverage: z.enum(["published", "partial", "manual_required"]).optional() }).strict().superRefine((p, ctx) => {
     if (p.source === "manual" && !p.manual) ctx.addIssue({ code: "custom", path: ["manual"], message: "a manual DA needs actor, reason and time" });
     if (p.source !== "none" && p.usd == null) ctx.addIssue({ code: "custom", path: ["usd"], message: "a sourced DA needs an amount" });
   }),
