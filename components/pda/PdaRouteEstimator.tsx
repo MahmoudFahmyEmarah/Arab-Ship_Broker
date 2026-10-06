@@ -393,6 +393,9 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
     setVoyageScope("");
     setLoadLocation("");
     setDischargeLocation("");
+    // Settlement is restated for every estimate (C2B-013): never carried into a new one.
+    setLoadSettlement("");
+    setDischargeSettlement("");
     setLoadRequestedServices([]);
     setDischargeRequestedServices([]);
     setLoadManualLines([]);
