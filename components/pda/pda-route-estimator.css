@@ -609,3 +609,9 @@
 @media (prefers-reduced-motion: reduce) {
   .is-spinning { animation: none; }
 }
+/* One status vocabulary (lib/economics/status.ts): Live / Partial / Fallback / Manual / Unavailable */
+.pda-status { font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: var(--ds-radius-small); margin: 2px 0; }
+.pda-status--live { color: var(--ds-green); background: var(--ds-green-soft); }
+.pda-status--partial, .pda-status--fallback { color: var(--ds-amber); background: var(--ds-amber-soft); }
+.pda-status--manual { color: var(--ds-blue); background: var(--ds-blue-soft); }
+.pda-status--unavailable { color: var(--ds-red); background: var(--ds-red-soft); }

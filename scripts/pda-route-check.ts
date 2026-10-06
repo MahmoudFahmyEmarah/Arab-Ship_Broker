@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { displayStatusLabel, fromComponentStatus, fromEstimateStatus, fromPdaLeg, fromSuezLineStatus } from "../lib/economics/status";
 
 import { aggregatePdaRoutePreview, derivePdaRouteTimeline } from "../lib/pda/route-calculate";
 import { dateTimeLocalUtcIso, formatUtcTimelineInstant } from "../lib/pda/route-datetime";
@@ -176,6 +177,20 @@ assert.equal(withFx.fxRates[0]?.sourceRef, "SAMA peg");
   assert.deepEqual(open.notSourced.filter((item) => item.code.startsWith("transit_")).map((item) => item.code), ["transit_suez", "transit_bosphorus"]);
   assert.match(open.notSourced.find((item) => item.code === "transit_suez")!.message, /No published Suez tariff/);
   assert.equal(open.totals.allInComplete, null);
+}
+
+// PR-13: one status vocabulary.
+{
+  assert.equal(fromPdaLeg({ completeAmount: 100, knownAmount: 100, governedLines: 3, manualLines: 0 }), "live");
+  assert.equal(fromPdaLeg({ completeAmount: 100, knownAmount: 100, governedLines: 2, manualLines: 1 }), "manual");
+  assert.equal(fromPdaLeg({ completeAmount: null, knownAmount: 60, governedLines: 2, manualLines: 0 }), "partial");
+  assert.equal(fromPdaLeg({ completeAmount: null, knownAmount: null, governedLines: 0, manualLines: 1 }), "manual");
+  assert.equal(fromPdaLeg({ completeAmount: null, knownAmount: null, governedLines: 0, manualLines: 0 }), "unavailable");
+  assert.equal(fromSuezLineStatus("placeholder"), "fallback");
+  assert.equal(fromSuezLineStatus("invalid"), "unavailable");
+  assert.equal(fromComponentStatus("fallback"), "fallback");
+  assert.equal(fromEstimateStatus("partial"), "partial");
+  assert.equal(displayStatusLabel("unavailable"), "Unavailable");
 }
 
 const missingFx = aggregatePdaRoutePreview({

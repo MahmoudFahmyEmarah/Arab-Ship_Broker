@@ -22,6 +22,7 @@ import type {
   PdaEstimatorTab,
   PdaEstimatorVesselOption,
 } from "@/lib/pda/estimator-contract";
+import { displayStatusLabel, fromPdaLeg } from "@/lib/economics/status";
 import { dateTimeLocalUtcIso, formatUtcTimelineInstant } from "@/lib/pda/route-datetime";
 import {
   PDA_ROUTE_SERVICE_OPTIONS,
@@ -1128,6 +1129,14 @@ function PortEstimateCard({
     item.provenance.requestedService === "cargo_handling"
     || item.provenance.requestedService === "agency"
   ));
+  const legStatus = result
+    ? fromPdaLeg({
+        completeAmount: displayTotal,
+        knownAmount: knownSubtotal,
+        governedLines: result.lines.filter((line) => !line.manual).length,
+        manualLines: result.lines.filter((line) => line.manual).length,
+      })
+    : null;
   const totalProvenance = !result
     ? "Waiting for explicit inputs"
     : displayTotal != null
@@ -1139,7 +1148,7 @@ function PortEstimateCard({
     <article className="pda-port-card asb-card">
       <header>
         <div><span className="pda-port-card__tag">{side === "load" ? "Load port" : "Discharge port"}</span><h2>{port?.name ?? "Port open"}</h2><p>{locode || "No exact port selected"} · {port?.country ?? ""}</p></div>
-        <div className="pda-port-card__total">{busy ? <Loader2 className="is-spinning" size={18} /> : <strong>{money(displayTotal, displayCurrency)}</strong>}<span>{totalProvenance}{displayTotal == null && knownSubtotal != null ? ` · ${money(knownSubtotal, displayCurrency)} display subtotal` : ""}</span>{fx && <small className="pda-port-card__fx">Converted at 1 {fx.base} = {fx.rate} {fx.quote} · {fx.sourceRef} ({fx.sourceKind.replace("_", " ")}), effective {fx.effectiveOn}{fx.inverse ? " · inverse of the recorded pair" : ""}</small>}</div>
+        <div className="pda-port-card__total">{busy ? <Loader2 className="is-spinning" size={18} /> : <strong>{money(displayTotal, displayCurrency)}</strong>}{legStatus ? <em className={`pda-status pda-status--${legStatus}`}>{displayStatusLabel(legStatus)}</em> : null}<span>{totalProvenance}{displayTotal == null && knownSubtotal != null ? ` · ${money(knownSubtotal, displayCurrency)} display subtotal` : ""}</span>{fx && <small className="pda-port-card__fx">Converted at 1 {fx.base} = {fx.rate} {fx.quote} · {fx.sourceRef} ({fx.sourceKind.replace("_", " ")}), effective {fx.effectiveOn}{fx.inverse ? " · inverse of the recorded pair" : ""}</small>}</div>
       </header>
       <div className="pda-port-card__facts">
         <div><span>Days of stay</span><strong>{compactNumber(days, " d")}</strong></div>
