@@ -1004,6 +1004,12 @@ function SummaryPanel({
   dischargeName: string;
 }) {
   const known = result?.totals.bothPortsKnown ?? null;
+  const transitOpen = result?.notSourced.find((item) => item.code === "canal_and_strait_transits" || item.code.startsWith("transit_")) ?? null;
+  const transitTile = !result
+    ? { value: "NOT SOURCED", note: "Complete both port selections", tone: "open" as const }
+    : result.totals.transit != null
+      ? { value: money(result.totals.transit, result.displayCurrency), note: result.transits.length ? result.transits.map((transit) => transit.note).join(" · ") : "No canal or strait on the measured route", tone: undefined }
+      : { value: "NOT SOURCED", note: transitOpen?.message ?? "No approved transit tariff is connected", tone: "open" as const };
   return (
     <section className="pda-summary asb-card">
       <div className="pda-summary__bar">
@@ -1024,7 +1030,7 @@ function SummaryPanel({
       <div className="pda-summary__tiles" aria-busy={busy}>
         <SummaryTile label="Known governed port subtotal" value={money(known, result?.displayCurrency ?? "USD")} note={result ? `POL ${money(result.totals.loadPortKnown, result.displayCurrency)} · POD ${money(result.totals.dischargePortKnown, result.displayCurrency)}` : "Requires explicit call facts"} />
         <SummaryTile label="Both ports · incl. handling & agency" value={money(result?.totals.handlingAndAgencyComplete ?? null, result?.displayCurrency ?? "USD")} note={result?.totals.handlingAndAgencyComplete != null ? "Every component has governed provenance" : "NOT SOURCED until both components are evidenced"} />
-        <SummaryTile label="Canal & strait transits" value="NOT SOURCED" note="No approved transit tariff is connected" tone="open" />
+        <SummaryTile label="Canal & strait transits" value={transitTile.value} note={transitTile.note} tone={transitTile.tone} />
         <SummaryTile label="Port cost and transits, all in" value={money(result?.totals.allInComplete ?? null, result?.displayCurrency ?? "USD")} note={result ? `${money(result.totals.allInKnown, result.displayCurrency)} known · ${result.notSourced.length} items open` : "Complete both port selections"} tone="dark" />
       </div>
     </section>

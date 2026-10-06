@@ -4,7 +4,11 @@ import { getAppUserRow } from "@/lib/app-user";
 import { calculatePda } from "@/lib/pda/calculate";
 import { aggregatePdaRoutePreview, derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
 import { pdaRoutePreviewSchema } from "@/lib/pda/route-schema";
-import type { PdaMeasuredPassage, PdaRouteFxRate, PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
+import type { PdaMeasuredPassage, PdaRouteFxRate, PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult, PdaRouteTimelineResult, PdaRouteTransit, PdaRouteTransitsInput } from "@/lib/pda/route-types";
+import { estimateSuezTransit } from "@/lib/suez/engine";
+import type { SuezInput } from "@/lib/suez/types";
+import { canalDirection } from "@/lib/voyage/canal";
+import { getSuezTariffContext, getVesselEconomicsProfile } from "@/sdk/app/suez";
 import { pdaRequestSchema } from "@/lib/pda/schemas";
 import type { PdaCalculationResult, PdaRequest } from "@/lib/pda/types";
 import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
@@ -366,6 +370,7 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
         load,
         discharge,
         timeline,
+        transitFacts: await routeTransits(supabase, input.load.portLocode, input.discharge.portLocode, timeline, vessel),
         fxRates: [
           ...(loadFx.fx ? [{ ...loadFx.fx, leg: "load" as const }] : []),
           ...(dischargeFx.fx ? [{ ...dischargeFx.fx, leg: "discharge" as const }] : []),
@@ -375,6 +380,78 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Unable to calculate route PDA") };
   }
+}
+
+/**
+ * Transits on the measured passage (Wave 3, PR-11): Suez is priced by the governed Suez engine
+ * on the tariff in force at mid-passage, from the vessel's governed economics profile (SCNT and
+ * Suez category). No measured route, no direction inside the canal, no SCNT/category or no
+ * published Suez tariff = the transit stays NOT SOURCED with that reason; nothing is guessed.
+ * Voyage conditions (late arrival, heavy lift, escort triggers, waste) are not declared on this
+ * page, so the Suez flags stay undecided and the estimate is partial unless the engine decides them.
+ */
+async function routeTransits(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  pol: string,
+  pod: string,
+  timeline: PdaRouteTimelineResult,
+  vessel: VesselView,
+): Promise<PdaRouteTransitsInput> {
+  const route = await getPortRoute(supabase, pol, pod);
+  if (!route) return { measured: false, chokepoints: [], priced: [] };
+  const chokepoints = [...new Set(route.chokepoints.map((item) => item.toUpperCase()))];
+  const priced: PdaRouteTransit[] = [];
+  if (chokepoints.includes("SUEZ")) {
+    const direction = canalDirection(route.waypoints);
+    const etd = Date.parse(timeline.etdLoad);
+    const transitDate = Number.isFinite(etd) && Number.isFinite(timeline.passageDays)
+      ? new Date(etd + (timeline.passageDays / 2) * 86_400_000).toISOString().slice(0, 10)
+      : null;
+    const base = { chokepoint: "SUEZ", label: "Suez Canal transit", direction, transitDate, undecided: 0, tariffVersionId: null };
+    const unpriced = (note: string): PdaRouteTransit => ({ ...base, status: "unavailable", amountUsd: null, note });
+    if (!direction) {
+      priced.push(unpriced("The measured track has no waypoints inside the canal, so its transit direction is unknown; the canal is not priced."));
+    } else if (!transitDate) {
+      priced.push(unpriced("The transit date cannot be derived from the timeline; the canal is not priced."));
+    } else {
+      const ownedVesselId = vessel.vesselId && UUID.test(vessel.vesselId) ? vessel.vesselId : null;
+      const profile = ownedVesselId ? await getVesselEconomicsProfile(supabase, ownedVesselId).catch(() => null) : null;
+      const scnt = profile?.found ? profile.scnt ?? null : null;
+      const category = profile?.found ? profile.suezCategory ?? null : null;
+      if (scnt == null || !category) {
+        priced.push(unpriced("Suez needs the vessel's SCNT and Suez category from its economics profile (Voyage data); the canal is not priced."));
+      } else {
+        const context = await getSuezTariffContext(supabase, transitDate).catch(() => null);
+        if (!context?.found) {
+          priced.push(unpriced(`No published Suez tariff covers ${transitDate}; the canal is not priced.`));
+        } else {
+          const input: SuezInput = {
+            vessel: {
+              scnt, scgt: profile?.scgt ?? null, gt: profile?.gt ?? vessel.gt ?? null, category,
+              buildYear: profile?.buildYear ?? null, firstTransit: profile?.firstTransit ?? null,
+              searchlightCompliant: profile?.searchlightCompliant ?? null, mooringCranesOk: profile?.mooringCranesOk ?? null,
+            },
+            voyage: { direction, cargoStatus: "laden", transitDate },
+          };
+          const estimate = estimateSuezTransit(input, context);
+          const undecided = estimate.layers.conditional.filter((flag) => flag.triggered === null && !flag.contingent).length;
+          const complete = estimate.status !== "invalid" && estimate.totals.complete;
+          priced.push({
+            ...base,
+            label: `Suez Canal transit (laden, ${direction})`,
+            status: estimate.status,
+            amountUsd: complete ? estimate.totals.appliedUsd : null,
+            undecided,
+            tariffVersionId: estimate.tariffVersion.id,
+            note: complete
+              ? `Suez tariff v${estimate.tariffVersion.versionNo} on ${transitDate}${undecided ? ` · ${undecided} condition(s) not declared on this page (late arrival, escort, waste…); see the Suez calculator` : ""}`
+              : `The Suez estimate is incomplete on ${transitDate}: ${estimate.unavailable.slice(0, 3).map((item) => item.reason).join("; ") || "missing governed inputs"}.`,
+          });
+        }
+      }
+    }
+  }
+  return { measured: true, chokepoints, priced };
 }
 
 /**

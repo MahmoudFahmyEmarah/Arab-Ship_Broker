@@ -157,6 +157,27 @@ const withFx = aggregatePdaRoutePreview({
 assert.equal(withFx.fxRates.length, 1);
 assert.equal(withFx.fxRates[0]?.sourceRef, "SAMA peg");
 
+// Transits (Wave 3): no measured route = unknown (canal item stays); a measured route with no
+// chokepoint costs nothing; Suez priced complete is added; anything unpriced is listed per chokepoint.
+{
+  const base = { ...aggregate, canonical, load: result({ nativeCurrency: "USD", native: 15_342 }), discharge: result({ nativeCurrency: "USD", native: 4_784 }), timeline };
+  assert.ok(aggregate.notSourced.some((item) => item.code === "canal_and_strait_transits"), "no measured route: transits unknown");
+  const none = aggregatePdaRoutePreview({ ...base, transitFacts: { measured: true, chokepoints: [], priced: [] } });
+  assert.equal(none.totals.transit, 0);
+  assert.equal(none.notSourced.some((item) => item.code === "canal_and_strait_transits" || item.code.startsWith("transit_")), false);
+  assert.equal(none.totals.allInKnown, none.totals.bothPortsKnown);
+  const suez = { chokepoint: "SUEZ", label: "Suez Canal transit (laden, SB)", direction: "SB" as const, transitDate: "2026-10-12", status: "partial" as const, amountUsd: 310_000, undecided: 2, tariffVersionId: "v5", note: "Suez tariff v5 on 2026-10-12" };
+  const priced = aggregatePdaRoutePreview({ ...base, transitFacts: { measured: true, chokepoints: ["SUEZ"], priced: [suez] } });
+  assert.equal(priced.totals.transit, 310_000);
+  assert.equal(priced.transits.length, 1);
+  assert.equal(priced.totals.allInKnown, (priced.totals.bothPortsKnown ?? 0) + 310_000);
+  const open = aggregatePdaRoutePreview({ ...base, transitFacts: { measured: true, chokepoints: ["SUEZ", "BOSPHORUS"], priced: [{ ...suez, amountUsd: null, status: "unavailable" as const, note: "No published Suez tariff covers 2026-10-12; the canal is not priced." }] } });
+  assert.equal(open.totals.transit, null);
+  assert.deepEqual(open.notSourced.filter((item) => item.code.startsWith("transit_")).map((item) => item.code), ["transit_suez", "transit_bosphorus"]);
+  assert.match(open.notSourced.find((item) => item.code === "transit_suez")!.message, /No published Suez tariff/);
+  assert.equal(open.totals.allInComplete, null);
+}
+
 const missingFx = aggregatePdaRoutePreview({
   ...aggregate,
   canonical,
