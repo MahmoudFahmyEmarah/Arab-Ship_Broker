@@ -317,4 +317,39 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(covered.lines.find((l) => l.ruleCode === "pilot_prog")?.amount, 1500, "contiguous progressive: 10,000 x 0.1 + 10,000 x 0.05");
 }
 
+// ── PR-10a: compound bases, started-unit rounding, settlement mode ──────────
+{
+  const egypt = (rules: PdaTariffVersion["rules"]) => ({ ...version, rules });
+  const call = (days: number, extra: Partial<PdaRequest["call"]> = {}, vessel: Partial<PdaRequest["vessel"]> = {}): PdaRequest => ({
+    ...request, vessel: { gt: 40000, loaM: 225, ...vessel }, call: { days, requestedServices: [], ...extra },
+  });
+  // Decree 488/2015: berthing dues USD 0.02 x GRT x days, part of a day = a day.
+  const berth = { id: ids.day, code: "berthing_dues", label: "Berthing dues", basis: "per_gt_day" as const, rate: 0.02, rounding: "started" as const, priority: 10, source };
+  const started = calculatePda(call(3.2), egypt([berth]));
+  assert.equal(started.lines[0]?.amount, 3200, "0.02 x 40,000 GT x 4 started days");
+  assert.equal(started.lines[0]?.inputs.rawDuration, 3.2);
+  assert.equal(started.lines[0]?.inputs.roundedUnits, 4);
+  assert.match(String(started.lines[0]?.inputs.formula), /ceil/);
+  const exact = calculatePda(call(3.2), egypt([{ ...berth, rounding: "exact" as const }]));
+  assert.equal(exact.lines[0]?.amount, 2560, "exact: 0.02 x 40,000 x 3.2");
+  assert.equal(calculatePda(call(3.0000000001), egypt([berth])).lines[0]?.amount, 2400, "float noise does not add a started day");
+  // Site occupation USD 12 x LOA m x days.
+  const site = { id: ids.flat, code: "site_occupation", label: "Site occupation", basis: "per_loa_day" as const, rate: 12, rounding: "started" as const, priority: 10, source };
+  assert.equal(calculatePda(call(2.5), egypt([site])).lines[0]?.amount, 8100, "12 x 225 m x 3 started days");
+  // Bulgaria-style: EUR 0.10 per LOA metre per started hour.
+  const hourly = { id: ids.progressive, code: "berth_hourly", label: "Berth (hourly)", basis: "per_loa_hour" as const, rate: 0.1, rounding: "started" as const, priority: 10, source };
+  assert.equal(calculatePda(call(1, { hours: 7.5 }, { loaM: 190 }), egypt([hourly])).lines[0]?.amount, 152, "0.10 x 190 m x 8 started hours");
+  // Blocks: unit size 0.5 day, started.
+  assert.equal(calculatePda(call(1.2), egypt([{ ...berth, unitSize: 0.5 }])).lines[0]?.inputs.roundedUnits, 3, "1.2 days = 3 started half-days");
+  // A compound rule without its factor raises MISSING_INPUT.
+  const noLoa = calculatePda(call(2, {}, { loaM: null }), egypt([site]));
+  assert.equal(noLoa.lines.length, 0);
+  assert.equal(noLoa.warnings.some((w) => w.code === "MISSING_INPUT"), true);
+  // Settlement mode is typed and used by applicability; missing is MISSING_INPUT, never inferred.
+  const agentOnly = { ...version.rules[0]!, applicability: { settlementModes: ["agent_account" as const] } };
+  assert.equal(calculatePda(call(1, { settlementMode: "agent_account" }), egypt([agentOnly])).lines.length, 1);
+  assert.equal(calculatePda(call(1, { settlementMode: "cash" }), egypt([agentOnly])).lines.length, 0);
+  assert.equal(calculatePda(call(1), egypt([agentOnly])).warnings.some((w) => w.code === "MISSING_INPUT" && /settlement mode/.test(w.message)), true);
+}
+
 console.log("PDA CHECK: ALL ASSERTIONS PASSED");

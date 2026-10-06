@@ -55,6 +55,7 @@ function missingFacts(rule: PdaTariffRule, request: PdaRequest): string[] {
   list("cargo status", request.call.cargoStatus, a.cargoStatuses);
   list("voyage scope", request.call.voyageScope, a.voyageScopes);
   list("location", request.call.location, a.locations);
+  list("settlement mode", request.call.settlementMode, a.settlementModes);
   range("GT", request.vessel.gt, a.minGt, a.maxGt);
   range("NT", request.vessel.nt, a.minNt, a.maxNt);
   range("SCNRT", request.vessel.scnrt, a.minScnrt, a.maxScnrt);
@@ -78,6 +79,7 @@ function applies(rule: PdaTariffRule, request: PdaRequest): boolean {
   if (!inList(request.call.cargoStatus, a.cargoStatuses)) return false;
   if (!inList(request.call.voyageScope, a.voyageScopes)) return false;
   if (!inList(request.call.location, a.locations)) return false;
+  if (!inList(request.call.settlementMode, a.settlementModes)) return false;
   return (
     inRange(request.vessel.gt, a.minGt, a.maxGt) &&
     inRange(request.vessel.nt, a.minNt, a.maxNt) &&
@@ -142,20 +144,70 @@ function progressiveAmount(rule: PdaTariffRule, quantity: number): number {
   return total;
 }
 
-function automaticAmount(rule: PdaTariffRule, request: PdaRequest, prior: Map<string, number>, notApplicable: Set<string>) {
+// Duration billing (PR-10): the raw duration less any included units, counted
+// exactly or by started unit (ceil(duration / unitSize)). Pre-PR-10 rules have
+// no rounding and default to exact with unit size 1, so their results are unchanged.
+interface DurationDetail {
+  rawDuration: number;
+  durationUnit: "day" | "hour";
+  includedUnits: number;
+  rounding: "exact" | "started";
+  unitSize: number;
+  roundedUnits: number;
+}
+
+function billedDuration(rule: PdaTariffRule, raw: number, unit: "day" | "hour"): DurationDetail {
+  const rounding = rule.rounding ?? "exact";
+  const unitSize = rule.unitSize ?? 1;
+  if (!(unitSize > 0)) throw new Error(`INVALID_TARIFF:${rule.code} unit size must be positive`);
+  const includedUnits = rule.includedUnits ?? 0;
+  const net = Math.max(0, raw - includedUnits);
+  const exact = net / unitSize;
+  // a tolerance keeps 3.0000000001 days from becoming 4 started days
+  const roundedUnits = rounding === "started" ? Math.ceil(exact - 1e-9) : exact;
+  return { rawDuration: raw, durationUnit: unit, includedUnits, rounding, unitSize, roundedUnits };
+}
+
+const callHours = (request: PdaRequest) => request.call.hours ?? request.call.days * 24;
+
+function durationFormula(d: DurationDetail): string {
+  const net = d.includedUnits ? `(${d.rawDuration} − ${d.includedUnits} included)` : `${d.rawDuration}`;
+  const per = d.unitSize === 1 ? `${d.durationUnit}s` : `blocks of ${d.unitSize} ${d.durationUnit}s`;
+  return d.rounding === "started" ? `started ${per}: ceil(${net} / ${d.unitSize}) = ${d.roundedUnits}` : `${per}: ${net} / ${d.unitSize} = ${d.roundedUnits}`;
+}
+
+type Calculated = { amount: number; quantity: number; rate: number | null; detail?: Record<string, unknown> };
+
+function automaticAmount(rule: PdaTariffRule, request: PdaRequest, prior: Map<string, number>, notApplicable: Set<string>): Calculated {
   const included = rule.includedUnits ?? 0;
   switch (rule.basis) {
     case "flat":
     case "per_call":
       return { amount: requireNumber(rule.amount ?? rule.rate, "amount"), quantity: 1, rate: rule.amount ?? rule.rate ?? null };
     case "per_day": {
-      const quantity = Math.max(0, request.call.days - included);
-      return { amount: quantity * requireNumber(rule.rate, "rate"), quantity, rate: rule.rate ?? null };
+      const d = billedDuration(rule, request.call.days, "day");
+      return { amount: d.roundedUnits * requireNumber(rule.rate, "rate"), quantity: d.roundedUnits, rate: rule.rate ?? null,
+        detail: { ...d, formula: `${durationFormula(d)} × rate ${rule.rate}` } };
     }
     case "per_hour": {
-      const hours = request.call.hours ?? request.call.days * 24;
-      const quantity = Math.max(0, hours - included);
-      return { amount: quantity * requireNumber(rule.rate, "rate"), quantity, rate: rule.rate ?? null };
+      const d = billedDuration(rule, callHours(request), "hour");
+      return { amount: d.roundedUnits * requireNumber(rule.rate, "rate"), quantity: d.roundedUnits, rate: rule.rate ?? null,
+        detail: { ...d, formula: `${durationFormula(d)} × rate ${rule.rate}` } };
+    }
+    // Compound bases (PR-10): rate × GT or LOA × billed duration.
+    case "per_gt_day":
+    case "per_loa_day":
+    case "per_loa_hour": {
+      const byGt = rule.basis === "per_gt_day";
+      const factorName = byGt ? "GT" : "LOA m";
+      const factor = byGt ? requireNumber(request.vessel.gt, "gt") : requireNumber(request.vessel.loaM, "loaM");
+      const d = rule.basis === "per_loa_hour"
+        ? billedDuration(rule, callHours(request), "hour")
+        : billedDuration(rule, request.call.days, "day");
+      const rate = requireNumber(rule.rate, "rate");
+      const quantity = factor * d.roundedUnits;
+      return { amount: quantity * rate, quantity, rate,
+        detail: { ...d, factorName, factor, formula: `${factorName} ${factor} × ${durationFormula(d)} × rate ${rate}` } };
     }
     case "per_gt": {
       const quantity = Math.max(0, requireNumber(request.vessel.gt, "gt") - included);
@@ -422,11 +474,13 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
         rate: calculated.rate,
         amount,
         ...(request.fxRate ? { convertedAmount: round(amount * request.fxRate, version.decimalPlaces, version.roundingMode) } : {}),
-        explanation: makeExplanation(rule, calculated.quantity, calculated.rate, beforeTax, amount),
+        explanation: makeExplanation(rule, calculated.quantity, calculated.rate, beforeTax, amount)
+          + (typeof calculated.detail?.formula === "string" ? `; ${calculated.detail.formula}` : ""),
         inputs: {
           quantity: calculated.quantity,
           rate: calculated.rate,
           serviceCodes: governedServiceCodes(rule),
+          ...(calculated.detail ?? {}),
         },
         serviceCodes: governedServiceCodes(rule),
         manual: false,
