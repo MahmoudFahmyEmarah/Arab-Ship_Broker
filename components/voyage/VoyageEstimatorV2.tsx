@@ -26,6 +26,7 @@ import { routeLegAction, saveVoyageEstimateAction, type RouteLegResult } from "@
 import { canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "@/lib/voyage/canal";
 import { suezFactReasons } from "@/lib/voyage/save-rules";
 import { createRequestGate, type RequestGate } from "@/lib/voyage/request-gate";
+import { acceptedLegResult, bindLegResult, legLookupKey, matchesLegEndpoints, matchesLegLookup, rebindManualLeg, voyagePdaHref, type BoundLegResult, type LegEndpoints, type LegLookupKey } from "@/lib/voyage/leg-state";
 import "@/lib/portal/voyage-estimator.css";
 import "./voyage-estimator-v2.css";
 
@@ -48,8 +49,11 @@ const laneKey = (a?: string | null, b?: string | null): string | null => {
   return /^[A-Z0-9.]+>[A-Z0-9.]+$/.test(k) ? k : null;
 };
 
-interface LegState { auto: RouteLegResult | null; loading: boolean; manualNm: string; manualEcaNm: string; manualReason: string; useManual: boolean }
-const emptyLeg = (): LegState => ({ auto: null, loading: false, manualNm: "", manualEcaNm: "", manualReason: "", useManual: false });
+const NO_ROUTE: RouteLegResult = { found: false, nm: null, ecaNm: null, chokepoints: [], method: "none", source: null, reversed: false, verified: false, geometryConfidence: "coarse", startZones: null, endZones: null, suezDirection: null, asOf: null, geometryVersions: [], algorithmVersion: null };
+
+interface LegState { auto: BoundLegResult<RouteLegResult> | null; loading: boolean; loadingFor: LegLookupKey | null; manualFor: LegEndpoints | null; manualNm: string; manualEcaNm: string; manualReason: string; useManual: boolean }
+const emptyLeg = (): LegState => ({ auto: null, loading: false, loadingFor: null, manualFor: null, manualNm: "", manualEcaNm: "", manualReason: "", useManual: false });
+const usesCurrentManual = (l: LegState, from: string | null, to: string | null) => l.useManual && matchesLegEndpoints(l.manualFor, from, to);
 
 interface ProfileForm {
   speedLaden: string; speedBallast: string; hasScrubber: Tri; vesselClass: VesselClass | "";
@@ -126,10 +130,13 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   React.useEffect(() => { if (vesselId && cargoId) logEvent("voyage_estimate", { target: vesselId, meta: { cargo: cargoId } }); }, [vesselId, cargoId]);
 
   // ── engine input (the same rules as the server save, so the preview matches what is saved) ──
-  const measured = (l: LegState) => !l.useManual && !l.loading && !!l.auto?.found;
-  const legInput = React.useCallback((key: "ballast" | "laden", from: string | null, to: string | null, l: LegState): SeaLegInput => {
-    if (l.useManual) return { key, from, to, nm: num(l.manualNm), ecaNm: num(l.manualEcaNm) ?? 0, method: "manual", manual: { actorUserId: actor, reason: l.manualReason.trim(), at: sessionAt } };
-    const a = l.auto;
+  const ballastLoading = ballast.loading && matchesLegLookup(ballast.loadingFor, openCode, polCode, voyageDate);
+  const ladenLoading = laden.loading && matchesLegLookup(laden.loadingFor, polCode, podCode, voyageDate);
+  const ballastAuto = acceptedLegResult(ballast.auto, ballast.loading, ballast.loadingFor, openCode, polCode, voyageDate);
+  const ladenAuto = acceptedLegResult(laden.auto, laden.loading, laden.loadingFor, polCode, podCode, voyageDate);
+  const measured = (l: LegState, a: RouteLegResult | null, from: string | null, to: string | null) => !usesCurrentManual(l, from, to) && !(l.loading && matchesLegLookup(l.loadingFor, from, to, voyageDate)) && !!a?.found;
+  const legInput = React.useCallback((key: "ballast" | "laden", from: string | null, to: string | null, l: LegState, a: RouteLegResult | null): SeaLegInput => {
+    if (usesCurrentManual(l, from, to)) return { key, from, to, nm: num(l.manualNm), ecaNm: num(l.manualEcaNm) ?? 0, method: "manual", manual: { actorUserId: actor, reason: l.manualReason.trim(), at: sessionAt } };
     if (!a?.found || !from || !to) return { key, from, to, nm: null, ecaNm: null, method: "none" };
     return { key, from, to, nm: a.nm, ecaNm: a.method === "waypoints" ? a.ecaNm : null, method: a.method === "waypoints" ? "waypoints" : "distance_only", routeSource: a.source, routeVerified: a.verified, ecaConfidence: a.geometryConfidence, canalNm: a.chokepoints.includes("SUEZ") ? settings.suez.nm : null };
   }, [actor, sessionAt, settings.suez.nm]);
@@ -138,10 +145,18 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     return usd == null ? { usd: null, source: "none" } : { usd, source: "manual", manual: { actorUserId: actor, reason: reason.trim(), at: sessionAt } };
   }, [actor, sessionAt]);
   const qty = cargo?.qty.max ?? cargo?.qty.min ?? 0;
+  const portsDaHref = voyagePdaHref({
+    availabilityId: vessel?.id ?? null,
+    cargoOwnedListingId: cargo?.ownedListingId ?? null,
+    cargoRef: cargo?.refId ?? null,
+    loadLocode: cargo?.portScope?.polScope === "port" ? polCode : null,
+    dischargeLocode: cargo?.portScope?.podScope === "port" ? podCode : null,
+    quantityMt: qty,
+  });
   // No open port on the position: the ballast leg is kept and reported unavailable, never silently dropped.
   const hasBallast = !!vessel && (openCode == null || openCode !== polCode);
-  const ladenStartZones = measured(laden) ? laden.auto?.startZones ?? null : null;
-  const ladenEndZones = measured(laden) ? laden.auto?.endZones ?? null : null;
+  const ladenStartZones = measured(laden, ladenAuto, polCode, podCode) ? ladenAuto?.startZones ?? null : null;
+  const ladenEndZones = measured(laden, ladenAuto, polCode, podCode) ? ladenAuto?.endZones ?? null : null;
   const loadInEca = ladenStartZones != null ? ladenStartZones.length > 0 : voy.loadInEca;
   const dischInEca = ladenEndZones != null ? ladenEndZones.length > 0 : voy.dischInEca;
   const consumption: ConsumptionMap = React.useMemo(() => {
@@ -169,8 +184,8 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     return {
       vessel: { name: vessel.name, speedLadenKn: num(form.speedLaden), speedBallastKn: num(form.speedBallast), consumption, hasScrubber: triToBool(form.hasScrubber), vesselClass: form.vesselClass || null },
       legs: {
-        ballast: hasBallast ? legInput("ballast", openCode, polCode, ballast) : null,
-        laden: legInput("laden", polCode, podCode, laden),
+        ballast: hasBallast ? legInput("ballast", openCode, polCode, ballast, ballastAuto) : null,
+        laden: legInput("laden", polCode, podCode, laden, ladenAuto),
       },
       canal: null,
       ballastCanal: null,
@@ -178,12 +193,12 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
       // the server takes the laycan from the linked listing; a market cargo's date is a broker input
       scheduleSource: cargo.ownedListingId && cargo.laycanFrom ? "listing" : "manual",
       ports: {
-        load: { key: "load", port: polCode, qtyMt: qty, rateMtDay: cargo.loadRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.loadAllowance) ?? 0, inEca: loadInEca, inEcaSource: ladenStartZones != null ? (laden.auto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.loadOpenLoopBan, euBerthOver2h: voy.loadEuBerth, pda: pdaInput(voy.pdaLoad, voy.pdaLoadReason) },
-        disch: { key: "disch", port: podCode, qtyMt: qty, rateMtDay: cargo.dischRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.dischAllowance) ?? 0, inEca: dischInEca, inEcaSource: ladenEndZones != null ? (laden.auto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.dischOpenLoopBan, euBerthOver2h: voy.dischEuBerth, pda: pdaInput(voy.pdaDisch, voy.pdaDischReason) },
+        load: { key: "load", port: polCode, qtyMt: qty, rateMtDay: cargo.loadRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.loadAllowance) ?? 0, inEca: loadInEca, inEcaSource: ladenStartZones != null ? (ladenAuto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.loadOpenLoopBan, euBerthOver2h: voy.loadEuBerth, pda: pdaInput(voy.pdaLoad, voy.pdaLoadReason) },
+        disch: { key: "disch", port: podCode, qtyMt: qty, rateMtDay: cargo.dischRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.dischAllowance) ?? 0, inEca: dischInEca, inEcaSource: ladenEndZones != null ? (ladenAuto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.dischOpenLoopBan, euBerthOver2h: voy.dischEuBerth, pda: pdaInput(voy.pdaDisch, voy.pdaDischReason) },
       },
       anchorageDays: num(voy.anchorageDays) ?? 0,
       anchorageInEca: ladenEndZones != null ? dischInEca : voy.anchorageInEca,
-      waitingAnchorageEcaSource: ladenEndZones != null && laden.auto?.geometryConfidence === "official" ? "governed" : "manual",
+      waitingAnchorageEcaSource: ladenEndZones != null && ladenAuto?.geometryConfidence === "official" ? "governed" : "manual",
       seaMarginPct: num(voy.seaMargin),
       lane: laneKey(cargo.route.polZone, cargo.route.podZone),
       season: seasonOf(cargo.laycanFrom || null),
@@ -193,19 +208,19 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
       revenue: freight != null && freight > 0 && qty > 0 ? { qtyMt: qty, freightUsdMt: freight, commissionPct: num(voy.commission) ?? 0 } : null,
       extras: { insuranceUsd: num(voy.insurance) ?? 0, stevedoringUsd: num(voy.stevedoring) ?? 0, otherUsd: num(voy.other) ?? 0 },
     };
-  }, [vessel, cargo, form, consumption, vesselSource, hasBallast, openCode, polCode, podCode, ballast, laden, legInput, pdaInput, loadInEca, dischInEca, ladenStartZones, ladenEndZones, settings, settingsSource, fuel, qty, voy]);
+  }, [vessel, cargo, form, consumption, vesselSource, hasBallast, openCode, polCode, podCode, ballast, laden, ballastAuto, ladenAuto, legInput, pdaInput, loadInEca, dischInEca, ladenStartZones, ladenEndZones, settings, settingsSource, fuel, qty, voy]);
   const pre: VoyageEstimate | null = React.useMemo(() => (baseInput ? estimateVoyage(baseInput) : null), [baseInput]);
 
   // ── Suez: one transit per leg that crosses the canal, priced on its own transit date ──
   const startDate = voyageDate;
   // A measured track decides; the override speaks only for a manual or missing laden leg (an assertion the server stamps).
-  const ladenSuez = measured(laden) ? !!laden.auto?.chokepoints.includes("SUEZ") : voy.suezOverride === "auto" ? (cargo ? needsSuez(cargo.route.polZone, cargo.route.podZone) : false) : voy.suezOverride === "yes";
-  const ballastSuez = hasBallast && measured(ballast) && !!ballast.auto?.chokepoints.includes("SUEZ");
+  const ladenSuez = measured(laden, ladenAuto, polCode, podCode) ? !!ladenAuto?.chokepoints.includes("SUEZ") : voy.suezOverride === "auto" ? (cargo ? needsSuez(cargo.route.polZone, cargo.route.podZone) : false) : voy.suezOverride === "yes";
+  const ballastSuez = hasBallast && measured(ballast, ballastAuto, openCode, polCode) && !!ballastAuto?.chokepoints.includes("SUEZ");
   const suezRequired = ladenSuez || ballastSuez;
   // C2O-058 #2: no direction from zones; a measured track without in-canal waypoints, or a manual leg without the
   // broker's explicit direction, leaves the canal unpriced (as the save does)
-  const ladenDir: "SB" | "NB" | null = measured(laden) ? (laden.auto?.suezDirection ?? null) : (voy.manualSuezDir === "SB" || voy.manualSuezDir === "NB" ? voy.manualSuezDir : null);
-  const ballastDir: "SB" | "NB" | null = ballast.auto?.suezDirection ?? null;
+  const ladenDir: "SB" | "NB" | null = measured(laden, ladenAuto, polCode, podCode) ? (ladenAuto?.suezDirection ?? null) : (voy.manualSuezDir === "SB" || voy.manualSuezDir === "NB" ? voy.manualSuezDir : null);
+  const ballastDir: "SB" | "NB" | null = measured(ballast, ballastAuto, openCode, polCode) ? (ballastAuto?.suezDirection ?? null) : null;
   const ladenDate = pre ? suezTransitDate(startDate, pre.days.portLoad + pre.days.seaLaden / 2) : startDate;
   const ballastDate = pre ? suezTransitDate(startDate, -pre.days.seaBallast / 2) : startDate;
   const [ctxByDate, setCtxByDate] = React.useState<Record<string, SuezTariffContextResult>>(() => ({ [suezContext.date]: suezContext }));
@@ -375,11 +390,11 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
                 <div className="ve-input-card">
                   <div className="ve-input-card__head">Legs · measured routes with ECA share</div>
                   <div className="ve-input-card__body">
-                    <LegEditor title="Ballast" from={openCode} to={polCode} leg={ballast} onChange={setBallast} hidden={!openCode || openCode === polCode} />
-                    <LegEditor title="Laden" from={polCode} to={podCode} leg={laden} onChange={setLaden} />
+                    <LegEditor title="Ballast" from={openCode} to={polCode} leg={ballast} auto={ballastAuto} loading={ballastLoading} onChange={setBallast} hidden={!openCode || openCode === polCode} />
+                    <LegEditor title="Laden" from={polCode} to={podCode} leg={laden} auto={ladenAuto} loading={ladenLoading} onChange={setLaden} />
                     <div className="vy-row2">
                       <label className="vy-field"><span>Sea margin (%)</span><input type="number" step="0.5" min="0" value={voy.seaMargin} onChange={(e) => setVoy({ ...voy, seaMargin: e.target.value })} placeholder={estimate ? `${estimate.seaMarginPct} (${estimate.seaMarginBasis})` : "settings"} /></label>
-                      {measured(laden)
+                      {measured(laden, ladenAuto, polCode, podCode)
                         ? <div className="vy-field"><span>Suez transit</span><div className="vy-leg__meta">{ladenSuez ? "required" : "not required"} · from the measured route{ballastSuez ? " · ballast leg transits too" : ""}</div></div>
                         : <label className="vy-field"><span>Suez transit (manual leg: your assertion)</span><select value={voy.suezOverride} onChange={(e) => setVoy({ ...voy, suezOverride: e.target.value as "auto" | "yes" | "no" })}><option value="auto">By zones ({cargo && needsSuez(cargo.route.polZone, cargo.route.podZone) ? "required" : "not required"})</option><option value="yes">Required</option><option value="no">Not required</option></select></label>}
                     </div>
@@ -388,7 +403,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
                         {(ladenSuez ? ctxByDate[ladenDate] : ctxByDate[ballastDate])?.found === false ? <span className="vy-error">No published Suez tariff for {ladenSuez ? ladenDate : ballastDate}: the canal cost is unavailable unless you enter it below.</span>
                           : !suezCategory ? <span className="vy-error">SCA vessel category unknown for this vessel type: set it on the Suez calculator; the canal cost is unavailable.</span>
                           : suezEstimate ? <>Suez: {canal?.complete ? <b>{fmtUSD(canal.costUsd)}</b> : <span className="vy-error">unavailable</span>} <span className={`vy-badge vy-badge--${canal ? BADGE[canal.status] : "missing"}`}>{canal?.status}</span> · {suezEstimate.direction} · {suezEstimate.cargoStatus} · transit {suezEstimate.transitDate} · tariff v{suezEstimate.tariffVersion.versionNo} · {suezEstimate.transitDays} + {suezEstimate.anchorageDays} days{canal?.anchorageInEcaSource === "governed" ? ` · anchorage ${canal.anchorageInEca ? "inside" : "outside"} ECA` : ""} · <Link href={`/dashboard/suez-toll?vessel=${vesselId}`} className="sz-link">details →</Link>{!canal?.complete && suezEstimate.unavailable[0] ? <div className="vy-error">{suezEstimate.unavailable[0].reason}</div> : null}</> : null}
-                        {ladenSuez && !measured(laden) && (
+                        {ladenSuez && !measured(laden, ladenAuto, polCode, podCode) && (
                           <label className="vy-field"><span>Suez direction (your assertion for a manual leg)</span>
                             <select value={voy.manualSuezDir} onChange={(e) => setVoy({ ...voy, manualSuezDir: e.target.value as "" | "SB" | "NB" })} data-testid="manual-suez-dir">
                               <option value="">Not stated: canal not priced</option><option value="SB">Southbound</option><option value="NB">Northbound</option>
@@ -465,7 +480,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
                         {voy.pdaDisch.trim() !== "" && <label className="vy-field"><span>Reason · disch DA</span><input value={voy.pdaDischReason} onChange={(e) => setVoy({ ...voy, pdaDischReason: e.target.value })} placeholder="e.g. Ports DA calculator figure" aria-label="Discharge DA reason" /></label>}
                       </div>
                     )}
-                    <div className="vy-muted">Port DAs: enter the Ports DA Calculator figure or an agent quote with its reason (labelled manual). <Link href={`/dashboard/ports-da?from=voyage&vesselId=${vesselId}&cargoId=${cargoId}`} className="sz-link">Ports DA →</Link></div>
+                    <div className="vy-muted">Port DAs: enter the Ports DA Calculator figure or an agent quote with its reason (labelled manual). <Link href={portsDaHref} className="sz-link">Ports DA →</Link></div>
                     <div className="vy-row3">
                       <label className="vy-field"><span>Insurance (USD)</span><input type="number" min="0" value={voy.insurance} onChange={(e) => setVoy({ ...voy, insurance: e.target.value })} /></label>
                       <label className="vy-field"><span>Stevedoring (USD)</span><input type="number" min="0" value={voy.stevedoring} onChange={(e) => setVoy({ ...voy, stevedoring: e.target.value })} /></label>
@@ -490,27 +505,44 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
 
 function fetchLeg(from: string | null, to: string | null, set: React.Dispatch<React.SetStateAction<LegState>>, asOf: string, gate: RequestGate) {
   const ticket = gate.next();   // any older response in flight is now stale
-  if (!from || !to || from === to) { set((l) => ({ ...l, auto: null, loading: false })); return; }
-  set((l) => ({ ...l, auto: null, loading: true }));   // the previous route never prices the new request
-  routeLegAction(from, to, asOf).then((r) => { if (!gate.isCurrent(ticket)) return; set((l) => ({ ...l, loading: false, auto: r.ok ? r.data : { found: false, nm: null, ecaNm: null, chokepoints: [], method: "none", source: null, reversed: false, verified: false, geometryConfidence: "coarse", startZones: null, endZones: null, suezDirection: null, asOf: null, geometryVersions: [], algorithmVersion: null } })); });
+  const key = legLookupKey(from, to, asOf);
+  if (!key) { set((l) => ({ ...l, auto: null, loading: false, loadingFor: null })); return; }
+  set((l) => ({ ...l, auto: null, loading: true, loadingFor: key }));   // the previous route never prices the new request
+  const settle = (result: RouteLegResult) => {
+    if (!gate.isCurrent(ticket)) return;
+    set((l) => ({ ...l, loading: false, loadingFor: null, auto: bindLegResult(key, result) }));
+  };
+  void routeLegAction(from, to, asOf).then(
+    (r) => settle(r.ok ? r.data : NO_ROUTE),
+    () => settle(NO_ROUTE),
+  );
 }
 
-function LegEditor({ title, from, to, leg, onChange, hidden }: { title: string; from: string | null; to: string | null; leg: LegState; onChange: (l: LegState) => void; hidden?: boolean }) {
+function LegEditor({ title, from, to, leg, auto, loading, onChange, hidden }: { title: string; from: string | null; to: string | null; leg: LegState; auto: RouteLegResult | null; loading: boolean; onChange: React.Dispatch<React.SetStateAction<LegState>>; hidden?: boolean }) {
   if (hidden) return null;
-  const a = leg.auto;
+  const rebound = rebindManualLeg(leg, from, to);
+  const endpoints = rebound?.manualFor ?? null;
+  const manualFactsCurrent = matchesLegEndpoints(leg.manualFor, from, to);
+  const manualSelected = leg.useManual && manualFactsCurrent;
+  const updateManual = (patch: Partial<Pick<LegState, "manualNm" | "manualEcaNm" | "manualReason">>) => {
+    onChange((current) => {
+      const currentForEndpoints = rebindManualLeg(current, from, to);
+      return currentForEndpoints ? { ...currentForEndpoints, ...patch, useManual: true } : current;
+    });
+  };
   return (
     <div className="vy-leg">
       <div className="vy-leg__title"><span>{title} · {from ?? "?"} → {to ?? "?"}</span>
-        {leg.loading ? <span className="vy-badge vy-badge--fallback">looking up</span> : leg.useManual ? <span className="vy-badge vy-badge--manual">manual</span> : a?.found ? <span className={`vy-badge ${a.method === "waypoints" ? "vy-badge--trusted" : "vy-badge--fallback"}`}>{a.method === "waypoints" ? "measured + ECA split" : "measured · ECA share unknown"}</span> : <span className="vy-badge vy-badge--missing">no route</span>}
+        {loading ? <span className="vy-badge vy-badge--fallback">looking up</span> : manualSelected ? <span className="vy-badge vy-badge--manual">manual</span> : auto?.found ? <span className={`vy-badge ${auto.method === "waypoints" ? "vy-badge--trusted" : "vy-badge--fallback"}`}>{auto.method === "waypoints" ? "measured + ECA split" : "measured · ECA share unknown"}</span> : <span className="vy-badge vy-badge--missing">no route</span>}
       </div>
-      {!leg.useManual && a?.found && <div className="vy-leg__meta">{fmtNM(a.nm)} NM{a.method === "waypoints" && a.ecaNm != null ? ` · ${fmtNM(a.ecaNm)} NM in ECA` : " · ECA share unknown (priced as non-ECA, flagged)"}{a.chokepoints.length ? ` · via ${a.chokepoints.join(", ")}` : ""}{a.reversed ? " · reversed track" : ""}{a.geometryVersions.length ? ` · zones ${a.geometryVersions.map((g) => `${g.code}@${g.geometryVersion}`).join(", ")}` : ""}</div>}
-      {!leg.useManual && a && !a.found && <div className="vy-leg__meta vy-error">No measured route for this pair: the leg is unavailable until a manual distance (with its reason) is entered.</div>}
+      {!manualSelected && auto?.found && <div className="vy-leg__meta">{fmtNM(auto.nm)} NM{auto.method === "waypoints" && auto.ecaNm != null ? ` · ${fmtNM(auto.ecaNm)} NM in ECA` : " · ECA share unknown (priced as non-ECA, flagged)"}{auto.chokepoints.length ? ` · via ${auto.chokepoints.join(", ")}` : ""}{auto.reversed ? " · reversed track" : ""}{auto.geometryVersions.length ? ` · zones ${auto.geometryVersions.map((g) => `${g.code}@${g.geometryVersion}`).join(", ")}` : ""}</div>}
+      {!manualSelected && auto && !auto.found && <div className="vy-leg__meta vy-error">No measured route for this pair: the leg is unavailable until a manual distance (with its reason) is entered.</div>}
       <div className="vy-row3">
-        <label className="vy-check"><input type="checkbox" checked={leg.useManual} onChange={(e) => onChange({ ...leg, useManual: e.target.checked })} /> Manual</label>
-        <label className="vy-field"><span>NM</span><input type="number" min="0" value={leg.manualNm} onChange={(e) => onChange({ ...leg, manualNm: e.target.value })} disabled={!leg.useManual} aria-label="NM" /></label>
-        <label className="vy-field"><span>of which ECA NM</span><input type="number" min="0" value={leg.manualEcaNm} onChange={(e) => onChange({ ...leg, manualEcaNm: e.target.value })} disabled={!leg.useManual} aria-label="of which ECA NM" /></label>
+        <label className="vy-check"><input type="checkbox" checked={manualSelected} disabled={!endpoints} onChange={(e) => { const checked = e.target.checked; onChange((current) => { if (!checked) return { ...current, useManual: false }; const currentForEndpoints = rebindManualLeg(current, from, to); return currentForEndpoints ? { ...currentForEndpoints, useManual: true } : current; }); }} /> Manual</label>
+        <label className="vy-field"><span>NM</span><input type="number" min="0" value={manualFactsCurrent ? leg.manualNm : ""} onChange={(e) => updateManual({ manualNm: e.target.value })} disabled={!manualSelected} aria-label="NM" /></label>
+        <label className="vy-field"><span>of which ECA NM</span><input type="number" min="0" value={manualFactsCurrent ? leg.manualEcaNm : ""} onChange={(e) => updateManual({ manualEcaNm: e.target.value })} disabled={!manualSelected} aria-label="of which ECA NM" /></label>
       </div>
-      {leg.useManual && <label className="vy-field vy-reason"><span>Reason for the manual distance</span><input value={leg.manualReason} onChange={(e) => onChange({ ...leg, manualReason: e.target.value })} placeholder="e.g. owner's distance table, 3 Oct" aria-label="Reason" /></label>}
+      {manualSelected && <label className="vy-field vy-reason"><span>Reason for the manual distance</span><input value={leg.manualReason} onChange={(e) => updateManual({ manualReason: e.target.value })} placeholder="e.g. owner's distance table, 3 Oct" aria-label="Reason" /></label>}
     </div>
   );
 }

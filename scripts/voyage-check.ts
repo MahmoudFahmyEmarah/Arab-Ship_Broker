@@ -15,6 +15,7 @@ import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage
 import { canalDirection, canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "../lib/voyage/canal";
 import { reconcileLinks, suezFactReasons, type GovernedSuezFacts } from "../lib/voyage/save-rules";
 import { createRequestGate } from "../lib/voyage/request-gate";
+import { acceptedLegResult, bindLegResult, currentLegResult, legEndpoints, legLookupKey, matchesLegEndpoints, matchesLegLookup, rebindManualLeg, voyagePdaHref } from "../lib/voyage/leg-state";
 import { voyageFuelProducts } from "../lib/voyage/fuel-source";
 import { estimateSuezTransit } from "../lib/suez/engine";
 import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
@@ -423,10 +424,36 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   const pg = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/page.tsx", import.meta.url), "utf8");
   ok(pg.includes("resolveVoyageVesselLink(supabase, linkVessel)") && pg.includes("vessels.some((v) => v.id === resolved)"), "a market listing key is resolved as the member, to one of their own options only");
   const v2 = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
-  ok(!v2.includes("detectSuezDirection") && !v2.includes("zoneDir") && v2.includes('measured(laden) ? (laden.auto?.suezDirection ?? null)'), "the preview never invents a Suez direction from zones");
+  ok(!v2.includes("detectSuezDirection") && !v2.includes("zoneDir") && v2.includes('measured(laden, ladenAuto, polCode, podCode) ? (ladenAuto?.suezDirection ?? null)'), "the preview never invents a Suez direction from zones");
   ok(v2.includes("routeLegAction(from, to, asOf)") && v2.includes("suezFactReasons(suezInput?.vessel"), "the preview reads routes at the voyage date and reuses the server's fact comparison");
-  // C2O-061 #2 · out-of-order responses: last request wins; the stale route is cleared and never prices
+  // C2O-061 #2 / C2O-063 · route facts carry their endpoint/date identity and stale settlements do nothing.
   {
+    const lookupKey = legLookupKey("EGALY", "SAJED", "2026-10-03");
+    ok(lookupKey != null, "a complete route lookup has an identity");
+    const bound = bindLegResult(lookupKey!, { nm: 1450 });
+    eq(currentLegResult(bound, "EGALY", "SAJED", "2026-10-03"), { nm: 1450 }, "the accepted route is usable for its exact from/to/as-of identity");
+    eq(currentLegResult(bound, "TRMER", "SAJED", "2026-10-03"), null, "a changed route origin makes the previous automatic result unusable at render time");
+    eq(currentLegResult(bound, "EGALY", "AEFJR", "2026-10-03"), null, "a changed route destination makes the previous automatic result unusable at render time");
+    eq(currentLegResult(bound, "EGALY", "SAJED", "2026-10-04"), null, "a changed voyage date makes the previous automatic result unusable at render time");
+    eq(acceptedLegResult(bound, true, lookupKey, "EGALY", "SAJED", "2026-10-03"), null, "even a matching automatic result is unusable while its current lookup is loading");
+    eq(acceptedLegResult(bound, true, { ...lookupKey!, asOf: "2026-10-04" }, "EGALY", "SAJED", "2026-10-03"), { nm: 1450 }, "loading from another lookup cannot suppress the accepted current result");
+    eq(currentLegResult(bound, "SAJED", "EGALY", "2026-10-03"), null, "a reversed route cannot consume the previous automatic result");
+    eq(currentLegResult(bound, null, "SAJED", "2026-10-03"), null, "a route with a missing endpoint cannot consume an automatic result");
+    eq(currentLegResult(bound, "EGALY", "EGALY", "2026-10-03"), null, "an equal-endpoint route cannot consume the previous automatic result");
+    eq(legLookupKey(null, "SAJED", "2026-10-03"), null, "a lookup with a missing endpoint is rejected");
+    eq(legLookupKey("EGALY", "EGALY", "2026-10-03"), null, "a lookup with equal endpoints is rejected");
+    const manualFor = legEndpoints("EGALY", "SAJED");
+    ok(matchesLegEndpoints(manualFor, "EGALY", "SAJED"), "manual distance facts are usable for the endpoint pair they were entered for");
+    ok(!matchesLegEndpoints(manualFor, "EGALY", "AEFJR") && !matchesLegEndpoints(manualFor, "TRMER", "SAJED") && !matchesLegEndpoints(manualFor, "SAJED", "EGALY"), "manual distance facts are unusable after either endpoint changes or the pair reverses");
+    ok(!matchesLegEndpoints(manualFor, null, "SAJED") && !matchesLegEndpoints(manualFor, "EGALY", "EGALY"), "manual distance facts are unusable for missing or equal endpoints");
+    const manual = { manualFor, manualNm: "1450", manualEcaNm: "200", manualReason: "owner table" };
+    eq(rebindManualLeg(manual, "EGALY", "SAJED"), manual, "date-only changes preserve manual facts because their identity is the unchanged endpoint pair");
+    eq(rebindManualLeg(manual, "EGALY", "AEFJR"), { manualFor: { from: "EGALY", to: "AEFJR" }, manualNm: "", manualEcaNm: "", manualReason: "" }, "the first bind to a changed endpoint pair is blank before any edited field is patched");
+    eq(rebindManualLeg(manual, "SAJED", "EGALY"), { manualFor: { from: "SAJED", to: "EGALY" }, manualNm: "", manualEcaNm: "", manualReason: "" }, "a reversed pair starts blank instead of adopting the old manual facts");
+    eq(rebindManualLeg(manual, null, "SAJED"), null, "manual facts cannot bind to a missing endpoint");
+    eq(rebindManualLeg(manual, "EGALY", "EGALY"), null, "manual facts cannot bind to equal endpoints");
+    ok(matchesLegLookup(lookupKey, "EGALY", "SAJED", "2026-10-03") && !matchesLegLookup(lookupKey, "EGALY", "SAJED", "2026-10-04"), "lookup loading identity includes from, to and as-of date");
+
     const gate = createRequestGate();
     const applied: string[] = [];
     const t1 = gate.next();            // request for the old date / cargo
@@ -437,8 +464,47 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
     eq(applied, ["new route"], "a slower older response never overwrites the newer route");
     const t3 = gate.next(); respond(t2, "late"); respond(t3, "latest");
     eq(applied, ["new route", "latest"], "each new request makes every earlier ticket stale");
+
+    let rejected = { loading: true, result: "pending" };
+    const old = gate.next();
+    const current = gate.next();
+    const reject = (ticket: number) => { if (gate.isCurrent(ticket)) rejected = { loading: false, result: "unavailable" }; };
+    reject(old);
+    eq(rejected, { loading: true, result: "pending" }, "a stale lookup rejection does not mutate the current request");
+    reject(current);
+    eq(rejected, { loading: false, result: "unavailable" }, "the current lookup rejection clears loading and records an unavailable result");
   }
-  ok(v2.includes("const measured = (l: LegState) => !l.useManual && !l.loading && !!l.auto?.found;") && v2.includes("set((l) => ({ ...l, auto: null, loading: true }))") && v2.includes("if (!gate.isCurrent(ticket)) return;"), "the preview clears the route while loading and applies only the latest response");
+  ok(v2.includes("acceptedLegResult(ballast.auto, ballast.loading, ballast.loadingFor, openCode, polCode, voyageDate)") && v2.includes("acceptedLegResult(laden.auto, laden.loading, laden.loadingFor, polCode, podCode, voyageDate)"), "both automatic legs are filtered by their render-time from/to/as-of identity and current loading state");
+  ok(v2.includes("matchesLegEndpoints(l.manualFor, from, to)") && v2.includes("rebindManualLeg(leg, from, to)") && v2.includes("onChange((current) =>") && v2.includes("rebindManualLeg(current, from, to)"), "manual leg facts use a functional endpoint binder that filters and blank-rebinds against the latest state");
+  ok(v2.includes("loadingFor: key") && v2.includes("matchesLegLookup(l.loadingFor, from, to, voyageDate)") && v2.includes("loading={ladenLoading}"), "loading state is bound to the current from/to/as-of lookup and cannot mislabel another route");
+  ok(v2.includes("auto: null, loading: true, loadingFor: key") && v2.includes("if (!gate.isCurrent(ticket)) return;") && v2.includes("loading: false, loadingFor: null, auto: bindLegResult(key, result)") && v2.includes("() => settle(NO_ROUTE)"), "the preview clears old routes, ignores stale settlements and settles a current rejection as unavailable");
+
+  // C2O-063 · Voyage -> PDA carries only a complete, authorised context.
+  {
+    const contextual = new URL(voyagePdaHref({ availabilityId: "availability-1", cargoOwnedListingId: "owned-cargo-1", cargoRef: "ASB-42", loadLocode: "EGALY", dischargeLocode: "SAJED", quantityMt: 26000 }), "https://asb.test");
+    eq(contextual.pathname, "/dashboard/ports-da", "the hand-off targets the Ports DA estimator");
+    eq(Object.fromEntries(contextual.searchParams), { from: "voyage", vesselId: "availability-1", ref: "ASB-42", load: "EGALY", disch: "SAJED", mt: "26000", cargoId: "owned-cargo-1" }, "an owned cargo hand-off carries the authorised availability, ref, exact ports, positive quantity and owned listing id");
+    const market = new URL(voyagePdaHref({ availabilityId: "availability-1", cargoOwnedListingId: null, cargoRef: "MARKET-7", loadLocode: "EGALY", dischargeLocode: "SAJED", quantityMt: 26000 }), "https://asb.test");
+    ok(market.searchParams.get("from") === "voyage" && !market.searchParams.has("cargoId"), "a market cargo hand-off keeps context but never forwards its actor-bound id as cargoId");
+    const valid = { availabilityId: "availability-1", cargoOwnedListingId: null, cargoRef: "ASB-42", loadLocode: "EGALY", dischargeLocode: "SAJED", quantityMt: 26000 };
+    for (const [name, changed] of [
+      ["availability", { availabilityId: null }],
+      ["nonblank availability", { availabilityId: "   " }],
+      ["reference", { cargoRef: null }],
+      ["bounded reference", { cargoRef: "R".repeat(101) }],
+      ["load LOCODE", { loadLocode: null }],
+      ["discharge LOCODE", { dischargeLocode: null }],
+      ["valid load LOCODE", { loadLocode: "Alexandria" }],
+      ["valid discharge LOCODE", { dischargeLocode: "saJed" }],
+      ["positive quantity", { quantityMt: 0 }],
+      ["finite quantity", { quantityMt: Number.NaN }],
+    ] as const) {
+      eq(voyagePdaHref({ ...valid, ...changed }), "/dashboard/ports-da", `missing or invalid ${name} fails closed to a non-contextual PDA link`);
+    }
+  }
+  ok(v2.includes("availabilityId: vessel?.id ?? null") && v2.includes("cargoRef: cargo?.refId ?? null") && v2.includes("quantityMt: qty"), "the PDA hand-off is built from the selected authorised availability, cargo reference and voyage quantity");
+  ok(v2.includes('cargoOwnedListingId: cargo?.ownedListingId ?? null') && !v2.includes("cargoOwnedListingId: cargo?.id") && !v2.includes("cargoOwnedListingId: cargoId"), "the PDA cargoId can only come from the owner-visible raw listing id");
+  ok(v2.includes('cargo?.portScope?.polScope === "port" ? polCode : null') && v2.includes('cargo?.portScope?.podScope === "port" ? podCode : null'), "the PDA hand-off accepts only exact port-scoped load and discharge LOCODEs");
 
   // C2O-050 #1 / #5 · adversarial Suez facts: anything not governed, a draft, or undeclared conditions is a reason
   const GOV: GovernedSuezFacts = { scnt: 16070, scgt: 21000, gt: 21500, category: "dry_bulk", buildYear: 2012, craneCount: 4, craneSwlMt: 30, mooringCranesOk: true, searchlightCompliant: true, firstTransit: false, beamFt: 105, doubleBottom: true };
