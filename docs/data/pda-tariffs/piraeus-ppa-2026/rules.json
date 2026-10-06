@@ -1,0 +1,245 @@
+[
+  {
+    "code": "port_use",
+    "label": "Use of the port (per GT per arrival)",
+    "basis": "per_gt",
+    "rate": 0.061,
+    "priority": 10,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ]
+    },
+    "sourceId": "00000000-0000-4000-9000-000000003005",
+    "sourcePage": "Art. 3 A.1 (p4-5)",
+    "sourceExcerpt": "The charge is calculated for each arrival, based on the total capacity (GRT or G.T.) ... 1.3. Cargo ships and other vessels, including RoPax of foreign origin: From 1/4/2024 0,061"
+  },
+  {
+    "code": "berthing",
+    "label": "Berthing (per LOA metre per day)",
+    "basis": "per_loa_day",
+    "rate": 1.033,
+    "rounding": "started",
+    "priority": 11,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "locations": [
+        "alongside"
+      ]
+    },
+    "sourceId": "00000000-0000-4000-9000-000000003005",
+    "sourcePage": "Art. 3 A.2 (p5); Art. 6.1 (p10)",
+    "sourceExcerpt": "charged for each metre - based on their length overall (LOA) - and for each day of stay ... 2.3. Cargo ships ... From 1/4/2024 1,033. Fraction of a day is calculated as a whole day."
+  },
+  {
+    "code": "anchorage",
+    "label": "Anchorage (per GT per undividable 15 days)",
+    "basis": "per_gt_day",
+    "rate": 0.397,
+    "rounding": "started",
+    "unitSize": 15,
+    "priority": 12,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "locations": [
+        "anchorage"
+      ]
+    },
+    "sourceId": "00000000-0000-4000-9000-000000003005",
+    "sourcePage": "Art. 4.2 (p8)",
+    "sourceExcerpt": "Ships / floating crafts anchored at the PPA port area between Salamina and Perama ... will be charged € 0,397, calculated per G.T. and undividable 15 days."
+  },
+  {
+    "code": "mooring",
+    "label": "Mooring by PPA (per work step)",
+    "basis": "manual_quote",
+    "priority": 20,
+    "applicability": {
+      "requestedServices": [
+        "mooring"
+      ]
+    },
+    "manualInstructions": "PPA mooring: 600,00 € per work step (lashing or unlashing, i.e. making fast or letting go), from 1/4/2024, charged only \"In case the mooring is not provided by the pilotage service\". The tariff prints no number of steps per call; usually one to make fast and one to let go, plus any shift. Enter 600,00 x steps, or 0 when the pilotage service moors the ship.",
+    "sourceId": "00000000-0000-4000-9000-000000003005",
+    "sourcePage": "Art. 3 A.5 (p6-7)",
+    "sourceExcerpt": "Cargo ships and other floating crafts including RoPax of foreign origin | Per work step (lashing or unlashing | As from 1/4/2024 600,00"
+  },
+  {
+    "code": "waste_liquid_oily",
+    "label": "Liquid (oily) waste reception fee (384 x σΜ)",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 30,
+    "applicability": {
+      "requestedServices": [
+        "waste"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 1000,
+        "flatAmount": 384
+      },
+      {
+        "order": 2,
+        "lowerBound": 1000,
+        "upperBound": 5000,
+        "flatAmount": 768
+      },
+      {
+        "order": 3,
+        "lowerBound": 5000,
+        "upperBound": 10000,
+        "flatAmount": 1152
+      },
+      {
+        "order": 4,
+        "lowerBound": 10000,
+        "upperBound": 25000,
+        "flatAmount": 1920
+      },
+      {
+        "order": 5,
+        "lowerBound": 25000,
+        "upperBound": 50000,
+        "flatAmount": 3072
+      },
+      {
+        "order": 6,
+        "lowerBound": 50000,
+        "upperBound": null,
+        "flatAmount": 3840
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000003006",
+    "sourcePage": "§3.1 (p3-4)",
+    "sourceExcerpt": "Τ = σΤ x σΜ ... σΤ = liquid waste management fixed coefficient = 384; σΜ 1/2/3/5/8/10 by GRT: 384 / 768 / 1.152 / 1.920 / 3.072 / 3.840"
+  },
+  {
+    "code": "waste_sewage",
+    "label": "Sewage reception fee (169 x σΜ)",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 31,
+    "applicability": {
+      "requestedServices": [
+        "waste"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 1000,
+        "flatAmount": 169
+      },
+      {
+        "order": 2,
+        "lowerBound": 1000,
+        "upperBound": 5000,
+        "flatAmount": 338
+      },
+      {
+        "order": 3,
+        "lowerBound": 5000,
+        "upperBound": 10000,
+        "flatAmount": 507
+      },
+      {
+        "order": 4,
+        "lowerBound": 10000,
+        "upperBound": 25000,
+        "flatAmount": 845
+      },
+      {
+        "order": 5,
+        "lowerBound": 25000,
+        "upperBound": 50000,
+        "flatAmount": 1352
+      },
+      {
+        "order": 6,
+        "lowerBound": 50000,
+        "upperBound": null,
+        "flatAmount": 1690
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000003006",
+    "sourcePage": "§3.1 (p5)",
+    "sourceExcerpt": "Fee = 169 x σμ: 169,00 / 338,00 / 507,00 / 845,00 / 1.352,00 / 1.690,00 €"
+  },
+  {
+    "code": "waste_solid",
+    "label": "Solid waste reception fee, cargo ships (174,75 x σΜ)",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 32,
+    "applicability": {
+      "requestedServices": [
+        "waste"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 1000,
+        "flatAmount": 174.75
+      },
+      {
+        "order": 2,
+        "lowerBound": 1000,
+        "upperBound": 5000,
+        "flatAmount": 349.5
+      },
+      {
+        "order": 3,
+        "lowerBound": 5000,
+        "upperBound": 10000,
+        "flatAmount": 524.25
+      },
+      {
+        "order": 4,
+        "lowerBound": 10000,
+        "upperBound": 25000,
+        "flatAmount": 873.75
+      },
+      {
+        "order": 5,
+        "lowerBound": 25000,
+        "upperBound": 50000,
+        "flatAmount": 1398
+      },
+      {
+        "order": 6,
+        "lowerBound": 50000,
+        "upperBound": null,
+        "flatAmount": 1747.5
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000003007",
+    "sourcePage": "§3.1 a1 (p3)",
+    "sourceExcerpt": "CARGO SHIPS (RO-RO, GENERAL CARGO, CONTAINER VESSELS etc), TANKERS ... σΤ = 174,75 ... 174,75 / 349,50 / 524,25 / 873,75 / 1.398,00 / 1.747,50"
+  },
+  {
+    "code": "towage",
+    "label": "Towage (private operators; PPA sets minimum tugs only)",
+    "basis": "manual_quote",
+    "priority": 40,
+    "applicability": {
+      "requestedServices": [
+        "towage"
+      ]
+    },
+    "manualInstructions": "PPA publishes no towage rates. Its tug regulation sets the minimum number of tugs and bollard pull for bulk carriers / general cargo by size category (I 0-100 ... IV 201-250, presumably LOA in metres), wind force and bow thruster. Enter the tug operator's quotation x tugs x moves.",
+    "sourceId": "00000000-0000-4000-9000-000000003008",
+    "sourcePage": "Bulk Carriers/ General Cargo table",
+    "sourceExcerpt": "minimum tugs and bollard pull by size category, Beaufort 4/5/6, mooring and unmooring, with/without bow thruster; no rates"
+  }
+]
