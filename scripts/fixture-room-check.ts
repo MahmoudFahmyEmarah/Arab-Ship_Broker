@@ -607,3 +607,13 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(!late2.canAddSubject && !late2.canInvite, "a closed window stops subjects and invitations");
   ok(!computeCapabilities("negotiating", [{ ...P2("vessel", "principal"), status: "invited" }], false, [], { windowClosed: true }).canRespondInvitation && !computeCapabilities("expired", [{ ...P2("vessel", "principal"), status: "invited" }], false).canRespondInvitation, "no invitation answer after the deadline or in a terminal room");
 }
+
+// C2B-016 P2: the owner-only Fixture console is reachable from the admin navigation.
+{
+  const nav = fs.readFileSync(path.join(process.cwd(), "lib/admin/nav.ts"), "utf8");
+  const sections = fs.readFileSync(path.join(process.cwd(), "lib/admin/sections.ts"), "utf8");
+  ok(/\{ id: "fixtures", label: "Fixture rooms", href: "\/admin\/fixtures", icon: "[A-Za-z]+", superOnly: true \}/.test(nav),
+    "ADMIN_NAV has an owner-only /admin/fixtures entry");
+  ok(/\{ id: "fixtures", href: "\/admin\/fixtures" \}/.test(sections) && /OWNER_ONLY[^;]*fixtures: true/.test(sections),
+    "the nav entry matches the owner-gated section registry");
+}

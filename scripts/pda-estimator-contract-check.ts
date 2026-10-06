@@ -235,4 +235,32 @@ assert.equal(isExactLoopbackUrl("https://127.0.0.1.attacker.example"), false);
 assert.equal(isExactLoopbackUrl("https://attacker.example/?next=http://localhost"), false);
 assert.equal(isExactLoopbackUrl("not a URL mentioning localhost"), false);
 
+// C2B-016: the Voyage Estimator hands off to PDA. A market cargo it does not own
+// pre-fills the explicit route/quantity facts but never becomes a cargo FK; an
+// owned cargo resolves through the authorised catalog as for the Fixture Room.
+const voyageMarket = resolvePdaEstimatorBootstrap(catalog, {
+  from: "voyage", ref: "voy-run-1", vesselId: "availability-1", load: "egaly", disch: "sajed", mt: "31000",
+});
+assert.equal(voyageMarket.initial.from, "voyage");
+assert.equal(voyageMarket.initial.cargoId, null, "an unowned market cargo is never promoted to a cargo FK");
+assert.equal(voyageMarket.initial.vesselId, "availability-1");
+assert.equal(voyageMarket.initial.loadPortLocode, "EGALY");
+assert.equal(voyageMarket.initial.dischargePortLocode, "SAJED");
+assert.equal(voyageMarket.initial.quantityMt, 31_000);
+assert.deepEqual(voyageMarket.notices, [], "safe facts apply without a cargo id and without notices");
+
+const voyageMarketKey = resolvePdaEstimatorBootstrap(catalog, {
+  from: "voyage", cargoId: "mkt_9f2c-opaque-listing-key", load: "EGALY", disch: "SAJED", mt: "31000",
+});
+assert.equal(voyageMarketKey.initial.cargoId, null, "a market listing key passed as cargoId is not a FK");
+assert.deepEqual(voyageMarketKey.notices.map((n) => n.code), ["HANDOFF_CARGO_NOT_FOUND"]);
+assert.equal(voyageMarketKey.initial.loadPortLocode, "EGALY", "route facts still apply");
+assert.equal(voyageMarketKey.initial.quantityMt, 31_000);
+
+const voyageOwned = resolvePdaEstimatorBootstrap(catalog, { from: "voyage", cargoId: "cargo-1", vesselId: "vessel-1" });
+assert.equal(voyageOwned.initial.cargoId, "cargo-1", "an owned cargo resolves normally");
+assert.equal(voyageOwned.initial.vesselId, "availability-1");
+assert.equal(voyageOwned.initial.loadPortLocode, "EGALY");
+assert.equal(voyageOwned.notices.length, 0);
+
 console.log("PDA ESTIMATOR CONTRACT CHECK: ALL ASSERTIONS PASSED");

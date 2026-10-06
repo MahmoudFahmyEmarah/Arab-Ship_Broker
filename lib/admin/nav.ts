@@ -27,6 +27,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { id: "review", label: "Review queue", href: "/admin/queue", icon: "DocAudit", countKey: "review" },
       { id: "cargo", label: "Cargo listings", href: "/admin/cargo", icon: "Cargo" },
       { id: "vesselavail", label: "Vessel availability", href: "/admin/vessel-availability", icon: "Vessel" },
+      { id: "fixtures", label: "Fixture rooms", href: "/admin/fixtures", icon: "DocAudit", superOnly: true },
     ],
   },
   {

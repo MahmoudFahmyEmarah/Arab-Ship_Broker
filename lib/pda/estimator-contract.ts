@@ -55,7 +55,7 @@ export interface PdaEstimatorCatalog {
 }
 
 export interface PdaEstimatorHandoff {
-  from: "fixture" | null;
+  from: PdaHandoffSource | null;
   ref: string | null;
   cargoId: string | null;
   vesselId: string | null;
@@ -91,7 +91,7 @@ export interface PdaEstimatorInitialSelection {
   quantityMt: number | null;
   allocation: PdaAllocation;
   density: PdaEstimatorDensity;
-  from: "fixture" | null;
+  from: PdaHandoffSource | null;
   ref: string | null;
 }
 
@@ -210,11 +210,17 @@ export function buildPdaEstimatorCatalog(input: {
   };
 }
 
+/** Accepted hand-off sources. Context from either is applied only through the
+ *  authorised PDA catalog: a cargo or vessel id that is not the viewer's own is
+ *  reported, never promoted to a foreign key; route and quantity are explicit facts. */
+export const PDA_HANDOFF_SOURCES = ["fixture", "voyage"] as const;
+export type PdaHandoffSource = (typeof PDA_HANDOFF_SOURCES)[number];
+
 export function parsePdaEstimatorHandoff(
   params: PdaEstimatorSearchParams,
 ): PdaEstimatorHandoff {
   const rawFrom = first(params.from)?.toLowerCase() ?? null;
-  const from = rawFrom === "fixture" ? "fixture" : null;
+  const from = (PDA_HANDOFF_SOURCES as readonly string[]).includes(rawFrom ?? "") ? (rawFrom as PdaHandoffSource) : null;
   const rawQuantity = first(params.mt);
   const supplied = ["from", "ref", "cargoId", "vesselId", "vessel", "load", "disch", "mt"]
     .some((key) => first(params[key]) != null);
