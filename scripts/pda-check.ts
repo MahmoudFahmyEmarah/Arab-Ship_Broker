@@ -292,4 +292,29 @@ const pctReq = calculatePda({ ...request, call: { ...request.call, voyageScope: 
 assert.equal(pctReq.lines.find((l) => l.ruleCode === "vat")?.amount, 10, "VAT on port dues only: berth does not apply");
 assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
 
+// C2O-051: a progressive table with an uncovered interval fails closed as TARIFF_GAP.
+{
+  const progressiveGap = (bands: NonNullable<PdaTariffVersion["rules"][number]["bands"]>) => calculatePda(
+    { ...request, vessel: { gt: 20000 } },
+    { ...version, rules: [version.rules[0]!, { id: ids.progressive, code: "pilot_prog", label: "Pilotage (progressive)",
+      basis: "progressive", unit: "gt", priority: 30, source, bands }] },
+  );
+  const internal = progressiveGap([
+    { order: 1, lowerBound: 0, upperBound: 9999, rate: 0.1 },
+    { order: 2, lowerBound: 15000, upperBound: null, rate: 0.05 },
+  ]);
+  assert.equal(internal.lines.some((l) => l.ruleCode === "pilot_prog"), false, "internal gap: no underpriced line");
+  assert.equal(internal.warnings.some((w) => w.code === "TARIFF_GAP" && w.ruleCode === "pilot_prog"), true, "internal gap: TARIFF_GAP");
+  assert.equal(internal.coverage, "partial");
+  const first = progressiveGap([{ order: 1, lowerBound: 500, upperBound: null, rate: 0.1 }]);
+  assert.equal(first.warnings.some((w) => w.code === "TARIFF_GAP" && w.ruleCode === "pilot_prog"), true, "first-interval gap: TARIFF_GAP");
+  const closedEnd = progressiveGap([{ order: 1, lowerBound: 0, upperBound: 10000, rate: 0.1 }]);
+  assert.equal(closedEnd.warnings.some((w) => w.code === "TARIFF_GAP"), true, "quantity beyond the last closed band: TARIFF_GAP");
+  const covered = progressiveGap([
+    { order: 1, lowerBound: 0, upperBound: 10000, rate: 0.1 },
+    { order: 2, lowerBound: 10000, upperBound: null, rate: 0.05 },
+  ]);
+  assert.equal(covered.lines.find((l) => l.ruleCode === "pilot_prog")?.amount, 1500, "contiguous progressive: 10,000 x 0.1 + 10,000 x 0.05");
+}
+
 console.log("PDA CHECK: ALL ASSERTIONS PASSED");

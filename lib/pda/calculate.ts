@@ -123,6 +123,15 @@ function findBand(rule: PdaTariffRule, quantity: number): PdaTariffBand {
 }
 
 function progressiveAmount(rule: PdaTariffRule, quantity: number): number {
+  // Every slice of [0, quantity] must be covered (C2O-051): an uncovered first
+  // or internal interval would otherwise be skipped silently and underprice.
+  let covered = 0;
+  for (const band of sortedBands(rule)) {
+    if (covered >= quantity) break;
+    if (band.lowerBound > covered) throw new Error(`TARIFF_GAP:no band covers ${covered} to ${Math.min(band.lowerBound, quantity)}`);
+    covered = Math.max(covered, band.upperBound ?? Number.POSITIVE_INFINITY);
+  }
+  if (covered < quantity) throw new Error(`TARIFF_GAP:no band covers ${covered} to ${quantity}`);
   let total = 0;
   for (const band of sortedBands(rule)) {
     const upper = band.upperBound ?? quantity;

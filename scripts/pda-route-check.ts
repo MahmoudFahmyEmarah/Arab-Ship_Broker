@@ -210,6 +210,28 @@ assert.equal(manualRequired.totals.loadPortKnown, 100);
 assert.equal(manualRequired.notSourced[0]?.reasonCode, "MANUAL_QUOTE_REQUIRED");
 assert.equal(manualRequired.notSourced[0]?.provenance.ruleCode, "towage");
 
+// C2O-051: a band gap in a published table leaves the leg incomplete with its own reason.
+const tariffGap = aggregatePdaRoutePreview({
+  ...aggregate,
+  canonical,
+  load: result({
+    nativeCurrency: "USD",
+    native: 100,
+    coverage: "partial",
+    warnings: [
+      { code: "MISSING_INPUT", message: "Berth requires draft.", ruleCode: "berth" },
+      { code: "TARIFF_GAP", message: "Pilotage: the published table has no band for 9999 to 15000.", ruleCode: "pilot_prog" },
+    ],
+  }),
+  discharge: result({ nativeCurrency: "USD", native: 400 }),
+  timeline,
+});
+assert.equal(tariffGap.totals.loadPort, null, "a gap makes the load-port total incomplete");
+assert.equal(tariffGap.totals.loadPortKnown, 100);
+assert.equal(tariffGap.notSourced[0]?.reasonCode, "TARIFF_GAP", "TARIFF_GAP outranks MISSING_INPUT as the leg reason");
+assert.equal(tariffGap.notSourced[0]?.provenance.ruleCode, "pilot_prog");
+assert.match(tariffGap.notSourced[0]?.message ?? "", /no band/);
+
 const manualRequiredWithNoPricedLines = aggregatePdaRoutePreview({
   ...aggregate,
   canonical,
