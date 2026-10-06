@@ -119,6 +119,8 @@ export interface PortCallInput {
   euBerthOver2h: boolean; // EU berth beyond 2 h → 0.10 % in port
   /** governed = from the route's start/end zones; manual = asserted by the broker (estimate partial) */
   inEcaSource?: "governed" | "coarse" | "manual";
+  /** listing = the handling rate of the linked cargo listing; manual = typed for this estimate (a broker input) */
+  rateSource?: "listing" | "manual";
   pda: { usd: number | null; source: "tariff" | "manual" | "none"; manual?: ManualProvenance };
 }
 
@@ -130,9 +132,13 @@ export interface VoyageInput {
   ballastCanal?: CanalInput | null;
   /** profile = the vessel's governed economics profile; manual = facts typed for this estimate (estimate partial) */
   vesselSource?: "profile" | "manual";
+  /** listing = the start date is the linked cargo's laycan; manual = typed by the broker (a broker input) */
+  scheduleSource?: "listing" | "manual";
   ports: { load: PortCallInput; disch: PortCallInput };
   anchorageDays: number;
   anchorageInEca: boolean;
+  /** governed = the discharge port's governed ECA status; anything else is the broker's (C2O-050 #4) */
+  waitingAnchorageEcaSource?: "governed" | "manual";
   seaMarginPct: number | null; // null → settings (default + lane + season)
   lane: string | null; // "E.MED>AG" style key for settings.seaMargin.byLane
   season: Season | null;

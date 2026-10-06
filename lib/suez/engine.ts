@@ -228,7 +228,13 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
       case "no_mooring_cranes": {
         const gtThreshold = p.gtThreshold, swl = p.swlMt, boats = p.boats;
         if (!isNum(gtThreshold) || !isNum(swl) || !isNum(boats)) { paramError = "params need gtThreshold, swlMt and boats"; break; }
-        const ok = vessel.mooringCranesOk ?? (vessel.craneSwlMt != null ? vessel.craneSwlMt >= swl && (vessel.craneCount ?? 1) >= 1 : null);
+        // C2O-058 #4: the waiver needs a governed capability, or a KNOWN crane count of at least the boats with
+        // adequate SWL; an unknown count is never assumed to be one, and a known shortfall decides it.
+        const swlKnown = vessel.craneSwlMt != null, countKnown = vessel.craneCount != null;
+        const ok = vessel.mooringCranesOk ?? (
+          (swlKnown && vessel.craneSwlMt! < swl) || (countKnown && vessel.craneCount! < boats) ? false
+            : swlKnown && countKnown ? true
+            : null);
         if (vessel.gt == null) { triggered = null; reason = `GT not sourced: cannot tell whether the ${fmt(gtThreshold)} GT mooring-boat rule applies.`; }
         else if (vessel.gt <= gtThreshold) reason = `GT ${fmt(vessel.gt)} ≤ ${fmt(gtThreshold)}: one mooring boat, no lifting requirement.`;
         else if (ok === false) { triggered = true; reason = `GT ${fmt(vessel.gt)} > ${fmt(gtThreshold)} and the vessel cannot lift ${fmt(boats)} mooring boats (cranes SWL ${fmt(swl)} t).`; }
@@ -292,7 +298,7 @@ export function estimateSuezTransit(rawInput: SuezInput, ctx: SuezTariffContext)
           if (Array.isArray(r.excludeCategories) && (r.excludeCategories as string[]).includes(vessel.category)) continue;
           let verdict: boolean | null = true;
           const need = (known: boolean, ok: boolean, fact: string) => { if (!known) { unknowns.add(fact); if (verdict !== false) verdict = null; } else if (!ok) verdict = false; };
-          if (isNum(r.scntMin) || isNum(r.scntBelow)) need(vessel.scnt != null, vessel.scnt != null && (!isNum(r.scntMin) || vessel.scnt > (r.scntMin as number)) && (!isNum(r.scntBelow) || vessel.scnt < (r.scntBelow as number)), "SCNT");
+          if (isNum(r.scntMin) || isNum(r.scntBelow)) need(vessel.scnt != null, vessel.scnt != null && (!isNum(r.scntMin) || vessel.scnt >= (r.scntMin as number)) && (!isNum(r.scntBelow) || vessel.scnt < (r.scntBelow as number)), "SCNT");
           if (isNum(r.draftFtOver)) need(vessel.draftFt != null, vessel.draftFt != null && vessel.draftFt > (r.draftFtOver as number), "arrival draft");
           if (isNum(r.beamFtOver) || isNum(r.beamFtMax)) need(vessel.beamFt != null, vessel.beamFt != null && (!isNum(r.beamFtOver) || vessel.beamFt > (r.beamFtOver as number)) && (!isNum(r.beamFtMax) || vessel.beamFt <= (r.beamFtMax as number)), "beam");
           if (r.doubleBottom === false) need(vessel.doubleBottom != null, vessel.doubleBottom === false, "double-bottom tanks");

@@ -22,13 +22,14 @@
 
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPortRoute } from "@/sdk/app/routes";
-import { getPointEcaZones, getRouteEcaSplit, getSuezTariffContext, getVesselEconomicsProfile, listEcaZones } from "@/sdk/app/suez";
-import { getVoyageSettings, saveVoyageEstimate } from "@/sdk/app/voyage";
+import { getPointEcaZones, getRouteEcaSplit, getSuezTariffContext, getVesselEconomicsProfile, listEcaZones, type VesselEconomicsProfile } from "@/sdk/app/suez";
+import { getVoyageLinkFacts, getVoyageSettings, saveVoyageEstimate } from "@/sdk/app/voyage";
 import { estimateVoyage } from "@/lib/voyage/engine";
 import { parseVoyageInput } from "@/lib/voyage/schemas";
 import { loadFuelIndex, voyageFuelProducts } from "@/lib/voyage/fuel-source";
-import { canalFromSuez, suezTransitDate } from "@/lib/voyage/canal";
+import { canalDirection, canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "@/lib/voyage/canal";
 import { resolveCalculatorAccess } from "@/lib/voyage/calculator-access";
+import { reconcileLinks, suezFactReasons } from "@/lib/voyage/save-rules";
 import { calculatorDenialMessage } from "@/lib/voyage/calculator-policy";
 import { estimateSuezTransit } from "@/lib/suez/engine";
 import { SUEZ_ALGORITHM_VERSION, type SuezEstimate, type SuezInput } from "@/lib/suez/types";
@@ -86,7 +87,7 @@ async function lookupLeg(supabase: SupabaseClient, a: string, b: string, asOf?: 
     geometryConfidence: split.geometryConfidence === "official" ? "official" : "coarse",
     startZones: waypoints ? (split.startZones ?? null) : null,
     endZones: waypoints ? (split.endZones ?? null) : null,
-    suezDirection: suez && wp.length >= 2 ? (wp[0][0] > wp[wp.length - 1][0] ? "SB" : "NB") : null,
+    suezDirection: suez ? canalDirection(wp) : null,
     asOf: split.asOf ?? null,
     geometryVersions: split.geometryVersions ?? [],
     algorithmVersion: split.algorithmVersion ?? null,
@@ -121,6 +122,9 @@ export interface SaveVoyagePayload {
   input: VoyageInput;
   /** the Suez vessel facts (SCNT, GT, category, flags); voyage facts and dates are set here */
   suezInput: SuezInput | null;
+  /** the broker declares that no special Suez condition applies (no heavy lift, military cargo, late arrival, protrusion,
+   *  non-compliant ladder, relieving pilots, waste or barge services); without it the canal cost is the broker's figure */
+  suezConditionsDeclared?: boolean;
   /** broker canal cost per transit, used only when that Suez estimate is incomplete */
   canalManual?: { laden?: { usd: number; reason: string } | null; ballast?: { usd: number; reason: string } | null } | null;
 }
@@ -155,7 +159,48 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     const settingsLoad = await getVoyageSettings(supabase);
     const settings: VoyageSettings = settingsLoad.settings;
 
-    // ── legs: re-resolved here; manual only with its reason ───────────────
+    // ── links first: an id is accepted only beside its own facts; an inconsistency is refused, never dropped (C2O-050 #2) ──
+    const clientFrom = typeof client.legs.laden?.from === "string" && LOCODE.test(client.legs.laden.from) ? client.legs.laden.from : null;
+    const clientTo = typeof client.legs.laden?.to === "string" && LOCODE.test(client.legs.laden.to) ? client.legs.laden.to : null;
+    const clientOpen = typeof client.legs.ballast?.from === "string" && LOCODE.test(client.legs.ballast.from) ? client.legs.ballast.from : clientFrom;
+    // a link id that is present but not a UUID is refused, never dropped (C2O-058 #9)
+    const linkId = (v: unknown, what: string): { id: string | null; bad: boolean } =>
+      v == null || v === "" ? { id: null, bad: false } : typeof v === "string" && UUID.test(v) ? { id: v, bad: false } : { id: null, bad: (notes.push(what), true) };
+    const vIn = linkId(payload.vesselId, "vessel"), aIn = linkId(payload.availabilityId, "position"), cIn = linkId(payload.cargoListingId, "cargo");
+    if (vIn.bad || aIn.bad || cIn.bad) return { ok: false, error: "A linked id is malformed; reload the page and link again." };
+    const vesselIdIn = vIn.id, availabilityId = aIn.id, cargoListingId = cIn.id;
+    // authorised through the member's own session before anything is read (C2O-058 #7): one generic refusal
+    let linkFacts;
+    try { linkFacts = await getVoyageLinkFacts(supabase, cargoListingId, availabilityId); }
+    catch { return { ok: false, error: "A linked listing is not available to you; remove the link to save." }; }
+    if (vesselIdIn && !(await supabase.rpc("get_vessel_economics_profile", { p_vessel_id: vesselIdIn })).data?.allowed) {
+      return { ok: false, error: "The linked vessel is not available to you; remove the link to save." };
+    }
+    const fc = linkFacts.cargo, fp = linkFacts.position;
+    const cargoRow = fc ? { load_port_locode: fc.loadPort, disch_port_locode: fc.dischPort, laycan_from: fc.laycanFrom, load_rate: fc.loadRate, disch_rate: fc.dischRate, qty_min_mt: fc.qtyMin, qty_max_mt: fc.qtyMax } : null;
+    const positionRow = fp ? { vessel_id: fp.vesselId, open_port_locode: fp.openPort } : null;
+    const linkCheck = reconcileLinks({
+      ladenFrom: clientFrom, ladenTo: clientTo, openPort: clientOpen,
+      qtyMt: client.ports?.load?.qtyMt == null ? null : Number(client.ports.load.qtyMt),
+      freightQtyMt: client.revenue ? Number(client.revenue.qtyMt) : null,
+      portCalls: { loadPort: client.ports?.load?.port ?? null, dischPort: client.ports?.disch?.port ?? null,
+                   loadQtyMt: client.ports?.load?.qtyMt == null ? null : Number(client.ports.load.qtyMt), dischQtyMt: client.ports?.disch?.qtyMt == null ? null : Number(client.ports.disch.qtyMt) },
+      vesselId: vesselIdIn,
+      cargo: cargoListingId ? { id: cargoListingId, row: cargoRow } : null,
+      position: availabilityId ? { id: availabilityId, row: positionRow ? { vessel_id: String(positionRow.vessel_id), open_port_locode: positionRow.open_port_locode ?? null } : null } : null,
+    });
+    if (!linkCheck.ok) return { ok: false, error: linkCheck.error };
+    const vesselId = linkCheck.vesselId;
+    const listing = cargoRow ? { laycan_from: cargoRow.laycan_from ?? null, load_rate: cargoRow.load_rate ?? null, disch_rate: cargoRow.disch_rate ?? null } : null;
+
+    // ── the voyage date: the listing's laycan, else the broker's date (a broker input); geometry and tariffs use it ──
+    const listedStart = listing?.laycan_from && ISO_DATE.test(String(listing.laycan_from).slice(0, 10)) ? String(listing.laycan_from).slice(0, 10) : null;
+    const typedStart = typeof payload.startDate === "string" && ISO_DATE.test(payload.startDate) ? payload.startDate : null;
+    const startDate = listedStart ?? typedStart ?? today;
+    const scheduleSource: "listing" | "manual" = listedStart ? "listing" : "manual";
+    if (!listedStart && !typedStart) notes.push("No laycan date: the voyage is dated today.");
+
+    // ── legs: re-resolved here at the voyage date; manual only with its reason ──
     const geometry = new Map<string, string>();
     let splitAlgorithm: string | null = null;
     const noLeg = (key: "ballast" | "laden", from: string | null, to: string | null): ResolvedLeg => ({
@@ -174,7 +219,7 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
         return { leg: { key, from, to, nm, ecaNm, method: "manual", manual }, snap: { key, pol: from, pod: to, totalNm: nm, ecaNm, method: "manual", source: null, manual }, route: null };
       }
       if (!from || !to) return noLeg(key, from, to);
-      const r = await lookupLeg(supabase, from, to, today);
+      const r = await lookupLeg(supabase, from, to, startDate); // ECA geometry in force on the voyage date (C2O-050 #3)
       r.geometryVersions.forEach((g) => geometry.set(g.code, g.geometryVersion));
       splitAlgorithm = splitAlgorithm ?? r.algorithmVersion;
       if (!r.found) return noLeg(key, from, to);
@@ -201,59 +246,62 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
       if (p?.pda?.source === "tariff") return { ok: false, error: "A tariff-based port DA is not linked to the estimator yet; enter the DA as a manual figure with its reason." };
     }
 
-    // ── links: an id is kept only beside its own economics ────────────────
-    let vesselId = typeof payload.vesselId === "string" && UUID.test(payload.vesselId) ? payload.vesselId : null;
-    let availabilityId = typeof payload.availabilityId === "string" && UUID.test(payload.availabilityId) ? payload.availabilityId : null;
-    let cargoListingId = typeof payload.cargoListingId === "string" && UUID.test(payload.cargoListingId) ? payload.cargoListingId : null;
-    if (cargoListingId) {
-      const { data: c } = await admin.from("cargo_listings").select("load_port_locode, disch_port_locode").eq("id", cargoListingId).maybeSingle();
-      if (!c || c.load_port_locode !== ladenLeg.leg.from || c.disch_port_locode !== ladenLeg.leg.to) {
-        notes.push("The laden route differs from the cargo listing's ports; the estimate is saved without the cargo link.");
-        cargoListingId = null;
-      }
-    }
-    if (availabilityId) {
-      const { data: a } = await admin.from("vessel_availability").select("vessel_id, open_port_locode").eq("id", availabilityId).maybeSingle();
-      const openPort = ballastLeg?.leg.from ?? ladenLeg.leg.from;
-      if (!a || (vesselId && a.vessel_id !== vesselId) || (a.open_port_locode && a.open_port_locode !== openPort)) {
-        notes.push("The open port differs from the position's; the estimate is saved without the position link.");
-        availabilityId = null;
-      } else if (!vesselId) {
-        vesselId = String(a.vessel_id);
-      }
-    }
-
     // ── vessel facts: the governed profile, or manual for this estimate ───
     let vesselSource: "profile" | "manual" = "manual";
+    let prof: VesselEconomicsProfile | null = null;
+    let vesselBuildYear: number | null = null;
     if (vesselId) {
-      const prof = await getVesselEconomicsProfile(supabase, vesselId).catch(() => null);
+      prof = await getVesselEconomicsProfile(supabase, vesselId).catch(() => null);
+      const { data: vrow } = await admin.from("vessels").select("build_year").eq("id", vesselId).maybeSingle();
+      vesselBuildYear = vrow?.build_year == null ? null : Number(vrow.build_year);
       if (prof?.found && prof.allowed) {
-        const fromProfile = { l: prof.speedLadenKn ?? null, b: prof.speedBallastKn ?? null, s: prof.hasScrubber ?? null, k: prof.vesselClass ?? null, c: consumptionOf(prof.consumption) };
-        const typed = { l: client.vessel?.speedLadenKn ?? null, b: client.vessel?.speedBallastKn ?? null, s: client.vessel?.hasScrubber ?? null, k: client.vessel?.vesselClass ?? null, c: consumptionOf(client.vessel?.consumption) };
+        // Operating facts AND the Suez facts (SCNT, GT, category, transit history, searchlight, cranes) must equal the
+        // governed profile; anything typed differently is manual for this estimate (Opus B pre-audit P1-1).
+        const sv = payload.suezInput?.vessel;
+        const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
+        const fromProfile = { l: prof.speedLadenKn ?? null, b: prof.speedBallastKn ?? null, s: prof.hasScrubber ?? null, k: prof.vesselClass ?? null, c: consumptionOf(prof.consumption),
+          ...(sv ? { scnt: num(prof.scnt), gt: num(prof.gt), cat: prof.suezCategory ?? null, ft: prof.firstTransit ?? null, sl: prof.searchlightCompliant ?? null, mc: prof.mooringCranesOk ?? null } : {}) };
+        const typed = { l: client.vessel?.speedLadenKn ?? null, b: client.vessel?.speedBallastKn ?? null, s: client.vessel?.hasScrubber ?? null, k: client.vessel?.vesselClass ?? null, c: consumptionOf(client.vessel?.consumption),
+          ...(sv ? { scnt: num(sv.scnt), gt: num(sv.gt), cat: sv.category ?? null, ft: sv.firstTransit ?? null, sl: sv.searchlightCompliant ?? null, mc: sv.mooringCranesOk ?? null } : {}) };
         vesselSource = sameFacts(fromProfile, typed) ? "profile" : "manual";
       }
     }
+
+    // ── Suez facts: every fact the canal price reads is compared with its governed source (C2O-050 #1, #5) ──
+    // A typed fact that is not the governed one, an arrival draft (a voyage fact) and undeclared voyage conditions
+    // make the canal the broker's figure; omitted conditions never count as governed "none".
+    const gp = prof?.found && prof.allowed ? prof : null;
+    const gn = (v: unknown) => (v == null ? null : Number(v));
+    const suezManual = suezFactReasons(payload.suezInput?.vessel, {
+      scnt: gn(gp?.scnt), scgt: gn(gp?.scgt), gt: gn(gp?.gt), category: gp?.suezCategory ?? null, buildYear: gn(gp?.buildYear) ?? vesselBuildYear,
+      craneCount: gn(gp?.craneCount), craneSwlMt: gn(gp?.craneSwlMt), mooringCranesOk: gp?.mooringCranesOk ?? null,
+      searchlightCompliant: gp?.searchlightCompliant ?? null, firstTransit: gp?.firstTransit ?? null, beamFt: gn(gp?.beamFt), doubleBottom: gp?.doubleBottom ?? null,
+    }, payload.suezConditionsDeclared === true);
 
     // ── ports: ECA status from the route's own geometry when the laden track is measured ──
     const ladenRoute = ladenLeg.route;
     const portEca = (zones: string[] | null | undefined, clientValue: boolean) =>
       zones == null ? { inEca: !!clientValue, inEcaSource: "manual" as const }
         : { inEca: zones.length > 0, inEcaSource: ladenRoute?.geometryConfidence === "official" ? ("governed" as const) : ("coarse" as const) };
+    // Handling rates equal to the linked listing's are listing facts; any other figure is a broker input.
+    const listingRate = (v: string | null | undefined) => { const n = v == null ? NaN : Number(String(v).replace(/[^0-9.]/g, "")); return Number.isFinite(n) && n > 0 ? n : null; };
+    const rateSource = (typed: number | null | undefined, listed: number | null) => (listed != null && typed === listed ? ("listing" as const) : ("manual" as const));
     const ports: VoyageInput["ports"] = {
-      load: { ...client.ports.load, ...portEca(ladenRoute?.startZones, client.ports.load.inEca), pda: { ...client.ports.load.pda, manual: stamp(client.ports.load.pda?.manual) } },
-      disch: { ...client.ports.disch, ...portEca(ladenRoute?.endZones, client.ports.disch.inEca), pda: { ...client.ports.disch.pda, manual: stamp(client.ports.disch.pda?.manual) } },
+      load: { ...client.ports.load, ...portEca(ladenRoute?.startZones, client.ports.load.inEca), rateSource: rateSource(client.ports.load.rateMtDay, listingRate(listing?.load_rate)), pda: { ...client.ports.load.pda, manual: stamp(client.ports.load.pda?.manual) } },
+      disch: { ...client.ports.disch, ...portEca(ladenRoute?.endZones, client.ports.disch.inEca), rateSource: rateSource(client.ports.disch.rateMtDay, listingRate(listing?.disch_rate)), pda: { ...client.ports.disch.pda, manual: stamp(client.ports.disch.pda?.manual) } },
     };
 
     const base: VoyageInput = {
       ...client,
+      // waiting at anchorage is off the discharge port: its ECA status is that port's, with the port's source (C2O-050 #4)
+      anchorageInEca: ports.disch.inEca, waitingAnchorageEcaSource: ports.disch.inEcaSource === "governed" ? "governed" : "manual",
       legs: { ballast: ballastLeg?.leg ?? null, laden: ladenLeg.leg },
       ports, canal: null, ballastCanal: null, vesselSource, fuel,
       settings, settingsSource: settingsLoad.status,
     };
 
     // ── canal transits: requirement, direction, date and price on the server ──
-    const startDate = typeof payload.startDate === "string" && ISO_DATE.test(payload.startDate) ? payload.startDate : today;
-    if (startDate === today && payload.startDate !== today) notes.push("No laycan date: transit dates are counted from today.");
+    base.scheduleSource = scheduleSource;
     const pre = estimateVoyage(base); // days per leg, before any canal
     const transitFor = async (rl: ResolvedLeg | null, which: "laden" | "ballast", clientCanal: CanalInput | null | undefined): Promise<{ canal: CanalInput | null; suez: SuezEstimate | null; date: string | null; basis: string | null }> => {
       if (!rl) return { canal: null, suez: null, date: null, basis: null };
@@ -261,7 +309,12 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
       const required = measured ? rl.route!.chokepoints.includes("SUEZ") : !!clientCanal?.required;
       if (!required) return { canal: null, suez: null, date: null, basis: null };
       if (!measured) notes.push(`The ${which} leg is manual: its Suez transit is the broker's assertion.`);
-      const direction = rl.route?.suezDirection ?? (payload.suezInput?.voyage?.direction === "NB" ? "NB" : "SB");
+      const clientDir = payload.suezInput?.voyage?.direction === "NB" || payload.suezInput?.voyage?.direction === "SB" ? payload.suezInput.voyage.direction : null;
+      const direction = measured ? rl.route!.suezDirection : clientDir;
+      if (!direction) {
+        notes.push(measured ? `The ${which} track has no waypoints inside the canal: its transit direction is unknown, so the canal is not priced.` : `The ${which} leg is manual and names no Suez direction: the canal is not priced.`);
+        return { canal: canalFromSuez(null, settings, { leg: which, anchorageInEca: false, anchorageInEcaSource: "manual", manualCost: null }), suez: null, date: null, basis: null };
+      }
       const legDays = which === "laden" ? pre.days.seaLaden : pre.days.seaBallast;
       const offset = which === "laden" ? pre.days.portLoad + legDays / 2 : -legDays / 2;
       const date = suezTransitDate(startDate, offset);
@@ -278,9 +331,12 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
       if (si?.vessel) {
         const ov = si.overrides ?? {};
         const restamp = <T,>(m: { value: T; reason: string } | undefined) => (m ? { value: m.value, reason: String(m.reason ?? "").trim(), actorUserId: ACTOR_REF, at: now } : undefined);
+        const declaredNone = payload.suezConditionsDeclared === true
+          ? { heavyLiftOver250t: false, floatingUnitScgt300: false, militaryCargo: false, lateArrivalBand: "none", notReady: false, deckProtrusionFt: 0, ladderNoncompliant: false, relievingPilots: 0, wasteNormalM3: 0, wasteHazardousM3: 0, bagsM3: 0, bargeHours: 0 }
+          : {};
         const input: SuezInput = {
           vessel: si.vessel,
-          voyage: { ...(si.voyage ?? {}), direction, cargoStatus: which, transitDate: date } as SuezInput["voyage"],
+          voyage: { ...declaredNone, ...(si.voyage ?? {}), direction, cargoStatus: which, transitDate: date } as SuezInput["voyage"],
           overrides: { ...(ov.sdrRate ? { sdrRate: restamp(ov.sdrRate) } : {}), ...(ov.transitDays ? { transitDays: restamp(ov.transitDays) } : {}), ...(ov.anchorageDays ? { anchorageDays: restamp(ov.anchorageDays) } : {}) },
         };
         const ctx = await getSuezTariffContext(supabase, date);
@@ -289,7 +345,8 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
       }
       const m = which === "laden" ? payload.canalManual?.laden : payload.canalManual?.ballast;
       const manualCost = m && Number.isFinite(Number(m.usd)) ? { usd: Number(m.usd), manual: { actorUserId: ACTOR_REF, reason: String(m.reason ?? "").trim(), at: now } } : null;
-      return { canal: canalFromSuez(suez, settings, { leg: which, ...anch, manualCost }), suez, date, basis };
+      const priced = canalFromSuez(suez, settings, { leg: which, ...anch, manualCost });
+      return { canal: downgradeCanalForFacts(priced, suezManual, { actorUserId: ACTOR_REF, at: now }), suez, date, basis };
     };
     const [laden, ballast] = await Promise.all([transitFor(ladenLeg, "laden", client.canal), transitFor(ballastLeg, "ballast", client.ballastCanal)]);
 
@@ -303,9 +360,9 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
     const fuelSnapshot = sealSnapshot({ ...fuel, canonicalSha256: undefined });
     const routeLegs = [...(ballastLeg ? [ballastLeg.snap] : []), ladenLeg.snap];
     const routeStatus: RouteEcaClassification["status"] = routeLegs.some((l) => l.method === "none") ? "unavailable"
-      : routeLegs.some((l) => l.method === "manual") ? "manual" : routeLegs.some((l) => l.verified === false || (l.method === "waypoints" && l.ecaConfidence === "coarse")) ? "fallback" : "trusted";
+      : routeLegs.some((l) => l.method === "manual") ? "manual" : routeLegs.some((l) => l.verified === false || l.method === "distance_only" || (l.method === "waypoints" && l.ecaConfidence === "coarse")) ? "fallback" : "trusted";
     const routeSnapshot = sealSnapshot<RouteEcaClassification>({
-      kind: "route_eca", status: routeStatus, asOf: today, legs: routeLegs,
+      kind: "route_eca", status: routeStatus, asOf: startDate, legs: routeLegs,
       geometryVersions: [...geometry].map(([code, geometryVersion]) => ({ code, geometryVersion })),
       algorithmVersion: splitAlgorithm ?? ECA_SPLIT_ALGORITHM_VERSION,
       warnings: result.warnings.filter((w) => /ECA|distance|track/i.test(w)),
@@ -331,6 +388,9 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
         manual: c?.manual ?? (t.suez?.sdrRate.manual ? { actorUserId: ACTOR_REF, reason: t.suez.sdrRate.manual.reason, at: now } : undefined),
         transitDate: t.date,
         transitDateBasis: t.basis,
+        factsSource: suezManual.length ? ("manual" as const) : ("governed" as const),
+        manualFacts: suezManual,
+        conditionsDeclared: payload.suezConditionsDeclared === true,
       };
     };
     const suezSnapshot = sealSnapshot<SuezCostSnapshot>({ kind: "suez_cost", ...transitSnap(laden), ballastTransit: ballast.canal ? transitSnap(ballast) : null });
@@ -345,7 +405,8 @@ export async function saveVoyageEstimateAction(payload: SaveVoyagePayload): Prom
 
     // ── normalised lines, each with its governed status ──────────────────
     const c = result.costs;
-    const opexStatus = result.settingsSource === "governed" && !result.opex.classAssumed ? "trusted" : "fallback";
+    const opexAssumed = result.platformAssumptions.some((p) => p.key.startsWith("opex") || p.key === "classMultipliers");
+    const opexStatus = result.settingsSource === "governed" && !result.opex.classAssumed && !opexAssumed ? "trusted" : "fallback";
     const lines = [
       ...result.legs.map((l) => ({ kind: "leg", code: l.key, label: l.label, status: l.status, quantity: l.days, unit: "days", rate: l.nm, amountUsd: null, explanation: l.note })),
       ...result.fuel.lines.map((f) => ({ kind: "fuel", code: f.productKey.toLowerCase(), label: f.productKey, status: f.status, quantity: f.mt, unit: "mt", rate: f.usdMt, amountUsd: f.usd, explanation: f.status === "trusted" ? `index average${f.priceAsOf ? ` as of ${f.priceAsOf}` : ""}` : f.status === "fallback" ? "admin fallback price" : "no price" })),

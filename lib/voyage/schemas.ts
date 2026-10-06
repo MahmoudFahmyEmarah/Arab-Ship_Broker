@@ -66,6 +66,7 @@ const portCall = z.object({
   openLoopBan: z.boolean(),
   euBerthOver2h: z.boolean(),
   inEcaSource: z.enum(["governed", "coarse", "manual"]).optional(),
+  rateSource: z.enum(["listing", "manual"]).optional(),
   pda: z.object({ usd: nonNeg(5_000_000).nullable(), source: z.enum(["tariff", "manual", "none"]), manual: manual.optional() }).strict().superRefine((p, ctx) => {
     if (p.source === "manual" && !p.manual) ctx.addIssue({ code: "custom", path: ["manual"], message: "a manual DA needs actor, reason and time" });
     if (p.source !== "none" && p.usd == null) ctx.addIssue({ code: "custom", path: ["usd"], message: "a sourced DA needs an amount" });
@@ -116,9 +117,11 @@ export const voyageInputSchema = z.object({
   canal: canalSchema.nullable(),
   ballastCanal: canalSchema.nullable().optional(),
   vesselSource: z.enum(["profile", "manual"]).optional(),
+  scheduleSource: z.enum(["listing", "manual"]).optional(),
   ports: z.object({ load: portCall, disch: portCall }).strict(),
   anchorageDays: days,
   anchorageInEca: z.boolean(),
+  waitingAnchorageEcaSource: z.enum(["governed", "manual"]).optional(),
   seaMarginPct: pctSmall.nullable(),
   lane: z.string().regex(/^[A-Z0-9.]+>[A-Z0-9.]+$/).nullable(),
   season: z.enum(["winter", "spring", "summer", "autumn"]).nullable(),

@@ -6,7 +6,7 @@ import { resolveCalculatorAccess } from "@/lib/voyage/calculator-access";
 import { CalculatorLocked } from "@/components/portal/calculators";
 import { VoyageEstimatorV2 } from "@/components/voyage/VoyageEstimatorV2";
 import { getPointEcaZones, getSuezTariffContext, listEcaZones } from "@/sdk/app/suez";
-import { getVoyageSettings } from "@/sdk/app/voyage";
+import { getVoyageSettings, resolveVoyageVesselLink } from "@/sdk/app/voyage";
 import { loadFuelIndex, voyageFuelProducts } from "@/lib/voyage/fuel-source";
 import { voyageOptionFromAdminRow, voyageOptionFromView, type AdminVoyageVesselRow, type VoyageVesselOption } from "@/lib/voyage/vessel-options";
 import type { SuezTariffContextResult } from "@/lib/suez/types";
@@ -60,6 +60,14 @@ export default async function VoyageEstimatorPage({ searchParams }: { searchPara
     access.kind === "admin" ? loadAdminVoyageVessels() : loadVesselViews({ mine: true }).then((r) => r.views.map(voyageOptionFromView)),
     loadCargoViews(), getVoyageSettings(supabase), loadOwnerOrgs(access.actorId),
   ]);
+  // A match card links with a market listing key (O2C-036 #1 / C2O-058 #1): resolve it as this member to one of
+  // THEIR positions; a key that does not resolve to an option is "not found" in the page, never another vessel.
+  const linkVessel = typeof params.vessel === "string" ? params.vessel : undefined;
+  let initialVesselId = linkVessel;
+  if (linkVessel && !vessels.some((v) => v.id === linkVessel) && /^[0-9a-f-]{36}$/i.test(linkVessel)) {
+    const resolved = await resolveVoyageVesselLink(supabase, linkVessel);
+    if (resolved && vessels.some((v) => v.id === resolved)) initialVesselId = resolved;
+  }
   // The convoy anchorage per direction, tested against the ECA zones in force today (the save re-tests on the transit date).
   const anchorages = settingsLoad.settings.suez.anchorages ?? {};
   const anchorageEca: { SB?: boolean | null; NB?: boolean | null } = {};
@@ -89,7 +97,7 @@ export default async function VoyageEstimatorPage({ searchParams }: { searchPara
       ownerOrgs={ownerOrgs}
       anchorageEca={anchorageEca}
       anchorageEcaConfidence={anchorageEcaConfidence}
-      initialVesselId={typeof params.vessel === "string" ? params.vessel : undefined}
+      initialVesselId={initialVesselId}
       initialCargoId={typeof params.cargo === "string" ? params.cargo : undefined}
     />
   );

@@ -7,7 +7,7 @@
 // named (O2C-022/024) is asserted to be `unavailable`, `invalid`, undecided or
 // `manual` — never a silent figure. Run: npm run test:suez
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { estimateSuezTransit, tollSdrFromTiers } from "../lib/suez/engine";
 import { parseSuezInput, parseTierCsv, suezItemInputSchema } from "../lib/suez/schemas";
 import type { SuezInput, SuezTariffContext, SuezTariffItem, SuezTollTier } from "../lib/suez/types";
@@ -168,6 +168,12 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   // derived crane capability from the tariff's SWL / boats parameters
   const derived = v1({ vessel: { ...rubato.vessel, gt: 12000, mooringCranesOk: null, craneCount: 2, craneSwlMt: 2.5 }, voyage: rubato.voyage });
   eq(derived.layers.conditional.find((f) => f.code === "imposed_tug")!.triggered, true, "SWL 2.5 t < params.swlMt 3 → tug applies");
+  // C2O-058 #4: the waiver needs a known crane count of at least params.boats with adequate SWL
+  const tugOf = (v: Partial<SuezInput["vessel"]>) => v1({ vessel: { ...rubato.vessel, gt: 12000, mooringCranesOk: null, ...v }, voyage: rubato.voyage }).layers.conditional.find((f) => f.code === "imposed_tug")!;
+  eq(tugOf({ craneCount: null, craneSwlMt: 5 }).triggered, null, "an unknown crane count is never assumed to be one: undecided");
+  eq(tugOf({ craneCount: 1, craneSwlMt: 5 }).triggered, true, "one crane for two boats → tug applies");
+  eq(tugOf({ craneCount: 2, craneSwlMt: 5 }).triggered, false, "two adequate cranes for two boats → waived");
+  eq(tugOf({ craneCount: 4, craneSwlMt: null }).triggered, null, "an unknown SWL leaves it undecided");
   // thresholds missing from params → the line is invalid, never a built-in default
   const missing = v1(rubato, { items: seedItems(1).map((i) => (i.code === "imposed_tug" ? { ...i, params: { amount: 22000 } } : i)) });
   eq(missing.layers.conditional.find((f) => f.code === "imposed_tug")!.status, "invalid", "imposed tug without gtThreshold/swlMt/boats is invalid");
@@ -393,6 +399,38 @@ const v2 = (i: SuezInput = { ...rubato, voyage: { ...rubato.voyage, transitDate:
   const bad = estimateSuezTransit(rubato, ctx([{ ...escort, params: {} }]));
   eq(bad.status, "invalid", "escort rules missing from the item params → invalid tariff data");
   eq(parseSuezInput({ ...rubato, vessel: { ...rubato.vessel, draftFt: -1 } }).ok, false, "a negative draft is refused");
+  // C2O-058 #5: escort lower bounds are inclusive, upper bounds exclusive — every exact boundary
+  eq(flag(run({ scnt: 70000, draftFt: 40, beamFt: 150, doubleBottom: true })).quantity, 1, "laden exactly 70,000 SCNT → one tug (70,000–90,000 band)");
+  eq(flag(run({ scnt: 90000, draftFt: 40, beamFt: 150, doubleBottom: true })).quantity, 2, "laden exactly 90,000 SCNT → two tugs");
+  eq(flag(run({ scnt: 69999.99, draftFt: 40, beamFt: 150, doubleBottom: true })).triggered, false, "laden just under 70,000 with normal draft and double bottom → none");
+  eq(flag(run({ scnt: 130000, draftFt: 30, beamFt: 150, doubleBottom: true }, "ballast")).quantity, 1, "ballast exactly 130,000 SCNT → one tug");
+  const box170 = estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, category: "container", scnt: 170000, draftFt: 50, beamFt: 200, doubleBottom: true } }, ctx([escort, cancel]));
+  eq(flag(box170).quantity, 2, "container exactly 170,000 SCNT → two tugs");
+  const lpg40 = estimateSuezTransit({ ...rubato, vessel: { ...rubato.vessel, category: "lpg", scnt: 40000, draftFt: 30, beamFt: 150, doubleBottom: true }, voyage: { ...rubato.voyage, cargoStatus: "ballast" } }, ctx([escort, cancel]));
+  eq(flag(lpg40).quantity, 1, "LPG exactly 40,000 SCNT → one tug");
+}
+
+// ── 16 · C2O-050: governed escort/age facts, SQL validation, legacy origin, durable rollback evidence ─
+{
+  const m = readFileSync(new URL("../supabase/migrations/20261003205600_suez_voyage_truth_fixes.sql", import.meta.url), "utf8");
+  ok(["build_year", "crane_count", "crane_swl_mt", "beam_ft", "double_bottom"].every((c) => m.includes(`add column if not exists ${c}`)) && m.includes("'beamFt', v_row.beam_ft") && m.includes("v_build, v_cranes, v_swl, v_beam, (p_profile ->> 'doubleBottom')::boolean"), "#5 the profile governs build year, cranes, beam and double bottom (read and upsert)");
+  ok(m.includes("malformed escort rule") && m.includes("contingent item %") && m.includes("must be a conditional flag_only item"), "P2 escort and contingent params are validated structurally in SQL");
+  ok(/update public\.suez_tariff_events e\s+set origin = 'command'/.test(m) && m.includes("v.created_by is not null") && m.includes("disable trigger trg_suez_events_append_only"), "#6 legacy admin events are relabelled command under the guard's switch");
+  ok(m.includes("create table if not exists public.schema_rollback_evidence") && m.includes("revoke all on table public.schema_rollback_evidence from public, anon, authenticated, service_role"), "#6 durable rollback evidence outside the module, private");
+  const down = readFileSync(new URL("../supabase/rollback/20261003_suez_voyage_down.sql", import.meta.url), "utf8");
+  ok(down.includes("insert into public.schema_rollback_evidence") && down.includes("not exists (select 1 from public.schema_rollback_evidence)"), "#6 a forced DOWN writes evidence; an empty evidence table goes with a clean DOWN");
+  const r400 = readFileSync(new URL("../supabase/migrations/20261003205400_suez_voyage_audit_remediation.sql", import.meta.url), "utf8");
+  ok(r400.includes("'invalid','unrecorded'));"), "P2 205400 re-applies over 205500's unrecorded lines");
+  const purge = readFileSync(new URL("../supabase/maintenance/20261006_purge_pre_f87_voyage_runs.sql", import.meta.url), "utf8");
+  ok(purge.includes("VOYAGE_PURGE_REFUSED") && purge.includes("'test-data-only'") && purge.includes("enable trigger trg_voyage_run_immutable"), "#6 pre-f87 runs with a person's id are purged only on an acknowledged test database");
+  ok(existsSync(new URL("../supabase/data/suez/load-v5-escort-contingent.sql", import.meta.url)) && existsSync(new URL("../supabase/data/suez/README.md", import.meta.url)), "P2 the governed tariff loads and their runbook are in the repository");
+  const m7 = readFileSync(new URL("../supabase/migrations/20261003205700_voyage_link_governance.sql", import.meta.url), "utf8");
+  ok(m7.indexOf("fn_voyage_may_reference(v_actor, 'cargo'") < m7.indexOf("from public.cargo_listings c") && m7.includes("VOYAGE_FORBIDDEN: a linked listing is not available to you"), "C2O-058 #7 link facts authorise before any read, one generic refusal");
+  ok(m7.includes("fn_market_resolve_handle(v_actor, p_key)") && m7.includes("fn_voyage_may_reference(v_actor, 'availability', v_id)") && m7.includes("return null;   -- unknown, expired and foreign keys are indistinguishable"), "C2O-058 #1 the listing key resolves only to a position the member may reference");
+  ok(down.includes("'removedCounts', v_counts, 'removedDetail', v_detail, 'preserved', v_preserved") && down.includes("drop function if exists public.voyage_link_facts(uuid, uuid);"), "C2O-058 #10 DOWN evidence counts removed rows and lists preserved data apart; DOWN drops the link RPCs");
+  ok(["voyage_estimate_lines","voyage_estimate_runs","suez_tariff_version_sources","suez_tariff_sources","suez_tariff_events","suez_toll_tiers","suez_tariff_items","suez_tariff_versions","sdr_rates","eca_zone_versions","eca_zones","vessel_economics_profile_events","vessel_economics_profiles"].every((t) => down.includes(`'${t}'`) && down.includes(`drop table if exists public.${t};`)) && !/removedCounts[^;]*app_settings/.test(down), "C2O-061 #1 evidence counts every table the DOWN drops; preserved settings never under removed");
+  ok(m7.includes("from public, anon, service_role;  -- member session only") && (m7.match(/grant execute on function public\.(resolve_voyage_vessel_link|voyage_link_facts)\([^)]*\) to authenticated;/g) ?? []).length === 2, "C2O-061 #3 the link RPCs are member-session only (service_role revoked)");
+  ok(readFileSync(new URL("../supabase/data/suez/load-v3-official-bands.sql", import.meta.url), "utf8").includes("cargo_status_scope, category_scope, confidence, condition_key"), "C2O-058 #11 the v3 loader carries every governed item column");
 }
 
 // ── 12 · Contract: fixtures mirror the seed, governance SQL carries the guards ─

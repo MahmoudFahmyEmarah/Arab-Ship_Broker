@@ -39,6 +39,10 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const round3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2)); // locale-free
 
+// EU/EEA coastal states (UN/LOCODE country prefixes): Directive (EU) 2016/802 art. 6(5) — 0.10 % sulphur at berth
+// beyond two hours. Regulatory geography, not an economic figure.
+const EU_EEA = new Set(["BE", "BG", "HR", "CY", "DK", "EE", "FI", "FR", "DE", "GR", "IE", "IT", "LV", "LT", "MT", "NL", "PL", "PT", "RO", "SI", "ES", "SE", "NO", "IS"]);
+
 export const RESIDUAL_PRODUCT_SCRUBBER = "HSFO380";
 export const RESIDUAL_PRODUCT_COMPLIANT = "VLSFO";
 
@@ -236,7 +240,9 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
     const burns: FuelBurn[] = [];
     const okA = burnState(burns, "anchorage", dAnch, input.anchorageInEca ? dAnch : 0, input.anchorageInEca);
     if (!okA) unavailable.push({ code: "anchorage_fuel", reason: "Waiting at anchorage: no anchorage consumption declared." });
-    legs.push({ key: "anchorage", label: "Waiting at anchorage", kind: "anchorage", status: okA ? "trusted" : "unavailable", from: null, to: null, nm: 0, ecaNm: 0, ecaShareKnown: true, days: round2(dAnch), ecaDays: round2(input.anchorageInEca ? dAnch : 0), burns, note: "Broker estimate" });
+    // the ECA status of the wait is governed only when it is the discharge port's governed status (C2O-050 #4)
+    const waitGoverned = input.waitingAnchorageEcaSource === "governed";
+    legs.push({ key: "anchorage", label: "Waiting at anchorage", kind: "anchorage", status: !okA ? "unavailable" : waitGoverned ? "trusted" : "manual", from: null, to: null, nm: 0, ecaNm: 0, ecaShareKnown: true, days: round2(dAnch), ecaDays: round2(input.anchorageInEca ? dAnch : 0), burns, note: "Broker estimate" });
   }
   const totalDays = dSeaBallast + dSeaLaden + dCanalTransit + dCanalAnch + dLoad + dDisch + dAnch;
 
@@ -249,7 +255,12 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
     if (p.inEcaSource === "coarse") asserted.push(`${which} ECA status from a coarse ECA ring`);
     if (p.openLoopBan) asserted.push(`${which} open-loop scrubber ban`);
     if (p.euBerthOver2h) asserted.push(`${which} EU berth beyond 2 h`);
+    // A flag left false is the cheaper answer, so it is an assertion too where it can matter (Opus B pre-audit P1-3):
+    // no governed register says which ports ban open-loop scrubbers, and EU/EEA ports require 0.10 % fuel at berth.
+    if (!p.openLoopBan && scrubber) asserted.push(`${which}: no open-loop scrubber ban assumed`);
+    if (!p.euBerthOver2h && p.port && EU_EEA.has(p.port.slice(0, 2))) asserted.push(`${which} is an EU/EEA port but the 2 h berth rule was not applied`);
   }
+  if (input.anchorageDays > 0 && input.waitingAnchorageEcaSource !== "governed") asserted.push(`waiting-anchorage ECA status (${input.anchorageInEca ? "inside" : "outside"})`);
   if (transits.some((c) => c.anchorageInEcaSource === "manual")) asserted.push("canal anchorage ECA status");
   if (transits.some((c) => c.anchorageInEcaSource === "coarse")) asserted.push("canal anchorage ECA status from a coarse ECA ring");
   if (asserted.length) assumptions.push(`Not governed: ${asserted.join("; ")}.`);
@@ -260,6 +271,8 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   if (input.anchorageDays !== s.anchorageDaysDefault) brokerInputs.push(`${fmt(input.anchorageDays)} days waiting at anchorage`);
   if (input.extras.insuranceUsd + input.extras.stevedoringUsd + input.extras.otherUsd > 0) brokerInputs.push("insurance/stevedoring/other costs");
   if (input.revenue) brokerInputs.push("freight and commission");
+  if ([input.ports.load, input.ports.disch].some((p) => p.rateSource !== "listing" && p.rateMtDay != null)) brokerInputs.push("port handling rates");
+  if (input.scheduleSource === "manual") brokerInputs.push("voyage start date (sets the tariff and SDR date)");
   if (brokerInputs.length) assumptions.push(`Broker inputs (not governed data): ${brokerInputs.join("; ")}.`);
 
   // ── platform constants not yet confirmed by the owner (B2O-010 §1: label, keep editable) ──
@@ -330,7 +343,8 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   // ── status ──────────────────────────────────────────────────────────
   let status: VoyageStatus;
   if (anyLegUnavailable && legs.filter((l) => l.kind === "sea").every((l) => l.status === "unavailable")) status = "unavailable";
-  else if (!complete || fuelStatus !== "trusted" || canal.status === "manual" || canal.status === "fallback" || classAssumed || asserted.length > 0 || brokerInputs.length > 0 || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
+  // an unconfirmed platform constant is an assumption: never trusted (C2O-050 #4)
+  else if (!complete || fuelStatus !== "trusted" || platformAssumptions.length > 0 || canal.status === "manual" || canal.status === "fallback" || classAssumed || asserted.length > 0 || brokerInputs.length > 0 || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
   else status = "trusted";
 
   return {

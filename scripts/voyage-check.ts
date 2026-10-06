@@ -10,9 +10,12 @@ import { readFileSync } from "node:fs";
 import { estimateVoyage, seaDays, seaMarginFor, seasonOf } from "../lib/voyage/engine";
 import { parseVoyageInput, parseVoyageSettings } from "../lib/voyage/schemas";
 import { canonicalJson, sealSnapshot, type FuelIndexSnapshot } from "../lib/voyage/snapshots";
-import { DEFAULT_VOYAGE_SETTINGS, type VoyageInput, type VoyageSettings } from "../lib/voyage/types";
+import { DEFAULT_VOYAGE_SETTINGS, PLATFORM_CONSTANTS, type VoyageInput, type VoyageSettings } from "../lib/voyage/types";
 import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage/calculator-policy";
-import { canalFromSuez, suezTransitDate } from "../lib/voyage/canal";
+import { canalDirection, canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "../lib/voyage/canal";
+import { reconcileLinks, suezFactReasons, type GovernedSuezFacts } from "../lib/voyage/save-rules";
+import { createRequestGate } from "../lib/voyage/request-gate";
+import { acceptedLegResult, bindLegResult, currentLegResult, legEndpoints, legLookupKey, matchesLegEndpoints, matchesLegLookup, rebindManualLeg, voyagePdaHref } from "../lib/voyage/leg-state";
 import { voyageFuelProducts } from "../lib/voyage/fuel-source";
 import { estimateSuezTransit } from "../lib/suez/engine";
 import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
@@ -22,7 +25,8 @@ const ok = (cond: boolean, msg: string) => { assert.ok(cond, msg); checks++; };
 const eq = (a: unknown, b: unknown, msg: string) => { assert.deepStrictEqual(a, b, msg); checks++; };
 const near = (a: number | null | undefined, b: number, tol: number, msg: string) => { assert.ok(a != null && Math.abs(a - b) <= tol, `${msg}: got ${a}, want ${b} ±${tol}`); checks++; };
 
-const S: VoyageSettings = structuredClone(DEFAULT_VOYAGE_SETTINGS);
+// the governed baseline: every platform constant confirmed by the owner (C2O-050 #4 makes an unconfirmed one partial)
+const S: VoyageSettings = { ...structuredClone(DEFAULT_VOYAGE_SETTINGS), confirmed: PLATFORM_CONSTANTS.map((c) => c.key) };
 S.seaMargin.defaultPct = 0; // fixtures sail on the governed margin (an entered margin is a broker input since C2O-044 #5)
 const MANUAL = { actorUserId: "user-1", reason: "agent quote 3 Oct", at: "2026-10-03T10:00:00Z" };
 const index = (products: Record<string, number>, extra: Partial<FuelIndexSnapshot> = {}): FuelIndexSnapshot => ({
@@ -304,7 +308,7 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   // P0-3 / P0-4 / P1-9 · contract: the save re-resolves legs and the guard covers every action
   const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
   ok((act.match(/await resolveCalculatorAccess\(\)/g) ?? []).length >= 2, "both voyage actions pass the entitlement guard");
-  ok(act.includes("lookupLeg(supabase, from, to, today)") && !act.includes("payload.routeLegs") && !act.includes("payload.routeMeta"), "legs and route metadata are resolved on the server, never taken from the browser");
+  ok(act.includes("lookupLeg(supabase, from, to, startDate)") && !act.includes("payload.routeLegs") && !act.includes("payload.routeMeta"), "legs and route metadata are resolved on the server at the voyage date, never taken from the browser");
   ok(act.includes('p?.pda?.source === "tariff"'), "a browser-asserted tariff DA is refused");
   ok(act.includes("canalFromSuez(suez, settings, { leg: which"), "the canal status is derived on the server");
   ok(/status: l\.status/.test(act) && /status: f\.status/.test(act), "every saved line carries its governed status");
@@ -373,10 +377,147 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   eq(estimateVoyage(base({ vessel: v, canal: { ...laden, anchorageInEcaSource: "manual" } })).status, "partial", "an asserted anchorage ECA status is a manual fact");
 
   // PR-04 · platform assumptions are labelled until the owner confirms them
-  const pa = estimateVoyage(base());
+  const pa = estimateVoyage(base({ settings: { ...S, confirmed: [] } }));
   ok(pa.platformAssumptions.some((p) => p.key === "opex.crewUsdDay" && p.label.includes("1,450")) && pa.assumptions.some((a) => a.startsWith("Platform assumption")), "unconfirmed constants are labelled platform assumption");
   const conf = estimateVoyage(base({ settings: { ...S, confirmed: ["opex.crewUsdDay", "opex.maintenanceUsdDay", "classMultipliers", "seaMargin.defaultPct", "speeds", "portTimeDays", "suez.days"] } }));
   eq(conf.platformAssumptions, [], "confirmed constants carry no label");
+  // C2O-050 #4 · an unconfirmed constant is an assumption: the estimate is never trusted on it
+  eq(pa.status, "partial", "an unconfirmed platform constant keeps the estimate partial");
+  const wait = estimateVoyage(base({ anchorageDays: 1.5, anchorageInEca: false }));
+  ok(wait.status === "partial" && wait.legs.find((l) => l.key === "anchorage")?.status === "manual" && wait.assumptions.some((a) => a.includes("waiting-anchorage ECA status")), "a broker's waiting-anchorage ECA flag is an assertion: manual leg, partial estimate");
+  const waitGov = estimateVoyage(base({ anchorageDays: 1.5, anchorageInEca: false, waitingAnchorageEcaSource: "governed" }));
+  ok(waitGov.legs.find((l) => l.key === "anchorage")?.status === "trusted" && !waitGov.assumptions.some((a) => a.includes("waiting-anchorage")), "the discharge port's governed ECA status makes the wait trusted");
+  // C2O-050 P2 · no end-point guess for the canal direction
+  eq(canalDirection([[30.5, 25.0, null], [12.0, 45.0, null]]), null, "a track with no waypoints inside the canal has no direction");
+  eq(canalDirection([[31.25, 32.3, null], [30.6, 32.33, null], [29.95, 32.56, null]]), "SB", "waypoints inside the canal decide the direction");
+  // C2O-050 #1 · ungoverned Suez facts make a trusted canal the broker's figure
+  const tc = { required: true, status: "trusted" as const, costUsd: 300000, complete: true, transitDays: 1, anchorageDays: 1, anchorageInEca: false, anchorageInEcaSource: "governed" as const };
+  const dg = downgradeCanalForFacts(tc as never, ["voyage conditions (special services, surcharges) not declared"], { actorUserId: "run-actor", at: "2026-10-06T00:00:00Z" });
+  ok(dg?.status === "manual" && !!dg.manual?.reason.includes("not declared"), "undeclared conditions downgrade a trusted canal to manual with the reason");
+  eq(downgradeCanalForFacts(tc as never, [], { actorUserId: "run-actor", at: "x" })?.status, "trusted", "governed facts leave the canal trusted");
+
+  // C2O-050 #2 · adversarial links: every inconsistency is refused, never silently unlinked
+  const cargoRow = { load_port_locode: "EGALY", disch_port_locode: "SAJED", qty_min_mt: 25000, qty_max_mt: 27500 };
+  const L = (over: Partial<Parameters<typeof reconcileLinks>[0]>) => reconcileLinks({ ladenFrom: "EGALY", ladenTo: "SAJED", openPort: "EGALY", qtyMt: 26000, freightQtyMt: null, vesselId: "v1", ...over });
+  ok(L({ cargo: { id: "c1", row: cargoRow } }).ok, "a consistent cargo link is accepted");
+  ok(!L({ ladenTo: "SAYNB", cargo: { id: "c1", row: cargoRow } }).ok, "another discharge port than the linked cargo's is refused");
+  ok(!L({ ladenFrom: "TRMER", cargo: { id: "c1", row: cargoRow } }).ok, "another load port than the linked cargo's is refused");
+  ok(!L({ qtyMt: 40000, cargo: { id: "c1", row: cargoRow } }).ok, "a quantity above the cargo's range is refused");
+  ok(!L({ qtyMt: 1000, cargo: { id: "c1", row: cargoRow } }).ok, "a quantity below the cargo's range is refused");
+  ok(!L({ qtyMt: null, cargo: { id: "c1", row: cargoRow } }).ok, "no quantity against a ranged cargo is refused");
+  ok(!L({ freightQtyMt: 30000, cargo: { id: "c1", row: cargoRow } }).ok, "a freight quantity that is not the cargo quantity is refused");
+  ok(!L({ cargo: { id: "c1", row: null } }).ok, "a vanished cargo link is refused, not dropped");
+  ok(!L({ position: { id: "p1", row: { vessel_id: "v2", open_port_locode: "EGALY" } } }).ok, "a position of another vessel is refused");
+  ok(!L({ openPort: "GRPIR", position: { id: "p1", row: { vessel_id: "v1", open_port_locode: "EGALY" } } }).ok, "an open port that is not the position's is refused");
+  const adopt = L({ vesselId: null, position: { id: "p1", row: { vessel_id: "v9", open_port_locode: "EGALY" } } });
+  ok(adopt.ok && adopt.vesselId === "v9", "a position without a vessel id adopts the position's vessel");
+  // C2O-058 #6 · both port calls are the linked cargo's, with one quantity (forged discharge refused)
+  const PC = { loadPort: "EGALY", dischPort: "SAJED", loadQtyMt: 26000, dischQtyMt: 26000 };
+  ok(L({ cargo: { id: "c1", row: cargoRow }, portCalls: PC }).ok, "port calls equal to the cargo's are accepted");
+  ok(!L({ cargo: { id: "c1", row: cargoRow }, portCalls: { ...PC, dischPort: "SAYNB" } }).ok, "a forged discharge port call is refused");
+  ok(!L({ cargo: { id: "c1", row: cargoRow }, portCalls: { ...PC, dischQtyMt: 20000 } }).ok, "a forged discharge quantity is refused");
+  ok(!L({ cargo: { id: "c1", row: cargoRow }, portCalls: { ...PC, loadPort: "TRMER" } }).ok, "a forged load port call is refused");
+  // C2O-058 #7 / #9 · authorise before reading, refuse malformed links; #1 resolve keys; #2 / #3 / #8 the preview
+  const act2 = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
+  ok(act2.includes("getVoyageLinkFacts(supabase, cargoListingId, availabilityId)") && !/admin\.from\("(cargo_listings|vessel_availability)"\)/.test(act2), "linked cargo/position facts come from the governed member RPC, never a service-role read of caller ids");
+  ok(act2.includes("A linked id is malformed") && act2.includes("is not available to you"), "malformed links are refused; unauthorised links get one generic refusal");
+  const pg = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/page.tsx", import.meta.url), "utf8");
+  ok(pg.includes("resolveVoyageVesselLink(supabase, linkVessel)") && pg.includes("vessels.some((v) => v.id === resolved)"), "a market listing key is resolved as the member, to one of their own options only");
+  const v2 = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
+  ok(!v2.includes("detectSuezDirection") && !v2.includes("zoneDir") && v2.includes('measured(laden, ladenAuto, polCode, podCode) ? (ladenAuto?.suezDirection ?? null)'), "the preview never invents a Suez direction from zones");
+  ok(v2.includes("routeLegAction(from, to, asOf)") && v2.includes("suezFactReasons(suezInput?.vessel"), "the preview reads routes at the voyage date and reuses the server's fact comparison");
+  // C2O-061 #2 / C2O-063 · route facts carry their endpoint/date identity and stale settlements do nothing.
+  {
+    const lookupKey = legLookupKey("EGALY", "SAJED", "2026-10-03");
+    ok(lookupKey != null, "a complete route lookup has an identity");
+    const bound = bindLegResult(lookupKey!, { nm: 1450 });
+    eq(currentLegResult(bound, "EGALY", "SAJED", "2026-10-03"), { nm: 1450 }, "the accepted route is usable for its exact from/to/as-of identity");
+    eq(currentLegResult(bound, "TRMER", "SAJED", "2026-10-03"), null, "a changed route origin makes the previous automatic result unusable at render time");
+    eq(currentLegResult(bound, "EGALY", "AEFJR", "2026-10-03"), null, "a changed route destination makes the previous automatic result unusable at render time");
+    eq(currentLegResult(bound, "EGALY", "SAJED", "2026-10-04"), null, "a changed voyage date makes the previous automatic result unusable at render time");
+    eq(acceptedLegResult(bound, true, lookupKey, "EGALY", "SAJED", "2026-10-03"), null, "even a matching automatic result is unusable while its current lookup is loading");
+    eq(acceptedLegResult(bound, true, { ...lookupKey!, asOf: "2026-10-04" }, "EGALY", "SAJED", "2026-10-03"), { nm: 1450 }, "loading from another lookup cannot suppress the accepted current result");
+    eq(currentLegResult(bound, "SAJED", "EGALY", "2026-10-03"), null, "a reversed route cannot consume the previous automatic result");
+    eq(currentLegResult(bound, null, "SAJED", "2026-10-03"), null, "a route with a missing endpoint cannot consume an automatic result");
+    eq(currentLegResult(bound, "EGALY", "EGALY", "2026-10-03"), null, "an equal-endpoint route cannot consume the previous automatic result");
+    eq(legLookupKey(null, "SAJED", "2026-10-03"), null, "a lookup with a missing endpoint is rejected");
+    eq(legLookupKey("EGALY", "EGALY", "2026-10-03"), null, "a lookup with equal endpoints is rejected");
+    const manualFor = legEndpoints("EGALY", "SAJED");
+    ok(matchesLegEndpoints(manualFor, "EGALY", "SAJED"), "manual distance facts are usable for the endpoint pair they were entered for");
+    ok(!matchesLegEndpoints(manualFor, "EGALY", "AEFJR") && !matchesLegEndpoints(manualFor, "TRMER", "SAJED") && !matchesLegEndpoints(manualFor, "SAJED", "EGALY"), "manual distance facts are unusable after either endpoint changes or the pair reverses");
+    ok(!matchesLegEndpoints(manualFor, null, "SAJED") && !matchesLegEndpoints(manualFor, "EGALY", "EGALY"), "manual distance facts are unusable for missing or equal endpoints");
+    const manual = { manualFor, manualNm: "1450", manualEcaNm: "200", manualReason: "owner table" };
+    eq(rebindManualLeg(manual, "EGALY", "SAJED"), manual, "date-only changes preserve manual facts because their identity is the unchanged endpoint pair");
+    eq(rebindManualLeg(manual, "EGALY", "AEFJR"), { manualFor: { from: "EGALY", to: "AEFJR" }, manualNm: "", manualEcaNm: "", manualReason: "" }, "the first bind to a changed endpoint pair is blank before any edited field is patched");
+    eq(rebindManualLeg(manual, "SAJED", "EGALY"), { manualFor: { from: "SAJED", to: "EGALY" }, manualNm: "", manualEcaNm: "", manualReason: "" }, "a reversed pair starts blank instead of adopting the old manual facts");
+    eq(rebindManualLeg(manual, null, "SAJED"), null, "manual facts cannot bind to a missing endpoint");
+    eq(rebindManualLeg(manual, "EGALY", "EGALY"), null, "manual facts cannot bind to equal endpoints");
+    ok(matchesLegLookup(lookupKey, "EGALY", "SAJED", "2026-10-03") && !matchesLegLookup(lookupKey, "EGALY", "SAJED", "2026-10-04"), "lookup loading identity includes from, to and as-of date");
+
+    const gate = createRequestGate();
+    const applied: string[] = [];
+    const t1 = gate.next();            // request for the old date / cargo
+    const t2 = gate.next();            // the newer request
+    const respond = (ticket: number, value: string) => { if (gate.isCurrent(ticket)) applied.push(value); };
+    respond(t2, "new route");          // the newer answer arrives first …
+    respond(t1, "old route");          // … then the slower, older one
+    eq(applied, ["new route"], "a slower older response never overwrites the newer route");
+    const t3 = gate.next(); respond(t2, "late"); respond(t3, "latest");
+    eq(applied, ["new route", "latest"], "each new request makes every earlier ticket stale");
+
+    let rejected = { loading: true, result: "pending" };
+    const old = gate.next();
+    const current = gate.next();
+    const reject = (ticket: number) => { if (gate.isCurrent(ticket)) rejected = { loading: false, result: "unavailable" }; };
+    reject(old);
+    eq(rejected, { loading: true, result: "pending" }, "a stale lookup rejection does not mutate the current request");
+    reject(current);
+    eq(rejected, { loading: false, result: "unavailable" }, "the current lookup rejection clears loading and records an unavailable result");
+  }
+  ok(v2.includes("acceptedLegResult(ballast.auto, ballast.loading, ballast.loadingFor, openCode, polCode, voyageDate)") && v2.includes("acceptedLegResult(laden.auto, laden.loading, laden.loadingFor, polCode, podCode, voyageDate)"), "both automatic legs are filtered by their render-time from/to/as-of identity and current loading state");
+  ok(v2.includes("matchesLegEndpoints(l.manualFor, from, to)") && v2.includes("rebindManualLeg(leg, from, to)") && v2.includes("onChange((current) =>") && v2.includes("rebindManualLeg(current, from, to)"), "manual leg facts use a functional endpoint binder that filters and blank-rebinds against the latest state");
+  ok(v2.includes("loadingFor: key") && v2.includes("matchesLegLookup(l.loadingFor, from, to, voyageDate)") && v2.includes("loading={ladenLoading}"), "loading state is bound to the current from/to/as-of lookup and cannot mislabel another route");
+  ok(v2.includes("auto: null, loading: true, loadingFor: key") && v2.includes("if (!gate.isCurrent(ticket)) return;") && v2.includes("loading: false, loadingFor: null, auto: bindLegResult(key, result)") && v2.includes("() => settle(NO_ROUTE)"), "the preview clears old routes, ignores stale settlements and settles a current rejection as unavailable");
+
+  // C2O-063 · Voyage -> PDA carries only a complete, authorised context.
+  {
+    const contextual = new URL(voyagePdaHref({ availabilityId: "availability-1", cargoOwnedListingId: "owned-cargo-1", cargoRef: "ASB-42", loadLocode: "EGALY", dischargeLocode: "SAJED", quantityMt: 26000 }), "https://asb.test");
+    eq(contextual.pathname, "/dashboard/ports-da", "the hand-off targets the Ports DA estimator");
+    eq(Object.fromEntries(contextual.searchParams), { from: "voyage", vesselId: "availability-1", ref: "ASB-42", load: "EGALY", disch: "SAJED", mt: "26000", cargoId: "owned-cargo-1" }, "an owned cargo hand-off carries the authorised availability, ref, exact ports, positive quantity and owned listing id");
+    const market = new URL(voyagePdaHref({ availabilityId: "availability-1", cargoOwnedListingId: null, cargoRef: "MARKET-7", loadLocode: "EGALY", dischargeLocode: "SAJED", quantityMt: 26000 }), "https://asb.test");
+    ok(market.searchParams.get("from") === "voyage" && !market.searchParams.has("cargoId"), "a market cargo hand-off keeps context but never forwards its actor-bound id as cargoId");
+    const valid = { availabilityId: "availability-1", cargoOwnedListingId: null, cargoRef: "ASB-42", loadLocode: "EGALY", dischargeLocode: "SAJED", quantityMt: 26000 };
+    for (const [name, changed] of [
+      ["availability", { availabilityId: null }],
+      ["nonblank availability", { availabilityId: "   " }],
+      ["reference", { cargoRef: null }],
+      ["bounded reference", { cargoRef: "R".repeat(101) }],
+      ["load LOCODE", { loadLocode: null }],
+      ["discharge LOCODE", { dischargeLocode: null }],
+      ["valid load LOCODE", { loadLocode: "Alexandria" }],
+      ["valid discharge LOCODE", { dischargeLocode: "saJed" }],
+      ["positive quantity", { quantityMt: 0 }],
+      ["finite quantity", { quantityMt: Number.NaN }],
+    ] as const) {
+      eq(voyagePdaHref({ ...valid, ...changed }), "/dashboard/ports-da", `missing or invalid ${name} fails closed to a non-contextual PDA link`);
+    }
+  }
+  ok(v2.includes("availabilityId: vessel?.id ?? null") && v2.includes("cargoRef: cargo?.refId ?? null") && v2.includes("quantityMt: qty"), "the PDA hand-off is built from the selected authorised availability, cargo reference and voyage quantity");
+  ok(v2.includes('cargoOwnedListingId: cargo?.ownedListingId ?? null') && !v2.includes("cargoOwnedListingId: cargo?.id") && !v2.includes("cargoOwnedListingId: cargoId"), "the PDA cargoId can only come from the owner-visible raw listing id");
+  ok(v2.includes('cargo?.portScope?.polScope === "port" ? polCode : null') && v2.includes('cargo?.portScope?.podScope === "port" ? podCode : null'), "the PDA hand-off accepts only exact port-scoped load and discharge LOCODEs");
+
+  // C2O-050 #1 / #5 · adversarial Suez facts: anything not governed, a draft, or undeclared conditions is a reason
+  const GOV: GovernedSuezFacts = { scnt: 16070, scgt: 21000, gt: 21500, category: "dry_bulk", buildYear: 2012, craneCount: 4, craneSwlMt: 30, mooringCranesOk: true, searchlightCompliant: true, firstTransit: false, beamFt: 105, doubleBottom: true };
+  const T = { scnt: 16070, scgt: 21000, gt: 21500, category: "dry_bulk", buildYear: 2012, craneCount: 4, craneSwlMt: 30, mooringCranesOk: true, searchlightCompliant: true, firstTransit: false, beamFt: 105, doubleBottom: true };
+  eq(suezFactReasons(T, GOV, true), [], "facts equal to the governed profile with declared conditions are governed");
+  ok(suezFactReasons({ ...T, scnt: 12000 }, GOV, true).some((r) => r.startsWith("scnt typed")), "a lower typed SCNT (cheaper toll) is not governed");
+  ok(suezFactReasons({ ...T, buildYear: 2020 }, GOV, true).some((r) => r.startsWith("buildYear")), "a younger typed build year (no overage) is not governed");
+  ok(suezFactReasons({ ...T, beamFt: 90 }, GOV, true).some((r) => r.startsWith("beamFt")), "a narrower typed beam (no escort) is not governed");
+  ok(suezFactReasons({ ...T, doubleBottom: true }, { ...GOV, doubleBottom: null }, true).some((r) => r.startsWith("doubleBottom")), "a double bottom the profile does not record is not governed");
+  ok(suezFactReasons({ ...T, firstTransit: false }, { ...GOV, firstTransit: null }, true).some((r) => r.startsWith("firstTransit")), "a typed transit history the profile does not hold is not governed");
+  ok(suezFactReasons({ ...T, draftFt: 30 }, GOV, true).includes("arrival draft typed for this voyage"), "an arrival draft is a voyage fact typed by the broker");
+  ok(suezFactReasons(T, GOV, false).some((r) => r.includes("not declared")), "omitted voyage conditions are never a governed none");
+  ok(suezFactReasons(T, null, true).length >= 10, "with no profile every typed fact is the broker's");
   ok(vy.includes("platform assumption"), "the page shows the label beside the running cost");
   ok(parseVoyageSettings({ ...S, confirmed: ["not.a.key"] }).ok === false, "only known constants can be confirmed");
   ok(parseVoyageSettings({ ...S, suez: { ...S.suez, anchorages: { SB: [31.35, 32.36] } } }).ok, "settings carry the anchorage points");
@@ -408,9 +549,19 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   eq(voyageFuelProducts("LSMGO", "LSMGO", true), ["HSFO380", "LSMGO"], "a scrubber ship burns HSFO 380 and the 0.10 % product");
   eq(voyageFuelProducts("ULSFO", "MGO05", null), ["VLSFO", "ULSFO", "MGO05"], "unknown scrubber → VLSFO plus the ECA and distillate products");
   ok(!/585|725/.test(fs), "no fallback price is hard-coded in the seam");
+  // Opus B pre-audit (f87a560): flags left false, handling rates, start date, Suez facts, direction
+  eq(estimateVoyage(base({ ports: { load: port("load"), disch: port("disch", { port: "NLRTM" }) } })).status, "partial", "an EU port without the 2 h berth rule is an assertion (P1-3)");
+  eq(estimateVoyage(base({ vessel: { ...base().vessel, hasScrubber: true } })).status, "partial", "a scrubber ship with no open-loop ban asserted is not trusted (P1-3)");
+  eq(estimateVoyage(base({ ports: { load: port("load", { rateMtDay: 8000, rateSource: "manual" }), disch: port("disch") } })).status, "partial", "a typed handling rate is a broker input");
+  eq(estimateVoyage(base({ ports: { load: port("load", { rateMtDay: 8000, rateSource: "listing" }), disch: port("disch") } })).status, "trusted", "the linked listing's handling rate keeps it trusted");
+  eq(estimateVoyage(base({ scheduleSource: "manual" })).status, "partial", "a typed start date (it picks the tariff date) is a broker input (P1-2)");
+  eq(canalDirection([[21.5, 39.1, 0], [27.9, 33.9, 600], [29.9, 32.55, 700], [31.3, 32.33, 790], [36, 14, 1800], [6.4, 3.4, 5600]]), "NB", "Jeddah → Lagos crosses northbound although it ends further south (P2-1)");
+  eq(canalDirection([[31.3, 32.33, 0], [29.9, 32.55, 90], [21.5, 39.1, 700]]), "SB", "Port Said → Jeddah is southbound");
+  ok(actSrc.includes("cat: sv.category") && actSrc.includes("scnt: num(sv.scnt)"), "the Suez vessel facts are compared with the economics profile (P1-1)");
+  ok(actSrc.includes("const startDate = listedStart ?? typedStart ?? today;"), "the linked listing's laycan wins over the browser's date (P1-2)");
   // contract: server-side derivations
   const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
-  for (const needle of ["rl.route!.chokepoints.includes(\"SUEZ\")", "suezDirection", "getPointEcaZones(supabase, point[0], point[1], date)", "portEca(ladenRoute?.startZones", "saved without the cargo link", "saved without the position link", "vesselSource = sameFacts(", "suezTransitDate(startDate, offset)", "cargoStatus: which", "routeVerified: r.verified"]) ok(act.includes(needle), `save derives on the server: ${needle.slice(0, 50)}`);
+  for (const needle of ["rl.route!.chokepoints.includes(\"SUEZ\")", "suezDirection", "getPointEcaZones(supabase, point[0], point[1], date)", "portEca(ladenRoute?.startZones", "reconcileLinks({", "if (!linkCheck.ok) return", "suezFactReasons(payload.suezInput?.vessel", "downgradeCanalForFacts(priced, suezManual", "lookupLeg(supabase, from, to, startDate)", "vesselSource = sameFacts(", "suezTransitDate(startDate, offset)", "cargoStatus: which", "routeVerified: r.verified"]) ok(act.includes(needle), `save derives on the server: ${needle.slice(0, 50)}`);
   ok(!act.includes("client.canal.required") || act.includes("measured ? rl.route!.chokepoints"), "the browser's canal flag counts only for a manual leg");
   const page = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/page.tsx", import.meta.url), "utf8");
   ok(page.includes("loadVesselViews({ mine: true }).then((r) => r.views.map(voyageOptionFromView))") && page.includes("loadOwnerOrgs(access.actorId)"), "members get their own vessels and the owner organisations");
