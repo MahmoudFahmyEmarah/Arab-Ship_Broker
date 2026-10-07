@@ -613,4 +613,13 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(ui.includes("listVoyagePdaEstimatesAction(code)") && ui.includes("function PdaPicker(") && ui.includes("disabled={o.usdTotal == null}") && ui.includes("disabled={!!voy.pdaLoadEstimate}"), "the estimator offers the member's saved PDA estimates per port, the manual figure stands aside when one is chosen");
 }
 
+// ── 16 · B2O-028 P3: the total-days badge names every constant behind it ──
+{
+  const ui = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
+  ok(ui.includes('Total voyage days{assumed("sea", "port", "canal")}') && !ui.includes('assumed("sea") ?? assumed("port")'), "the total-days badge takes the union of sea, port and canal assumptions");
+  const pa = [{ key: "speeds", label: "speeds" }, { key: "portTimeDays", label: "port time" }, { key: "suez.days", label: "Suez days" }, { key: "seaMargin.defaultPct", label: "margin" }];
+  const union = (["sea", "port", "canal"] as const).flatMap((a) => assumptionsFor(a, pa)).filter((u, i, all) => all.findIndex((x) => x.key === u.key) === i);
+  eq(union.map((u) => u.key), ["speeds", "seaMargin.defaultPct", "portTimeDays", "suez.days"], "the union lists each constant once");
+}
+
 console.log(`voyage-check: ${checks} checks passed`);
