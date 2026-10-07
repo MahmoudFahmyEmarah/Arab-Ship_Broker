@@ -702,3 +702,10 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const rails = read("components/fixture-room/RoomRails.tsx");
   ok(/run\("addSubject", \(b\) => \(\{ \.\.\.b, title: std\.title, description: std\.hint, responsibleSide: std\.responsibleSide, deadlineAt: null \}\)\)/.test(rails) && /caps\.canAddSubject && \(/.test(rails), "a chip adds the subject through the ordinary governed command, only where subjects may be added");
 }
+
+// B2O-031 P3: a suggestion stays visible after a newer proposal, labelled as such
+{
+  const tr = read("components/fixture-room/TermRow.tsx");
+  ok(/const bridgeSuperseded = !!bridge && \[term\.cargoPosition, term\.vesselPosition\]\.some\(\(p\) => !!p && Date\.parse\(p\.createdAt\) > Date\.parse\(bridge\.suggestedAt\)\)/.test(tr) && /bridge-superseded-/.test(tr), "a suggestion older than a side's latest figure says a newer figure was sent since");
+}
+

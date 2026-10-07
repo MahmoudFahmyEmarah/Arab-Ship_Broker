@@ -125,6 +125,8 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
   // the mediator's live advisory figure on this term (Wave 3); adopting it is an ordinary bid / offer
   const bridge = view.bridges?.find((b) => b.termId === term.id) ?? null;
   const roomOpen = view.room.status === "invited" || view.room.status === "negotiating";
+  // advisory only: once either side has moved after it, say so rather than hide it (B2O-031 P3)
+  const bridgeSuperseded = !!bridge && [term.cargoPosition, term.vesselPosition].some((p) => !!p && Date.parse(p.createdAt) > Date.parse(bridge.suggestedAt));
   const commonBase = { asPartyId: null as string | null, onBehalfOfPartyId: actForPartyId };
   const [prompt, setPrompt] = React.useState<PromptConfig | null>(null);
   const closePrompt = React.useCallback(() => setPrompt(null), []);
@@ -301,7 +303,7 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
 
               {bridge && (
                 <div className="fx-bridge" data-testid={`bridge-${term.code}`}>
-                  <span className="fx-bridge__txt">{bridge.byLabel} suggests <b><Gloss text={bridge.displayValue} /></b>{bridge.comment ? <> · <em>{bridge.comment}</em></> : null}</span>
+                  <span className="fx-bridge__txt">{bridge.byLabel} suggests <b><Gloss text={bridge.displayValue} /></b>{bridge.comment ? <> · <em>{bridge.comment}</em></> : null}{bridgeSuperseded ? <> · <em data-testid={`bridge-superseded-${term.code}`}>a newer figure was sent since</em></> : null}</span>
                   <button type="button" className="asb-btn primary fx-send" disabled={busy} data-testid={`adopt-${term.code}`}
                     title={`Send ${bridge.displayValue} as your ${mySide === "cargo" ? "bid" : "offer"}`}
                     onClick={() => submit({ value: bridge.value, expiresInMinutes: null, comment: "Adopted the mediator's suggestion." })}>
@@ -378,7 +380,7 @@ export function TermRow({ view, term, active, onActivate, run, busy, now, actFor
                 )}
               </div>
               <div className="fx-bridge-form" data-testid={`suggest-${term.code}`}>
-                {bridge && <div className="fx-offnote">Your live suggestion: <b><Gloss text={bridge.displayValue} /></b> · a new one replaces it.</div>}
+                {bridge && <div className="fx-offnote">Your live suggestion: <b><Gloss text={bridge.displayValue} /></b>{bridgeSuperseded ? " · a side has moved since" : ""} · a new one replaces it.</div>}
                 <div className="fx-fields"><ValueFields kind={term.valueKind} fields={bridgeFields} setField={setBridgeField} /></div>
                 <div className="fx-send2">
                   <input className="asb-input fx-amend2" aria-label="Why this figure" value={bridgeComment} maxLength={1000} onChange={(e) => setBridgeComment(e.target.value)} placeholder="why this figure, optional" />
