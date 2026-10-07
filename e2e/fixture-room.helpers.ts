@@ -10,8 +10,16 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 
-export const PASSWORD = "e2e-Fixture-Passw0rd!";
+/** A run against a hosted project (staging): E2E_DB_URL is set or the Supabase URL is not the local stack. */
+export const HOSTED = !!process.env.E2E_DB_URL || !/127\.0\.0\.1|localhost/.test(process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321");
+/**
+ * A known password must never sit on a hosted account (C2O-075 P0): a hosted run gets a random password per test
+ * process (Playwright creates and signs in a spec's seeds in the same worker, and a restarted worker re-seeds).
+ * The local stack keeps the fixed one.
+ */
+export const PASSWORD = HOSTED ? `e2e-${randomBytes(18).toString("base64url")}-Aa1!` : "e2e-Fixture-Passw0rd!";
 
 export interface FixtureSeed {
   stamp: string;
@@ -33,22 +41,167 @@ export interface FixtureSeed {
  * project is refused by ref, whatever the environment says.
  */
 export function dbExec(sql: string): void {
-  const remote = process.env.E2E_DB_URL;
-  if (remote && /rezfejaxbmdzkslrrefr/.test(remote)) throw new Error("e2e refuses to run SQL against the production project");
-  const cmd = remote
-    ? `docker run --rm -i --entrypoint psql ${process.env.E2E_PG_IMAGE ?? "public.ecr.aws/supabase/postgres:17.6.1.127"} --dbname="${remote}" -q -v ON_ERROR_STOP=0`
-    : "docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0";
+  const cmd = psqlCommand("-q -v ON_ERROR_STOP=0");
   // A hosted session pooler can refuse a connection while the app under test holds its slots; psql then exits
   // non-zero before running anything (statement errors alone exit 0 here). Retry the whole batch a few times.
   for (let attempt = 1; ; attempt++) {
     try {
-      execSync(cmd, { input: sql, stdio: ["pipe", "ignore", "ignore"], env: { ...process.env, MSYS_NO_PATHCONV: "1" } });
+      execSync(cmd, { input: sql, stdio: ["pipe", "ignore", "ignore"], env: psqlEnv() });
       return;
     } catch (e) {
       if (attempt >= 4) throw e;
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000 * attempt);
     }
   }
+}
+
+/**
+ * The psql command for the target. A hosted connection string travels in the container's environment
+ * (E2E_PGURL), never on the docker command line; the production project is refused by ref.
+ */
+function psqlCommand(flags: string): string {
+  const remote = process.env.E2E_DB_URL;
+  if (remote && /rezfejaxbmdzkslrrefr/.test(remote)) throw new Error("e2e refuses to run SQL against the production project");
+  // the container's sh expands $E2E_PGURL; the host shell must not (cmd.exe ignores single quotes, and $ is not special there)
+  const inner = process.platform === "win32" ? `"exec psql \\"$E2E_PGURL\\" -X ${flags}"` : `'exec psql "$E2E_PGURL" -X ${flags}'`;
+  return remote
+    ? `docker run --rm -i -e E2E_PGURL --entrypoint sh ${process.env.E2E_PG_IMAGE ?? "public.ecr.aws/supabase/postgres:17.6.1.127"} -c ${inner}`
+    : `docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -X ${flags}`;
+}
+const psqlEnv = () => ({ ...process.env, MSYS_NO_PATHCONV: "1", E2E_PGURL: process.env.E2E_DB_URL ?? "" });
+
+/**
+ * Runs a batch as ONE transaction with ON_ERROR_STOP (psql -1): every statement commits, or none does — guards
+ * lifted inside it come back on a rollback too. Errors are raised with the database's message (connection strings
+ * redacted). Only a connection failure is retried: the batches given here delete exact ids and are idempotent.
+ */
+export function dbTx(label: string, sql: string): void {
+  const cmd = psqlCommand("-q -1 -v ON_ERROR_STOP=1");
+  for (let attempt = 1; ; attempt++) {
+    try {
+      execSync(cmd, { input: sql, stdio: ["pipe", "ignore", "pipe"], env: psqlEnv() });
+      return;
+    } catch (e) {
+      const err = e as { status?: number; stderr?: Buffer | string };
+      const msg = String(err.stderr ?? "").replace(/postgres(ql)?:\/\/\S+/g, "<db-url>").trim().slice(0, 800);
+      if (err.status === 2 && attempt < 4) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000 * attempt); continue; }
+      throw new Error(`${label}: rolled back (psql exit ${err.status ?? "?"}) — ${msg || "no message"}`);
+    }
+  }
+}
+
+/** A teardown failure is an error on a hosted project (residue there is never acceptable); a warning locally. */
+function reportTeardown(label: string, e: unknown): void {
+  if (HOSTED) throw e;
+  console.warn(`[e2e] ${label} left rows on the local stack: ${(e as Error).message}`);
+}
+
+export interface CleanupIds { userIds?: string[]; orgIds?: string[]; cargoIds?: string[]; availabilityIds?: string[]; vesselIds?: string[] }
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const idRows = (ids: string[] | undefined) => {
+  const ok = (ids ?? []).filter(Boolean);
+  for (const id of ok) if (!UUID_RE.test(id)) throw new Error(`e2e cleanup: not a uuid: ${id}`);
+  return ok.length ? `values ${ok.map((id) => `('${id}'::uuid)`).join(", ")}` : "select null::uuid where false";
+};
+/** append-only guards the teardown lifts INSIDE its transaction (named, never all triggers; foreign keys stay enforced) */
+const GUARDS = [
+  "public.fixture_events:trg_fixture_events_immutable", "public.fixture_proposals:trg_fixture_proposals_immutable",
+  "public.fixture_messages:trg_fixture_messages_immutable", "public.fixture_recap_versions:trg_fixture_recaps_immutable",
+  "public.fixture_subjects:trg_fixture_subjects_immutable", "public.fixture_access_log:trg_fixture_access_log_immutable",
+];
+const guardSql = (mode: "disable" | "enable") => `do $g$ declare g text; begin
+  foreach g in array array['${GUARDS.join("','")}'] loop
+    if exists (select 1 from pg_trigger t where t.tgrelid = to_regclass(split_part(g, ':', 1)) and t.tgname = split_part(g, ':', 2)) then
+      execute format('alter table %s ${mode} trigger %I', split_part(g, ':', 1), split_part(g, ':', 2));
+    end if;
+  end loop;
+end $g$;`;
+
+/**
+ * One transaction that removes exactly the named e2e rows and everything that hangs off them (C2O-075 P0):
+ * - refuses unless every named row is an e2e row (emails e2e-…@arabshipbroker.test, organisations "E2E …",
+ *   cargo refs E2EFX-…, hulls "E2E …") and every room it touches pairs e2e listings only;
+ * - foreign keys stay ON (no replica mode): a dependent row nobody listed fails the transaction instead of dangling;
+ * - only the named append-only guards are lifted, inside the transaction;
+ * - ends with a residue proof: any named row or handle left raises and rolls everything back.
+ */
+export function cleanupSql(ids: CleanupIds): string {
+  return `
+set local lock_timeout = '15s';
+create temp table e2e_u (id uuid primary key) on commit drop; insert into e2e_u ${idRows(ids.userIds)};
+create temp table e2e_o (id uuid primary key) on commit drop; insert into e2e_o ${idRows(ids.orgIds)};
+create temp table e2e_c (id uuid primary key) on commit drop; insert into e2e_c ${idRows(ids.cargoIds)};
+create temp table e2e_a (id uuid primary key) on commit drop; insert into e2e_a ${idRows(ids.availabilityIds)};
+create temp table e2e_v (id uuid primary key) on commit drop; insert into e2e_v ${idRows(ids.vesselIds)};
+create temp table e2e_l (id uuid primary key) on commit drop; insert into e2e_l select id from e2e_c union select id from e2e_a;
+create temp table e2e_r (id uuid primary key) on commit drop;
+insert into e2e_r select r.id from public.fixture_rooms r
+ where r.cargo_listing_id in (select id from e2e_c) or r.vessel_availability_id in (select id from e2e_a)
+    or r.created_by_user_id in (select id from e2e_u) or r.id in (select p.room_id from public.fixture_parties p where p.user_id in (select id from e2e_u));
+do $guard$ begin
+  if exists (select 1 from auth.users u join e2e_u x using (id) where u.email not like 'e2e-%@arabshipbroker.test')
+     or exists (select 1 from public.users u join e2e_u x using (id) where u.email not like 'e2e-%@arabshipbroker.test') then
+    raise exception 'E2E_GUARD: a named user is not an e2e account'; end if;
+  if exists (select 1 from public.organizations o join e2e_o x using (id) where o.name not like 'E2E %') then raise exception 'E2E_GUARD: a named organisation is not an e2e one'; end if;
+  if exists (select 1 from public.cargo_listings c join e2e_c x using (id) where c.ref not like 'E2EFX-%') then raise exception 'E2E_GUARD: a named cargo is not an e2e listing'; end if;
+  if exists (select 1 from public.vessels v join e2e_v x using (id) where v.vessel_name not like 'E2E %') then raise exception 'E2E_GUARD: a named hull is not an e2e vessel'; end if;
+  if exists (select 1 from public.vessel_availability a join e2e_a x using (id) join public.vessels v on v.id = a.vessel_id where v.vessel_name not like 'E2E %') then raise exception 'E2E_GUARD: a named position is not on an e2e hull'; end if;
+  if exists (select 1 from public.fixture_rooms r join e2e_r x using (id)
+              left join public.cargo_listings c on c.id = r.cargo_listing_id
+              left join public.vessel_availability a on a.id = r.vessel_availability_id left join public.vessels v on v.id = a.vessel_id
+             where coalesce(c.ref, '') not like 'E2EFX-%' or coalesce(v.vessel_name, '') not like 'E2E %') then
+    raise exception 'E2E_GUARD: a room to remove pairs a non-e2e listing'; end if;
+end $guard$;
+${guardSql("disable")}
+delete from public.fixture_access_log where room_id in (select id from e2e_r) or user_id in (select id from e2e_u);
+delete from public.fixture_events where room_id in (select id from e2e_r);
+delete from public.fixture_recap_versions where room_id in (select id from e2e_r);
+delete from public.fixture_messages where room_id in (select id from e2e_r);
+delete from public.fixture_subjects where room_id in (select id from e2e_r);
+do $pda$ begin if to_regclass('public.fixture_pda_links') is not null then delete from public.fixture_pda_links where room_id in (select id from e2e_r); end if; end $pda$;
+update public.fixture_terms set cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, agreed_proposal_id = null where room_id in (select id from e2e_r);
+delete from public.fixture_proposals where room_id in (select id from e2e_r);
+delete from public.fixture_terms where room_id in (select id from e2e_r);
+-- parties go with their room (ON DELETE CASCADE): a room points at its creating party, so parties cannot go first.
+-- Successor chains: remove the rooms no other remaining room points at, until none is left.
+do $rooms$ declare n int; begin
+  loop
+    delete from public.fixture_rooms r where r.id in (select id from e2e_r)
+       and not exists (select 1 from public.fixture_rooms s where s.supersedes_room_id = r.id);
+    get diagnostics n = row_count;
+    exit when n = 0;
+  end loop;
+end $rooms$;
+do $handles$ begin
+  if to_regclass('market_private.listing_handles') is not null then
+    delete from market_private.listing_handles where listing_id in (select id from e2e_l) or actor_user_id in (select id from e2e_u);
+  end if;
+  if to_regclass('fixture_private.match_handles') is not null then
+    delete from fixture_private.match_handles where own_listing_id in (select id from e2e_l) or cargo_listing_id in (select id from e2e_c)
+       or vessel_availability_id in (select id from e2e_a) or actor_user_id in (select id from e2e_u);
+  end if;
+end $handles$;
+delete from public.listing_ownership where listing_id in (select id from e2e_l) or owner_user_id in (select id from e2e_u) or transferred_by in (select id from e2e_u);
+delete from public.matches where cargo_id in (select id from e2e_c) or vessel_avail_id in (select id from e2e_a);
+delete from public.vessel_availability where id in (select id from e2e_a);
+delete from public.vessels where id in (select id from e2e_v);
+delete from public.cargo_listings where id in (select id from e2e_c);
+delete from public.profiles where account_id in (select id from e2e_u);
+delete from public.organization_members where user_id in (select id from e2e_u) or org_id in (select id from e2e_o);
+delete from public.users where id in (select id from e2e_u);
+delete from auth.users where id in (select id from e2e_u);
+delete from public.organizations where id in (select id from e2e_o);
+do $residue$ begin
+  if exists (select 1 from auth.users where id in (select id from e2e_u)) or exists (select 1 from public.users where id in (select id from e2e_u))
+     or exists (select 1 from public.organizations where id in (select id from e2e_o)) or exists (select 1 from public.cargo_listings where id in (select id from e2e_c))
+     or exists (select 1 from public.vessel_availability where id in (select id from e2e_a)) or exists (select 1 from public.vessels where id in (select id from e2e_v))
+     or exists (select 1 from public.fixture_rooms where id in (select id from e2e_r)) or exists (select 1 from public.fixture_parties where room_id in (select id from e2e_r))
+     or exists (select 1 from public.listing_ownership where listing_id in (select id from e2e_l)) then
+    raise exception 'E2E_RESIDUE: a named row survived the teardown';
+  end if;
+end $residue$;
+${guardSql("enable")}
+`;
 }
 
 function localKeys() {
@@ -66,19 +219,50 @@ function localKeys() {
   return { url, service };
 }
 
+/**
+ * A seed that fails part-way removes what it created (exact ids, one transaction). If even that fails, every
+ * account it created is banned and deactivated, so no half-seeded account stays usable (C2O-075 P0).
+ */
+async function undoPartialSeed(admin: SupabaseClient, created: Required<CleanupIds>, cause: unknown): Promise<never> {
+  const why = (cause as Error)?.message ?? String(cause);
+  try {
+    dbTx("e2e partial-seed undo", cleanupSql(created));
+  } catch (undo) {
+    for (const id of created.userIds) {
+      await admin.auth.admin.updateUserById(id, { ban_duration: "876000h", password: `x-${randomBytes(24).toString("base64url")}` }).catch(() => undefined);
+      await admin.from("users").update({ is_active: false }).eq("id", id).then(() => undefined, () => undefined);
+    }
+    throw new Error(`${why} — and the partial seed could not be removed (${(undo as Error).message}); its ${created.userIds.length} account(s) were banned and deactivated`);
+  }
+  throw new Error(`${why} — the partial seed was removed`);
+}
+const noneCreated = (): Required<CleanupIds> => ({ userIds: [], orgIds: [], cargoIds: [], availabilityIds: [], vesselIds: [] });
+
 export async function seedFixture(): Promise<FixtureSeed> {
   const { url, service } = localKeys();
   const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
+  const created = noneCreated();
+  try {
+    return await seedFixtureInto(admin, created);
+  } catch (e) {
+    return undoPartialSeed(admin, created, e);
+  }
+}
+
+async function seedFixtureInto(admin: SupabaseClient, created: Required<CleanupIds>): Promise<FixtureSeed> {
   const stamp = Date.now().toString(36);
   const testImo = String(1_000_000 + (Number.parseInt(stamp, 36) % 9_000_000));
   const mk = async (email: string, role: string, company: string) => {
     const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
     if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
+    created.userIds.push(data.user.id);
     const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: `E2E ${role}`, company, role, subscription_tier: "T3", is_active: true });
     if (e2) throw new Error(`users: ${e2.message}`);
     const { data: org, error: e3 } = await admin.from("organizations").insert({ name: company, org_type: role === "cargo_owner" ? "charterer" : "owner", desk_contact_name: "Desk" }).select("id").single();
     if (e3) throw new Error(`org: ${e3.message}`);
-    await admin.from("organization_members").insert({ org_id: org.id, user_id: data.user.id, member_role: "admin", is_current: true, status: "active" });
+    created.orgIds.push(org.id);
+    const { error: e4 } = await admin.from("organization_members").insert({ org_id: org.id, user_id: data.user.id, member_role: "admin", is_current: true, status: "active" });
+    if (e4) throw new Error(`membership: ${e4.message}`);
     // the account's profile row lets the dashboard shell show the workspace
     await admin.from("profiles").insert({ account_id: data.user.id, profile_type: role === "cargo_owner" ? "cargo" : "vessel", display_name: `E2E ${role}`, is_active: true });
     return { email, userId: data.user.id as string, orgId: org.id as string };
@@ -96,17 +280,22 @@ export async function seedFixture(): Promise<FixtureSeed> {
     disch_port_locode: "ZZFXB", disch_port_name: "Fixture Disch Port", disch_zone: "E.MED", laycan_from: d(10), laycan_to: d(20), is_spot: false, load_terms: "FIOST", freight_idea_usd_mt: 24.5,
   }).select("id").single();
   if (ce) throw new Error(`cargo: ${ce.message}`);
+  created.cargoIds.push(c.id);
   await admin.from("cargo_listings").update({ status: "IN", review_status: "APPROVED" }).eq("id", c.id);
   const { data: v, error: ve } = await admin.from("vessels").insert({ vessel_name: `E2E HULL ${stamp.toUpperCase()}`, imo_number: testImo, vessel_type: "Bulk Carrier", dwt_grain: 30000, build_year: 2012, flag: "Malta", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false }).select("id").single();
   if (ve) throw new Error(`vessel: ${ve.message}`);
+  created.vesselIds.push(v.id);
   const { data: a, error: ae } = await admin.from("vessel_availability").insert({ vessel_id: v.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(5), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 26, accepts_part_cargo: false }).select("id").single();
   if (ae) throw new Error(`availability: ${ae.message}`);
+  created.availabilityIds.push(a.id);
   await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", a.id);
   const tbnName = `E2E SECRET HULL ${stamp.toUpperCase()}`;
   const { data: tv, error: tve } = await admin.from("vessels").insert({ vessel_name: tbnName, imo_number: null, vessel_type: "Bulk Carrier", dwt_grain: 29000, build_year: 2016, flag: "Liberia", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false, is_tbn: true }).select("id").single();
   if (tve) throw new Error(`tbn vessel: ${tve.message}`);
+  created.vesselIds.push(tv.id);
   const { data: ta, error: tae } = await admin.from("vessel_availability").insert({ vessel_id: tv.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(7), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 27, accepts_part_cargo: false }).select("id").single();
   if (tae) throw new Error(`tbn availability: ${tae.message}`);
+  created.availabilityIds.push(ta.id);
   await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", ta.id);
   const { error: oe } = await admin.from("listing_ownership").insert([
     { listing_type: "cargo", listing_id: c.id, owner_user_id: charterer.userId, owner_org_id: charterer.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
@@ -125,29 +314,33 @@ export async function seedFixture(): Promise<FixtureSeed> {
 export async function seedOrgSeat(seed: FixtureSeed): Promise<{ email: string; userId: string }> {
   const { url, service } = localKeys();
   const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
+  const created = noneCreated();
+  try {
+    return await seedOrgSeatInto(admin, seed, created);
+  } catch (e) {
+    return undoPartialSeed(admin, created, e);
+  }
+}
+
+async function seedOrgSeatInto(admin: SupabaseClient, seed: FixtureSeed, created: Required<CleanupIds>): Promise<{ email: string; userId: string }> {
   const email = `e2e-fx-seat-${seed.stamp}@arabshipbroker.test`;
   const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
   if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
+  created.userIds.push(data.user.id);
   const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: "E2E second seat", company: `E2E Charterers ${seed.stamp}`, role: "cargo_owner", subscription_tier: "T3", is_active: true });
   if (e2) throw new Error(`users (seat): ${e2.message}`);
   const { error: e3 } = await admin.from("organization_members").insert({ org_id: seed.charterer.orgId, user_id: data.user.id, member_role: "broker", is_current: true, status: "active" });
   if (e3) throw new Error(`seat membership: ${e3.message}`);
-  await admin.from("profiles").insert({ account_id: data.user.id, profile_type: "cargo", display_name: "E2E second seat", is_active: true });
+  const { error: e4 } = await admin.from("profiles").insert({ account_id: data.user.id, profile_type: "cargo", display_name: "E2E second seat", is_active: true });
+  if (e4) throw new Error(`seat profile: ${e4.message}`);
   return { email, userId: data.user.id as string };
 }
 
 export function cleanupSeat(seat: { userId: string }) {
-  const sql = `
-set session_replication_role = replica;
-delete from public.profiles where account_id = '${seat.userId}';
-delete from public.organization_members where user_id = '${seat.userId}';
-delete from public.users where id = '${seat.userId}';
-delete from auth.users where id = '${seat.userId}';
-`;
   try {
-    dbExec(sql);
-  } catch {
-    // leaving rows behind on a disposable database is not a test failure
+    dbTx("e2e seat teardown", cleanupSql({ userIds: [seat.userId] }));
+  } catch (e) {
+    reportTeardown("seat teardown", e);
   }
 }
 
@@ -179,25 +372,29 @@ export interface AdminSeed { email: string; userId: string }
 export async function seedAdmin(stamp: string): Promise<AdminSeed> {
   const { url, service } = localKeys();
   const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
+  const created = noneCreated();
+  try {
+    return await seedAdminInto(admin, stamp, created);
+  } catch (e) {
+    return undoPartialSeed(admin, created, e);
+  }
+}
+
+async function seedAdminInto(admin: SupabaseClient, stamp: string, created: Required<CleanupIds>): Promise<AdminSeed> {
   const email = `e2e-fx-adm-${stamp}@arabshipbroker.test`;
   const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true, app_metadata: { role: "admin" } });
   if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
+  created.userIds.push(data.user.id);
   const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: "E2E Fixture Admin", company: "Arab ShipBroker", role: "admin", admin_tier: "super", subscription_tier: "T4", is_active: true });
   if (e2) throw new Error(`users (admin): ${e2.message}`);
   return { email, userId: data.user.id as string };
 }
 
 export function cleanupAdmin(a: AdminSeed) {
-  const sql = `
-set session_replication_role = replica;
-delete from public.fixture_access_log where user_id = '${a.userId}';
-delete from public.users where id = '${a.userId}';
-delete from auth.users where id = '${a.userId}';
-`;
   try {
-    dbExec(sql);
-  } catch {
-    // leaving rows behind on a disposable database is not a test failure
+    dbTx("e2e admin teardown", cleanupSql({ userIds: [a.userId] }));
+  } catch (e) {
+    reportTeardown("admin teardown", e);
   }
 }
 
@@ -217,33 +414,13 @@ export async function apiClientAs(email: string): Promise<SupabaseClient> {
 }
 
 export function cleanupFixture(s: FixtureSeed) {
-  const sql = `
-set session_replication_role = replica;
-delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_events where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_recap_versions where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_messages where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_subjects where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-update public.fixture_terms set cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, agreed_proposal_id = null, status = 'open' where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_proposals where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_rooms where cargo_listing_id = '${s.cargoId}';
-delete from public.listing_ownership where listing_id in ('${s.cargoId}', '${s.availabilityId}', '${s.tbn.availabilityId}');
-delete from public.matches where cargo_id = '${s.cargoId}' or vessel_avail_id in ('${s.availabilityId}', '${s.tbn.availabilityId}');
-delete from public.vessel_availability where id in ('${s.availabilityId}', '${s.tbn.availabilityId}');
-delete from public.vessels where id in ('${s.vesselId}', '${s.tbn.vesselId}');
-delete from public.cargo_listings where id = '${s.cargoId}';
-delete from public.profiles where account_id in ('${s.charterer.userId}', '${s.owner.userId}');
-delete from public.organization_members where user_id in ('${s.charterer.userId}', '${s.owner.userId}');
-delete from public.users where id in ('${s.charterer.userId}', '${s.owner.userId}');
-delete from auth.users where id in ('${s.charterer.userId}', '${s.owner.userId}');
-delete from public.organizations where id in ('${s.charterer.orgId}', '${s.owner.orgId}');
-`;
   try {
-    dbExec(sql);
-  } catch {
-    // leaving rows behind on a disposable database is not a test failure
+    dbTx("e2e fixture teardown", cleanupSql({
+      userIds: [s.charterer.userId, s.owner.userId], orgIds: [s.charterer.orgId, s.owner.orgId], cargoIds: [s.cargoId],
+      availabilityIds: [s.availabilityId, s.tbn.availabilityId], vesselIds: [s.vesselId, s.tbn.vesselId],
+    }));
+  } catch (e) {
+    reportTeardown("fixture teardown", e);
   }
 }
 
