@@ -14,7 +14,7 @@ import { test, expect as baseExpect } from "@playwright/test";
 // about rendered or persisted state, so a wide budget hides nothing.
 const expect = baseExpect.configure({ timeout: 60_000 });
 import { buildTermCatalogue, FIXTURE_TERM_CATALOGUE_VERSION } from "../lib/fixture-room/terms";
-import { apiClientAs, cleanupAdmin, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed, openRoomViaApi } from "./fixture-room.helpers";
+import { apiClientAs, cleanupAdmin, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed, openRoomViaApi, teardownAll } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "serial", timeout: 180_000 });
@@ -36,7 +36,7 @@ test.beforeAll(async () => {
   });
   if (posted.error) throw new Error(`post_fixture_message: ${posted.error.message}`);
 });
-test.afterAll(async () => { if (seed) cleanupFixture(seed); if (admin) cleanupAdmin(admin); });
+test.afterAll(async () => { teardownAll("fixture admin a11y teardown", [() => { if (seed) cleanupFixture(seed); }, () => { if (admin) cleanupAdmin(admin); }]); });
 
 const focusRing = (el: Element) => {
   const s = getComputedStyle(el);

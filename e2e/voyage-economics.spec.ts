@@ -14,7 +14,7 @@
  * previously open published version gets its open window back.
  */
 import { test, expect, type Browser } from "@playwright/test";
-import { HOSTED, cleanupAdmin, cleanupFixture, dbTx, seedAdmin, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { cleanupAdmin, cleanupFixture, dbTx, seedAdmin, seedFixture, signInAs, teardownAll, type FixtureSeed } from "./fixture-room.helpers";
 
 const stamp = Date.now().toString(36);
 const plus = (days: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
@@ -30,14 +30,6 @@ let versionId: string | null = null;
 function psql(sql: string) {
   dbTx("voyage e2e teardown", sql);
 }
-/** every teardown step runs even if an earlier one failed; a hosted run then fails with all their errors */
-function teardownAll(steps: (() => void)[]) {
-  const errors: unknown[] = [];
-  for (const step of steps) { try { step(); } catch (e) { errors.push(e); } }
-  if (!errors.length) return;
-  if (HOSTED) throw new AggregateError(errors, `voyage e2e teardown: ${errors.map((e) => (e as Error).message).join(" | ")}`);
-  console.warn(`[e2e] voyage teardown left rows on the local stack: ${errors.map((e) => (e as Error).message).join(" | ")}`);
-}
 
 test.describe.configure({ mode: "serial" });
 
@@ -49,7 +41,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   // Published versions, SDR rates and events are immutable by trigger (20261003205000); the disposable e2e rows are
   // removed by the local superuser with the guards lifted for this statement batch only, then the previous version's open window is restored.
-  teardownAll([() => psql(`
+  teardownAll("voyage e2e teardown", [() => psql(`
 alter table public.suez_tariff_versions disable trigger trg_suez_version_guard;
 alter table public.suez_tariff_versions disable trigger trg_suez_version_events;
 alter table public.suez_tariff_items disable trigger trg_suez_items_guard;

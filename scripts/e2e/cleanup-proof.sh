@@ -1,44 +1,68 @@
 #!/usr/bin/env bash
-# Proof of e2e/fixture-room.helpers.ts#cleanupSql on the ISOLATED asb_fixture database; every case is rolled back.
-#   A  a full e2e seed with a real room (events, proposals, messages, parties) is removed; guards are back on; FKs never off
+# Proof of e2e/e2e-cleanup.ts#cleanupSql on the ISOLATED asb_e2e database (scripts/e2e/build-proof-db.sh); every case
+# runs in its own transaction and is rolled back.
+#   A  a full e2e seed — a room with an agreed term, a proposal chain, a PDA-link chain with a self link, and a
+#      successor room — is removed; the six guards are enabled after; the suite seed is untouched
 #   B  naming a non-e2e account is refused (E2E_GUARD) and nothing is removed
-#   C  an unlisted dependent row (billing_customers -> users, ON DELETE RESTRICT) fails the whole transaction
+#   C  an unlisted dependent row (billing_customers -> users, RESTRICT) fails the whole transaction
+#   D  target binding: rows absent in teardown mode are refused (E2E_TARGET); absent in replay mode is the proved
+#      replay state; a mixed state is refused in replay mode
+#   E  a guard already disabled before the teardown is refused (E2E_GUARD)
 set -uo pipefail
 cd "$(dirname "$0")/../.."
-PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_fixture -X -q -v ON_ERROR_STOP=1"
+DB="${E2E_PROOF_DB:-asb_e2e}"
+case "$DB" in postgres|template*) echo "refusing to run the proof on $DB"; exit 2;; esac
+PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d $DB -X -q -v ON_ERROR_STOP=1"
 SEED=supabase/tests/fixture_room/seed_fixture_shape.sql
+ROWS=scripts/e2e/cleanup-proof-rows.sql
 E2E_USERS="00000000-0000-4000-8000-00000000e0a1,00000000-0000-4000-8000-00000000e0a2"
-SEED_USER="00000000-0000-4000-8000-0000000000a1"   # u_ch1 of the suite seed: not an e2e account
+GHOST="00000000-0000-4000-8000-00000000e0a9"          # an e2e-looking id that is not on the database
+SEED_USER="00000000-0000-4000-8000-0000000000a1"      # u_ch1 of the suite seed: not an e2e account
 fail() { echo "PROOF FAIL: $*"; exit 1; }
-cleanup() { npx tsx scripts/e2e/print-cleanup.ts "$1"; }
+cleanup() { npx tsx scripts/e2e/print-cleanup.ts "$@"; }
+show() { echo "$1" | grep -E "NOTICE|ERROR" | sed 's/^psql:<stdin>:[0-9]*: //' | grep -v "does not exist, skipping"; }
 ASSERT_A="do \$\$ begin
   if exists (select 1 from auth.users where email like 'e2e-fx-%-proof@arabshipbroker.test') or exists (select 1 from public.users where email like 'e2e-fx-%-proof@arabshipbroker.test')
      or exists (select 1 from public.cargo_listings where ref = 'E2EFX-proof') or exists (select 1 from public.vessels where vessel_name = 'E2E HULL PROOF')
-     or exists (select 1 from public.organizations where name like 'E2E % proof') or exists (select 1 from public.fixture_rooms where cargo_listing_id = '00000000-0000-4000-8000-00000000e0e1')
-     or exists (select 1 from public.fixture_events e where e.payload::text like '%e2e-proof%' or e.idempotency_key like 'e2e-proof%')
+     or exists (select 1 from public.organizations where name like 'E2E % proof')
+     or exists (select 1 from public.fixture_rooms where cargo_listing_id = '00000000-0000-4000-8000-00000000e0e1')
+     or exists (select 1 from public.fixture_pda_links l join public.pda_estimates e on e.id = l.pda_estimate_id where e.terminal_name = 'proof quay')
+     or exists (select 1 from public.fixture_events where idempotency_key like 'e2e-proof%')
+     or exists (select 1 from public.fixture_proposals p join public.fixture_terms t on t.id = p.term_id where t.room_id not in (select id from public.fixture_rooms))
      or exists (select 1 from public.listing_ownership where listing_id in ('00000000-0000-4000-8000-00000000e0e1','00000000-0000-4000-8000-00000000e0b1')) then
     raise exception 'A: residue after the teardown'; end if;
-  if exists (select 1 from pg_trigger where tgname like 'trg_fixture_%immutable' and tgenabled <> 'O') then raise exception 'A: a guard stayed disabled'; end if;
-  if exists (select 1 from public.users where id = '$SEED_USER') is not true then raise exception 'A: a non-e2e row was removed'; end if;
-  raise notice 'A ok: e2e seed, room ledger, ownership removed; guards enabled; suite seed untouched';
+  if (select count(*) from pg_trigger where tgname like 'trg_fixture_%immutable' and tgenabled = 'O') <> 6 then raise exception 'A: a guard is not enabled'; end if;
+  if not exists (select 1 from public.users where id = '$SEED_USER') or not exists (select 1 from public.pda_estimates where terminal_name = 'proof quay') then raise exception 'A: a non-e2e row was removed'; end if;
+  raise notice 'A ok: agreed term, proposal chain, PDA-link chain (self link), successor room and the e2e seed removed; guards enabled; non-e2e rows untouched';
 end \$\$;"
-# A (the transaction's own BEGIN/ROLLBACK wrap seed + rows + cleanup + asserts)
-out=$({ echo "begin;"; cat "$SEED"; cat scripts/e2e/cleanup-proof-rows.sql; cleanup "$E2E_USERS"; echo "$ASSERT_A"; echo "rollback;"; } | $PSQL 2>&1); rc=$?
-echo "$out" | grep -E "NOTICE|ERROR" | sed 's/^psql:<stdin>:[0-9]*: //' | grep -v "does not exist, skipping"
+run() { { echo "begin;"; cat "$SEED"; "$@"; echo "rollback;"; } | $PSQL 2>&1; }
+
+# A
+out=$(run eval 'cat "$ROWS"; cleanup teardown "$E2E_USERS"; echo "$ASSERT_A"'); rc=$?; show "$out"
 [ $rc = 0 ] && echo "$out" | grep -q "A ok" || fail "case A (rc=$rc)"
 # B
-out=$({ echo "begin;"; cat "$SEED"; cat scripts/e2e/cleanup-proof-rows.sql; cleanup "$E2E_USERS,$SEED_USER"; echo "rollback;"; } | $PSQL 2>&1); rc=$?
-echo "$out" | grep -E "ERROR" | sed 's/^psql:<stdin>:[0-9]*: //'
-[ $rc != 0 ] && echo "$out" | grep -q "E2E_GUARD: a named user is not an e2e account" || fail "case B must be refused by the guard (rc=$rc)"
+out=$(run eval 'cat "$ROWS"; cleanup teardown "$E2E_USERS,$SEED_USER"'); rc=$?; show "$out"
+[ $rc != 0 ] && echo "$out" | grep -q "E2E_GUARD: a named user is not an e2e account" || fail "case B (rc=$rc)"
 echo "B ok: a non-e2e account in the list is refused before anything is removed"
 # C
-out=$({ echo "begin;"; cat "$SEED"; cat scripts/e2e/cleanup-proof-rows.sql; echo "insert into public.billing_customers (user_id, legal_name) values ('00000000-0000-4000-8000-00000000e0a1', 'E2E proof');"; cleanup "$E2E_USERS"; echo "rollback;"; } | $PSQL 2>&1); rc=$?
-echo "$out" | grep -E "ERROR" | sed 's/^psql:<stdin>:[0-9]*: //'
-[ $rc != 0 ] && echo "$out" | grep -qi "foreign key" || fail "case C must fail on the restricting foreign key (rc=$rc)"
-echo "C ok: an unlisted dependent row fails the transaction (foreign keys stay enforced, no replica mode)"
-# afterwards: nothing committed, every guard enabled
+out=$(run eval 'cat "$ROWS"; echo "insert into public.billing_customers (user_id, legal_name) values ('"'"'00000000-0000-4000-8000-00000000e0a1'"'"', '"'"'E2E proof'"'"');"; cleanup teardown "$E2E_USERS"'); rc=$?; show "$out"
+[ $rc != 0 ] && echo "$out" | grep -qi "violates foreign key" || fail "case C (rc=$rc)"
+echo "C ok: an unlisted dependent row fails the transaction (foreign keys stay enforced)"
+# D
+out=$(run eval 'cleanup teardown "$E2E_USERS"'); rc=$?; show "$out"
+[ $rc != 0 ] && echo "$out" | grep -q "E2E_TARGET: 0 of 7 named rows" || fail "case D1: absent rows must be refused in teardown mode (rc=$rc)"
+out=$(run eval 'cleanup replay "$E2E_USERS"; echo "do \$\$ begin raise notice '"'"'D2 replay accepted'"'"'; end \$\$;"'); rc=$?; show "$out"
+[ $rc = 0 ] && echo "$out" | grep -q "D2 replay accepted" || fail "case D2: all-absent is the proved replay state (rc=$rc)"
+out=$(run eval 'cat "$ROWS"; cleanup replay "$E2E_USERS,$GHOST"'); rc=$?; show "$out"
+[ $rc != 0 ] && echo "$out" | grep -q "E2E_TARGET: replay found 7 of 8" || fail "case D3: a mixed state must be refused (rc=$rc)"
+echo "D ok: absent rows refused on a first teardown; all-absent accepted only as a replay; a mixed state refused"
+# E
+out=$(run eval 'cat "$ROWS"; echo "alter table public.fixture_events disable trigger trg_fixture_events_immutable;"; cleanup teardown "$E2E_USERS"'); rc=$?; show "$out"
+[ $rc != 0 ] && echo "$out" | grep -q "E2E_GUARD: the six Fixture append-only guards must exist and be enabled" || fail "case E (rc=$rc)"
+echo "E ok: a guard already disabled before the teardown is refused"
+# nothing committed
 n=$($PSQL -At -c "select count(*) from pg_trigger where tgname like 'trg_fixture_%immutable' and tgenabled = 'O'")
 r=$($PSQL -At -c "select count(*) from public.users where email like 'e2e-fx-%-proof@arabshipbroker.test'")
 echo "after: fixture guards enabled=$n, proof users left=$r"
-[ "$r" = 0 ] && [ "$n" -ge 6 ] || fail "state after the proof"
+[ "$r" = 0 ] && [ "$n" = 6 ] || fail "state after the proof"
 echo "E2E CLEANUP PROOF: OK"

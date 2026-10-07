@@ -45,3 +45,41 @@ begin
     (select count(*) from public.fixture_events where room_id = v_room), (select count(*) from public.fixture_proposals where room_id = v_room),
     (select count(*) from public.fixture_messages where room_id = v_room);
 end $$;
+-- C2O-078 #2 shapes: an agreed term, a proposal chain, a PDA-link chain with a self link, a successor room
+do $$
+declare v jsonb; v_room uuid; v_room2 uuid; v_tid uuid; v_pid uuid; v_est uuid := gen_random_uuid(); v_ev bigint[]; v_l1 uuid := gen_random_uuid(); v_l2 uuid := gen_random_uuid(); v_l3 uuid := gen_random_uuid();
+  v_party uuid;
+begin
+  v_room := (select id from public.fixture_rooms where cargo_listing_id = pg_temp.fx_id('e_c'));
+  -- an agreed term (agreed_proposal_id + agreed_by_party_id set)
+  perform pg_temp.fx_as('e_ch');
+  v_tid := pg_temp.fx_term(v_room, 'quantity');
+  v := public.submit_fixture_proposal(v_room, v_tid, '{"num": 26000}'::jsonb, null, false, null, pg_temp.fx_ver(v_room), 'e2e-proof-qty');
+  v_pid := (v->'data'->>'proposalId')::uuid;
+  perform pg_temp.fx_as('e_ow');
+  v := public.accept_fixture_proposal(v_room, v_pid, pg_temp.fx_ver(v_room), 'e2e-proof-qty-acc');
+  -- a proposal chain: the owner's second offer supersedes its first
+  v := public.submit_fixture_proposal(v_room, pg_temp.fx_term(v_room, 'freight'), '{"num": 26.5}'::jsonb, null, false, null, pg_temp.fx_ver(v_room), 'e2e-proof-offer-2');
+  reset role;
+  if not exists (select 1 from public.fixture_terms where room_id = v_room and status = 'agreed') then raise exception 'proof setup: no agreed term'; end if;
+  if not exists (select 1 from public.fixture_proposals where room_id = v_room and supersedes_proposal_id is not null) then raise exception 'proof setup: no proposal chain'; end if;
+  -- a PDA-link chain: three links on three events; link 2 supersedes link 1, link 3 supersedes itself
+  insert into public.pda_estimates (id, owner_user_id, port_locode, terminal_name, call_date, coverage, input_snapshot, native_currency, native_total, generated_at)
+  values (v_est, pg_temp.fx_id('u_ch1'), 'ZZFXA', 'proof quay', current_date + 12, 'manual_required', '{}', 'USD', 1000, now());
+  select array_agg(id order by seq) into v_ev from (select id, seq from public.fixture_events where room_id = v_room order by seq limit 3) e;
+  v_party := (select id from public.fixture_parties where room_id = v_room and side = 'cargo' and capacity = 'principal' limit 1);
+  insert into public.fixture_pda_links (id, room_id, pda_estimate_id, purpose, linked_by_party_id, linked_by_user_id, linked_event_id, supersedes_link_id) values
+    (v_l1, v_room, v_est, 'load', v_party, pg_temp.fx_id('e_ch'), v_ev[1], null),
+    (v_l2, v_room, v_est, 'discharge', v_party, pg_temp.fx_id('e_ch'), v_ev[2], v_l1),
+    (v_l3, v_room, v_est, 'other', v_party, pg_temp.fx_id('e_ch'), v_ev[3], v_l3);
+  -- a successor room: close, then recreate on the same pairing (the new room's parties are e2e seats too)
+  perform pg_temp.fx_as('e_ch');
+  v := public.close_fixture_room(v_room, 'withdrawn', 'proof', pg_temp.fx_ver(v_room), 'e2e-proof-close');
+  v := public.recreate_fixture_room(v_room, pg_temp.fx_terms(), 'e2e-proof-recreate', '{}'::jsonb);
+  reset role;
+  -- no command writes supersedes_room_id today; the column can still hold a chain, so the proof sets one
+  v_room2 := (v->'data'->>'roomId')::uuid;
+  update public.fixture_rooms set supersedes_room_id = v_room where id = v_room2;
+  if v_room2 is null or not exists (select 1 from public.fixture_rooms where id = v_room2 and supersedes_room_id = v_room) then raise exception 'proof setup: no successor room (%)', v; end if;
+  raise notice 'proof shapes: agreed term, proposal chain, 3 PDA links (chain + self link), successor room %', v_room2;
+end $$;
