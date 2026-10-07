@@ -1,5 +1,7 @@
 # Turkey (TCDD / KEGM / TDİ / Ministry ports): review dossier, NOT a loadable package
 
+> **7 Oct 2026, owner ruling (b) "USD version + manual lines":** the loadable İzmir package built from this dossier is `../turkey-izmir-2026/`. The blockers below still describe what that package leaves manual or assumed.
+
 This folder holds a verbatim extraction of the Turkish tariff documents in `tmp/Data/TURKISH PORTS.zip`, in `SOURCE-EXTRACTION.md`. The extraction gives the SHA-256 of each member and table and row locations. **It is deliberately not packaged as PDA rules.** Packaging it now would mean guessing.
 
 ## Why it is not loadable yet (blockers for the owner and the PDA owner)

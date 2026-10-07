@@ -1,0 +1,65 @@
+{
+  "package": "turkey-izmir-2026",
+  "ports": [
+    "TRIZM"
+  ],
+  "currency": "USD",
+  "effectiveFrom": "2026-01-01",
+  "publishable": false,
+  "blockers": [
+    {
+      "id": "TR-AUTH",
+      "text": "Source authority: the TURKISH PORTS.zip documents name no issuer or provider. pda_submit_tariff_version refuses rules whose sources are not official, agent or statutory. The owner rules on the provenance (for example an agent's compiled pack → 'agent'), or a current KEGM/TCDD sheet or agent proforma replaces them."
+    }
+  ],
+  "dependsOn": [
+    "20261007310000_pda_fx_rates (+ the 20261007320000 ECB feed): the EUR and TRY manual lines are converted at the governed rates."
+  ],
+  "sources": {
+    "tcdd": {
+      "placeholderId": "00000000-0000-4000-9000-000000005012",
+      "title": "TCDD Port Tariff compendium (TCDD, KEGM, TDİ, Ministry, waste) — undated",
+      "authority": "reference",
+      "file": "tmp/Data/TURKISH PORTS.zip :: TURKISH PORTS/TCDD PORT TARIFF.docx",
+      "sha256": "a2f89a5fede22d8e34fcb3d94ea67d066fefdec6e5629b0d64075601a392c93a"
+    },
+    "portDues": {
+      "placeholderId": "00000000-0000-4000-9000-000000005006",
+      "title": "Port dues (For the year 2026)",
+      "authority": "reference",
+      "file": "tmp/Data/TURKISH PORTS.zip :: TURKISH PORTS/PORT DUES (For the year 2026).docx",
+      "sha256": "2c59f6cb11c6499d51f25af11bfe50c805d4a9517a03120315cc9a8b3bb1d87a"
+    },
+    "sanitary": {
+      "placeholderId": "00000000-0000-4000-9000-000000005007",
+      "title": "Sanitary dues (Official Gazette 9.5.2008 No 26871)",
+      "authority": "reference",
+      "file": "tmp/Data/TURKISH PORTS.zip :: TURKISH PORTS/SANITARY DUES.docx",
+      "sha256": "e915f2f478941bfba23fcf338e9c78b183af6003933ec827bcd707f91ae02597"
+    },
+    "agency": {
+      "placeholderId": "00000000-0000-4000-9000-000000005001",
+      "title": "Agency service fee (Official Gazette 32314, 19.09.2023)",
+      "authority": "reference",
+      "file": "tmp/Data/TURKISH PORTS.zip :: TURKISH PORTS/AGENCY SERVICE FEE.docx",
+      "sha256": "b057513680fb84ad4049eb94343fec25bbd1bbd6ab28576990b4aa37c5141133"
+    },
+    "supervision": {
+      "placeholderId": "00000000-0000-4000-9000-000000005008",
+      "title": "Supervision services (Official Gazette 26812, 10.03.2008)",
+      "authority": "reference",
+      "file": "tmp/Data/TURKISH PORTS.zip :: TURKISH PORTS/Supervision Services .docx",
+      "sha256": "d8047a685ec03d80b4a7241cf8fc478658fd94c9efa7d70cf2090968d5244ce7"
+    }
+  },
+  "knownLimits": [
+    "UNDATED SOURCES. Every USD table (TCDD/KEGM pilotage, towage, mooring, wharfage) is undated; KEGM revises them yearly. Only the port dues say 2026. Confirm before use.",
+    "Above 10,000 GT the pilotage and mooring rules continue the printed header increment (+81, +11 per started 1,000 GT) to the 80,000 GT cap: a platform assumption, stated on each line. The cap is printed for TCDD only.",
+    "Rates are the 'Other Cargo Vessels' column (bulk and general cargo). Container, Ro-Ro, passenger and car-carrier columns differ and are not loaded.",
+    "İzmir pilotage and towage are KEGM services (§2); the KEGM Other Cargo figures equal TCDD §1. Outer-harbour services are +100 %; holidays +50 %; dangerous goods +10 % to +30 % — none applied automatically.",
+    "T9 prints different KEGM rates (202,27 + 83,17 pilotage; 382,99 + 71,87 towage); T12 is used. Which edition is current is open (review question 9).",
+    "Sanitary dues read the single printed formula (0,5025 USD × NT, paid in TL) as the port-call rate; transit and free-pratique variants are not printed separately.",
+    "Manual lines: port dues (TRY), wharfage (three conflicting bases), anchoring (72-hour threshold), towage (tug count), agency, supervision and waste (EUR).",
+    "Not in the package: light dues (the pack covers Straits transits only), Chamber of Shipping contribution and freight tax (T11, contradictory), private-terminal berth, handling, ISPS and security charges."
+  ]
+}
