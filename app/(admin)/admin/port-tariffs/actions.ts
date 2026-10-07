@@ -135,3 +135,11 @@ export async function recordFxRate(form: FormData) {
   }});
   rpcError(error, "FX rate recorded");
 }
+
+export async function attestSource(form: FormData) {
+  const { actorId, db } = await context();
+  const { error } = await db.rpc("pda_attest_tariff_source", { p_actor: actorId, p_payload: {
+    sourceId: value(form, "sourceId"), authority: value(form, "authority"), provenance: value(form, "provenance"),
+  }});
+  rpcError(error, "Source provenance recorded; its authority is raised");
+}
