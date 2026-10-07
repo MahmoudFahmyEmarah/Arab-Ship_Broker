@@ -324,7 +324,14 @@ begin
   if e <> 'FX_VALIDATION' then raise exception 'B1: a comment over 1000 characters must be FX_VALIDATION, got %', e; end if;
   e := pg_temp.fx_err(format('select public.suggest_fixture_bridge(%L, %L, %L::jsonb, null, %s, %L)', v_room, gen_random_uuid(), '{"num": 26}', pg_temp.fx_ver(v_room), 'br-noterm'));
   if e <> 'FX_NOT_FOUND' then raise exception 'B1: an unknown term must be FX_NOT_FOUND, got %', e; end if;
-  raise notice 'B1 ok: principals, outsider refused; the mediator''s suggestion is one event, no proposal, no state change; replay equal; validated';
+  -- C2O-089: a principal or an outsider holding the mediator's original key and arguments gets FX_AUTH, not the envelope
+  perform pg_temp.fx_as('u_ch1');
+  e := pg_temp.fx_err(format('select public.suggest_fixture_bridge(%L, %L, %L::jsonb, %L, %s, %L)', v_room, v_tid, '{"num": 26, "currency": "USD"}', 'splits the difference', v_ver, 'br-sug-1'));
+  if e <> 'FX_AUTH' then raise exception 'B1: a principal replaying the mediator''s key must be FX_AUTH, got %', e; end if;
+  perform pg_temp.fx_as('u_out');
+  e := pg_temp.fx_err(format('select public.suggest_fixture_bridge(%L, %L, %L::jsonb, %L, %s, %L)', v_room, v_tid, '{"num": 26, "currency": "USD"}', 'splits the difference', v_ver, 'br-sug-1'));
+  if e <> 'FX_AUTH' then raise exception 'B1: an outsider replaying the mediator''s key must be FX_AUTH, got %', e; end if;
+  raise notice 'B1 ok: principals, outsider refused (also when replaying the mediator''s key); the mediator''s suggestion is one event, no proposal, no state change; replay equal; validated';
 end $$;
 
 -- ── B2 · both sides read the live suggestion; a newer one replaces it ───────

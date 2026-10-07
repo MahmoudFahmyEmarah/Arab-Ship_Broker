@@ -1,6 +1,21 @@
--- DOWN · 20261007500000_fixture_room_lineage.sql — restores recreate_fixture_room exactly as
--- 20260923208000 defined it. Lineage values already written are kept (informational; no command reads them).
+-- ════════════════════════════════════════════════════════════════════════
+-- DOWN · 20261007500000_fixture_room_lineage.sql — restores recreate_fixture_room exactly as 20260923208000 defined
+-- it, drops the one-successor index, and narrows the event CHECK back to 20261007400000's list.
+-- Ledger rows are never deleted: with any room.continued_from event this DOWN refuses (roll forward instead).
+-- Lineage values already written are kept (no command reads them).
 -- Run in one transaction: psql -v ON_ERROR_STOP=1 -1 -f <this file>
+-- ════════════════════════════════════════════════════════════════════════
+
+set constraints all immediate;
+
+do $$
+declare v_used int;
+begin
+  select count(*) into v_used from public.fixture_events where type = 'room.continued_from';
+  if v_used > 0 then
+    raise exception 'FX_DOWN_REFUSED: % lineage event(s) are in the ledger; roll forward instead', v_used using errcode = '55000';
+  end if;
+end $$;
 
 create or replace function public.recreate_fixture_room(
   p_room_id uuid, p_terms jsonb, p_idempotency_key text, p_options jsonb default '{}'::jsonb)
@@ -25,3 +40,27 @@ begin
 end $$;
 revoke all on function public.recreate_fixture_room(uuid, jsonb, text, jsonb) from public, anon;
 grant execute on function public.recreate_fixture_room(uuid, jsonb, text, jsonb) to authenticated, service_role;
+
+drop index if exists public.fixture_rooms_one_successor_uq;
+
+do $$
+declare v_comment text;
+begin
+  select obj_description(oid, 'pg_constraint') into v_comment from pg_constraint
+   where conrelid = 'public.fixture_events'::regclass and conname = 'fixture_events_type_check';
+  alter table public.fixture_events drop constraint if exists fixture_events_type_check;
+  alter table public.fixture_events add constraint fixture_events_type_check check (type in (
+    'room.created','party.invited','party.accepted','party.declined','party.removed',
+    'party.disclosure_agreed','room.counterparty_disclosed',
+    'proposal.submitted','proposal.withdrawn','proposal.lapsed','proposal.accepted',
+    'term.agreed','term.reopened','term.held','term.resumed','term.referred','term.referral_cleared',
+    'term.bridge_suggested',
+    'subject.added','subject.lifted','subject.failed','subject.extended','subject.reinstated',
+    'room.fix_confirmed','room.fixed_on_subjects','room.fixed','room.returned_to_negotiation','room.window_extended',
+    'recap.published','recap.acknowledged','recap.invalidated',
+    'message.posted','message.redacted',
+    'listing_sync.required','listing_sync.applied','pda.linked','room.closed'));
+  if v_comment is not null then
+    execute format('comment on constraint fixture_events_type_check on public.fixture_events is %L', v_comment);
+  end if;
+end $$;

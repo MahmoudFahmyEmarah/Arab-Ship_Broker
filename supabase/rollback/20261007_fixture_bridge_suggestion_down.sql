@@ -3,14 +3,26 @@
 --
 -- Drops suggest_fixture_bridge and fn_fixture_live_bridges and restores
 -- get_fixture_room exactly as 20260923208000 defined it (no `bridges`).
--- Ledger rows are never deleted: the event CHECK goes back to the
--- 20261006100000 list ONLY when no term.bridge_suggested event exists;
--- otherwise the wider CHECK stays (a superset, so nothing breaks) and a
--- NOTICE says so. The saved 'down:' comment is carried over either way.
+-- Ledger rows are never deleted: with any term.bridge_suggested event the
+-- DOWN refuses (roll forward); otherwise the event CHECK goes back to the
+-- 20261006100000 list, carrying the saved 'down:' comment.
 -- Run in one transaction: psql -v ON_ERROR_STOP=1 -1 -f <this file>
 -- ════════════════════════════════════════════════════════════════════════
 
 set constraints all immediate;
+
+-- With mediator suggestions in the ledger this DOWN refuses (C2O-089 P1): ledger rows are never deleted, and a
+-- widened CHECK left behind would make the older enforcement DOWN (which restores its saved list) fail later.
+-- Roll forward instead.
+do $$
+declare v_used int;
+begin
+  select count(*) into v_used from public.fixture_events where type = 'term.bridge_suggested';
+  if v_used > 0 then
+    raise exception 'FX_DOWN_REFUSED: % mediator suggestion event(s) are in the ledger; this DOWN would leave a CHECK the older DOWNs cannot restore — roll forward instead', v_used
+      using errcode = '55000';
+  end if;
+end $$;
 
 drop function if exists public.suggest_fixture_bridge(uuid, uuid, jsonb, text, integer, text);
 
@@ -38,13 +50,8 @@ comment on function public.get_fixture_room(uuid, integer) is
 drop function if exists public.fn_fixture_live_bridges(uuid);
 
 do $$
-declare v_comment text; v_used int;
+declare v_comment text;
 begin
-  select count(*) into v_used from public.fixture_events where type = 'term.bridge_suggested';
-  if v_used > 0 then
-    raise notice 'fixture bridge DOWN: % ledger event(s) are mediator suggestions; the wider event CHECK stays (rows are never deleted)', v_used;
-    return;
-  end if;
   select obj_description(oid, 'pg_constraint') into v_comment from pg_constraint
    where conrelid = 'public.fixture_events'::regclass and conname = 'fixture_events_type_check';
   alter table public.fixture_events drop constraint if exists fixture_events_type_check;

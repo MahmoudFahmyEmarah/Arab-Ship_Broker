@@ -15,7 +15,8 @@
 --     term status. Hold / refer therefore do not block it, but they still
 --     block the adoption, which is an ordinary submit_fixture_proposal by
 --     either side (the UI fills the composer with the suggested value);
---   * idempotent like every command: the replay returns the stored envelope.
+--   * idempotent like every command: the replay returns the stored envelope — only to the same mediator
+--     (authority is checked first and the actor is part of the request hash, C2O-089).
 --
 -- get_fixture_room gains `bridges`: per term, the latest suggestion that is
 -- still live — the term is not agreed or withdrawn, and the suggestion came
@@ -61,17 +62,19 @@ declare v_actor uuid; r public.fixture_rooms; v_hash text; v_replay jsonb; med p
 begin
   v_actor := public.fn_fixture_actor();
   r := public.fn_fixture_lock(p_room_id);
-  v_hash := md5(jsonb_build_object('cmd', 'suggest_fixture_bridge', 'term', p_term_id, 'value', p_value, 'comment', p_comment)::text);
-  v_replay := public.fn_fixture_replay(r.id, p_idempotency_key, v_hash);
-  if v_replay is not null then return v_replay; end if;
-  perform public.fn_fixture_check_version(r, p_expected_version);
-  -- the caller's own active mediator seat, whichever other seats it also holds
+  -- authority BEFORE replay (C2O-089 P1): the caller's own active mediator seat, whichever other seats it holds;
+  -- a principal, a removed participant or an outsider holding the original key gets FX_AUTH, never the envelope
   select p.* into med from public.fn_fixture_actor_parties(r.id) p
    where p.side = 'mediator' and p.capacity = 'broker' and p.status = 'active'
    order by p.created_at limit 1;
   if med.id is null then
     raise exception 'FX_AUTH: only the mediator can suggest a bridging figure' using errcode = '42501';
   end if;
+  -- the replay is bound to the actor too: another mediator reusing the key is a different request
+  v_hash := md5(jsonb_build_object('cmd', 'suggest_fixture_bridge', 'actor', v_actor, 'party', med.id, 'term', p_term_id, 'value', p_value, 'comment', p_comment)::text);
+  v_replay := public.fn_fixture_replay(r.id, p_idempotency_key, v_hash);
+  if v_replay is not null then return v_replay; end if;
+  perform public.fn_fixture_check_version(r, p_expected_version);
   if r.status not in ('invited', 'negotiating') then
     raise exception 'FX_STATE: suggestions are not accepted while the room is %', replace(r.status, '_', ' ') using errcode = '55000';
   end if;

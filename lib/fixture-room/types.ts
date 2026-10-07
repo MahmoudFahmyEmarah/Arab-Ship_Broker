@@ -40,7 +40,7 @@ export type FixtureEventType =
   | "room.fix_confirmed" | "room.fixed_on_subjects" | "room.fixed" | "room.returned_to_negotiation" | "room.window_extended"
   | "recap.published" | "recap.acknowledged" | "recap.invalidated"
   | "message.posted" | "message.redacted"
-  | "listing_sync.required" | "listing_sync.applied" | "pda.linked" | "room.closed";
+  | "listing_sync.required" | "listing_sync.applied" | "pda.linked" | "room.closed" | "room.continued_from";
 
 export interface FixturePartyView {
   id: string;

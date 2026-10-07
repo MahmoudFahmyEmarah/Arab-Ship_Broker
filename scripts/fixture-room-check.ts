@@ -675,6 +675,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const bm = read("supabase/migrations/20261007400000_fixture_bridge_suggestion.sql");
   const cmd = bm.split("create or replace function public.suggest_fixture_bridge(")[1].split("end $$;")[0];
   ok(/fn_fixture_replay\(r\.id, p_idempotency_key, v_hash\)/.test(cmd) && /fn_fixture_check_version\(r, p_expected_version\)/.test(cmd) && /fn_fixture_require_window\(r\)/.test(cmd), "the suggestion is a governed command: replay, version check and the negotiation window");
+  ok(cmd.indexOf("FX_AUTH: only the mediator") < cmd.indexOf("fn_fixture_replay(") && /'actor', v_actor, 'party', med\.id/.test(cmd), "C2O-089: authority is checked before the replay, and the replay hash binds the actor");
   ok(/p\.side = 'mediator' and p\.capacity = 'broker' and p\.status = 'active'/.test(cmd) && /FX_AUTH: only the mediator can suggest/.test(cmd), "only the room's active mediator suggests");
   ok(/fn_fixture_validate_value\(t\.value_kind, p_value\)/.test(cmd) && !/insert into public\.fixture_proposals|update public\.fixture_terms|update public\.fixture_rooms/.test(cmd), "the suggestion validates the value and moves nothing (no proposal, no term or room write)");
   ok(/'term\.bridge_suggested'/.test(bm.split("-- ── 2")[0]) && /comment on constraint fixture_events_type_check/.test(bm), "the event CHECK gains term.bridge_suggested and keeps the saved DOWN comment");
@@ -684,7 +685,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const bd = read("supabase/rollback/20261007_fixture_bridge_suggestion_down.sql");
   const wrap = (f: string) => f.split("create or replace function public.get_fixture_room(")[1].split("end $$;")[0];
   ok(wrap(bd) === wrap(read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql")), "the DOWN restores the 208000 room read verbatim");
-  ok(/drop function if exists public\.suggest_fixture_bridge\(uuid, uuid, jsonb, text, integer, text\);/.test(bd) && /drop function if exists public\.fn_fixture_live_bridges\(uuid\);/.test(bd) && /the wider event CHECK stays/.test(bd) && /set constraints all immediate;/.test(bd), "the DOWN drops the command and reader, never deletes ledger rows, fires deferred checks first");
+  ok(/drop function if exists public\.suggest_fixture_bridge\(uuid, uuid, jsonb, text, integer, text\);/.test(bd) && /drop function if exists public\.fn_fixture_live_bridges\(uuid\);/.test(bd) && /FX_DOWN_REFUSED/.test(bd) && !/the wider event CHECK stays/.test(bd) && bd.indexOf("FX_DOWN_REFUSED") < bd.indexOf("drop function") && /set constraints all immediate;/.test(bd), "C2O-089: the DOWN refuses while suggestion events exist (before dropping anything), never deletes ledger rows, fires deferred checks first");
   const h = read("scripts/fixture-room-harness.sh");
   ok(/20261007400000_fixture_bridge_suggestion\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" )?"supabase\/rollback\/20261007_fixture_bridge_suggestion_down\.sql" /.test(h) && /\[bridge\]="FIXTURE BRIDGE SMOKE"/.test(h) && / enforcement bridge(?: lineage)?; do/.test(h), "the harness applies the bridge, runs its suite and reverses it first");
   const tr = read("components/fixture-room/TermRow.tsx");
@@ -709,14 +710,17 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/const bridgeSuperseded = !!bridge && \[term\.cargoPosition, term\.vesselPosition\]\.some\(\(p\) => !!p && Date\.parse\(p\.createdAt\) > Date\.parse\(bridge\.suggestedAt\)\)/.test(tr) && /bridge-superseded-/.test(tr), "a suggestion older than a side's latest figure says a newer figure was sent since");
 }
 
-// Lineage: a recreated room records the room it continues (supersedes_room_id was never written before 20261007500000)
+// Lineage (C2O-084): predecessor-bound idempotency, one successor, lineage through the ledger
 {
   const lm = read("supabase/migrations/20261007500000_fixture_room_lineage.sql");
   const body = lm.split("create or replace function public.recreate_fixture_room(")[1].split("end $$;")[0];
-  ok(/update public\.fixture_rooms x set supersedes_room_id = r\.id/.test(body) && /x\.supersedes_room_id is null/.test(body) && /x\.cargo_listing_id = r\.cargo_listing_id and x\.vessel_availability_id = r\.vessel_availability_id/.test(body), "recreate sets the lineage once, on the same pairing only");
+  ok(/v_prior\.supersedes_room_id is distinct from r\.id or v_prior\.id = r\.id/.test(body) && body.indexOf("FX_IDEMPOTENCY") < body.indexOf("fn_fixture_terminal(r.status)"), "a used key replays only this predecessor's successor; the live-source check cannot be bypassed by an old key");
+  ok(/x\.supersedes_room_id = r\.id/.test(body) && /create unique index if not exists fixture_rooms_one_successor_uq/.test(lm), "one successor per predecessor (refused, and enforced by a unique index)");
+  ok(body.indexOf("update public.fixture_rooms set supersedes_room_id") > body.indexOf("FX_STATE: the negotiation could not be started again") && /'room\.continued_from'/.test(body) && /'version', v_room\.version/.test(body), "the lineage is recorded with its own ledger event after every check, and the final version is returned");
+  ok(/'room\.continued_from'/.test(lm.split("-- ── 2")[0]) && /comment on constraint fixture_events_type_check/.test(lm), "the event CHECK gains room.continued_from and keeps the saved DOWN comment");
   const down = read("supabase/rollback/20261007_fixture_room_lineage_down.sql");
   const released = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").split("create or replace function public.recreate_fixture_room(")[1].split("end $$;")[0];
-  ok(down.includes(released) && !/supersedes_room_id = r\.id/.test(down), "the DOWN restores the released recreate verbatim");
+  ok(down.includes(released) && /FX_DOWN_REFUSED/.test(down) && down.indexOf("FX_DOWN_REFUSED") < down.indexOf("create or replace function") && /drop index if exists public\.fixture_rooms_one_successor_uq/.test(down) && !/'room\.continued_from'/.test(down.split("FX_DOWN_REFUSED")[1]), "the DOWN refuses with lineage events, else restores the released recreate verbatim, drops the index and narrows the CHECK");
   const h = read("scripts/fixture-room-harness.sh");
   ok(/20261007500000_fixture_room_lineage\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" /.test(h) && /\[lineage\]="FIXTURE LINEAGE SMOKE"/.test(h), "the harness applies the lineage migration, runs its suite and reverses it first");
 }

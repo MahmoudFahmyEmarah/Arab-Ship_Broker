@@ -296,6 +296,7 @@ export const EVENT_TEXT: Record<string, (p: Record<string, unknown>) => string> 
   "term.resumed": (p) => `resumed ${String(p.termLabel ?? "").toLowerCase()}`,
   "term.referred": (p) => `referred ${String(p.termLabel ?? "").toLowerCase()} to principal`,
   "term.referral_cleared": (p) => `cleared the referral on ${String(p.termLabel ?? "").toLowerCase()}`,
+  "room.continued_from": (p) => `started this negotiation again · continues ${p.previousRef ?? "an earlier room"}`,
   "term.bridge_suggested": (p) => `suggested ${p.displayValue ?? ""} on ${String(p.termLabel ?? "").toLowerCase()} to bridge the gap${p.comment ? ` · “${p.comment}”` : ""}`,
   "subject.added": (p) => `added subject “${p.title}”`,
   "subject.lifted": (p) => `lifted “${p.title}”`,
