@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { calculatePda, flagTreatment } from "../lib/pda/calculate";
 import { pdaApplicabilitySchema } from "../lib/pda/schemas";
+import { ecbFeedPayloads, parseEcbDaily } from "../lib/pda/ecb";
 import type { PdaRequest, PdaTariffVersion } from "../lib/pda/types";
 
 const ids = {
@@ -371,6 +372,20 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["foreign", "foreign"] }).success, false);
   assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["domestic"] }).success, false);
   assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["foreign", "national"] }).success, true);
+}
+
+// ECB feed (owner request 7 Oct): the parser takes exactly one dated set; payloads are EUR → wanted currencies.
+{
+  const xml = `<?xml version="1.0"?><gesmes:Envelope><Cube><Cube time='2026-10-07'><Cube currency='USD' rate='1.1050'/><Cube currency='JPY' rate='162.30'/><Cube currency='RON' rate='4.9765'/></Cube></Cube></gesmes:Envelope>`;
+  const daily = parseEcbDaily(xml);
+  assert.equal(daily.date, "2026-10-07");
+  assert.equal(daily.rates.USD, 1.105);
+  const payloads = ecbFeedPayloads(daily);
+  assert.deepEqual(payloads.map((p) => p.quoteCurrency), ["USD", "RON"], "TRY absent from the file is skipped, JPY not wanted");
+  assert.ok(payloads.every((p) => p.baseCurrency === "EUR" && p.sourceKind === "ecb" && p.sourceRef.startsWith("ECB euro foreign exchange reference rates, 2026-10-07")));
+  assert.throws(() => parseEcbDaily("<Cube></Cube>"), /expected one dated rate set/);
+  assert.throws(() => parseEcbDaily(xml.replace("<Cube time='2026-10-07'>", "<Cube time='2026-10-07'><Cube time='2026-10-06'>")), /expected one dated rate set/);
+  assert.throws(() => parseEcbDaily("<Cube time='2026-10-07'></Cube>"), /no rates/);
 }
 
 // C2B-009: the TypeScript schema refuses duplicated two-value lists, like the RPC.
