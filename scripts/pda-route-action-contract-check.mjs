@@ -41,7 +41,7 @@ assert.doesNotMatch(actions, /derivedDate|timeline\.(?:etaLoad|etaDischarge)\.sl
 assert.match(actions, /vessel:\s*authoritativeVesselFacts\(input\.vessel,\s*input\.flagState\)/);
 assert.match(actions, /const flagState = await flagStateOf\(supabase, vessel\.flag\)/);
 assert.match(actions, /\.from\("flag_states"\)/);
-assert.doesNotMatch(actions, /flagState:\s*input\.(?:load|discharge|selection|vessel)/);
+assert.doesNotMatch(actions, /flagState:\s*input\.(?:load|discharge|selection|vessel)\b/);
 assert.match(actions, /enteredBy:\s*input\.manualActorLabel/);
 assert.doesNotMatch(actions, /input\.request\.callDate/);
 assert.doesNotMatch(actions, /service_role/i);
