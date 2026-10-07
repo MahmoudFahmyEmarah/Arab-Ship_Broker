@@ -11,7 +11,7 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
   await requireAdmin({ section: "porttariffs" });
   const db = getSupabaseAdminClient();
   const params = await searchParams;
-  const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }, { data: terminals }, { data: fxRates }, { data: attestations }] = await Promise.all([
+  const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }, { data: terminals }, { data: fxRates }, { data: attestations }, { data: unattestedSources }] = await Promise.all([
     db.from("tariff_publishers").select("id,name,publisher_type,country").order("name"),
     db.from("tariff_sources").select("id,title,source_filename,authority,effective_from,sha256").order("registered_at", { ascending: false }).limit(50),
     db.from("port_tariff_sets").select("id,name,port_locode,terminal_id,publisher_id").order("created_at", { ascending: false }).limit(50),
@@ -19,9 +19,11 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
     db.from("tariff_staged_rules").select("id,batch_id,row_no,raw_text,port_locode,source_page,source_sheet,confidence,validation_errors,decision").eq("decision", "pending").order("created_at").limit(30),
     db.from("port_terminals").select("id,port_locode,name,is_verified,created_by").order("port_locode").order("name").limit(100),
     db.from("pda_fx_rates").select("id,base_currency,quote_currency,rate,effective_on,source_kind,source_ref,created_at").order("effective_on", { ascending: false }).order("created_at", { ascending: false }).limit(30),
-    db.from("tariff_source_attestations").select("id,source_id,from_authority,to_authority,provenance,attested_at").order("attested_at", { ascending: false }).limit(30),
+    db.from("tariff_source_attestations").select("id,source_id,from_authority,to_authority,provenance,attested_at,tariff_sources(title)").order("attested_at", { ascending: false }).limit(30),
+    // Every reference/unverified source, however old (C2O-089 P2): the latest-50 list above may not reach them.
+    db.from("tariff_sources").select("id,title,authority").in("authority", ["reference", "unverified"]).order("title").limit(500),
   ]);
-  const unattested = (sources ?? []).filter((s) => s.authority === "reference" || s.authority === "unverified");
+  const unattested = unattestedSources ?? [];
 
   return <div className="adm-page">
     <AdminPageHeader title="Port Tariffs" subtitle="Register evidence, stage extracted tariff rows, and publish deterministic PDA rules through independent maker/checker approval." warn={<span>Uploaded or extracted rates are <strong>never published automatically</strong>. Verify exact port, terminal, effective dates and source evidence.</span>}/>
@@ -54,7 +56,7 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
         <textarea name="provenance" required minLength={20} maxLength={2000} placeholder="Provenance: who supplied or issued the document, when, and how (e.g. emailed by our İzmir agent on 3 Oct 2026)"/>
         <button type="submit">Record provenance</button>
       </form>
-      <div className="adm-version-list">{(attestations ?? []).length === 0 ? <p className="adm-muted">No provenance recorded yet.</p> : (attestations ?? []).map((a) => { const src = (sources ?? []).find((s) => s.id === a.source_id); return <article key={a.id}><div><strong>{src?.title ?? a.source_id}</strong><span>{a.from_authority} → {a.to_authority} · {new Date(a.attested_at).toISOString().slice(0, 10)} · {a.provenance}</span></div></article>; })}</div>
+      <div className="adm-version-list">{(attestations ?? []).length === 0 ? <p className="adm-muted">No provenance recorded yet.</p> : (attestations ?? []).map((a) => { return <article key={a.id}><div><strong>{(a.tariff_sources as { title?: string } | null)?.title ?? a.source_id}</strong><span>{a.from_authority} → {a.to_authority} · {new Date(a.attested_at).toISOString().slice(0, 10)} · {a.provenance}</span></div></article>; })}</div>
     </Panel>
 
     <Panel title="FX rates for PDA display">

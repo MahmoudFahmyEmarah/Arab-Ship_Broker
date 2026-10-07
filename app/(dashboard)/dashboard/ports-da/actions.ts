@@ -190,8 +190,9 @@ function canonicalRouteLeg(input: {
 /**
  * FX (Wave 3 groundwork): when the tariff currency differs from the display currency,
  * the server resolves one governed rate (public.fn_pda_fx_rate: latest on or before the
- * call date, within 31 days, direct or inverse pair). No governed rate = no conversion,
- * so the leg keeps FX_RATE_REQUIRED; a member-typed rate is never used on this path.
+ * call date, within 31 days, the direct pair first, else the inverse). No governed rate = no conversion,
+ * so the leg keeps FX_RATE_REQUIRED; a failed lookup is an error, not a missing rate; a member-typed rate is
+ * never used on this path.
  */
 async function forDisplayCurrency(
   supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
@@ -207,7 +208,12 @@ async function forDisplayCurrency(
     p_quote: displayCurrency,
     p_on: request.callDate,
   });
-  const fx = !error && data && typeof data === "object" ? (data as PdaRouteFxRate) : null;
+  if (error) {
+    // A failed lookup is not a missing rate (C2O-090 P2): report it, never show "needs an authorised FX rate".
+    console.error("[pda] fn_pda_fx_rate failed", { base: nativeCurrency, quote: displayCurrency, on: request.callDate, error: error.message });
+    throw new UserFacingActionError("Exchange rates could not be loaded. Please try again.");
+  }
+  const fx = data && typeof data === "object" ? (data as PdaRouteFxRate) : null;
   const rate = fx && Number.isFinite(Number(fx.rate)) && Number(fx.rate) > 0 ? Number(fx.rate) : null;
   return {
     request: { ...request, convertedCurrency: displayCurrency, fxRate: rate },
