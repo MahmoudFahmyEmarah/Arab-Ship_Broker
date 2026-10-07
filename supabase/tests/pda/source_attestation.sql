@@ -6,6 +6,7 @@ begin;
 do $$
 declare
   admin uuid := gen_random_uuid();
+  checker uuid := gen_random_uuid();
   member uuid := gen_random_uuid();
   v_pub uuid; v_src uuid; v_trusted uuid; v_version uuid; v_att uuid; v_port text;
   denied boolean;
@@ -15,9 +16,10 @@ begin
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
   select '00000000-0000-0000-0000-000000000000'::uuid, f.id, 'authenticated', 'authenticated', f.email,
          crypt('PdaAttest1!', gen_salt('bf')), now(), '{}'::jsonb, '{}'::jsonb, now(), now()
-    from (values (admin, 'pda-attest-admin@example.test'), (member, 'pda-attest-member@example.test')) f(id, email);
+    from (values (admin, 'pda-attest-admin@example.test'), (checker, 'pda-attest-checker@example.test'), (member, 'pda-attest-member@example.test')) f(id, email);
   insert into public.users (id, supabase_user_id, email, full_name, role, is_active, admin_tier, subscription_tier) values
     (admin, admin, 'pda-attest-admin@example.test', 'PDA Attest Admin', 'admin', true, null, 'T4'),
+    (checker, checker, 'pda-attest-checker@example.test', 'PDA Attest Checker', 'admin', true, null, 'T4'),
     (member, member, 'pda-attest-member@example.test', 'PDA Attest Member', 'cargo_owner', true, null, 'T3');
 
   v_pub := public.pda_upsert_tariff_publisher(admin, '{"name":"Attestation test publisher","publisherType":"other","country":"Turkey"}');
@@ -34,7 +36,9 @@ begin
     'roundingMode', 'half_up', 'decimalPlaces', 2, 'primarySourceId', v_src));
   perform public.pda_replace_tariff_rules(admin, v_version, jsonb_build_array(jsonb_build_object(
     'code', 'attest_fee', 'label', 'Attestation test fee', 'basis', 'per_call', 'amount', 10, 'priority', 10,
-    'applicability', '{"requestedServices":["port_dues"]}'::jsonb, 'sourceId', v_src, 'sourcePage', 'p. 1', 'sourceExcerpt', 'fee 10')));
+    'applicability', '{"requestedServices":["port_dues"]}'::jsonb, 'sourceId', v_src, 'sourcePage', 'p. 1', 'sourceExcerpt', 'fee 10'),
+    jsonb_build_object('code', 'attest_second_fee', 'label', 'Second fee from the official document', 'basis', 'per_call', 'amount', 5, 'priority', 20,
+    'applicability', '{"requestedServices":["port_dues"]}'::jsonb, 'sourceId', v_trusted, 'sourcePage', 'p. 2', 'sourceExcerpt', 'fee 5')));
   denied := false;
   begin perform public.pda_submit_tariff_version(admin, v_version);
   exception when others then if sqlerrm like 'PDA_SOURCE:%' then denied := true; else raise; end if; end;
@@ -106,7 +110,36 @@ begin
      or has_table_privilege('anon', 'public.tariff_source_attestations', 'select')
      or has_table_privilege('service_role', 'public.tariff_source_attestations', 'insert') then
     raise exception 'A8: the attestation table is over-granted'; end if;
+
+  -- A9 · registration and attestation are the only write paths for sources (20261008110000)
+  if has_table_privilege('service_role', 'public.tariff_sources', 'update') or has_table_privilege('service_role', 'public.tariff_sources', 'insert')
+     or has_table_privilege('service_role', 'public.tariff_sources', 'delete') then
+    raise exception 'A9: service_role can write tariff_sources directly'; end if;
+  if not has_table_privilege('service_role', 'public.tariff_sources', 'select') then raise exception 'A9: service_role cannot read sources'; end if;
+
+  -- A10 · publication rechecks EVERY cited source, not only the primary one: a non-primary source that lost its
+  -- authority after submission (here by a superuser write) blocks publication
+  update public.tariff_sources set authority = 'reference' where id = v_trusted;
+  denied := false;
+  begin perform public.pda_publish_tariff_version(checker, v_version);
+  exception when others then if sqlerrm like 'PDA_SOURCE:%' then denied := true; else raise; end if; end;
+  if not denied then raise exception 'A10: a version citing a reference source was published'; end if;
 end $$;
+
+-- A9 (behaviour) · as service_role a direct authority change is refused; the governed registration still works
+set local role service_role;
+do $$
+declare denied boolean := false; v uuid;
+begin
+  begin update public.tariff_sources set authority = 'official' where sha256 = repeat('ab', 32);
+  exception when insufficient_privilege then denied := true; end;
+  if not denied then raise exception 'A9: service_role changed a source authority directly'; end if;
+  v := public.pda_register_tariff_source((select id from public.users where email = 'pda-attest-admin@example.test'),
+    jsonb_build_object('title', 'Registered as service_role', 'sourceFilename', 'svc.pdf', 'mimeType', 'application/pdf',
+      'sha256', repeat('ef', 32), 'authority', 'unverified'));
+  if v is null then raise exception 'A9: governed registration failed as service_role'; end if;
+end $$;
+reset role;
 
 do $m$ begin raise notice 'PDA SOURCE ATTESTATION: ALL ASSERTIONS PASSED'; end $m$;
 rollback;
