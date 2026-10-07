@@ -129,7 +129,8 @@ for (const object of [
   assert.match(down, new RegExp(`drop (?:function|table) if exists public\\.${object}`, "i"));
 }
 
-assert.equal(pkg.dependencies?.["@react-pdf/renderer"], "^4.9.0");
+// the recap PDF renderer is added with the PDF itself; no code imports it yet (O2ALL-003 port, 7 Oct 2026)
+assert.equal(pkg.dependencies?.["@react-pdf/renderer"], undefined);
 assert.match(pkg.scripts?.["test:shared-fixture-services"] ?? "", /shared-fixture-services-check\.ts/);
 assert.match(pkg.scripts?.["test:shared-fixture-services:e2e"] ?? "", /playwright\.shared-fixture-services\.config\.ts/);
 assert.match(pkg.scripts?.prebuild ?? "", /test:shared-fixture-services/);
