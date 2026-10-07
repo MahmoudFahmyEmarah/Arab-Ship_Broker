@@ -32,6 +32,13 @@ ASSERT_A="do \$\$ begin
      or exists (select 1 from public.listing_ownership where listing_id in ('00000000-0000-4000-8000-00000000e0e1','00000000-0000-4000-8000-00000000e0b1')) then
     raise exception 'A: residue after the teardown'; end if;
   if (select count(*) from pg_trigger where tgname like 'trg_fixture_%immutable' and tgenabled = 'O') <> 6 then raise exception 'A: a guard is not enabled'; end if;
+  if to_regclass('public.notifications') is not null then
+    if exists (select 1 from pg_trigger where tgname = 'notifications_snapshot_guard' and tgenabled <> 'O') then raise exception 'A: the notification guard is not enabled'; end if;
+    if exists (select 1 from public.notifications where payload->>'roomId' in (select id::text from public.fixture_rooms where cargo_listing_id = '00000000-0000-4000-8000-00000000e0e1'))
+       or exists (select 1 from public.notifications n where n.kind like 'fixture.%' and n.recipient_user_id = '00000000-0000-4000-8000-0000000000a5') then
+      raise exception 'A: a notification about the run survived (staff included)'; end if;
+    raise notice 'A notifications: the run''s notifications (the e2e accounts'' and staff''s) removed; the core''s guard enabled';
+  end if;
   if not exists (select 1 from public.users where id = '$SEED_USER') or not exists (select 1 from public.pda_estimates where terminal_name = 'proof quay') then raise exception 'A: a non-e2e row was removed'; end if;
   raise notice 'A ok: agreed term, proposal chain, PDA-link chain (self link), successor room and the e2e seed removed; guards enabled; non-e2e rows untouched';
 end \$\$;"
@@ -60,6 +67,15 @@ echo "D ok: absent rows refused on a first teardown; all-absent accepted only as
 out=$(run eval 'cat "$ROWS"; echo "alter table public.fixture_events disable trigger trg_fixture_events_immutable;"; cleanup teardown "$E2E_USERS"'); rc=$?; show "$out"
 [ $rc != 0 ] && echo "$out" | grep -q "E2E_GUARD: the six Fixture append-only guards must exist and be enabled" || fail "case E (rc=$rc)"
 echo "E ok: a guard already disabled before the teardown is refused"
+# F · ports: this run's own port goes; a real port, or another run's e2e port, named in the list is refused
+PORT_ROWS="insert into public.ports (locode, trade_name, country, zone, port_type, is_active, is_verified) values ('ZYP01', 'E2E Port proofstamp01 Load', 'Egypt', 'E.MED', 'Sea Port', true, true), ('ZYP02', 'Real Port', 'Egypt', 'E.MED', 'Sea Port', true, true), ('ZYP03', 'E2E Port otherrun0001 Load', 'Egypt', 'E.MED', 'Sea Port', true, true);"
+out=$(run eval 'cat "$ROWS"; echo "$PORT_ROWS"; PROOF_PORTS=ZYP01 cleanup teardown "$E2E_USERS"; echo "do \$\$ begin if exists (select 1 from public.ports where locode = '"'"'ZYP01'"'"') or not exists (select 1 from public.ports where locode = '"'"'ZYP02'"'"') then raise exception '"'"'F1: own port must go, real port stay'"'"'; end if; raise notice '"'"'F1 ok'"'"'; end \$\$;"'); rc=$?; show "$out"
+[ $rc = 0 ] && echo "$out" | grep -q "F1 ok" || fail "case F1: this run's port must be removed (rc=$rc)"
+out=$(run eval 'cat "$ROWS"; echo "$PORT_ROWS"; PROOF_PORTS=ZYP01,ZYP02 cleanup teardown "$E2E_USERS"'); rc=$?; show "$out"
+[ $rc != 0 ] && echo "$out" | grep -q "E2E_GUARD: a named port is not this run's e2e port" || fail "case F2: a real port must be refused (rc=$rc)"
+out=$(run eval 'cat "$ROWS"; echo "$PORT_ROWS"; PROOF_PORTS=ZYP01,ZYP03 cleanup teardown "$E2E_USERS"'); rc=$?; show "$out"
+[ $rc != 0 ] && echo "$out" | grep -q "E2E_GUARD: a named port is not this run's e2e port" || fail "case F3: another run's port must be refused (rc=$rc)"
+echo "F ok: this run's port is removed; a real port or another run's e2e port in the list is refused"
 # nothing committed
 n=$($PSQL -At -c "select count(*) from pg_trigger where tgname like 'trg_fixture_%immutable' and tgenabled = 'O'")
 r=$($PSQL -At -c "select count(*) from public.users where email like 'e2e-fx-%-proof@arabshipbroker.test'")

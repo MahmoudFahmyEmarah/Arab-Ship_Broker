@@ -60,13 +60,22 @@ const run = async (created: ReturnType<typeof noneCreated>, admin: RecoveryClien
   {
     const c = noneCreated(); c.userIds.push(A, B);
     const m = await run(c, fakeAdmin({ banAlwaysFails: true, gone: [B] }).admin, deps({ txFails: true }));
-    ok(new RegExp(`UNRESOLVED: \\[${A}\\]`).test(m) && new RegExp(`${B} \\(removed\\)`).test(m) && !/the partial seed was removed/.test(m), "an account that could not be banned is reported UNRESOLVED; one already gone is reported removed");
+    ok(new RegExp(`UNRESOLVED: \\[${A} \\(ban not verified\\)\\]`).test(m) && new RegExp(`${B} \\(removed\\)`).test(m) && !/the partial seed was removed/.test(m), "an account that could not be banned is reported UNRESOLVED; one already gone is reported removed");
   }
-  // 4 · the ban works but the public row could not be deactivated: said so
+  // 4 · the ban works but the public row could not be deactivated: the account is UNRESOLVED (C2O-084 P1)
   {
     const c = noneCreated(); c.userIds.push(A);
     const m = await run(c, fakeAdmin({ deactivateFails: true }).admin, deps({ txFails: true }));
-    ok(/banned, public row NOT deactivated/.test(m), "a failed deactivation is reported, not hidden");
+    ok(new RegExp(`UNRESOLVED: \\[${A} \\(public row not deactivated\\)\\]`).test(m) && /neutralised: \[\]/.test(m), "a failed deactivation leaves the account UNRESOLVED, never neutralised");
+  }
+  // 4b · the ban works but sessions could not be revoked: UNRESOLVED (an access or refresh token may still work)
+  {
+    const c = noneCreated(); c.userIds.push(A);
+    const d = deps({ txFails: true });
+    const real = d.tx;
+    d.tx = (label, s) => { if (label === "e2e session revocation") throw new Error("revocation refused"); real(label, s); };
+    const m = await run(c, fakeAdmin({}).admin, d);
+    ok(new RegExp(`UNRESOLVED: \\[${A} \\(sessions not revoked\\)\\]`).test(m) && /neutralised: \[\]/.test(m), "a failed session revocation leaves the account UNRESOLVED, never neutralised");
   }
   // 5 · reconciliation impossible: even a successful row removal is not reported as success
   {

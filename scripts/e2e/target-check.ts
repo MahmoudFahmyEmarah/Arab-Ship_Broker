@@ -1,7 +1,8 @@
 // E2E target binding (C2O-078 P0): one target for seeding and teardown; every mismatch is refused before any write.
 // Pure: no network, no database. Run: npx tsx scripts/e2e/target-check.ts
 import assert from "node:assert/strict";
-import { isHostedTarget, resolveTarget } from "../../e2e/e2e-db";
+import { readFileSync } from "node:fs";
+import { isForeignSupabaseRequest, isHostedTarget, resolveTarget } from "../../e2e/e2e-db";
 
 let n = 0;
 const ok = (c: boolean, m: string) => { assert.ok(c, m); n++; console.log(`  ok   ${m}`); };
@@ -35,4 +36,15 @@ refused({ ...hosted, E2E_SUPABASE_SERVICE_ROLE_KEY: jwt({ ref: "abcdefghijklmnop
 refused({ ...hosted, E2E_SUPABASE_SERVICE_ROLE_KEY: jwt({ ref: REF, role: "anon" }) }, /as service_role/, "an anon key passed as the service key is refused");
 ok(resolveTarget({ ...hosted, E2E_SUPABASE_SERVICE_ROLE_KEY: jwt({ ref: REF, role: "service_role" }) }).kind === "hosted", "a service key issued for this project is accepted");
 ok(isHostedTarget({ E2E_SUPABASE_URL: "http://localhost.example" }) && !isHostedTarget({}), "an unresolvable environment counts as hosted (random password, strict teardown)");
+// C2O-084 P0: the browser is bound to the same target — a Supabase call to any other origin is foreign
+const api = `https://${REF}.supabase.co`;
+ok(!isForeignSupabaseRequest(`${api}/auth/v1/token?grant_type=password`, api) && !isForeignSupabaseRequest(`${api}/rest/v1/users?select=id`, api), "the bound project's Auth and REST calls pass");
+ok(isForeignSupabaseRequest("https://rezfejaxbmdzkslrrefr.supabase.co/auth/v1/token", api) && isForeignSupabaseRequest("https://abcdefghijklmnopqrst.supabase.co/rest/v1/x", api), "an app built against another project (production included) is caught at its first Auth/REST call");
+ok(["storage/v1/object/x", "functions/v1/f", "graphql/v1", "realtime/v1/websocket"].every((pth) => isForeignSupabaseRequest(`https://abcdefghijklmnopqrst.supabase.co/${pth}`, api)), "Storage, Functions, GraphQL and Realtime paths are guarded too");
+ok(isForeignSupabaseRequest("wss://abcdefghijklmnopqrst.supabase.co/realtime/v1/websocket", api) && !isForeignSupabaseRequest(`wss://${REF}.supabase.co/realtime/v1/websocket`, api), "a WebSocket is compared as its https origin");
+ok(!isForeignSupabaseRequest("http://127.0.0.1:3100/dashboard", api) && !isForeignSupabaseRequest("https://fonts.googleapis.com/css2", api), "app pages and other hosts are not Supabase calls");
+ok(isForeignSupabaseRequest("http://localhost:54321/auth/v1/token", "http://127.0.0.1:54321"), "even localhost vs 127.0.0.1 is a different origin (the app must call exactly the bound API)");
+const helpers = readFileSync(new URL("../../e2e/fixture-room.helpers.ts", import.meta.url), "utf8");
+const signIn = helpers.split("export async function signInAs(")[1];
+ok(signIn.indexOf("bindSupabaseOrigin(context)") > -1 && signIn.indexOf("bindSupabaseOrigin(context)") < signIn.indexOf("context.newPage()") && (signIn.match(/failForeign\(\)/g) ?? []).length >= 3 && /routeWebSocket/.test(helpers), "every sign-in binds the guard before the page exists and fails with the offending URL");
 console.log(`E2E TARGET CHECK: ${n} passed`);

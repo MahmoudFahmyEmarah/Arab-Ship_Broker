@@ -6,8 +6,9 @@
  *   is refused; a retry after a lost connection accepts only the proved replay state (all of them gone, none left);
  * - every named row must be an e2e row, and every room touched must pair e2e listings only;
  * - foreign keys stay ON (no replica mode): an unlisted dependent fails the transaction instead of dangling;
- * - exactly the six Fixture append-only guards must exist and be enabled before; they are lifted inside the
- *   transaction only, and proved enabled at its end;
+ * - exactly the six Fixture append-only guards (and, with the shared notification core, its snapshot guard) must
+ *   exist and be enabled before; they are lifted inside the transaction only, and proved enabled at its end;
+ * - notifications of the e2e accounts, and anyone's notifications about this run's rooms, are removed;
  * - chains (PDA links, proposals, successor rooms; self links included) are broken inside the transaction, then
  *   removed — PDA links before the events they cite; agreed terms are reopened consistently (status with agreed_*);
  * - fixed ports are removed only when this seed created them;
@@ -18,13 +19,14 @@ import { dbQuery, dbTx, isHostedTarget } from "./e2e-db";
 
 export interface CleanupIds {
   userIds?: string[]; orgIds?: string[]; cargoIds?: string[]; availabilityIds?: string[]; vesselIds?: string[];
-  /** ports the seed itself created (never pre-existing ones) */
+  /** this run's own ports, and the stamp their names carry ("E2E Port <stamp> …"): only those are ever removed */
   portCodes?: string[];
+  portStamp?: string;
 }
 export type CleanupMode = "teardown" | "replay" | "undo";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PORT_RE = /^ZZFX[A-Z0-9]$/;
+const PORT_RE = /^ZY[A-Z0-9]{3}$/;
 const rows = (vals: string[] | undefined, re: RegExp, cast: string) => {
   const ok = [...new Set((vals ?? []).filter(Boolean))];
   for (const v of ok) if (!re.test(v)) throw new Error(`e2e cleanup: refusing malformed value ${v}`);
@@ -39,11 +41,21 @@ export const FIXTURE_GUARDS = [
 const guardList = `array['${FIXTURE_GUARDS.join("','")}']`;
 const guardCount = (state: string) =>
   `(select count(*) from unnest(${guardList}) g join pg_trigger t on t.tgrelid = to_regclass(split_part(g, ':', 1)) and t.tgname = split_part(g, ':', 2) and t.tgenabled ${state})`;
+// the shared notification core's snapshot guard, when the core is installed (Wave 4): a Fixture room's events
+// notify its parties and, for some events, the platform's administrators
+const NTF_GUARD = "public.notifications:notifications_snapshot_guard";
+const ntfGuardState = (state: string) =>
+  `(select count(*) from pg_trigger t where t.tgrelid = to_regclass('public.notifications') and t.tgname = 'notifications_snapshot_guard' and t.tgenabled ${state})`;
 const guardAlter = (mode: "disable" | "enable") => `do $g$ declare g text; begin
   foreach g in array ${guardList} loop execute format('alter table %s ${mode} trigger %I', split_part(g, ':', 1), split_part(g, ':', 2)); end loop;
+  if to_regclass('public.notifications') is not null then
+    execute format('alter table %s ${mode} trigger %I', split_part('${NTF_GUARD}', ':', 1), split_part('${NTF_GUARD}', ':', 2));
+  end if;
 end $g$;`;
 
 export function cleanupSql(ids: CleanupIds, mode: CleanupMode = "teardown"): string {
+  if (ids.portCodes?.length && !/^[a-z0-9]{8,24}$/.test(ids.portStamp ?? "")) throw new Error("e2e cleanup: ports need the run's stamp");
+  const portName = `E2E Port ${ids.portStamp ?? "-"} %`;
   return `
 set local lock_timeout = '15s';
 create temp table e2e_u (id uuid primary key) on commit drop; insert into e2e_u ${rows(ids.userIds, UUID_RE, "uuid")};
@@ -66,6 +78,9 @@ begin
   if ${guardCount("is not null")} <> ${FIXTURE_GUARDS.length} or ${guardCount("= 'O'")} <> ${FIXTURE_GUARDS.length} then
     raise exception 'E2E_GUARD: the six Fixture append-only guards must exist and be enabled before a teardown';
   end if;
+  if to_regclass('public.notifications') is not null and ${ntfGuardState("= 'O'")} <> 1 then
+    raise exception 'E2E_GUARD: the notification snapshot guard must exist and be enabled before a teardown';
+  end if;
 end $target$;
 create temp table e2e_r (id uuid primary key) on commit drop;
 insert into e2e_r select r.id from public.fixture_rooms r
@@ -79,6 +94,7 @@ do $guard$ begin
   if exists (select 1 from public.cargo_listings c join e2e_c x using (id) where c.ref not like 'E2EFX-%') then raise exception 'E2E_GUARD: a named cargo is not an e2e listing'; end if;
   if exists (select 1 from public.vessels v join e2e_v x using (id) where v.vessel_name not like 'E2E %') then raise exception 'E2E_GUARD: a named hull is not an e2e vessel'; end if;
   if exists (select 1 from public.vessel_availability a join e2e_a x using (id) join public.vessels v on v.id = a.vessel_id where v.vessel_name not like 'E2E %') then raise exception 'E2E_GUARD: a named position is not on an e2e hull'; end if;
+  if exists (select 1 from public.ports p join e2e_p x using (locode) where p.trade_name not like '${portName}') then raise exception 'E2E_GUARD: a named port is not this run''s e2e port'; end if;
   if exists (select 1 from public.fixture_rooms r join e2e_r x using (id)
               left join public.cargo_listings c on c.id = r.cargo_listing_id
               left join public.vessel_availability a on a.id = r.vessel_availability_id left join public.vessels v on v.id = a.vessel_id
@@ -111,6 +127,18 @@ delete from public.fixture_terms where room_id in (select id from e2e_r);
 -- parties go with their room (a room points at its creating party); a successor chain is broken first
 update public.fixture_rooms set supersedes_room_id = null where id in (select id from e2e_r) and supersedes_room_id is not null;
 delete from public.fixture_rooms where id in (select id from e2e_r);
+-- notifications: the e2e accounts' own, and anyone's about this run's rooms (staff are told of some room events);
+-- deliveries go with them, digest batches of the e2e accounts after them; preferences go with the user
+do $ntf$ begin
+  if to_regclass('public.notifications') is not null then
+    delete from public.notifications where recipient_user_id in (select id from e2e_u)
+        or (kind like 'fixture.%' and payload->>'roomId' in (select id::text from e2e_r));
+    if to_regclass('public.notification_digest_batches') is not null then
+      delete from public.notification_digest_batches b where b.recipient_user_id in (select id from e2e_u)
+         and not exists (select 1 from public.notification_deliveries d where d.digest_batch_id = b.id);
+    end if;
+  end if;
+end $ntf$;
 do $handles$ begin
   if to_regclass('market_private.listing_handles') is not null then
     delete from market_private.listing_handles where listing_id in (select id from e2e_l) or actor_user_id in (select id from e2e_u);
@@ -125,7 +153,7 @@ delete from public.matches where cargo_id in (select id from e2e_c) or vessel_av
 delete from public.vessel_availability where id in (select id from e2e_a);
 delete from public.vessels where id in (select id from e2e_v);
 delete from public.cargo_listings where id in (select id from e2e_c);
-delete from public.ports where locode in (select locode from e2e_p);
+delete from public.ports where locode in (select locode from e2e_p) and trade_name like '${portName}';
 delete from public.profiles where account_id in (select id from e2e_u);
 delete from public.organization_members where user_id in (select id from e2e_u) or org_id in (select id from e2e_o);
 delete from public.users where id in (select id from e2e_u);
@@ -141,6 +169,14 @@ do $residue$ begin
     raise exception 'E2E_RESIDUE: a named row survived the teardown';
   end if;
   if ${guardCount("= 'O'")} <> ${FIXTURE_GUARDS.length} then raise exception 'E2E_GUARD: a Fixture guard is not enabled at the end of the teardown'; end if;
+  if to_regclass('public.notifications') is not null and ${ntfGuardState("= 'O'")} <> 1 then raise exception 'E2E_GUARD: the notification guard is not enabled at the end of the teardown'; end if;
+  -- nested: a statement naming public.notifications is planned only where the table exists (no core, no reference)
+  if to_regclass('public.notifications') is not null then
+    if exists (select 1 from public.notifications where recipient_user_id in (select id from e2e_u))
+       or exists (select 1 from public.notifications where kind like 'fixture.%' and payload->>'roomId' in (select id::text from e2e_r)) then
+      raise exception 'E2E_RESIDUE: a notification of the run survived the teardown';
+    end if;
+  end if;
 end $residue$;
 `;
 }
@@ -168,7 +204,7 @@ export interface Created extends Required<CleanupIds> {
   /** intended emails, recorded BEFORE each createUser so an ambiguous response can be reconciled */
   emails: string[];
 }
-export const noneCreated = (): Created => ({ userIds: [], orgIds: [], cargoIds: [], availabilityIds: [], vesselIds: [], portCodes: [], emails: [] });
+export const noneCreated = (): Created => ({ userIds: [], orgIds: [], cargoIds: [], availabilityIds: [], vesselIds: [], portCodes: [], portStamp: "", emails: [] });
 
 type Res = { error: { message: string } | null };
 /** the Auth admin and table surface recovery needs (a SupabaseClient satisfies it; tests pass fakes) */
@@ -213,13 +249,16 @@ export async function undoPartialSeed(admin: RecoveryClient, created: Created, c
     throw new Error(`${why} — the partial seed was removed (${created.userIds.length} account(s))${notes.length ? `; ${notes.join("; ")}` : ""}`);
   }
   // 3 · neutralise every known account; every response checked, every account re-read
+  // C2O-084 P1: an account counts as neutralised only when its sessions were revoked, it is banned (re-read) and its
+  // public row is deactivated; any one of those failing leaves it UNRESOLVED (a token or an active row may still work)
+  let sessionsRevoked = true;
   if (created.userIds.length) {
     try {
       deps.tx("e2e session revocation", `do $s$ begin
         if to_regclass('auth.refresh_tokens') is not null then delete from auth.refresh_tokens where user_id::text in (${sqlText(created.userIds)}); end if;
         if to_regclass('auth.sessions') is not null then delete from auth.sessions where user_id::text in (${sqlText(created.userIds)}); end if;
       end $s$;`);
-    } catch (e) { notes.push(`session revocation failed (${(e as Error).message})`); }
+    } catch (e) { sessionsRevoked = false; notes.push(`session revocation failed (${(e as Error).message})`); }
   }
   const neutralised: string[] = [];
   const unresolved: string[] = [];
@@ -234,8 +273,8 @@ export async function undoPartialSeed(admin: RecoveryClient, created: Created, c
     const gone = !!back.error && (back.error.status === 404 || /not found/i.test(back.error.message));
     const bannedNow = !back.error && !!back.data.user?.banned_until && Date.parse(back.data.user.banned_until) > Date.now();
     if (gone) neutralised.push(`${id} (removed)`);
-    else if (banned && bannedNow) neutralised.push(`${id} (banned${deactivated.error ? ", public row NOT deactivated" : ""})`);
-    else unresolved.push(id);
+    else if (banned && bannedNow && sessionsRevoked && !deactivated.error) neutralised.push(`${id} (banned)`);
+    else unresolved.push(`${id} (${[!(banned && bannedNow) && "ban not verified", !sessionsRevoked && "sessions not revoked", deactivated.error && "public row not deactivated"].filter(Boolean).join(", ")})`);
   }
   // an intended email we could not look up may still be an account: never reported as handled
   if (!reconciled) unresolved.push(...pending.map((e) => `email ${e}`));

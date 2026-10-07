@@ -68,6 +68,22 @@ export function resolveTarget(env: E2EEnv = process.env): E2ETarget {
   return { kind: "hosted", apiUrl, ref, dbUrl };
 }
 
+/** Supabase service paths a browser may call: Auth, REST, Storage, Edge Functions, GraphQL and Realtime. */
+const SUPABASE_PATH = /^\/(auth|rest|storage|functions|graphql|realtime)\/v1(\/|$)/;
+
+/**
+ * True when a browser request goes to a Supabase service path on ANY origin other than the bound target's API
+ * origin (C2O-084 P0): the app under test may have been built against another project. ws/wss are compared as
+ * http/https.
+ */
+export function isForeignSupabaseRequest(rawUrl: string, apiUrl: string): boolean {
+  let u: URL;
+  try { u = new URL(rawUrl); } catch { return false; }
+  if (!SUPABASE_PATH.test(u.pathname)) return false;
+  const proto = u.protocol === "wss:" ? "https:" : u.protocol === "ws:" ? "http:" : u.protocol;
+  return `${proto}//${u.host}` !== new URL(apiUrl).origin;
+}
+
 /** hosted unless the target resolves as local; an unresolvable environment counts as hosted (fail closed) */
 export function isHostedTarget(env: E2EEnv = process.env): boolean {
   try { return resolveTarget(env).kind === "hosted"; } catch { return true; }

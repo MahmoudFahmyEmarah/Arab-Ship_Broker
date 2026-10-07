@@ -13,7 +13,7 @@ import { expect, type Browser, type BrowserContext, type Page } from "@playwrigh
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { dbExec, dbQuery, dbTx, isHostedTarget, resolveTarget } from "./e2e-db";
+import { dbExec, dbQuery, dbTx, isForeignSupabaseRequest, isHostedTarget, resolveTarget } from "./e2e-db";
 import { cleanupSql, noneCreated, teardownAll, teardownRows, undoPartialSeed, type Created, type RecoveryClient } from "./e2e-cleanup";
 
 export { dbExec, dbQuery, dbTx, cleanupSql, teardownAll };
@@ -39,7 +39,8 @@ export interface FixtureSeed {
   availabilityId: string;
   /** a TBN hull of the owner that also matches the cargo (C2O-011): its name and id must never reach the cargo side */
   tbn: { vesselId: string; name: string; availabilityId: string };
-  /** the fixture ports this seed created (removed with it); pre-existing ones are never touched */
+  /** this run's own ports (random ZY… codes named "E2E Port <stamp>"), created and removed by this seed only */
+  ports: { load: string; disch: string };
   portCodes: string[];
 }
 
@@ -83,6 +84,7 @@ async function seeded<T>(work: (admin: SupabaseClient, created: Created) => Prom
 export async function seedFixture(): Promise<FixtureSeed> {
   return seeded(async (admin, created) => {
     const stamp = `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
+    created.portStamp = stamp;
     const testImo = String(1_000_000 + (Number.parseInt(stamp.slice(-9), 36) % 9_000_000));
     const mk = async (email: string, role: string, company: string) => {
       const userId = await createAccount(admin, created, email);
@@ -97,24 +99,23 @@ export async function seedFixture(): Promise<FixtureSeed> {
     };
     const charterer = await mk(`e2e-fx-ch-${stamp}@arabshipbroker.test`, "cargo_owner", `E2E Charterers ${stamp}`);
     const owner = await mk(`e2e-fx-ow-${stamp}@arabshipbroker.test`, "vessel_owner", `E2E Owners ${stamp}`);
-    // fixture ports: created (and tracked) only when absent — never an untracked upsert of a shared row
-    const ports = [
-      { locode: "ZZFXA", trade_name: "Fixture Load Port", country: "Egypt", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
-      { locode: "ZZFXB", trade_name: "Fixture Disch Port", country: "Turkey", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
-    ];
-    const have = await admin.from("ports").select("locode").in("locode", ports.map((p) => p.locode));
-    must("ports lookup", have);
-    for (const p of ports.filter((x) => !(have.data ?? []).some((h: { locode: string }) => h.locode === x.locode))) {
-      created.portCodes.push(p.locode);
-      must(`port ${p.locode}`, await admin.from("ports").insert(p));
+    // this run's own ports (C2O-084 P1): random ZY codes named for the run, so two runs never share one and the
+    // teardown removes only a port that is listed AND carries this e2e name (a real port can never match)
+    const portCode = () => `ZY${[...randomBytes(3)].map((b) => "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[b % 36]).join("")}`;
+    const loadPort = portCode();
+    let dischPort = portCode();
+    while (dischPort === loadPort) dischPort = portCode();
+    for (const [locode, side, country] of [[loadPort, "Load", "Egypt"], [dischPort, "Disch", "Turkey"]] as const) {
+      created.portCodes.push(locode);
+      must(`port ${locode}`, await admin.from("ports").insert({ locode, trade_name: `E2E Port ${stamp} ${side}`, country, zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true }));
     }
     const d = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
     const cargoId = randomUUID();
     created.cargoIds.push(cargoId);
     must("cargo", await admin.from("cargo_listings").insert({
       id: cargoId, ref: `E2EFX-${stamp}`, status: "IN", review_status: "APPROVED", cargo_type: "Dry Bulk", commodity_name: "E2E Wheat, Bulk", is_dg_cargo: false, is_grain_cargo: true,
-      qty_min_mt: 25000, qty_max_mt: 27500, load_port_locode: "ZZFXA", load_port_name: "Fixture Load Port", load_zone: "E.MED",
-      disch_port_locode: "ZZFXB", disch_port_name: "Fixture Disch Port", disch_zone: "E.MED", laycan_from: d(10), laycan_to: d(20), is_spot: false, load_terms: "FIOST", freight_idea_usd_mt: 24.5,
+      qty_min_mt: 25000, qty_max_mt: 27500, load_port_locode: loadPort, load_port_name: "Fixture Load Port", load_zone: "E.MED",
+      disch_port_locode: dischPort, disch_port_name: "Fixture Disch Port", disch_zone: "E.MED", laycan_from: d(10), laycan_to: d(20), is_spot: false, load_terms: "FIOST", freight_idea_usd_mt: 24.5,
     }));
     must("cargo status", await admin.from("cargo_listings").update({ status: "IN", review_status: "APPROVED" }).eq("id", cargoId));
     const hull = async (name: string, imo: string | null, dwt: number, build: number, flag: string, tbn: boolean, open: number, idea: number) => {
@@ -123,7 +124,7 @@ export async function seedFixture(): Promise<FixtureSeed> {
       must(`vessel ${name}`, await admin.from("vessels").insert({ id: vesselId, vessel_name: name, imo_number: imo, vessel_type: "Bulk Carrier", dwt_grain: dwt, build_year: build, flag, is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false, ...(tbn ? { is_tbn: true } : {}) }));
       const availabilityId = randomUUID();
       created.availabilityIds.push(availabilityId);
-      must(`availability ${name}`, await admin.from("vessel_availability").insert({ id: availabilityId, vessel_id: vesselId, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(open), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: idea, accepts_part_cargo: false }));
+      must(`availability ${name}`, await admin.from("vessel_availability").insert({ id: availabilityId, vessel_id: vesselId, open_port_locode: loadPort, open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(open), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: idea, accepts_part_cargo: false }));
       must(`availability status ${name}`, await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", availabilityId));
       return { vesselId, availabilityId };
     };
@@ -138,7 +139,7 @@ export async function seedFixture(): Promise<FixtureSeed> {
     ]));
     return {
       stamp, charterer, owner, cargoId, vesselId: named.vesselId, vesselImo: testImo, vesselName, availabilityId: named.availabilityId,
-      tbn: { vesselId: tbn.vesselId, name: tbnName, availabilityId: tbn.availabilityId }, portCodes: [...created.portCodes],
+      tbn: { vesselId: tbn.vesselId, name: tbnName, availabilityId: tbn.availabilityId }, ports: { load: loadPort, disch: dischPort }, portCodes: [...created.portCodes],
     };
   });
 }
@@ -214,7 +215,7 @@ export async function apiClientAs(email: string): Promise<SupabaseClient> {
 export function cleanupFixture(s: FixtureSeed) {
   teardownRows("e2e fixture teardown", {
     userIds: [s.charterer.userId, s.owner.userId], orgIds: [s.charterer.orgId, s.owner.orgId], cargoIds: [s.cargoId],
-    availabilityIds: [s.availabilityId, s.tbn.availabilityId], vesselIds: [s.vesselId, s.tbn.vesselId], portCodes: s.portCodes,
+    availabilityIds: [s.availabilityId, s.tbn.availabilityId], vesselIds: [s.vesselId, s.tbn.vesselId], portCodes: s.portCodes, portStamp: s.stamp,
   });
 }
 
@@ -237,9 +238,33 @@ export async function dismissOverlays(page: Page) {
   }
 }
 
+/**
+ * Binds a browser context to the e2e target (C2O-084 P0): every request to a Supabase service path on another
+ * origin — the app under test was built against another project — is aborted and recorded, WebSockets included.
+ * Callers check `violations` and fail with the offending URL.
+ */
+export async function bindSupabaseOrigin(context: BrowserContext): Promise<{ violations: string[] }> {
+  const apiUrl = resolveTarget().apiUrl;
+  const violations: string[] = [];
+  await context.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (isForeignSupabaseRequest(url, apiUrl)) { violations.push(url); await route.abort("blockedbyclient"); return; }
+    await route.fallback();
+  });
+  await context.routeWebSocket(/.*/, (ws) => {
+    if (isForeignSupabaseRequest(ws.url(), apiUrl)) { violations.push(ws.url()); ws.close(); return; }
+    ws.connectToServer();
+  });
+  return { violations };
+}
+
 /** A fresh context signed in through the real login form, with the shell's overlays answered. */
 export async function signInAs(browser: Browser, baseURL: string, email: string): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  const guard = await bindSupabaseOrigin(context);
+  const failForeign = () => {
+    if (guard.violations.length) throw new Error(`the app under test called Supabase outside the e2e target (${new URL(resolveTarget().apiUrl).origin}): ${guard.violations[0]}`);
+  };
   const page = await context.newPage();
   await page.goto("/auth/login");
   await page.locator('input[name="email"]').fill(email);
@@ -248,12 +273,23 @@ export async function signInAs(browser: Browser, baseURL: string, email: string)
   // The app uses client-side routing after the auth call. Waiting for a page
   // `load` event can miss that transition even when the dashboard is already
   // rendered, so assert the observable URL instead.
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 90_000 });
+  try {
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 90_000 });
+  } catch (e) {
+    failForeign();
+    throw e;
+  }
   // Wait for the router transition itself, not only its early URL update.
   // Starting the next navigation while the login transition is still
   // rendering can let its pending router.push win and send the test back to
   // /dashboard after it has requested a Fixture page.
-  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible({ timeout: 90_000 });
+  try {
+    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible({ timeout: 90_000 });
+  } catch (e) {
+    failForeign();
+    throw e;
+  }
+  failForeign();
   await dismissOverlays(page);
   return { context, page };
 }
