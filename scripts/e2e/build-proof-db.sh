@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the ISOLATED proof database asb_e2e from this checkout's repository artefacts (db-rebuild.sh + every
-# migration), with a throwaway pg_cron stub because pg_cron can only live in the cron database. Never touches
+# migration), with throwaway pg_cron and storage stand-ins (pg_cron can only live in the cron database; Storage is
+# a platform service). Never touches
 # postgres (shared), staging or production.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -16,6 +17,11 @@ create or replace function cron.schedule(job_name text, schedule text, command t
 create or replace function cron.schedule(schedule text, command text) returns bigint language plpgsql as $f$ declare v bigint; begin insert into cron.job (schedule, command) values (schedule, command) returning jobid into v; return v; end $f$;
 create or replace function cron.unschedule(job_name text) returns boolean language plpgsql as $f$ begin delete from cron.job where jobname = job_name; return found; end $f$;
 create or replace function cron.unschedule(job_id bigint) returns boolean language plpgsql as $f$ begin delete from cron.job where jobid = job_id; return found; end $f$;
+-- Supabase Storage is a platform service, not in the repository baseline: the same minimal stand-in the shared-core
+-- harness uses (supabase/tests/shared_fixture_services_bootstrap.sql), so the recap-bucket migration can apply
+create schema if not exists storage;
+create table if not exists storage.buckets (id text primary key, name text not null, public boolean not null default false, file_size_limit bigint, allowed_mime_types text[]);
+create table if not exists storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text not null references storage.buckets(id), name text not null default '');
 SQL
 ROOT=tmp/rebuild-root; rm -rf "$ROOT"
 mkdir -p "$ROOT/scripts" "$ROOT/supabase/migrations"
