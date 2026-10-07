@@ -57,11 +57,42 @@ begin
     raise exception 'K3: the counterparty listed the charterer''s matches';
   exception when insufficient_privilege then null;
   end;
-  -- a second active seat of the owning organisation represents the listing too
+  -- a second active seat of the owning organisation represents the listing — only when it is entitled (C2O-090):
+  -- u_ch2 is T1, so the direct RPC is refused; as a market partner, or on T3, it lists the matches
+  perform pg_temp.fx_as('u_ch2');
+  begin
+    v := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
+    raise exception 'K3: a T1 seat listed matches through the direct RPC';
+  exception when insufficient_privilege then
+    if sqlerrm not like 'FX_GATE%' then raise exception 'K3: a T1 seat must be refused by the tier gate, got %', sqlerrm; end if;
+  end;
+  -- the market-partner flag exists once 20260923340000 is in the chain; where it is, a T1 market partner is entitled
+  perform pg_temp.fx_owner();
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'users' and column_name = 'is_market_partner') then
+    execute format('update public.users set is_market_partner = true where id = %L', pg_temp.fx_id('u_ch2'));
+    perform pg_temp.fx_as('u_ch2');
+    v := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
+    if jsonb_array_length(v) < 2 then raise exception 'K3: an entitled (market partner) seat of the owning organisation must see the matches'; end if;
+    perform pg_temp.fx_owner();
+    execute format('update public.users set is_market_partner = false where id = %L', pg_temp.fx_id('u_ch2'));
+    raise notice 'K3 market partner: a T1 market partner is entitled';
+  else
+    raise notice 'K3 market partner: skipped here (users.is_market_partner is not in this chain)';
+  end if;
+  update public.users set subscription_tier = 'T3' where id = pg_temp.fx_id('u_ch2');
   perform pg_temp.fx_as('u_ch2');
   v := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'));
-  if jsonb_array_length(v) < 2 then raise exception 'K3: an active seat of the owning organisation must see the matches'; end if;
-  raise notice 'K3 ok: only the listing''s owner or its organisation''s active seats may list its matches';
+  if jsonb_array_length(v) < 2 then raise exception 'K3: an entitled (T3) seat of the owning organisation must see the matches'; end if;
+  if (select string_agg(x->>'ref', ',' order by o) from jsonb_array_elements(v) with ordinality t(x, o))
+     is distinct from (select string_agg(x->>'ref', ',' order by o) from jsonb_array_elements(public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c6'))) with ordinality t(x, o)) then
+    raise exception 'K3: repeated calls must return the same order'; end if;
+  perform pg_temp.fx_owner();
+  update public.users set subscription_tier = 'T1' where id = pg_temp.fx_id('u_ch2');
+  -- an admin lists the matches of a listing it owns
+  perform pg_temp.fx_as('u_adm', true);
+  v := public.list_fixture_match_candidates('cargo', pg_temp.fx_id('c3'));
+  if jsonb_typeof(v) <> 'array' then raise exception 'K3: an admin must be served'; end if;
+  raise notice 'K3 ok: only the listing''s owner or its organisation''s entitled seats may list its matches; T1 is refused; the order is stable';
 
   -- K4 · the vessel side follows the same ownership rule
   perform pg_temp.fx_as('u_ow1');

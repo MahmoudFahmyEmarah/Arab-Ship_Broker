@@ -414,6 +414,8 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/export function matchFit\(label: MatchLabel \| null \| undefined, c: MatchCargoOption, v: MatchVesselOption, f: MatchFacts \| undefined\)/.test(mb) && !/kind: "no"|Under capacity|Opens after laycan|Gearless/.test(fitFn), "fit reasons state only the governed match facts, never a contradiction of a valid match");
   ok(!/assessFit/.test(mb) && /label \? \(label\.toLowerCase\(\) as Fit\["tier"\]\) : "unrated"/.test(fitFn) && /fit\.label \?\? "not rated"/.test(mb), "B2O-021: the tier is the governed Rules label (or not rated), never a client score");
   const lm = read("supabase/migrations/20261007100000_fixture_match_label.sql");
+  ok(/if not public\.fn_fixture_tier_ok\(\) then\s*raise exception 'FX_GATE/.test(lm) && lm.indexOf("fn_fixture_tier_ok()") < lm.indexOf("fn_fixture_owns_listing(") && lm.indexOf("fn_fixture_tier_ok()") < lm.indexOf("match_handles"), "C2O-090: the candidate RPC applies the Fixture tier gate before any read or handle issuance");
+  ok(/m\.dwt_delta asc, m\.availability_id\)/.test(lm) && /m\.dwt_delta asc, m\.cargo_id\)/.test(lm), "C2O-090 P2: the candidate's id is the final, stable sort key");
   ok((lm.match(/'matchLabel', \(select mm\.score_label from public\.matches mm where/g) ?? []).length === 2 && !/match_score|'score'/.test(lm.replace(/--.*$/gm, "")), "the candidate RPC returns the governed label word for both directions and never the raw score");
   ok(!/reasons\.slice\(/.test(mb), "every fit reason is shown (no truncation)");
   const h = read("scripts/fixture-room-harness.sh");

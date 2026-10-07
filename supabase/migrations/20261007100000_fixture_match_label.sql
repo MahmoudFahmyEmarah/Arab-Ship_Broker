@@ -7,7 +7,8 @@
 -- read from public.matches (Stream R's published cache). Members see the word
 -- only, never a score (R-C); the Fixture Room is T3+ so the word is allowed.
 -- Candidates sort by label (Strong, Good, Possible, then anything else), then
--- as before. The zone fact distinguishes load / discharge / other, so its text
+-- as before, then by the candidate's id (a stable order). The Fixture Room's
+-- tier gate (fn_fixture_tier_ok) now applies here too (C2O-090). The zone fact distinguishes load / discharge / other, so its text
 -- stays true when R-B pairs on adjacent zones. Everything else — ownership
 -- check, handle issue and retention, TBN masking, hints, grants — is the
 -- released body unchanged. Requires Stream R (20261003300000) in the chain.
@@ -25,6 +26,11 @@ declare
 begin
   if p_kind is null or p_kind not in ('cargo', 'vessel') or p_listing_id is null then
     raise exception 'FX_VALIDATION: kind must be cargo or vessel and a listing is required' using errcode = '22023';
+  end if;
+  -- the Fixture Room's entitlement, before any candidate read or handle issuance (C2O-090 P1): T3+, a market
+  -- partner or an admin — the same gate create_fixture_room applies
+  if not public.fn_fixture_tier_ok() then
+    raise exception 'FX_GATE: the Fixture Room is available from Subscriber tier (T3+)' using errcode = '42501';
   end if;
   if public.fn_fixture_owns_listing(case p_kind when 'cargo' then 'cargo' else 'vessel_availability' end, p_listing_id) is null then
     raise exception 'FX_AUTH: you can only match your own listings' using errcode = '42501';
@@ -63,7 +69,7 @@ begin
                'grain', cl.is_grain_cargo, 'dg', cl.is_dg_cargo,
                'gearRequired', coalesce(cl.requires_geared, false),
                'partCargo', m.accepts_part_cargo, 'dwtDelta', m.dwt_delta))
-           order by case (select mm.score_label from public.matches mm where mm.cargo_id = p_listing_id and mm.vessel_avail_id = m.availability_id) when 'Strong' then 0 when 'Good' then 1 when 'Possible' then 2 else 3 end, m.is_rate_aligned desc, m.dwt_delta asc), '[]'::jsonb)
+           order by case (select mm.score_label from public.matches mm where mm.cargo_id = p_listing_id and mm.vessel_avail_id = m.availability_id) when 'Strong' then 0 when 'Good' then 1 when 'Possible' then 2 else 3 end, m.is_rate_aligned desc, m.dwt_delta asc, m.availability_id), '[]'::jsonb)
       into v_out
       from m join h on h.vessel_availability_id = m.availability_id
       join public.cargo_listings cl on cl.id = p_listing_id;
@@ -94,7 +100,7 @@ begin
                'grain', m.is_grain_cargo, 'dg', m.is_dg_cargo,
                'gearRequired', coalesce(m.requires_geared, false),
                'partCargo', va.accepts_part_cargo, 'dwtDelta', m.dwt_delta))
-           order by case (select mm.score_label from public.matches mm where mm.cargo_id = m.cargo_id and mm.vessel_avail_id = p_listing_id) when 'Strong' then 0 when 'Good' then 1 when 'Possible' then 2 else 3 end, m.is_rate_aligned desc, m.dwt_delta asc), '[]'::jsonb)
+           order by case (select mm.score_label from public.matches mm where mm.cargo_id = m.cargo_id and mm.vessel_avail_id = p_listing_id) when 'Strong' then 0 when 'Good' then 1 when 'Possible' then 2 else 3 end, m.is_rate_aligned desc, m.dwt_delta asc, m.cargo_id), '[]'::jsonb)
       into v_out
       from m join h on h.cargo_listing_id = m.cargo_id
       join public.vessel_availability va on va.id = p_listing_id;

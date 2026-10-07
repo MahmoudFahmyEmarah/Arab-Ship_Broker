@@ -272,6 +272,10 @@ set local session_replication_role = origin;
 select public.fn_refresh_matches();
 -- ── end of seed ─────────────────────────────────────────────────────────────
 
+-- The colleague seat u_ch2 is seeded on T1; these cases need an ENTITLED colleague of the charterer's organisation,
+-- since the candidate RPC applies the Fixture tier gate (C2O-090). Rolled back with the suite.
+update public.users set subscription_tier = 'T3' where id = pg_temp.fx_id('u_ch2');
+
 -- Fixture Room · HANDLES body (C2O-013, 29 Sep 2026): the private selection handles of
 -- 20260923208000. Runs after the shared seed inside the caller's transaction. Adds the
 -- grain cargo c6 (owned by the charterer organisation) that both the named vessel a1 and
