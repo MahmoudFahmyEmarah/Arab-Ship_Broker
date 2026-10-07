@@ -686,7 +686,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(wrap(bd) === wrap(read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql")), "the DOWN restores the 208000 room read verbatim");
   ok(/drop function if exists public\.suggest_fixture_bridge\(uuid, uuid, jsonb, text, integer, text\);/.test(bd) && /drop function if exists public\.fn_fixture_live_bridges\(uuid\);/.test(bd) && /the wider event CHECK stays/.test(bd) && /set constraints all immediate;/.test(bd), "the DOWN drops the command and reader, never deletes ledger rows, fires deferred checks first");
   const h = read("scripts/fixture-room-harness.sh");
-  ok(/20261007400000_fixture_bridge_suggestion\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261007_fixture_bridge_suggestion_down\.sql" /.test(h) && /\[bridge\]="FIXTURE BRIDGE SMOKE"/.test(h) && / enforcement bridge; do/.test(h), "the harness applies the bridge, runs its suite and reverses it first");
+  ok(/20261007400000_fixture_bridge_suggestion\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" )?"supabase\/rollback\/20261007_fixture_bridge_suggestion_down\.sql" /.test(h) && /\[bridge\]="FIXTURE BRIDGE SMOKE"/.test(h) && / enforcement bridge(?: lineage)?; do/.test(h), "the harness applies the bridge, runs its suite and reverses it first");
   const tr = read("components/fixture-room/TermRow.tsx");
   ok(/view\.bridges\?\.find\(\(b\) => b\.termId === term\.id\)/.test(tr) && /onClick=\{\(\) => submit\(\{ value: bridge\.value, expiresInMinutes: null, comment: "Adopted the mediator's suggestion\." \}\)\}/.test(tr), "either side adopts the suggestion through its own bid / offer (submit_fixture_proposal)");
   ok(/run\("bridge", \(base\) => \(\{ \.\.\.base, termId: term\.id, value: r\.value, comment: bridgeComment\.trim\(\) \|\| null \}\)\)/.test(tr) && /data-testid=\{`suggest-\$\{term\.code\}`\}/.test(tr), "the mediator console sends the suggestion from its own seat (no acting-for)");
@@ -707,5 +707,17 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
 {
   const tr = read("components/fixture-room/TermRow.tsx");
   ok(/const bridgeSuperseded = !!bridge && \[term\.cargoPosition, term\.vesselPosition\]\.some\(\(p\) => !!p && Date\.parse\(p\.createdAt\) > Date\.parse\(bridge\.suggestedAt\)\)/.test(tr) && /bridge-superseded-/.test(tr), "a suggestion older than a side's latest figure says a newer figure was sent since");
+}
+
+// Lineage: a recreated room records the room it continues (supersedes_room_id was never written before 20261007500000)
+{
+  const lm = read("supabase/migrations/20261007500000_fixture_room_lineage.sql");
+  const body = lm.split("create or replace function public.recreate_fixture_room(")[1].split("end $$;")[0];
+  ok(/update public\.fixture_rooms x set supersedes_room_id = r\.id/.test(body) && /x\.supersedes_room_id is null/.test(body) && /x\.cargo_listing_id = r\.cargo_listing_id and x\.vessel_availability_id = r\.vessel_availability_id/.test(body), "recreate sets the lineage once, on the same pairing only");
+  const down = read("supabase/rollback/20261007_fixture_room_lineage_down.sql");
+  const released = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").split("create or replace function public.recreate_fixture_room(")[1].split("end $$;")[0];
+  ok(down.includes(released) && !/supersedes_room_id = r\.id/.test(down), "the DOWN restores the released recreate verbatim");
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20261007500000_fixture_room_lineage\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" /.test(h) && /\[lineage\]="FIXTURE LINEAGE SMOKE"/.test(h), "the harness applies the lineage migration, runs its suite and reverses it first");
 }
 
