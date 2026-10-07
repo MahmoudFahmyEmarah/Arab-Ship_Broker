@@ -36,7 +36,12 @@ assert.match(actions, /derivePdaRouteTimeline/);
 assert.match(actions, /aggregatePdaRoutePreview/);
 assert.match(actions, /callDate:\s*input\.leg\.callDate/);
 assert.doesNotMatch(actions, /derivedDate|timeline\.(?:etaLoad|etaDischarge)\.slice/);
-assert.match(actions, /vessel:\s*authoritativeVesselFacts\(input\.vessel\)/);
+// Wave 2 (B2C-035): vessel facts stay authoritative; the flag state is resolved on the server
+// from the governed flag registry, never taken from the browser request.
+assert.match(actions, /vessel:\s*authoritativeVesselFacts\(input\.vessel,\s*input\.flagState\)/);
+assert.match(actions, /const flagState = await flagStateOf\(supabase, vessel\.flag\)/);
+assert.match(actions, /\.from\("flag_states"\)/);
+assert.doesNotMatch(actions, /flagState:\s*input\.(?:load|discharge|selection|vessel)/);
 assert.match(actions, /enteredBy:\s*input\.manualActorLabel/);
 assert.doesNotMatch(actions, /input\.request\.callDate/);
 assert.doesNotMatch(actions, /service_role/i);
