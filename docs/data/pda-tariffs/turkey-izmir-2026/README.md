@@ -2,7 +2,7 @@
 
 This is a **review package**. Nothing in it is loaded into any database.
 
-**Blocked on one owner decision (TR-AUTH).** The Turkish documents name no issuer or provider, so they are registered as `reference`. The publication RPC refuses rules without trusted evidence (`official`, `agent` or `statutory`). A rolled-back load on a stand-in database stopped there (7 Oct 2026). Everything before that step succeeded: the sources, the draft and the 11 rules with their bands.
+**Publication waits on provenance (TR-AUTH).** The Turkish documents name no issuer or provider, so they load as `reference`, and the publication RPC refuses rules without trusted evidence (`official`, `agent` or `statutory`). The package loads as a **draft**. Once an admin knows where the documents came from, they record it on **/admin/port-tariffs → Source provenance** (migration `20261007330000`). That raises the source's authority with an audit row. Then the version is submitted, and a second admin publishes it. A rolled-back stand-in load proved both halves on 7 Oct 2026.
 
 - **Port:** TRIZM (İzmir Alsancak, a TCDD port; pilotage and towage are KEGM services).
 - **Currency:** USD (owner ruling 7 Oct 2026: "USD version + manual lines").
@@ -23,7 +23,7 @@ The verbatim extraction, with table and row locations, is `../turkey-2026-review
 - **Mooring and unmooring:** "22+11", charged once per call.
 - **Sanitary dues:** 0,5025 USD × NT (the printed formula, paid in TL at the daily USD rate), above 50 NT.
 
-**Platform assumption:** the printed tables stop at 10,000 GT. Above that, the rules continue the header increment (+81 and +11 per started 1,000 GT) up to the 80,000 GT cap (TCDD principle 8). Each line says so in its label.
+**Platform assumption:** the printed tables stop at 10,000 GT. Above that, the rules continue the header increment (+81 and +11 per started 1,000 GT) up to the 80,000 GT cap (TCDD principle 8). Each line says so in its label. Owner ruling, 7 Oct 2026: keep it.
 
 ## Manual lines (entered in USD)
 

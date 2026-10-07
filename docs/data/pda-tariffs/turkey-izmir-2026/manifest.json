@@ -9,11 +9,12 @@
   "blockers": [
     {
       "id": "TR-AUTH",
-      "text": "Source authority: the TURKISH PORTS.zip documents name no issuer or provider. pda_submit_tariff_version refuses rules whose sources are not official, agent or statutory. The owner rules on the provenance (for example an agent's compiled pack → 'agent'), or a current KEGM/TCDD sheet or agent proforma replaces them."
+      "text": "Source authority: the TURKISH PORTS.zip documents name no issuer or provider, so they load as 'reference' and pda_submit_tariff_version refuses them. Load the package as a draft; once an admin learns where the documents came from, they record it on /admin/port-tariffs → Source provenance (pda_attest_tariff_source, 20261007330000), then submit, and a second admin publishes."
     }
   ],
   "dependsOn": [
-    "20261007310000_pda_fx_rates (+ the 20261007320000 ECB feed): the EUR and TRY manual lines are converted at the governed rates."
+    "20261007310000_pda_fx_rates (+ the 20261007320000 ECB feed): the EUR and TRY manual lines are converted at the governed rates.",
+    "20261007330000_pda_source_attestation: an admin records the documents' provenance before the version can be submitted."
   ],
   "sources": {
     "tcdd": {
@@ -54,7 +55,7 @@
   },
   "knownLimits": [
     "UNDATED SOURCES. Every USD table (TCDD/KEGM pilotage, towage, mooring, wharfage) is undated; KEGM revises them yearly. Only the port dues say 2026. Confirm before use.",
-    "Above 10,000 GT the pilotage and mooring rules continue the printed header increment (+81, +11 per started 1,000 GT) to the 80,000 GT cap: a platform assumption, stated on each line. The cap is printed for TCDD only.",
+    "Above 10,000 GT the pilotage and mooring rules continue the printed header increment (+81, +11 per started 1,000 GT) to the 80,000 GT cap: a platform assumption, stated on each line (owner ruling 7 Oct 2026: keep it). The cap is printed for TCDD only.",
     "Rates are the 'Other Cargo Vessels' column (bulk and general cargo). Container, Ro-Ro, passenger and car-carrier columns differ and are not loaded.",
     "İzmir pilotage and towage are KEGM services (§2); the KEGM Other Cargo figures equal TCDD §1. Outer-harbour services are +100 %; holidays +50 %; dangerous goods +10 % to +30 % — none applied automatically.",
     "T9 prints different KEGM rates (202,27 + 83,17 pilotage; 382,99 + 71,87 towage); T12 is used. Which edition is current is open (review question 9).",
