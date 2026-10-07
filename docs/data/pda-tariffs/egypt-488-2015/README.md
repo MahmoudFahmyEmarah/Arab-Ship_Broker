@@ -64,7 +64,7 @@ registered `tariff_sources.id`, never one id for all.
 | Rule code | Basis | Notes |
 |---|---|---|
 | `port_dues` | per GT 0.35 | per call |
-| `light_dues` | per GT 0.15 | full rate; the 416/2019 reductions for calls combined with a Suez transit (−10 % / −20 %, Suez-only −25 % at Suez) cannot be entered because manual amounts are non-negative, so such calls are overstated |
+| `light_dues` | per GT 0.15 | full rate; the 416/2019 reductions for calls combined with a Suez transit (−10 % / −20 %, Suez-only −25 % at Suez) are not applied, so such calls are overstated on this line. **Owner waiver, 8 Oct 2026:** accepted as a labelled over-estimate. The line label states it. |
 | `pilotage_arrival`, `pilotage_departure` | tiered flat by GT (9 bands) | outer anchorage ↔ berth; shifting and waiting-area tables not included |
 | `sailing_permit` 30, `berthing_form` 5, `seamens_club` 25 | flat | per call |
 | `agency_fee` | tiered flat by GT, **up to 300,000 GT** | one-port column, first 5 days; +200 per started 10,000 GRT above 40,000 |

@@ -19,7 +19,7 @@
   },
   {
     "code": "light_dues",
-    "label": "Light dues (foreign, per GRT)",
+    "label": "Light dues (foreign, per GRT; full rate — may be 10–25 % lower when the call is combined with a Suez Canal transit, Decree 416/2019)",
     "basis": "per_gt",
     "rate": 0.15,
     "priority": 11,

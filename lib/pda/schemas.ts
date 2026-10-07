@@ -58,6 +58,7 @@ export const pdaRequestSchema = z.object({
     dwt: nonNegative.nullable().optional(),
     loaM: nonNegative.nullable().optional(),
     draftM: nonNegative.nullable().optional(),
+    registeredMaxDraftM: nonNegative.nullable().optional(),
     vesselType: z.string().trim().max(100).nullable().optional(),
     flagState: z.string().trim().regex(/^[A-Za-z]{2}$/).nullable().optional(),
   }),

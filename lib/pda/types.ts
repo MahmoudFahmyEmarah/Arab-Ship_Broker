@@ -38,7 +38,10 @@ export interface PdaVesselFacts {
   scnrt?: number | null;
   dwt?: number | null;
   loaM?: number | null;
+  /** The call draft (a declared call fact). Applicability by draft reads only this. */
   draftM?: number | null;
+  /** The vessel's registered maximum (summer) draft: a particular for display, never used as the call draft. */
+  registeredMaxDraftM?: number | null;
   vesselType?: string | null;
   /** Flag state, ISO 3166-1 alpha-2. For an owned vessel the server resolves it from public.flag_states; otherwise it is a declared fact, like GT. */
   flagState?: string | null;

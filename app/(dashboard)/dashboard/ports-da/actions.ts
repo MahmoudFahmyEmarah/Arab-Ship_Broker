@@ -14,6 +14,7 @@ import type { PdaCalculationResult, PdaRequest } from "@/lib/pda/types";
 import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
 import type { CargoView, VesselView } from "@/lib/portal/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { resolveDeclaredFlag, resolveFlagName, type FlagStateRow } from "@/lib/pda/flag";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaCalculationContext, savePdaEstimate } from "@/sdk/app/pda";
 import { getPortRoute } from "@/sdk/app/routes";
@@ -83,29 +84,14 @@ function numberFromDisplay(value: string): number | null {
 }
 
 /**
- * Wave 2: the flag state (ISO 3166-1 alpha-2) of a vessel's registered flag, resolved
- * through the governed public.flag_states registry by name or alias. Unknown or
- * unregistered flags resolve to null, so a rule that needs the treatment raises
- * MISSING_INPUT instead of guessing.
+ * The active flag-state registry (public.flag_states). A failed read is null, so every flag resolves unknown and a
+ * rule that needs the treatment raises MISSING_INPUT (C2O-090 B2C-035 P1-1); nothing is ever guessed as foreign.
  */
-async function flagStateOf(
+async function activeFlagRegistry(
   supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
-  flag: string | null | undefined,
-): Promise<string | null> {
-  const wanted = flag?.trim().toLowerCase();
-  if (!wanted || wanted === "—") return null;
-  const { data, error } = await supabase
-    .from("flag_states")
-    .select("iso2, name, aliases")
-    .eq("is_active", true);
-  if (error || !data) return null;
-  const hit = data.find(
-    (row) =>
-      row.name?.trim().toLowerCase() === wanted ||
-      (row.aliases ?? []).some((alias: string) => alias.trim().toLowerCase() === wanted),
-  );
-  const iso2 = hit?.iso2?.trim().toUpperCase() ?? null;
-  return iso2 && /^[A-Z]{2}$/.test(iso2) ? iso2 : null;
+): Promise<FlagStateRow[] | null> {
+  const { data, error } = await supabase.from("flag_states").select("iso2, name, aliases, is_active").eq("is_active", true);
+  return error || !data ? null : (data as FlagStateRow[]);
 }
 
 function authoritativeVesselFacts(vessel: VesselView, flagState: string | null): PdaRequest["vessel"] {
@@ -126,15 +112,21 @@ function authoritativeVesselFacts(vessel: VesselView, flagState: string | null):
     scnrt: vessel.scnrt ?? null,
     dwt: numberFromDisplay(vessel.dwt),
     loaM: vessel.loaM ?? null,
-    // The registered maximum (summer) draft: a conservative stand-in for the call draft.
-    draftM: vessel.draftM ?? null,
+    // The registered maximum (summer) draft is a vessel particular, never the call draft (C2O-090 B2C-035 P1-2):
+    // a rule conditioned on draft sees the call draft only when the member declares it.
+    registeredMaxDraftM: vessel.draftM ?? null,
     flagState,
   };
 }
 
 async function canonicalStandaloneRequest(request: PdaRequest): Promise<PdaRequest> {
   const requestedVesselId = request.vessel.vesselId;
-  if (!requestedVesselId) return request;
+  const supabase = await getSupabaseServerClient();
+  const registry = await activeFlagRegistry(supabase);
+  if (!requestedVesselId) {
+    // A declared flag counts only when an active register carries that ISO code; otherwise it is unknown.
+    return { ...request, vessel: { ...request.vessel, flagState: resolveDeclaredFlag(registry, request.vessel.flagState) } };
+  }
 
   const vessels = await loadVesselViews({ mine: true });
   if (vessels.source !== "live") {
@@ -151,12 +143,11 @@ async function canonicalStandaloneRequest(request: PdaRequest): Promise<PdaReque
       "The selected vessel is not available to this account",
     );
   }
-  const supabase = await getSupabaseServerClient();
   return {
     ...request,
     vessel: {
       ...request.vessel,
-      ...authoritativeVesselFacts(vessel, await flagStateOf(supabase, vessel.flag)),
+      ...authoritativeVesselFacts(vessel, resolveFlagName(registry, vessel.flag)),
     },
   };
 }
@@ -322,7 +313,7 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
       requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
     ]);
     const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
-    const flagState = await flagStateOf(supabase, vessel.flag);
+    const flagState = resolveFlagName(await activeFlagRegistry(supabase), vessel.flag);
     let loadRequest = canonicalRouteLeg({
       leg: input.load,
       vessel,

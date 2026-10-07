@@ -70,7 +70,35 @@ begin
   if has_function_privilege('authenticated', 'public.pda_record_fx_rate(uuid, jsonb)', 'execute') then raise exception 'FX5: members can record rates'; end if;
   if not has_function_privilege('authenticated', 'public.fn_pda_fx_rate(text, text, date)', 'execute') then raise exception 'FX5: members cannot resolve a rate'; end if;
   if has_function_privilege('anon', 'public.fn_pda_fx_rate(text, text, date)', 'execute') then raise exception 'FX5: anon can resolve a rate'; end if;
+
+  -- FX6 · direct first (20261008100000): an older direct row beats a newer reciprocal row, in both directions
+  perform public.pda_record_fx_rate(admin, '{"baseCurrency":"USD","quoteCurrency":"EUR","rate":0.8,"effectiveOn":"2026-10-07","sourceKind":"agent","sourceRef":"Agent quote 7 Oct 2026"}');
+  fx := public.fn_pda_fx_rate('EUR', 'USD', '2026-10-08');
+  if (fx->>'inverse')::boolean or (fx->>'rate')::numeric <> 1.10 then raise exception 'FX6: a newer inverse beat the direct EUR/USD rate: %', fx; end if;
+  fx := public.fn_pda_fx_rate('USD', 'EUR', '2026-10-08');
+  if (fx->>'inverse')::boolean or (fx->>'rate')::numeric <> 0.8 then raise exception 'FX6: the direct USD/EUR rate was not used: %', fx; end if;
+  fx := public.fn_pda_fx_rate('USD', 'EUR', '2026-10-06');
+  if not (fx->>'inverse')::boolean or (fx->>'rate')::numeric <> round(1 / 1.10, 8) then raise exception 'FX6: no direct row, the inverse should answer: %', fx; end if;
+
+  -- FX7 · the governed commands are the only write path: service_role cannot insert directly
+  if has_table_privilege('service_role', 'public.pda_fx_rates', 'insert') then raise exception 'FX7: service_role can insert FX rates directly'; end if;
+  if not has_table_privilege('service_role', 'public.pda_fx_rates', 'select') then raise exception 'FX7: service_role cannot read FX rates'; end if;
 end $$;
+
+-- FX7 (behaviour) · as service_role a direct insert is refused, while the governed admin command still records
+set local role service_role;
+do $$
+declare denied boolean := false;
+begin
+  begin
+    insert into public.pda_fx_rates (base_currency, quote_currency, rate, effective_on, source_kind, source_ref, created_by)
+    values ('EUR', 'GBP', 0.85, '2026-10-06', 'ecb', 'forged direct insert', null);
+  exception when insufficient_privilege then denied := true; end;
+  if not denied then raise exception 'FX7: service_role inserted an FX rate directly'; end if;
+  perform public.pda_record_fx_rate((select id from public.users where email = 'pda-fx-admin@example.test'),
+    '{"baseCurrency":"EUR","quoteCurrency":"GBP","rate":0.85,"effectiveOn":"2026-10-06","sourceKind":"ecb","sourceRef":"ECB euro reference rate 6 Oct 2026"}');
+end $$;
+reset role;
 
 do $m$ begin raise notice 'PDA FX RATES: ALL ASSERTIONS PASSED'; end $m$;
 rollback;

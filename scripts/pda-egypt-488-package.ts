@@ -113,7 +113,7 @@ export const RULES: RuleJson[] = [
   { code: "port_dues", label: "Port dues (foreign, per GRT per call)", basis: "per_gt", rate: 0.35, priority: 10,
     applicability: { requestedServices: ["port_dues"] },
     ...src("d488", "Art. 2 §6-1", "Port dues: 35 cents per GRT (foreign vessels, §6)") },
-  { code: "light_dues", label: "Light dues (foreign, per GRT)", basis: "per_gt", rate: 0.15, priority: 11,
+  { code: "light_dues", label: "Light dues (foreign, per GRT; full rate — may be 10–25 % lower when the call is combined with a Suez Canal transit, Decree 416/2019)", basis: "per_gt", rate: 0.15, priority: 11,
     applicability: { requestedServices: ["port_dues"] },
     ...src("d488", "Art. 2 §6-5", "Light dues 15 cents per GRT. Full rate; the 416/2019 reductions for calls combined with a Suez transit are not applied.") },
   { code: "berthing_dues", label: "Berthing dues (USD 0.02 per GRT per day)", basis: "manual_quote", priority: 12,
@@ -208,7 +208,7 @@ export const MANIFEST = {
     },
   },
   knownLimits: [
-    "Light dues are charged at the full rate; the 416/2019 reductions for calls combined with a Suez transit cannot be entered (manual amounts are non-negative).",
+    "Light dues are charged at the full rate; the 416/2019 reductions for calls combined with a Suez transit (−10 % / −20 %, Suez-only −25 %) are not applied. OWNER WAIVER (8 Oct 2026, C2O-090 B2C-035 P1-3): accepted as a labelled over-estimate; the line label says so.",
     "One tariff set per port (EGALY, EGDAM, EGPSD, EGSOK, …) with the same rules; minimum towage/mooring hours differ by port (towage instructions).",
   ],
 };
