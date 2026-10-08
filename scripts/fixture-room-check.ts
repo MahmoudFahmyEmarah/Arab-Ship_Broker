@@ -19,7 +19,7 @@
  *      idempotency_key and an explicit grant; no internal helper is granted; the
  *      excluded PDA objects appear nowhere in the Fixture migrations
  */
-import { notificationFor, lapseWarning, notificationKey, maskedActorLabel, notificationPayload, NOTIFICATION_EXPIRES_AT } from "../lib/fixture-room/notify-model";
+import { notificationFor, notificationKey, maskedActorLabel, notificationPayload, notificationExpiresAt, deadlineLabel } from "../lib/fixture-room/notify-model";
 import { newSince, termsTouched, lastSeenKey, nextLastSeen } from "../lib/fixture-room/last-seen";
 import fs from "node:fs";
 import path from "node:path";
@@ -288,12 +288,12 @@ const omitted = [
   "supabase/migrations/20260923204000_fixture_room_expiry_sweep.sql",
   "supabase/migrations/20260923205000_fixture_room_notifications.sql",
   "supabase/tests/fixture_room/bodies/expiry.sql",
-  "supabase/tests/fixture_room/bodies/notify.sql",
   "supabase/tests/fixture_room/fixture_expiry_smoke.sql",
-  "supabase/tests/fixture_room/fixture_notify_smoke.sql",
 ];
-ok(omitted.every((p) => !fs.existsSync(path.join(root, p))), "the deferred sweep/projector migrations and suites are physically absent from this release");
-ok(!/2026092320(4000|5000)|\[expiry\]|\[notify\]|\bexpiry\b|\bnotify\b/.test(harnessSh), "the release harness cannot apply or run the deferred sweep/projector");
+// Wave 4 (O2ALL-003): the September projector stays out (20261008100000 replaces it on today's ledger) and so does the
+// expiry sweep (PR-08's clock owns expiry); the notify suite now runs against the new projector
+ok(omitted.every((p) => !fs.existsSync(path.join(root, p))), "the superseded sweep and September projector are physically absent from this release");
+ok(!/2026092320(4000|5000)|\[expiry\]|\bexpiry\b/.test(harnessSh) && /20261008100000_fixture_room_notifications\.sql/.test(harnessSh), "the release harness cannot apply the superseded sweep/projector, and applies the Wave 4 projector");
 ok(!/observe the lapse once|payload->>'proposalId' = v_prev\.id::text/.test(commands), "the released command observes proposal lapse lazily and carries no deferred sweep guard");
 
 // ── Phase 1.1 · design alignment, commit 1 (27 Sep 2026) ───────────────────────
@@ -345,8 +345,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const offer = notificationFor("proposal.submitted", ctx);
   ok(!!offer && offer.importance === "urgent" && offer.audience === "other_side" && offer.deadlineAt === "2026-09-28T12:00:00Z", "an offer with a validity window is urgent, for the other side, with its deadline");
   const all = ["party.invited", "party.accepted", "proposal.submitted", "proposal.lapsed", "term.agreed", "term.reopened", "term.referred", "term.bridge_suggested", "room.fixed_on_subjects", "subject.lifted", "subject.failed", "room.fixed", "recap.published", "room.counterparty_disclosed", "message.posted", "room.closed"] as const;
-  const early = new Date("2026-09-28T11:57:00Z");
-  const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n") + (lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, early)?.body ?? "");
+  const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n");
   ok(!/Secret Owners|MV HIDDEN|9876543|Tasos|\+30 690/.test(texts), "no notification text or link carries an organisation, vessel, IMO or a member's free text, even when the payload holds them (hostile actorLabel ignored)");
   // C2O-010 item 3: the actor label is derived from the governed side, never taken from the caller
   ok(maskedActorLabel({ side: "cargo", isPlatform: false }) === "Charterer side" && maskedActorLabel({ side: "vessel", isPlatform: false }) === "Owner side"
@@ -355,7 +354,8 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(!/actorLabel/.test(read("lib/fixture-room/notify-model.ts").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")), "the model accepts no caller-supplied actor label");
   const pl = notificationPayload(ctx, 7, "proposal.submitted", offer!);
   ok(JSON.stringify(Object.keys(pl).sort()) === JSON.stringify(["deadlineAt", "eventSeq", "eventType", "roomId", "roomRef", "termCode"]) && !/Secret|HIDDEN|9876543|Tasos/.test(JSON.stringify(pl)), "the payload sent to the core is a whitelist, never the source event payload");
-  ok(NOTIFICATION_EXPIRES_AT === null && lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, new Date("2026-09-28T12:00:01Z")) === null, "no expiry is sent, and a delayed run never warns about a window already closed");
+  ok(notificationExpiresAt(notificationFor("proposal.submitted", ctx)!) === "2026-09-28T12:00:00Z" && /valid until 28 Sep 2026 12:00 UTC/.test(notificationFor("proposal.submitted", ctx)!.body) && deadlineLabel("2026-02-30T10:00:00Z") === "for a limited time", "the deadline is the email cut-off and is named in the copy (UTC); a malformed one is never named");
+  ok(!/lapseWarning|lapse-warning/.test(read("lib/fixture-room/notify-model.ts")), "no unscheduled lapse warning remains (C2O-092 P2)");
   // C2O-010 item 1: importance is urgent | normal | info; the email preference decides digest
   const kinds = new Set(all.map((t) => notificationFor(t, ctx)?.importance).filter(Boolean));
   ok([...kinds].every((k) => k === "urgent" || k === "normal" || k === "info"), "importance is only urgent, normal or info (the shared table's check)");
@@ -365,7 +365,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(notificationFor("term.referred", ctx)!.audience === "mediator" && notificationFor("room.fixed", ctx)!.audience === "all", "referrals reach the mediator; outcomes reach everyone");
   ok(notificationFor("term.held", ctx) === null && notificationFor("recap.acknowledged", ctx) === null, "routine bookkeeping events notify no one");
   // C2O-010 item 2: one logical notification per event and recipient
-  ok(notificationKey(42) === "fixture:42" && notificationKey(42, "lapse-warning") === "fixture:42:lapse-warning" && !/in_app|email|channel/.test(read("lib/fixture-room/notify-model.ts").split("export function notificationKey")[1].split("\n}")[0]), "one logical notification per event (the dedupe key names no channel)");
+  ok(notificationKey(42) === "fixture:42" && !/in_app|email|channel/.test(read("lib/fixture-room/notify-model.ts").split("export function notificationKey")[1].split("\n}")[0]), "one logical notification per event (the dedupe key names no channel)");
   // C2O-012 item 2: a subject's title is member free text and never enters a notification
   const hostile = { ...ctx, payload: { seq: 2, title: "Sub details - call Tasos +30 690 000 0000 tasos@seed-owners.test" } };
   const subjTexts = ["subject.lifted", "subject.failed"].map((t) => notificationFor(t as "subject.lifted", hostile)).map((r) => `${r!.title} ${r!.body}`).join(" ");
@@ -588,20 +588,40 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok((race.match(/fn_refresh_matches\(\)/g) ?? []).length === 6
      && /delete from public\.ports[^;]*;\s*set session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);/.test(race)
      && /values \('cargo', '\$C6'[^;]*;\s*set session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);/.test(race)
-     && /open_date = current_date \+ 60[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(4\);/.test(race)
+     && /open_date = current_date \+ 60[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(6\);/.test(race)
      && race.includes("open_date = current_date + 5 where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()")
-     && /status = 'FIXED'[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(4\);/.test(race)
+     && /status = 'FIXED'[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(6\);/.test(race)
      && race.includes("status = 'OPEN' where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()"),
      "the race harness refreshes exactly at cleanup, C6 seed, both invalidations and both restorations");
+  {
+    const lib = read("supabase/tests/fixture_room/race_lib.sh");
+    ok(/FIXTURE_RACE_DISPOSABLE:-\}" = "\$db"/.test(lib) && /asb_fixture\|asb_e2e\|asb_rc\|asb_w\[0-9a-z\]\*\|asb_race_\[0-9a-z_\]\*\)/.test(lib)
+       && /rezfejaxbmdzkslrrefr/.test(lib) && /pg_try_advisory_lock\(hashtextextended\('asb:fixture-race-gate', 0\)\)/.test(lib)
+       && /trap race_teardown EXIT/.test(lib) && /pg_terminate_backend/.test(lib) && /RESIDUE:/.test(lib) && /mktemp -d/.test(lib)
+       && /race_cleanup_notifications \|\| \{ echo "\$1: CLEANUP FAILED \(notifications\)"/.test(lib) && /fixture notification\(s\) about removed rooms or recipients survived/.test(lib),
+       "race_lib: allowlisted + confirmed disposable target, hosted refused, one run per database, EXIT/INT/TERM teardown, zero-residue proof");
+  }
+  // the races wait for real lock state: every competitor waits in the database for its holder's sleep (no fixed delays)
+  for (const f of ["fixture_race_two_sessions.sh", "fixture_recreate_race.sh"]) {
+    const t = read(`supabase/tests/fixture_room/${f}`);
+    // C2O-095: no default target, the shared safety harness, fatal cleanup, run-scoped logs, a proven end
+    ok(!/-d postgres\}"/.test(t) && /\. "\$\(dirname "\$0"\)\/race_lib\.sh"\nrace_init "\$\{1:-\}"/.test(t) && /\{ cleanup && race_cleanup_notifications; \} \|\| exit 1/.test(t)
+       && !/ON_ERROR_STOP=0 <<SQL >\/dev\/null 2>&1 \|\| true/.test(t) && !/\/tmp\/fx/.test(t) && /race_finish "/.test(t) && !/ALL ASSERTIONS PASSED/.test(t),
+       `${f}: explicit allowlisted target, fatal cleanup, run-scoped logs, PASSED only from race_finish`);
+    ok(!/^sleep [0-9.]+$/m.test(t) && (t.match(/set application_name = 'fx\w+';/g) ?? []).length === (t.match(/pg_stat_clear_snapshot\(\)/g) ?? []).length && /RACE_SETUP/.test(t), `${f}: no fixed shell delay; each holder is awaited in the database`);
+  }
 
   const normalize = (value: string) => value.replace(/\r\n/g, "\n");
   const shared = normalize(seed).trimEnd();
-  const smokeNames = ["state", "rls", "masking", "idempotency", "immutability", "snapshot", "candidates", "liftall", "handles", "enforcement"];
-  ok(smokeNames.every((name) => {
+  // C2O-097 #5: the suite list comes from the harness itself, so every suite it regenerates is covered (no fixed list)
+  const smokeNames = (read("scripts/fixture-room-harness.sh").match(/^for name in ([a-z ]+); do$/m)?.[1] ?? "").trim().split(/\s+/);
+  const stale = smokeNames.filter((name) => {
     const body = normalize(read(`supabase/tests/fixture_room/bodies/${name}.sql`)).trimEnd();
     const generated = normalize(read(`supabase/tests/fixture_room/fixture_${name}_smoke.sql`));
-    return generated.includes(`${shared}\n\n${body}`);
-  }), "all ten generated Fixture smokes contain the exact current shared seed and authoritative body");
+    return !generated.includes(`${shared}\n\n${body}`);
+  });
+  ok(smokeNames.length >= 13 && ["bridge", "lineage", "notify"].every((n) => smokeNames.includes(n)) && stale.length === 0,
+    `every generated Fixture smoke the harness runs (${smokeNames.length}) contains the exact current shared seed and authoritative body${stale.length ? ` — stale: ${stale.join(", ")}` : ""}`);
 }
 
 // -- PR-07 / PR-08 . enforcement (20261006100000) --
@@ -689,14 +709,14 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(wrap(bd) === wrap(read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql")), "the DOWN restores the 208000 room read verbatim");
   ok(/drop function if exists public\.suggest_fixture_bridge\(uuid, uuid, jsonb, text, integer, text\);/.test(bd) && /drop function if exists public\.fn_fixture_live_bridges\(uuid\);/.test(bd) && /FX_DOWN_REFUSED/.test(bd) && !/the wider event CHECK stays/.test(bd) && bd.indexOf("FX_DOWN_REFUSED") < bd.indexOf("drop function") && /set constraints all immediate;/.test(bd), "C2O-089: the DOWN refuses while suggestion events exist (before dropping anything), never deletes ledger rows, fires deferred checks first");
   const h = read("scripts/fixture-room-harness.sh");
-  ok(/20261007400000_fixture_bridge_suggestion\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" )?"supabase\/rollback\/20261007_fixture_bridge_suggestion_down\.sql" /.test(h) && /\[bridge\]="FIXTURE BRIDGE SMOKE"/.test(h) && / enforcement bridge(?: lineage)?; do/.test(h), "the harness applies the bridge, runs its suite and reverses it first");
+  ok(/20261007400000_fixture_bridge_suggestion\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" )?(?:"supabase\/rollback\/20261008052000_shared_notification_semantics_down\.sql" "supabase\/rollback\/20261008050000_shared_fixture_services_down\.sql" )?(?:"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" )?"supabase\/rollback\/20261007_fixture_bridge_suggestion_down\.sql" /.test(h) && /\[bridge\]="FIXTURE BRIDGE SMOKE"/.test(h) && / enforcement bridge(?: lineage)?(?: notify)?; do/.test(h), "the harness applies the bridge, runs its suite and reverses it first");
   const tr = read("components/fixture-room/TermRow.tsx");
   ok(/view\.bridges\?\.find\(\(b\) => b\.termId === term\.id\)/.test(tr) && /onClick=\{\(\) => submit\(\{ value: bridge\.value, expiresInMinutes: null, comment: "Adopted the mediator's suggestion\." \}\)\}/.test(tr), "either side adopts the suggestion through its own bid / offer (submit_fixture_proposal)");
   ok(/run\("bridge", \(base\) => \(\{ \.\.\.base, termId: term\.id, value: r\.value, comment: bridgeComment\.trim\(\) \|\| null \}\)\)/.test(tr) && /data-testid=\{`suggest-\$\{term\.code\}`\}/.test(tr), "the mediator console sends the suggestion from its own seat (no acting-for)");
   ok(/bridge: suggestFixtureBridgeAction/.test(read("components/fixture-room/FixtureRoomClient.tsx")) && /parse\(suggestBridgeSchema, input\)/.test(read("app/(dashboard)/dashboard/fixture-room/actions.ts")), "the room's command runner reaches the validated server action");
   ok(commandAllowedIn("suggest_fixture_bridge", "negotiating") && commandAllowedIn("suggest_fixture_bridge", "invited") && !commandAllowedIn("suggest_fixture_bridge", "on_subjects") && !commandAllowedIn("suggest_fixture_bridge", "fixed"), "suggestions only while the terms are negotiated");
   const ctx = { roomId: "00000000-0000-4000-8000-000000000001", roomRef: "FX-2026-00001", actor: { side: "mediator" as const, isPlatform: true },
-    payload: { termLabel: "Freight & terms", termCode: "freight", displayValue: "$26.25/MT", comment: "call Tasos on +30 690" } };
+    payload: { termLabel: "Freight & terms", termCode: "freight", valueKind: "money_per_mt", displayValue: "$26.25/MT", comment: "call Tasos on +30 690" } };
   const n = notificationFor("term.bridge_suggested", ctx);
   ok(!!n && n.audience === "both_sides" && n.importance === "normal" && /\$26\.25\/MT/.test(n.body) && !/Tasos/.test(`${n.title} ${n.body}`), "both sides are told of the figure; the mediator's free-text comment stays in the room");
   // standard subjects
@@ -729,6 +749,47 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const released = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").split("create or replace function public.recreate_fixture_room(")[1].split("end $$;")[0];
   ok(down.includes(released) && /FX_DOWN_REFUSED/.test(down) && down.indexOf("FX_DOWN_REFUSED") < down.indexOf("create or replace function") && /drop index if exists public\.fixture_rooms_one_successor_uq/.test(down) && !/'room\.continued_from'/.test(down.split("FX_DOWN_REFUSED")[1]), "the DOWN refuses with lineage events, else restores the released recreate verbatim, drops the index and narrows the CHECK");
   const h = read("scripts/fixture-room-harness.sh");
-  ok(/20261007500000_fixture_room_lineage\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" /.test(h) && /\[lineage\]="FIXTURE LINEAGE SMOKE"/.test(h), "the harness applies the lineage migration, runs its suite and reverses it first");
+  ok(/20261007500000_fixture_room_lineage\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" )?(?:"supabase\/rollback\/20261008052000_shared_notification_semantics_down\.sql" "supabase\/rollback\/20261008050000_shared_fixture_services_down\.sql" )?"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" /.test(h) && /\[lineage\]="FIXTURE LINEAGE SMOKE"/.test(h), "the harness applies the lineage migration, runs its suite and reverses it first");
+}
+
+// Wave 4 · the notification projector (O2ALL-003: in-app and email now)
+{
+  const nm = read("supabase/migrations/20261008100000_fixture_room_notifications.sql");
+  const rule = nm.split("create or replace function public.fn_fixture_notify_rule(")[1].split("end $$;")[0];
+  const model = read("lib/fixture-room/notify-model.ts");
+  const modelTypes = [...model.split("export function notificationFor")[1].split("\n}\n")[0].matchAll(/case "([a-z_.]+)":/g)].map((m) => m[1]).sort();
+  const sqlTypes = [...rule.matchAll(/when '([a-z_.]+)' then/g)].map((m) => m[1]).filter((t) => t.includes(".")).sort();
+  ok(JSON.stringify(modelTypes) === JSON.stringify(sqlTypes) && modelTypes.length >= 18, `the SQL rule handles exactly the event types the audited model does (${modelTypes.length})`);
+  ok(!/p->>'(comment|body|title|note|description|label|reason)'\s*(\|\||,\s*'')/.test(rule.replace(/p->>'reason' in \(/g, "")) && !/display_label/.test(nm), "no free-text payload field and no stored display label reaches a message");
+  ok(/'Arab ShipBroker' when ap\.side = 'cargo' then 'Charterer side'/.test(nm) && /when 'vessel' then 'Owner side'/.test(nm.replace(/ap\.side = /g, "")), "the actor is named only by the three side-derived labels");
+  ok(/continue when v_recipient = e\.actor_user_id/.test(nm) && /perform public\.fn_fixture_notify_event\(new\.id\);\s*exception when others then/.test(nm) && /'pending_core'/.test(nm) && /status = 'failed', attempts = public\.fixture_notification_projections\.attempts \+ 1/.test(nm), "nobody hears of their own move; a failed or core-less projection is recorded (never lost) and never breaks a command");
+  ok(/'fixture:' \|\| e\.id::text/.test(nm) && /true, null::timestamptz,\s*-- C2O-092 #2[^\n]*\n\s*nullif\(v_rule->>'deadlineAt', ''\)::timestamptz\);/.test(nm), "one idempotent enqueue per event and recipient, email requested, the offer's validity as the email cutoff");
+  ok(/revoke all on function public\.fn_fixture_notify_rule\(text, jsonb, text, text, uuid\) from public, anon, authenticated;/.test(nm) && /revoke all on function public\.fn_fixture_notify_recipients/.test(nm) && /revoke all on function public\.fn_fixture_notify_project\(\)/.test(nm), "every projector function is private");
+  const down = read("supabase/rollback/20261008100000_fixture_room_notifications_down.sql");
+  ok(/drop trigger if exists trg_fixture_events_notify/.test(down) && (down.match(/drop function if exists public\.fn_fixture_notify_/g) ?? []).length === 8 && /drop table if exists public\.fixture_notification_projections/.test(down) && down.indexOf("NTF_DOWN_REFUSED") < down.indexOf("drop trigger"), "the DOWN refuses while events wait for notifications, then removes the trigger, the ledger and the eight functions");
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20261008100000_fixture_room_notifications\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" /.test(h) && /\[notify\]="FIXTURE NOTIFY SMOKE"/.test(h), "the harness applies the projector, runs its suite and reverses it first");
+  ok(/fn_fixture_notify_rule\(/.test(read("scripts/fixture-notify-parity.ts")), "a parity check runs the SQL rule against the model on the same events");
+}
+
+// C2O-092 #8: the core is in the real Fixture chain, monotonic after the released migrations, before the projector
+{
+  const h = read("scripts/fixture-room-harness.sh");
+  const order = ["20261007500000_fixture_room_lineage.sql", "20261008050000_shared_notifications.sql", "20261008052000_shared_notification_semantics.sql", "20261008100000_fixture_room_notifications.sql"].map((f) => h.indexOf(f));
+  ok(order.every((i) => i > 0) && order.every((v, i, a) => i === 0 || v > a[i - 1]), "the Fixture harness applies the shared core before the projector, in monotonic order");
+  ok(!fs.existsSync(path.join(root, "supabase/migrations/20260923350000_shared_notifications.sql")) && !fs.existsSync(path.join(root, "supabase/migrations/20260923352000_shared_notification_semantics.sql")), "no back-dated core migration remains");
+  const baseDown = read("supabase/rollback/20261008050000_shared_fixture_services_down.sql");
+  ok(/NTF_DOWN_REFUSED/.test(baseDown) && /history-exported:/.test(baseDown) && baseDown.indexOf("NTF_DOWN_REFUSED") < baseDown.indexOf("drop table"), "the core's DOWN refuses to destroy notification history unless the export is confirmed");
+}
+
+// C2O-092 #1/#3/#4: outbound values, relayed sides, durable projection
+{
+  const nm = read("supabase/migrations/20261008100000_fixture_room_notifications.sql");
+  const model = read("lib/fixture-room/notify-model.ts");
+  ok(/v text := public\.fn_fixture_notify_outbound_value\(p\);/.test(nm) && !/coalesce\(p->>'displayValue', ''\);/.test(nm.split("fn_fixture_notify_rule(")[1] ?? ""), "every figure in a message goes through the outbound filter");
+  ok((model.match(/outboundValue\(p\)/g) ?? []).length >= 4 && !/\$\{str\(p\.displayValue\)\}/.test(model), "the model's messages use only the outbound value");
+  ok(/x\.participation_mode = 'relayed'/.test(nm) && /v_admins := true;/.test(nm), "a relayed side's notifications reach the mediator desk");
+  ok(/create or replace function public\.fn_fixture_notify_reconcile/.test(nm) && /grant execute on function public\.fn_fixture_notify_reconcile\(integer\) to service_role;/.test(nm) && /fn_fixture_notify_health/.test(nm), "recorded projections are replayed by a service-only reconcile, with an observable health read");
+  ok(/when 'room\.window_extended' then/.test(nm) && /case "room\.window_extended":/.test(model), "the window extension is notified on both sides");
 }
 

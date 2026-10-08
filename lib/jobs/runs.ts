@@ -31,6 +31,7 @@ export type JobName =
   | "fx-ecb"
   | "market-insights"
   | "groupmail-dispatch"
+  | "fixture-notifications"
   | "email-sync"
   | "whatsapp-webhook"
   | "whatsapp-sweep"

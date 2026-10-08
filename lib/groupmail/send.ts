@@ -15,14 +15,24 @@ export interface SmtpAuth {
   fromName: string;
 }
 
-export function makeTransport(a: SmtpAuth) {
+export interface SmtpTransportTimeouts {
+  connectionTimeout?: number;
+  greetingTimeout?: number;
+  socketTimeout?: number;
+}
+
+export function makeTransport(a: SmtpAuth, timeouts: SmtpTransportTimeouts = {}) {
   return nodemailer.createTransport({
     host: a.host,
     port: a.port,
     secure: a.port === 465,
+    // Port 465 is implicit TLS. Every other configured SMTP port must upgrade
+    // with STARTTLS rather than exposing credentials or notification content.
+    requireTLS: a.port !== 465,
     auth: { user: a.user, pass: a.password },
-    connectionTimeout: 20_000,
-    socketTimeout: 30_000,
+    connectionTimeout: timeouts.connectionTimeout ?? 20_000,
+    greetingTimeout: timeouts.greetingTimeout ?? 15_000,
+    socketTimeout: timeouts.socketTimeout ?? 30_000,
   });
 }
 
