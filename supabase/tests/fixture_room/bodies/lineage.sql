@@ -56,3 +56,30 @@ begin
   if (select count(*) from public.fixture_rooms where supersedes_room_id = v_room) <> 1 then raise exception 'L2: exactly one successor'; end if;
   raise notice 'L2 ok: replay returns the successor at its current version; another predecessor and a second successor are refused with zero writes';
 end $$;
+
+-- ── L3 · C2O-094: the replay is bound to the complete request and returns the lineage event ─
+do $$
+declare w jsonb; v_room uuid; v_new uuid; e text; n_rooms int; n_events int; ev public.fixture_events;
+begin
+  perform pg_temp.fx_owner();
+  select x.supersedes_room_id, x.id into v_room, v_new from public.fixture_rooms x where x.create_idempotency_key = 'lin-recreate-1';
+  select * into ev from public.fixture_events where room_id = v_new and type = 'room.continued_from';
+  if ev.idempotency_key is distinct from 'lin-recreate-1' or ev.request_hash is null or ev.result is null then
+    raise exception 'L3: the lineage event carries the key, the request hash and the result'; end if;
+  select count(*), (select count(*) from public.fixture_events) into n_rooms, n_events from public.fixture_rooms;
+  perform pg_temp.fx_as('u_ch1');
+  w := public.recreate_fixture_room(v_room, pg_temp.fx_terms(), 'lin-recreate-1', '{}'::jsonb);
+  if (w->>'eventId')::bigint is distinct from ev.id or (w->>'version')::int is distinct from ev.seq or w->'data'->>'roomId' is distinct from v_new::text then
+    raise exception 'L3: a replay returns the lineage event and its version: %', w; end if;
+  -- the same key with other terms, or other options, is refused — never replayed
+  e := pg_temp.fx_err(format('select public.recreate_fixture_room(%L, %L::jsonb, %L, %L::jsonb)', v_room,
+         (pg_temp.fx_terms() - 0)::text, 'lin-recreate-1', '{}'));
+  if e <> 'FX_IDEMPOTENCY_MISMATCH' then raise exception 'L3: changed terms must be refused, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.recreate_fixture_room(%L, %L::jsonb, %L, %L::jsonb)', v_room,
+         pg_temp.fx_terms()::text, 'lin-recreate-1', '{"note":"other"}'));
+  if e <> 'FX_IDEMPOTENCY_MISMATCH' then raise exception 'L3: changed options must be refused, got %', e; end if;
+  perform pg_temp.fx_owner();
+  if (select count(*) from public.fixture_rooms) <> n_rooms or (select count(*) from public.fixture_events) <> n_events then
+    raise exception 'L3: a replay or a refusal must write nothing'; end if;
+  raise notice 'L3 ok: the replay returns the lineage event; changed terms or options under the same key are refused with zero writes';
+end $$;

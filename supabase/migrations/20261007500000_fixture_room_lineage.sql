@@ -9,7 +9,10 @@
 --   * allows one successor per predecessor (a partial unique index; FX_STATE names the existing successor);
 --   * records the lineage through the ledger: supersedes_room_id is set on the new room together with a dedicated
 --     immutable event room.continued_from (version + 1), and the returned version is the room's final version;
---   * every refusal happens before any write.
+--   * every refusal happens before any write;
+--   * (C2O-094) the complete request — predecessor, terms, options — is hashed onto room.continued_from, which
+--     carries the key and the result: a replay returns that event and its version; changed arguments are refused
+--     (FX_IDEMPOTENCY_MISMATCH); (actor, key) and the predecessor are locked first, so identical calls serialise.
 --
 -- Idempotent. DOWN: supabase/rollback/20261007_fixture_room_lineage_down.sql
 -- ════════════════════════════════════════════════════════════════════════
@@ -44,25 +47,41 @@ create unique index if not exists fixture_rooms_one_successor_uq
   on public.fixture_rooms (supersedes_room_id) where supersedes_room_id is not null;
 
 -- ── 3 · recreate ────────────────────────────────────────────────────────────
+-- C2O-094: the complete request (predecessor, terms, options) is hashed onto room.continued_from, which carries the
+-- key and the result — that is the event a replay checks and returns; the predecessor row and (actor, key) are
+-- locked before any decision, so two identical calls serialise and the second replays instead of failing.
 create or replace function public.recreate_fixture_room(
   p_room_id uuid, p_terms jsonb, p_idempotency_key text, p_options jsonb default '{}'::jsonb)
  returns jsonb language plpgsql volatile security definer set search_path to 'public'
 as $$
 declare v_actor uuid := public.fn_fixture_actor(); r public.fixture_rooms; v jsonb; v_room public.fixture_rooms;
-        v_prior public.fixture_rooms; v_next public.fixture_rooms; v_ev jsonb;
+        v_prior public.fixture_rooms; v_next public.fixture_rooms; v_ev jsonb; v_hash text; e public.fixture_events;
 begin
   select * into r from public.fixture_rooms x where x.id = p_room_id;
   if r.id is null or not public.fn_can_access_fixture(r.id) then
     raise exception 'FX_NOT_FOUND: room % not found', p_room_id using errcode = 'P0002';
   end if;
-  -- idempotency bound to the predecessor: a key this actor already used is a replay only of THIS recreate
+  if p_idempotency_key is null or btrim(p_idempotency_key) = '' or length(p_idempotency_key) > 200 then
+    raise exception 'FX_VALIDATION: idempotency_key is required (1–200 characters)' using errcode = '22023';
+  end if;
+  v_hash := md5(jsonb_build_object('cmd', 'recreate_fixture_room', 'predecessor', r.id,
+                                   'terms', p_terms, 'options', coalesce(p_options, '{}'::jsonb))::text);
+  -- serialise: the same (actor, key) anywhere, then this predecessor; later reads see what the winner committed
+  perform pg_advisory_xact_lock(hashtextextended('fixture-recreate:' || v_actor::text || ':' || p_idempotency_key, 0));
+  perform 1 from public.fixture_rooms x where x.id = r.id for update;
+  select * into r from public.fixture_rooms x where x.id = p_room_id;
+  -- idempotency bound to the complete request: a key this actor already used replays only THIS recreate
   select * into v_prior from public.fixture_rooms x where x.created_by_user_id = v_actor and x.create_idempotency_key = p_idempotency_key;
   if v_prior.id is not null then
     if v_prior.supersedes_room_id is distinct from r.id or v_prior.id = r.id then
       raise exception 'FX_IDEMPOTENCY: this key already opened another room; use a new key to start this negotiation again' using errcode = '22023';
     end if;
-    return jsonb_build_object('ok', true, 'version', v_prior.version, 'eventId', null, 'replayed', true,
-                              'data', jsonb_build_object('roomId', v_prior.id, 'ref', v_prior.ref, 'status', v_prior.status));
+    select * into e from public.fixture_events x
+     where x.room_id = v_prior.id and x.type = 'room.continued_from' and x.idempotency_key = p_idempotency_key;
+    if e.id is null or e.request_hash is distinct from v_hash then
+      raise exception 'FX_IDEMPOTENCY_MISMATCH: idempotency key % was already used with different arguments', p_idempotency_key using errcode = 'P0001';
+    end if;
+    return jsonb_build_object('ok', true, 'version', e.seq, 'eventId', e.id, 'replayed', true, 'data', coalesce(e.result, '{}'::jsonb));
   end if;
   if not public.fn_fixture_terminal(r.status) then
     raise exception 'FX_STATE: only a closed negotiation can be started again (this one is %)', replace(r.status, '_', ' ') using errcode = '55000';
@@ -79,13 +98,13 @@ begin
     raise exception 'FX_STATE: the negotiation could not be started again on the same pairing' using errcode = '55000';
   end if;
   update public.fixture_rooms set supersedes_room_id = r.id where id = v_room.id;
+  -- the result-bearing event of this command: the key, the full request hash and the envelope's data
   v_ev := public.fn_fixture_event(v_room.id, 'room.continued_from', v_actor, v_room.created_by_party_id, null, false,
-    'recreate_fixture_room', null, null,
+    'recreate_fixture_room', p_idempotency_key, v_hash,
     jsonb_build_object('previousRoomId', r.id, 'previousRef', r.ref, 'previousStatus', r.status),
-    jsonb_build_object('roomId', v_room.id, 'previousRoomId', r.id));
-  select * into v_room from public.fixture_rooms x where x.id = v_room.id;
-  return jsonb_build_object('ok', true, 'version', v_room.version, 'eventId', v->'eventId', 'replayed', false,
-                            'data', jsonb_build_object('roomId', v_room.id, 'ref', v_room.ref, 'status', v_room.status));
+    jsonb_build_object('roomId', v_room.id, 'ref', v_room.ref, 'status', v_room.status, 'previousRoomId', r.id));
+  return jsonb_build_object('ok', true, 'version', (v_ev->>'version')::int, 'eventId', (v_ev->>'eventId')::bigint, 'replayed', false,
+                            'data', v_ev->'data');
 end $$;
 revoke all on function public.recreate_fixture_room(uuid, jsonb, text, jsonb) from public, anon;
 grant execute on function public.recreate_fixture_room(uuid, jsonb, text, jsonb) to authenticated, service_role;
