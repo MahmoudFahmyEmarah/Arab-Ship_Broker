@@ -1,11 +1,11 @@
 -- PDA source guard (Codex C2O-089 B2C-042 P1; forward fix because staging carries 20261007330000).
 --  1. Registration (pda_register_tariff_source) and attestation (pda_attest_tariff_source) are the only write paths
---     for tariff_sources: service_role keeps SELECT but loses direct INSERT/UPDATE/DELETE/TRUNCATE, so no service
+--     for tariff_sources: service_role keeps SELECT only (REVOKE ALL, then GRANT SELECT; C2O-094 P2), so no service
 --     path can raise, lower or relabel a source's authority, or change its evidence, without the immutable
 --     attestation row. Both commands are SECURITY DEFINER and keep working.
 --  2. Publication rechecks the authority of EVERY source cited by the version's rules, as submission already does
 --     (it rechecked only the primary source).
-revoke insert, update, delete, truncate on table public.tariff_sources from service_role;
+revoke all on table public.tariff_sources from service_role;
 grant select on table public.tariff_sources to service_role;
 
 create or replace function public.pda_publish_tariff_version(p_actor uuid, p_version_id uuid)

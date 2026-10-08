@@ -90,7 +90,9 @@ function numberFromDisplay(value: string): number | null {
 async function activeFlagRegistry(
   supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
 ): Promise<FlagStateRow[] | null> {
-  const { data, error } = await supabase.from("flag_states").select("iso2, name, aliases, is_active").eq("is_active", true);
+  // The whole registry, inactive rows included: an exact inactive name must stay unknown (C2O-094), not fall
+  // through to another register's alias.
+  const { data, error } = await supabase.from("flag_states").select("iso2, name, aliases, is_active");
   return error || !data ? null : (data as FlagStateRow[]);
 }
 

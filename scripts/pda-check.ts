@@ -405,6 +405,19 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(resolveDeclaredFlag(registry, "OR"), null, "declared ISO of an inactive register");
   assert.equal(resolveDeclaredFlag(registry, null), null);
   assert.equal(resolveDeclaredFlag(null, "PA"), null, "registry read failure → unknown");
+  // C2O-094: an exact canonical name never falls through to another register's alias
+  const collision = [
+    { name: "Atlantis", iso2: "AT", aliases: [], is_active: false },
+    { name: "Neptune", iso2: "NP", aliases: ["Atlantis"], is_active: true },
+    { name: "Oceania", iso2: "O1", aliases: [], is_active: true },
+    { name: "Pacifica", iso2: "PC", aliases: ["Oceania"], is_active: true },
+  ];
+  assert.equal(resolveFlagName(collision, "Atlantis"), null, "inactive exact canonical → unknown, not the active alias NP");
+  assert.equal(resolveFlagName(collision, "Oceania"), null, "malformed exact canonical → unknown, not the alias PC");
+  assert.equal(resolveFlagName(collision, "Neptune"), "NP");
+  assert.equal(resolveFlagName([{ name: "Gamma", iso2: "GA", aliases: ["Delta"], is_active: false }, { name: "Beta", iso2: "BE", aliases: ["Delta"], is_active: true }], "Delta"), null,
+    "an alias also carried by an inactive register is not trusted");
+  assert.equal(resolveFlagName([{ name: "Panama", iso2: "PA", aliases: [] }], "Panama"), null, "a row without is_active is never trusted");
   // the engine never prices an unresolved flag as foreign
   const foreignOnly: PdaTariffVersion = { ...version, portLocode: "EGALY", rules: [{ ...version.rules[0]!, applicability: { flagTreatments: ["foreign"] } }] };
   const unresolved = calculatePda({ ...request, portLocode: "EGALY", vessel: { ...request.vessel, flagState: resolveDeclaredFlag(registry, "ZZ") } }, foreignOnly);
