@@ -14,16 +14,16 @@
 #
 # Timing: each in-flight session names itself (application_name) and holds its locks inside a pg_sleep; its
 # competitor first waits INSIDE the database until that session is sleeping (refreshing the per-transaction
-# pg_stat_activity snapshot on every pass; RACE_SETUP if it never gets there) (refreshing the per-transaction
 # pg_stat_activity snapshot on every pass; RACE_SETUP if it never gets there) — never a fixed shell delay, which a
 # slow docker exec or candidate lookup on a loaded machine outruns.
 #
-# Default psql: docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres
-# (the local disposable database). Run it ONLY against a disposable database:
-# the sessions COMMIT (a race cannot be rolled back) and the seed rows are
-# removed afterwards.
+# Target (C2O-095, race_lib.sh): there is NO default. Pass the psql command of a disposable database and confirm it:
+#   FIXTURE_RACE_DISPOSABLE=asb_fixture <script> "docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_fixture"
+# The database must be allowlisted (asb_fixture, asb_e2e, asb_rc, asb_w*, asb_race_*); hosted hosts are refused. The
+# sessions COMMIT; one run per database (advisory gate); cleanup is fatal and zero residue is proven before PASSED.
 set -uo pipefail
-PSQL="${1:-docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres}"
+. "$(dirname "$0")/race_lib.sh"
+race_init "${1:-}"
 cd "$(dirname "$0")/../../.."
 SEED=supabase/tests/fixture_room/seed_fixture_shape.sql
 U_CH1=00000000-0000-4000-8000-0000000000a1
@@ -43,7 +43,7 @@ TERMS='[{"code":"cargo_grade","label":"Cargo & grade","category":"cargo","sortOr
 
 # ── clean slate ─────────────────────────────────────────────────────────────
 cleanup() {
-  $PSQL -q -v ON_ERROR_STOP=0 <<SQL >/dev/null 2>&1 || true
+  $PSQL -1 -q -X -v ON_ERROR_STOP=1 <<SQL >"$LOGDIR/cleanup.log" 2>&1 || { echo "CLEANUP FAILED:" >&2; cat "$LOGDIR/cleanup.log" >&2; return 1; }
 set session_replication_role = replica;
 delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5', '$C6') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
 delete from public.fixture_access_log where user_id in (select id from public.users where email like '%@fixture.test');
@@ -71,7 +71,7 @@ set session_replication_role = origin;
 select public.fn_refresh_matches();
 SQL
 }
-cleanup
+cleanup || exit 1
 { echo 'begin;'; cat "$SEED"; echo 'commit;'; } | $PSQL -q -v ON_ERROR_STOP=1 > /dev/null || { echo "seed failed"; exit 1; }
 # c6: a grain cargo of the charterer organisation that both the named hull (a1) and the TBN hull (a3) match
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /dev/null || { echo "c6 seed failed"; cleanup; exit 1; }
@@ -100,7 +100,7 @@ VER=$(q "select version from public.fixture_rooms where id = '$ROOM'")
 echo "room $ROOM at version $VER"
 
 # ── race 1: two proposals from the same expected_version ────────────────────
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_a.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_a.log 2>&1 &
 set application_name = 'fxrace_a';
 $(claims $U_CH1)
 begin;
@@ -109,8 +109,8 @@ select pg_sleep(6);
 commit;
 SQL
 PID_A=$!
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_b.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_a' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_a never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_a holds its locks
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_b.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_a' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_a never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_a holds its locks
 $(claims $U_CH1)
 select public.submit_fixture_proposal('$ROOM', '$TERM', '{"num": 23}'::jsonb, 'session B', false, null, $VER, 'race-bid-b');
 SQL
@@ -123,13 +123,13 @@ ok "$(q "select count(*) from public.fixture_events where room_id = '$ROOM' and 
 ok "$(q "select count(*) from public.fixture_proposals where room_id = '$ROOM'")" "1" "exactly one proposal row"
 ok "$(q "select version from public.fixture_rooms where id = '$ROOM'")" "$((VER + 1))" "the room advanced by exactly one version"
 ok "$(q "select comment from public.fixture_proposals where room_id = '$ROOM'")" "session A" "the first session's proposal is the one that landed"
-ok "$(grep -c 'FX_VERSION_CONFLICT' /tmp/fxrace_b.log)" "1" "session B was refused with FX_VERSION_CONFLICT"
-ok "$(grep -c 'ERROR' /tmp/fxrace_a.log)" "0" "session A saw no error"
+ok "$(grep -c 'FX_VERSION_CONFLICT' $LOGDIR/fxrace_b.log)" "1" "session B was refused with FX_VERSION_CONFLICT"
+ok "$(grep -c 'ERROR' $LOGDIR/fxrace_a.log)" "0" "session A saw no error"
 
 # ── race 2: two handles for the same pairing, two sessions (C2O-013) ────────
 # the owner matches its position a1 against the admin-owned cargo c3 twice: two
 # different candidate keys for one pair; one room wins, the other gets FX_CONFLICT
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_c.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_c.log 2>&1 &
 set application_name = 'fxrace_c';
 $(claims $U_OW1)
 begin;
@@ -138,17 +138,17 @@ select pg_sleep(6);
 commit;
 SQL
 PID_C=$!
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_d.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_c' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_c never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_c holds its locks
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_d.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_c' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_c never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_c holds its locks
 $(claims $U_OW1)
 select public.create_fixture_room_from_candidate((select (x->>'candidateKey')::uuid from jsonb_array_elements(public.list_fixture_match_candidates('vessel', '$A1')) x where x->>'ref' = 'FXC-003'), '$TERMS'::jsonb, 'race-create-d', '{}'::jsonb);
 SQL
 PID_D=$!
 wait $PID_C; wait $PID_D
 ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C3' and vessel_availability_id = '$A1'")" "1" "exactly one room for the raced pairing (two handles)"
-ok "$(grep -c 'FX_CONFLICT' /tmp/fxrace_d.log)" "1" "the second handle was refused with FX_CONFLICT"
+ok "$(grep -c 'FX_CONFLICT' $LOGDIR/fxrace_d.log)" "1" "the second handle was refused with FX_CONFLICT"
 WINNER=$(q "select id from public.fixture_rooms where cargo_listing_id = '$C3' and vessel_availability_id = '$A1'")
-ok "$(grep -c "FX_CONFLICT: room $WINNER" /tmp/fxrace_d.log)" "1" "the loser's conflict names the winning room (the builder opens it)"
+ok "$(grep -c "FX_CONFLICT: room $WINNER" $LOGDIR/fxrace_d.log)" "1" "the loser's conflict names the winning room (the builder opens it)"
 
 # ── race 3: listing update vs create (C2O-014 item 4, the TOCTOU window) ────
 # free the C1/A1 pairing: close race 1's room
@@ -158,7 +158,7 @@ select public.close_fixture_room('$ROOM', 'withdrawn', null, (select version fro
 SQL
 # 3a · the update is in flight first: the create waits on the locked position, then sees it
 #      no longer matches and refuses
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_e.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_e.log 2>&1 &
 set application_name = 'fxrace_e';
 begin;
 set local session_replication_role = replica;
@@ -169,18 +169,18 @@ select pg_sleep(6);
 commit;
 SQL
 PID_E=$!
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_f.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_e' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_e never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_e holds its locks
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_f.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_e' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_e never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_e holds its locks
 $(claims $U_CH1)
 select public.create_fixture_room_from_candidate((select (x->>'candidateKey')::uuid from jsonb_array_elements(public.list_fixture_match_candidates('cargo', '$C1')) x where x->>'name' = 'SEED VESSEL ONE'), '$TERMS'::jsonb, 'race-toctou-a', '{}'::jsonb);
 SQL
 PID_F=$!
 wait $PID_E; wait $PID_F
-ok "$(grep -c 'no longer matches' /tmp/fxrace_f.log)" "1" "a create racing an in-flight listing update waits, then refuses the invalid pair"
+ok "$(grep -c 'no longer matches' $LOGDIR/fxrace_f.log)" "1" "a create racing an in-flight listing update waits, then refuses the invalid pair"
 ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C1' and vessel_availability_id = '$A1' and status not in ('withdrawn', 'failed', 'expired')")" "0" "no room was opened on the invalidated pair"
 q "set session_replication_role = replica; update public.vessel_availability set open_date = current_date + 5 where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()" > /dev/null
 # 3b · the create is in flight first: the listing update waits until the room exists
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_g.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_g.log 2>&1 &
 set application_name = 'fxrace_g';
 $(claims $U_CH1)
 begin;
@@ -189,16 +189,16 @@ select pg_sleep(6);
 commit;
 SQL
 PID_G=$!
-$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_h.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_g' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_g never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_g holds its locks
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrace_h.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_g' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_g never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_g holds its locks
 set lock_timeout = '1s';
 set session_replication_role = replica;
 update public.vessel_availability set open_date = current_date + 60 where id = '$A1';
 SQL
 PID_H=$!
 wait $PID_G; wait $PID_H
-ok "$(grep -c 'lock timeout' /tmp/fxrace_h.log)" "1" "a listing update racing an in-flight create waits on the locked position (lock timeout after 1 s)"
-ok "$(grep -c 'ERROR' /tmp/fxrace_g.log)" "0" "the in-flight create completed"
+ok "$(grep -c 'lock timeout' $LOGDIR/fxrace_h.log)" "1" "a listing update racing an in-flight create waits on the locked position (lock timeout after 1 s)"
+ok "$(grep -c 'ERROR' $LOGDIR/fxrace_g.log)" "0" "the in-flight create completed"
 ok "$(q "select count(*) from public.fixture_rooms where cargo_listing_id = '$C1' and vessel_availability_id = '$A1' and status not in ('withdrawn', 'failed', 'expired')")" "1" "the room exists on the pair that was valid when it was validated"
 
 # ── helpers for races 4-7 ───────────────────────────────────────────────────
@@ -213,7 +213,7 @@ SQL
 }
 
 # ── race 4: one actor, one idempotency key, two different pairs (C2O-015 item 1) ──
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_i.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_i.log 2>&1 &
 set application_name = 'fxrace_i';
 $(claims $U_CH1)
 begin;
@@ -222,14 +222,14 @@ select pg_sleep(6);
 commit;
 SQL
 PID_I=$!
-$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_j.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_i' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_i never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_i holds its locks
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrace_j.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_i' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_i never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_i holds its locks
 $(claims $U_CH1)
 select public.create_fixture_room_from_candidate($KEY_A3, '$TERMS'::jsonb, 'race-idem-pair', '{}'::jsonb);
 SQL
 PID_J=$!
 wait $PID_I; wait $PID_J
-ok "$(grep -c 'FX_IDEMPOTENCY_MISMATCH' /tmp/fxrace_j.log)" "1" "the same key racing for a different pair is FX_IDEMPOTENCY_MISMATCH, never the winner's room"
+ok "$(grep -c 'FX_IDEMPOTENCY_MISMATCH' $LOGDIR/fxrace_j.log)" "1" "the same key racing for a different pair is FX_IDEMPOTENCY_MISMATCH, never the winner's room"
 ok "$(q "select count(*) from public.fixture_rooms where create_idempotency_key = 'race-idem-pair'")" "1" "exactly one room for that key"
 ok "$(live_rooms '00000000-0000-4000-8000-0000000000b3')" "0" "no room on the loser's pair"
 close_live "$A1"
@@ -237,7 +237,7 @@ close_live "$A1"
 # ── race 5: recreate vs listing update, both orders (C2O-015 item 2) ────────
 TERMINAL=$(q "select id from public.fixture_rooms where create_idempotency_key = 'race-idem-pair'")
 # 5a · the update (position no longer live) is in flight: the recreate waits, then refuses
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_k.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_k.log 2>&1 &
 set application_name = 'fxrace_k';
 begin;
 set local session_replication_role = replica;
@@ -248,18 +248,18 @@ select pg_sleep(6);
 commit;
 SQL
 PID_K=$!
-$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_l.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_k' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_k never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_k holds its locks
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrace_l.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_k' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_k never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_k holds its locks
 $(claims $U_CH1)
 select public.recreate_fixture_room('$TERMINAL', '$TERMS'::jsonb, 'race-recreate-a', '{}'::jsonb);
 SQL
 PID_L=$!
 wait $PID_K; wait $PID_L
-ok "$(grep -c 'not live on the market' /tmp/fxrace_l.log)" "1" "a recreate racing an in-flight listing update waits, then refuses the stale position"
+ok "$(grep -c 'not live on the market' $LOGDIR/fxrace_l.log)" "1" "a recreate racing an in-flight listing update waits, then refuses the stale position"
 ok "$(live_rooms "$A1")" "0" "no room from the stale position"
 q "set session_replication_role = replica; update public.vessel_availability set status = 'OPEN' where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()" > /dev/null
 # 5b · the recreate is in flight: the listing update waits until the room exists
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_m.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_m.log 2>&1 &
 set application_name = 'fxrace_m';
 $(claims $U_CH1)
 begin;
@@ -268,23 +268,23 @@ select pg_sleep(6);
 commit;
 SQL
 PID_M=$!
-$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_n.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_m' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_m never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_m holds its locks
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrace_n.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_m' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_m never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_m holds its locks
 set lock_timeout = '1s';
 set session_replication_role = replica;
 update public.vessel_availability set status = 'FIXED' where id = '$A1';
 SQL
 PID_N=$!
 wait $PID_M; wait $PID_N
-ok "$(grep -c 'lock timeout' /tmp/fxrace_n.log)" "1" "a listing update racing an in-flight recreate waits on the locked position"
-ok "$(grep -c 'ERROR' /tmp/fxrace_m.log)" "0" "the in-flight recreate completed"
+ok "$(grep -c 'lock timeout' $LOGDIR/fxrace_n.log)" "1" "a listing update racing an in-flight recreate waits on the locked position"
+ok "$(grep -c 'ERROR' $LOGDIR/fxrace_m.log)" "0" "the in-flight recreate completed"
 ok "$(live_rooms "$A1")" "1" "the recreated room exists on a position that was live when it was checked"
 close_live "$A1"
 
 
 # ── race 6: seat revocation vs create, both orders (C2O-015 item 3) ─────────
 # 6a · the revocation is in flight: the create waits, then refuses (the member no longer represents c6)
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_o.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_o.log 2>&1 &
 set application_name = 'fxrace_o';
 begin;
 set local session_replication_role = replica;
@@ -293,18 +293,18 @@ select pg_sleep(6);
 commit;
 SQL
 PID_O=$!
-$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_p.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_o' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_o never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_o holds its locks
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrace_p.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_o' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_o never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_o holds its locks
 $(claims $U_CH1)
 select public.create_fixture_room_from_candidate($KEY_A1, '$TERMS'::jsonb, 'race-seat-a', '{}'::jsonb);
 SQL
 PID_P=$!
 wait $PID_O; wait $PID_P
-ok "$(grep -cE 'FX_AUTH' /tmp/fxrace_p.log)" "1" "a create racing an in-flight seat revocation waits, then refuses"
+ok "$(grep -cE 'FX_AUTH' $LOGDIR/fxrace_p.log)" "1" "a create racing an in-flight seat revocation waits, then refuses"
 ok "$(live_rooms "$A1")" "0" "no room created by the revoked seat"
 q "set session_replication_role = replica; update public.organization_members set is_current = true where org_id = '$ORG_CH' and user_id = '$U_CH1'" > /dev/null
 # 6b · the create is in flight: the revocation waits until the room exists
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_q.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_q.log 2>&1 &
 set application_name = 'fxrace_q';
 $(claims $U_CH1)
 begin;
@@ -313,21 +313,21 @@ select pg_sleep(6);
 commit;
 SQL
 PID_Q=$!
-$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_r.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_q' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_q never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_q holds its locks
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrace_r.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_q' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_q never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_q holds its locks
 set lock_timeout = '1s';
 set session_replication_role = replica;
 update public.organization_members set is_current = false where org_id = '$ORG_CH' and user_id = '$U_CH1';
 SQL
 PID_R=$!
 wait $PID_Q; wait $PID_R
-ok "$(grep -c 'lock timeout' /tmp/fxrace_r.log)" "1" "a seat revocation racing an in-flight create waits until the room is committed"
-ok "$(grep -c 'ERROR' /tmp/fxrace_q.log)" "0" "the in-flight create completed"
+ok "$(grep -c 'lock timeout' $LOGDIR/fxrace_r.log)" "1" "a seat revocation racing an in-flight create waits until the room is committed"
+ok "$(grep -c 'ERROR' $LOGDIR/fxrace_q.log)" "0" "the in-flight create completed"
 close_live "$A1"
 
 # ── race 7: account deactivation vs create, both orders (C2O-015 item 3) ────
 # 7a · the deactivation is in flight: the create waits, then refuses (the account is no actor)
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_s.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_s.log 2>&1 &
 set application_name = 'fxrace_s';
 begin;
 set local session_replication_role = replica;
@@ -336,18 +336,18 @@ select pg_sleep(6);
 commit;
 SQL
 PID_S=$!
-$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_t.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_s' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_s never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_s holds its locks
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrace_t.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_s' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_s never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_s holds its locks
 $(claims $U_CH1)
 select public.create_fixture_room_from_candidate($KEY_A1, '$TERMS'::jsonb, 'race-account-a', '{}'::jsonb);
 SQL
 PID_T=$!
 wait $PID_S; wait $PID_T
-ok "$(grep -c 'not active' /tmp/fxrace_t.log)" "1" "a create racing an in-flight account deactivation waits, then refuses"
+ok "$(grep -c 'not active' $LOGDIR/fxrace_t.log)" "1" "a create racing an in-flight account deactivation waits, then refuses"
 ok "$(live_rooms "$A1")" "0" "no room created by the deactivated account"
 q "set session_replication_role = replica; update public.users set is_active = true where id = '$U_CH1'" > /dev/null
 # 7b · the create is in flight: the deactivation (or a tier change) waits until the room exists
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_u.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrace_u.log 2>&1 &
 set application_name = 'fxrace_u';
 $(claims $U_CH1)
 begin;
@@ -356,17 +356,17 @@ select pg_sleep(6);
 commit;
 SQL
 PID_U=$!
-$PSQL -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_v.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrace_u' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_u never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_u holds its locks
+$PSQL -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrace_v.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrace_u' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrace_u never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrace_u holds its locks
 set lock_timeout = '1s';
 set session_replication_role = replica;
 update public.users set subscription_tier = 'T1' where id = '$U_CH1';
 SQL
 PID_V=$!
 wait $PID_U; wait $PID_V
-ok "$(grep -c 'lock timeout' /tmp/fxrace_v.log)" "1" "a tier change racing an in-flight create waits until the room is committed"
-ok "$(grep -c 'ERROR' /tmp/fxrace_u.log)" "0" "the in-flight create completed"
+ok "$(grep -c 'lock timeout' $LOGDIR/fxrace_v.log)" "1" "a tier change racing an in-flight create waits until the room is committed"
+ok "$(grep -c 'ERROR' $LOGDIR/fxrace_u.log)" "0" "the in-flight create completed"
 close_live "$A1"
 
-cleanup
-if [ $fail = 0 ]; then echo "FIXTURE RACE (two sessions): ALL ASSERTIONS PASSED"; else echo "FIXTURE RACE (two sessions): FAILED"; echo "--- A"; cat /tmp/fxrace_a.log; echo "--- B"; cat /tmp/fxrace_b.log; echo "--- D"; cat /tmp/fxrace_d.log; exit 1; fi
+[ "$fail" = 0 ] || { echo "--- A"; cat "$LOGDIR/fxrace_a.log"; echo "--- B"; cat "$LOGDIR/fxrace_b.log"; echo "--- D"; cat "$LOGDIR/fxrace_d.log"; }
+race_finish "FIXTURE RACE (two sessions)"

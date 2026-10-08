@@ -593,9 +593,20 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
      && /status = 'FIXED'[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(6\);/.test(race)
      && race.includes("status = 'OPEN' where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()"),
      "the race harness refreshes exactly at cleanup, C6 seed, both invalidations and both restorations");
+  {
+    const lib = read("supabase/tests/fixture_room/race_lib.sh");
+    ok(/FIXTURE_RACE_DISPOSABLE:-\}" = "\$db"/.test(lib) && /asb_fixture\|asb_e2e\|asb_rc\|asb_w\[0-9a-z\]\*\|asb_race_\[0-9a-z_\]\*\)/.test(lib)
+       && /rezfejaxbmdzkslrrefr/.test(lib) && /pg_try_advisory_lock\(hashtextextended\('asb:fixture-race-gate', 0\)\)/.test(lib)
+       && /trap race_teardown EXIT/.test(lib) && /pg_terminate_backend/.test(lib) && /RESIDUE:/.test(lib) && /mktemp -d/.test(lib),
+       "race_lib: allowlisted + confirmed disposable target, hosted refused, one run per database, EXIT/INT/TERM teardown, zero-residue proof");
+  }
   // the races wait for real lock state: every competitor waits in the database for its holder's sleep (no fixed delays)
   for (const f of ["fixture_race_two_sessions.sh", "fixture_recreate_race.sh"]) {
     const t = read(`supabase/tests/fixture_room/${f}`);
+    // C2O-095: no default target, the shared safety harness, fatal cleanup, run-scoped logs, a proven end
+    ok(!/-d postgres\}"/.test(t) && /\. "\$\(dirname "\$0"\)\/race_lib\.sh"\nrace_init "\$\{1:-\}"/.test(t) && /cleanup \|\| exit 1/.test(t)
+       && !/ON_ERROR_STOP=0 <<SQL >\/dev\/null 2>&1 \|\| true/.test(t) && !/\/tmp\/fx/.test(t) && /race_finish "/.test(t) && !/ALL ASSERTIONS PASSED/.test(t),
+       `${f}: explicit allowlisted target, fatal cleanup, run-scoped logs, PASSED only from race_finish`);
     ok(!/^sleep [0-9.]+$/m.test(t) && (t.match(/set application_name = 'fx\w+';/g) ?? []).length === (t.match(/pg_stat_clear_snapshot\(\)/g) ?? []).length && /RACE_SETUP/.test(t), `${f}: no fixed shell delay; each holder is awaited in the database`);
   }
 

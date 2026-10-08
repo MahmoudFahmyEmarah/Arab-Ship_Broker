@@ -19,16 +19,16 @@
 #
 # Timing: each in-flight session names itself (application_name) and holds its locks inside a pg_sleep; its
 # competitor first waits INSIDE the database until that session is sleeping (refreshing the per-transaction
-# pg_stat_activity snapshot on every pass; RACE_SETUP if it never gets there) (refreshing the per-transaction
 # pg_stat_activity snapshot on every pass; RACE_SETUP if it never gets there) — never a fixed shell delay, which a
 # slow docker exec or candidate lookup on a loaded machine outruns.
 #
-# Default psql: docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres
-# (the local disposable database). Run it ONLY against a disposable database:
-# the sessions COMMIT (a race cannot be rolled back) and the seed rows are
-# removed afterwards.
+# Target (C2O-095, race_lib.sh): there is NO default. Pass the psql command of a disposable database and confirm it:
+#   FIXTURE_RACE_DISPOSABLE=asb_fixture <script> "docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_fixture"
+# The database must be allowlisted (asb_fixture, asb_e2e, asb_rc, asb_w*, asb_race_*); hosted hosts are refused. The
+# sessions COMMIT; one run per database (advisory gate); cleanup is fatal and zero residue is proven before PASSED.
 set -uo pipefail
-PSQL="${1:-docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres}"
+. "$(dirname "$0")/race_lib.sh"
+race_init "${1:-}"
 cd "$(dirname "$0")/../../.."
 SEED=supabase/tests/fixture_room/seed_fixture_shape.sql
 U_CH1=00000000-0000-4000-8000-0000000000a1
@@ -48,7 +48,7 @@ TERMS='[{"code":"cargo_grade","label":"Cargo & grade","category":"cargo","sortOr
 
 # ── clean slate ─────────────────────────────────────────────────────────────
 cleanup() {
-  $PSQL -q -v ON_ERROR_STOP=0 <<SQL >/dev/null 2>&1 || true
+  $PSQL -1 -q -X -v ON_ERROR_STOP=1 <<SQL >"$LOGDIR/cleanup.log" 2>&1 || { echo "CLEANUP FAILED:" >&2; cat "$LOGDIR/cleanup.log" >&2; return 1; }
 set session_replication_role = replica;
 delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where (cargo_listing_id in ('$C1', '00000000-0000-4000-8000-0000000000e2', '$C3', '00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000e5', '$C6') or vessel_availability_id in ('$A1', '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b3', '$A4')));
 delete from public.fixture_access_log where user_id in (select id from public.users where email like '%@fixture.test');
@@ -76,7 +76,7 @@ set session_replication_role = origin;
 select public.fn_refresh_matches();
 SQL
 }
-cleanup
+cleanup || exit 1
 { echo 'begin;'; cat "$SEED"; echo 'commit;'; } | $PSQL -q -v ON_ERROR_STOP=1 > /dev/null || { echo "seed failed"; exit 1; }
 # c6: a grain cargo of the charterer organisation that both the named hull (a1) and the TBN hull (a3) match
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /dev/null || { echo "c6 seed failed"; cleanup; exit 1; }
@@ -109,7 +109,7 @@ ok() { if [ "$1" = "$2" ]; then echo "  ok   $3 ($1)"; else echo " FAIL  $3 — 
 
 # close it, so it can be started again
 q "$(claims $U_CH1) select public.close_fixture_room('$ROOM', 'withdrawn', 'race', (select version from public.fixture_rooms where id = '$ROOM'), 'race-close-same')->>'ok'" > /dev/null
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrr_w.log 2>&1 &
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL > $LOGDIR/fxrr_w.log 2>&1 &
 set application_name = 'fxrr_w';
 $(claims $U_CH1)
 begin;
@@ -118,17 +118,17 @@ select pg_sleep(6);
 commit;
 SQL
 PID_W=$!
-$PSQL -At -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrr_x.log 2>&1 &
-do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrr_w' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrr_w never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrr_w holds its locks
+$PSQL -At -q -v ON_ERROR_STOP=0 <<SQL > $LOGDIR/fxrr_x.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where datname = current_database() and application_name = 'fxrr_w' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrr_w never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrr_w holds its locks
 $(claims $U_CH1)
 select public.recreate_fixture_room('$ROOM', '$TERMS'::jsonb, 'race-recreate-same', '{}'::jsonb)->>'replayed';
 SQL
 PID_X=$!
 wait $PID_W; wait $PID_X
-ok "$(grep -c 'ERROR' /tmp/fxrr_w.log)" "0" "the first identical recreate completed"
-ok "$(grep -c 'ERROR' /tmp/fxrr_x.log)" "0" "the second identical recreate was not refused"
-ok "$(grep -c '^true$' /tmp/fxrr_x.log)" "1" "the second identical recreate waited, then replayed the first"
+ok "$(grep -c 'ERROR' $LOGDIR/fxrr_w.log)" "0" "the first identical recreate completed"
+ok "$(grep -c 'ERROR' $LOGDIR/fxrr_x.log)" "0" "the second identical recreate was not refused"
+ok "$(grep -c '^true$' $LOGDIR/fxrr_x.log)" "1" "the second identical recreate waited, then replayed the first"
 ok "$(q "select count(*) from public.fixture_rooms where supersedes_room_id = '$ROOM'")" "1" "two identical recreates open exactly one successor"
 
-cleanup
-if [ $fail = 0 ]; then echo "FIXTURE RECREATE RACE (two sessions): ALL ASSERTIONS PASSED"; else echo "FIXTURE RECREATE RACE (two sessions): FAILED"; echo "--- W"; cat /tmp/fxrr_w.log; echo "--- X"; cat /tmp/fxrr_x.log; exit 1; fi
+[ "$fail" = 0 ] || { echo "--- W"; cat "$LOGDIR/fxrr_w.log"; echo "--- X"; cat "$LOGDIR/fxrr_x.log"; }
+race_finish "FIXTURE RECREATE RACE (two sessions)"
