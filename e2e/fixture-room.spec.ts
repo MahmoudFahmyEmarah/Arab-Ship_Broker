@@ -19,7 +19,7 @@ import { test, expect as baseExpect, type Page } from "@playwright/test";
 // Every assertion is about persisted state, so a wide budget hides nothing: a wrong state
 // stays wrong however long the wait.
 const expect = baseExpect.configure({ timeout: 180_000 });   // 27–28 Sep 2026: <600 MB free on the runner, one accept took >90 s
-import { apiClientAs, cleanupFixture, dismissOverlays, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { apiClientAs, cleanupFixture, dismissOverlays, seedFixture, signInAs, type FixtureSeed, teardownAll } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 // Two browsers, about fifteen governed round trips and two sign-ins: on the loaded local machine
@@ -31,7 +31,7 @@ let seed: FixtureSeed;
 let roomUrl = "";
 
 test.beforeAll(async () => { seed = await seedFixture(); });
-test.afterAll(async () => { if (seed) cleanupFixture(seed); });
+test.afterAll(async () => { teardownAll("fixture room teardown", [() => { if (seed) cleanupFixture(seed); }]); });
 
 async function openTerm(page: Page, code: string) {
   await dismissOverlays(page);
@@ -198,7 +198,7 @@ test("both sides confirm before the deal is fixed", async ({ browser, baseURL })
   const owApi = await apiClientAs(seed.owner.email);
   const values: Record<string, unknown> = {
     cargo_grade: { text: "Wheat in bulk" }, quantity: { num: 26000 },
-    ports: { load: "ZZFXA", disch: "ZZFXB", load_name: "Fixture Load Port", disch_name: "Fixture Disch Port" },
+    ports: { load: seed.ports.load, disch: seed.ports.disch, load_name: "Fixture Load Port", disch_name: "Fixture Disch Port" },
     laycan: { spot: true }, ld_rates: { load: 8000, disch: 6000 },
   };
   const version = async () => ((await chApi.rpc("get_fixture_room_version", { p_room_id: roomId })).data as number);

@@ -29,7 +29,7 @@ import {
   extendFixtureSubjectAction, failFixtureSubjectAction, fixFixtureOnSubjectsAction, inviteFixturePartyAction, liftAllFixtureSubjectsAction, liftFixtureSubjectAction, loadFixtureRoom,
   recreateFixtureRoomAction,
   pollFixtureRoomVersion, postFixtureMessageAction, publishFixtureRecapAction, reopenFixtureTermAction, respondFixtureInvitationAction,
-  setFixtureTermFlagAction, submitFixtureProposalAction, withdrawFixtureProposalAction,
+  setFixtureTermFlagAction, submitFixtureProposalAction, withdrawFixtureProposalAction, suggestFixtureBridgeAction,
   syncFixtureListingStatusAction, extendFixtureWindowAction,
 } from "@/app/(dashboard)/dashboard/fixture-room/actions";
 import { TermRow } from "./TermRow";
@@ -45,6 +45,7 @@ const ACTIONS = {
   withdraw: withdrawFixtureProposalAction,
   reopen: reopenFixtureTermAction,
   flag: setFixtureTermFlagAction,
+  bridge: suggestFixtureBridgeAction,
   addSubject: addFixtureSubjectAction,
   liftSubject: liftFixtureSubjectAction,
   liftAll: liftAllFixtureSubjectsAction,

@@ -171,6 +171,14 @@ export function setFixtureTermFlag(supabase: SupabaseClient, input: CommandBase 
   return command<{ termId: string; flag: FixtureTermFlag }>(supabase, "set_fixture_term_flag", { ...behalf(input), p_term_id: input.termId, p_flag: input.flag, p_note: input.note ?? null });
 }
 
+/** The mediator's advisory bridging figure on an open term (Wave 3); either side adopts it with submitFixtureProposal. */
+export function suggestFixtureBridge(supabase: SupabaseClient, input: { roomId: string; expectedVersion: number; idempotencyKey: string; termId: string; value: FixtureValue; comment?: string | null }) {
+  return command<{ termId: string; termStatus: string; displayValue: string; value: FixtureValue }>(supabase, "suggest_fixture_bridge", {
+    p_room_id: input.roomId, p_term_id: input.termId, p_value: input.value, p_comment: input.comment ?? null,
+    p_expected_version: input.expectedVersion, p_idempotency_key: input.idempotencyKey,
+  });
+}
+
 export function addFixtureSubject(supabase: SupabaseClient, input: CommandBase & { title: string; description?: string | null; responsibleSide?: "cargo" | "vessel" | "mediator" | null; deadlineAt?: string | null }) {
   return command<{ subjectId: string; seq: number }>(supabase, "add_fixture_subject", {
     ...base(input), p_title: input.title, p_description: input.description ?? null, p_responsible_side: input.responsibleSide ?? null, p_deadline_at: input.deadlineAt ?? null,

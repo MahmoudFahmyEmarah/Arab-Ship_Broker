@@ -93,6 +93,7 @@ drop function if exists public.fn_suez_lock_draft(uuid);
 drop function if exists public.fn_suez_validate_tiers(uuid);
 drop function if exists public.fn_suez_event(text, uuid, uuid, text, jsonb);
 drop function if exists public.fn_suez_require_admin(uuid);
+drop function if exists public.list_voyage_pda_estimates(text);
 drop function if exists public.voyage_link_facts(uuid, uuid);
 drop function if exists public.resolve_voyage_vessel_link(uuid);
 drop function if exists public.fn_voyage_may_reference(uuid, text, uuid);

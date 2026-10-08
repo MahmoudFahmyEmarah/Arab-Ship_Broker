@@ -12,42 +12,37 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createFixtureRoomFromCandidateAction, loadMatchCandidates, type MatchBuilderData, type MatchCargoOption, type MatchFacts, type MatchVesselOption } from "@/app/(dashboard)/dashboard/fixture-room/actions";
+import { createFixtureRoomFromCandidateAction, loadMatchCandidates, type MatchBuilderData, type MatchCargoOption, type MatchFacts, type MatchLabel, type MatchVesselOption } from "@/app/(dashboard)/dashboard/fixture-room/actions";
 import { GestureKeys, UNCERTAIN_MESSAGE, runGesture } from "@/lib/fixture-room/client";
 import { FIXTURE_ERROR_TITLE } from "@/lib/fixture-room/errors";
 
 type First = { kind: "cargo"; cargo: MatchCargoOption } | { kind: "vessel"; vessel: MatchVesselOption };
 type Reason = { kind: "ok" | "info"; txt: string };
-type Fit = { tier: "strong" | "possible" | "weak"; reasons: Reason[] };
+type Fit = { tier: "strong" | "good" | "possible" | "weak" | "unrated"; label: MatchLabel | null; reasons: Reason[] };
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : Number(n).toLocaleString("en-US"));
 const laycan = (c: MatchCargoOption) => (c.isSpot ? "SPOT" : c.laycanFrom || c.laycanTo ? `${c.laycanFrom ?? "—"} – ${c.laycanTo ?? "—"}` : "—");
 
 /**
- * Why the governed match holds, from the facts the matcher reports (zone, laycan
- * rule, grain / DG certification, gear, capacity band). Every fact is a rule the
- * pair passed, so each reads as a tick; the freight ideas are shown for
- * information only, since they are not a matching rule. The tier ranks within
- * valid matches: rate alignment and how closely the hull fits the parcel.
+ * The fit shown for a candidate: the TIER is the governed Rules label the server published for the pair (B2O-021
+ * R-B; no client scorer), and the reasons are the governed match facts the matcher reports (zone, laycan rule,
+ * grain / DG certification, gear, capacity band). The freight ideas are shown for information only, since they
+ * are not a matching rule. A pair the Rules cache has not labelled reads "not rated", never a guessed tier.
  */
-export function assessFit(c: MatchCargoOption, v: MatchVesselOption, f: MatchFacts | undefined): Fit {
+export function matchFit(label: MatchLabel | null | undefined, c: MatchCargoOption, v: MatchVesselOption, f: MatchFacts | undefined): Fit {
   const reasons: Reason[] = [];
-  let score = 0;
   if (f) {
     const band = f.partCargo ? "part cargo, 80–120 %" : "90–110 %";
-    const close = c.qtyMax > 0 && f.dwtDelta <= c.qtyMax * 0.05;
-    score += close ? 2 : 1;
     reasons.push({ kind: "ok", txt: `Fits ${fmt(c.qtyMin)}–${fmt(c.qtyMax)} MT (${band})` });
-    reasons.push({ kind: "ok", txt: f.zone === "load" ? "Open in the load zone" : "Open in the discharge zone" });
+    reasons.push({ kind: "ok", txt: f.zone === "load" ? "Open in the load zone" : f.zone === "discharge" ? "Open in the discharge zone" : `Open in ${f.openZone ?? "a zone"}, near the load zone` });
     reasons.push({ kind: "ok", txt: f.laycan === "spot" ? "Spot cargo · prompt tonnage" : "Opens within the laycan window (−21 / +14 days)" });
-    if (f.laycan === "window") score += 1;
     if (f.grain) reasons.push({ kind: "ok", txt: "Grain certified" });
     if (f.dg) reasons.push({ kind: "ok", txt: "DG certified" });
     if (f.gearRequired) reasons.push({ kind: "ok", txt: "Geared, as the cargo requires" });
   }
-  if (c.rateAligned === true || v.rateAligned === true) { score += 2; reasons.push({ kind: "ok", txt: "Freight ideas aligned (within $5)" }); }
+  if (c.rateAligned === true || v.rateAligned === true) reasons.push({ kind: "ok", txt: "Freight ideas aligned (within $5)" });
   else if (c.freightIdea != null && v.freightIdea != null) reasons.push({ kind: "info", txt: `Ideas $${Number(c.freightIdea).toFixed(2)} vs $${Number(v.freightIdea).toFixed(2)}` });
-  return { tier: score >= 4 ? "strong" : score >= 2 ? "possible" : "weak", reasons };
+  return { tier: label ? (label.toLowerCase() as Fit["tier"]) : "unrated", label: label ?? null, reasons };
 }
 
 function Reasons({ fit }: { fit?: Fit }) {
@@ -66,7 +61,7 @@ function CargoPick({ c, cta, onPick, locked, fit, testId }: { c: MatchCargoOptio
       <div className="fxm-card__top">
         <span className="fxm-card__badge cargo">Cargo</span>
         <span className="fxm-card__ref">{c.ref ?? "—"}</span>
-        {fit && <span className={`fxm-match ${fit.tier}`}>{fit.tier}</span>}
+        {fit && <span className={`fxm-match ${fit.tier}`} title={fit.label ? "Rules match label" : "The Rules engine has not rated this pair"}>{fit.label ?? "not rated"}</span>}
         {c.mine && <span className="nr-tag">mine</span>}
       </div>
       <div className="fxm-card__name">{c.commodity}</div>
@@ -85,7 +80,7 @@ function VesselPick({ v, cta, onPick, locked, fit, testId }: { v: MatchVesselOpt
       <div className="fxm-card__top">
         <span className="fxm-card__badge vessel">Vessel</span>
         <span className="fxm-card__ref">{v.type}</span>
-        {fit && <span className={`fxm-match ${fit.tier}`}>{fit.tier}</span>}
+        {fit && <span className={`fxm-match ${fit.tier}`} title={fit.label ? "Rules match label" : "The Rules engine has not rated this pair"}>{fit.label ?? "not rated"}</span>}
         {v.mine && <span className="nr-tag">mine</span>}
       </div>
       <div className="fxm-card__name">{v.name}{v.isTbn && v.name === "TBN" && <span className="nr-tag" title="The owner discloses the hull when the fixture allows it">identity withheld</span>}</div>
@@ -228,8 +223,8 @@ export function MatchBuilder({ data }: { data: MatchBuilderData }) {
             )}
             <div className="fxm__grid">
               {first.kind === "cargo"
-                ? candidates.vessels.map((v) => <VesselPick key={v.candidateKey} v={v} fit={assessFit(first.cargo, v, v.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(v.candidateKey, v.hints)} testId="cand-vessel" />)
-                : candidates.cargo.map((c) => <CargoPick key={c.candidateKey} c={c} fit={assessFit(c, first.vessel, c.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(c.candidateKey, c.hints)} testId="cand-cargo" />)}
+                ? candidates.vessels.map((v) => <VesselPick key={v.candidateKey} v={v} fit={matchFit(v.matchLabel, first.cargo, v, v.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(v.candidateKey, v.hints)} testId="cand-vessel" />)
+                : candidates.cargo.map((c) => <CargoPick key={c.candidateKey} c={c} fit={matchFit(c.matchLabel, c, first.vessel, c.fit)} cta={busy ? "Opening…" : "Open fixture →"} onPick={() => open(c.candidateKey, c.hints)} testId="cand-cargo" />)}
             </div>
           </>
         )}

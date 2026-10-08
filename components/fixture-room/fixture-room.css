@@ -536,7 +536,9 @@
 .fxm-match {margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
   padding: 2px 8px; border-radius: 99px;}
 .fxm-match.strong {color: var(--asb-green); background: var(--asb-green-bg);}
+.fxm-match.good {color: var(--asb-blue); background: var(--asb-blue-light);}
 .fxm-match.possible {color: var(--asb-amber); background: var(--asb-amber-bg);}
+.fxm-match.unrated {color: var(--asb-gray-500); background: transparent; box-shadow: inset 0 0 0 1px var(--asb-gray-200);}
 .fxm-match.weak {color: var(--asb-gray-500); background: var(--asb-gray-100);}
 .fxm-card__name {font-size: 14.5px; font-weight: 600; color: var(--asb-navy); line-height: 1.2;}
 .fxm-card__spec {font-size: 11.5px; color: var(--asb-ink); font-variant-numeric: tabular-nums;}
@@ -1030,3 +1032,10 @@
 .nr .fx-invite-side { margin: 6px 0 0; padding: 6px 8px; border: var(--bd); border-radius: var(--r-card); display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; }
 .nr .fx-invite-side legend { padding: 0 4px; font-size: 10.5px; color: var(--asb-gray-500); }
 .nr .fx-invite-side label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+/* Wave 3 · the mediator's bridging suggestion */
+.fx-bridge {display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 8px; border-radius: 8px;
+  background: var(--asb-blue-light); color: var(--asb-ink); box-shadow: inset 3px 0 0 var(--asb-blue);}
+.fx-bridge__txt {flex: 1 1 220px; min-width: 0;}
+.fx-bridge__txt em {color: var(--asb-gray-600); font-style: normal;}
+.fx-bridge-form {margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--asb-gray-200);}

@@ -6,7 +6,7 @@
  * live region exists, and focus is visible.
  */
 import { test, expect } from "@playwright/test";
-import { cleanupFixture, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { cleanupFixture, seedFixture, signInAs, type FixtureSeed, teardownAll } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "serial" });
@@ -15,7 +15,7 @@ let seed: FixtureSeed;
 let roomUrl = "";
 
 test.beforeAll(async () => { seed = await seedFixture(); });
-test.afterAll(async () => { if (seed) cleanupFixture(seed); });
+test.afterAll(async () => { teardownAll("fixture a11y teardown", [() => { if (seed) cleanupFixture(seed); }]); });
 
 test("a term strip is a button that opens with Enter and Space", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);

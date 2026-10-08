@@ -15,8 +15,10 @@ import { CALCULATOR_MEMBER_ROLLOUT, decideCalculatorAccess } from "../lib/voyage
 import { canalDirection, canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "../lib/voyage/canal";
 import { reconcileLinks, suezFactReasons, type GovernedSuezFacts } from "../lib/voyage/save-rules";
 import { createRequestGate } from "../lib/voyage/request-gate";
+import { assumptionsFor, legArea } from "../lib/voyage/assumption-badges";
 import { acceptedLegResult, bindLegResult, currentLegResult, legEndpoints, legLookupKey, matchesLegEndpoints, matchesLegLookup, rebindManualLeg, voyagePdaHref } from "../lib/voyage/leg-state";
 import { voyageFuelProducts } from "../lib/voyage/fuel-source";
+import { pdaFromEstimate, pdaStatusFor } from "../lib/voyage/pda-link";
 import { estimateSuezTransit } from "../lib/suez/engine";
 import type { SuezInput, SuezTariffContext, SuezTariffItem } from "../lib/suez/types";
 
@@ -34,7 +36,7 @@ const index = (products: Record<string, number>, extra: Partial<FuelIndexSnapsho
   contributingPorts: ["AEFJR"], stemMt: 500, products: Object.entries(products).map(([key, averageUsdMt]) => ({ key, averageUsdMt, freshness: "current" as const, latestQuoteAt: "2026-10-03T05:00:00Z" })), noOffer: [], warnings: [], ...extra,
 });
 const noIndex = (): FuelIndexSnapshot => ({ kind: "fuel_index", status: "unavailable", algorithmVersion: "bunker-index/0", asOf: null, requestedPort: null, scope: null, actualPort: null, region: null, contributingPorts: [], stemMt: null, products: [], noOffer: [], warnings: [] });
-const port = (key: "load" | "disch", over: Partial<VoyageInput["ports"]["load"]> = {}): VoyageInput["ports"]["load"] => ({ key, port: key === "load" ? "EGALY" : "SAJED", qtyMt: 0, rateMtDay: null, allowanceDays: 0, inEca: false, openLoopBan: false, euBerthOver2h: false, pda: { usd: 12000, source: "tariff" }, ...over });
+const port = (key: "load" | "disch", over: Partial<VoyageInput["ports"]["load"]> = {}): VoyageInput["ports"]["load"] => ({ key, port: key === "load" ? "EGALY" : "SAJED", qtyMt: 0, rateMtDay: null, allowanceDays: 0, inEca: false, openLoopBan: false, euBerthOver2h: false, pda: { usd: 12000, source: "tariff", coverage: "published" }, ...over });
 const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   vessel: { speedLadenKn: 12.5, speedBallastKn: 13, hasScrubber: false, vesselClass: "C", consumption: { sea_laden: { residual: 7, distillate: 0.8 }, sea_ballast: { residual: 6, distillate: 0.8 }, port_working: { residual: 0, distillate: 0 }, port_idle: { residual: 0, distillate: 0 }, anchorage: { residual: 0, distillate: 0 } } },
   legs: { ballast: null, laden: { key: "laden", from: "EGALY", to: "SAJED", nm: 1500, ecaNm: 0, method: "waypoints" } },
@@ -154,7 +156,7 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
 {
   const v = { ...base().vessel, consumption: { ...base().vessel.consumption, sea_laden: { residual: 7, distillate: 0.8 }, port_working: { residual: 3, distillate: 1 }, port_idle: { residual: 1, distillate: 0.5 } } };
   const e = estimateVoyage(base({ vessel: v, ports: {
-    load: port("load", { qtyMt: 30000, rateMtDay: 5000, allowanceDays: 0.5, inEca: true, pda: { usd: 18000, source: "tariff" } }),
+    load: port("load", { qtyMt: 30000, rateMtDay: 5000, allowanceDays: 0.5, inEca: true, pda: { usd: 18000, source: "tariff", coverage: "published" } }),
     disch: port("disch", { qtyMt: 30000, rateMtDay: 10000, pda: { usd: 42000, source: "manual", manual: MANUAL } }),
   } }));
   near(e.days.portLoad, 6.5, 0.001, "30,000 ÷ 5,000 + 0.5 allowance"); near(e.days.portDisch, 3, 0.001, "30,000 ÷ 10,000");
@@ -309,7 +311,7 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   const act = readFileSync(new URL("../app/(dashboard)/dashboard/voyage-estimator/actions.ts", import.meta.url), "utf8");
   ok((act.match(/await resolveCalculatorAccess\(\)/g) ?? []).length >= 2, "both voyage actions pass the entitlement guard");
   ok(act.includes("lookupLeg(supabase, from, to, startDate)") && !act.includes("payload.routeLegs") && !act.includes("payload.routeMeta"), "legs and route metadata are resolved on the server at the voyage date, never taken from the browser");
-  ok(act.includes('p?.pda?.source === "tariff"'), "a browser-asserted tariff DA is refused");
+  ok(act.includes('p?.pda?.source !== "tariff"') && act.includes('supabase.rpc("get_pda_estimate", { p_estimate_id: id })') && act.includes("pdaFromEstimate(") && act.includes("pdaResolved.load ??"), "a tariff DA is re-read from the saved PDA estimate on the server, never the browser's figure");
   ok(act.includes("canalFromSuez(suez, settings, { leg: which"), "the canal status is derived on the server");
   ok(/status: l\.status/.test(act) && /status: f\.status/.test(act), "every saved line carries its governed status");
   const sz = readFileSync(new URL("../app/(dashboard)/dashboard/suez-toll/actions.ts", import.meta.url), "utf8");
@@ -381,6 +383,17 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   ok(pa.platformAssumptions.some((p) => p.key === "opex.crewUsdDay" && p.label.includes("1,450")) && pa.assumptions.some((a) => a.startsWith("Platform assumption")), "unconfirmed constants are labelled platform assumption");
   const conf = estimateVoyage(base({ settings: { ...S, confirmed: ["opex.crewUsdDay", "opex.maintenanceUsdDay", "classMultipliers", "seaMargin.defaultPct", "speeds", "portTimeDays", "suez.days"] } }));
   eq(conf.platformAssumptions, [], "confirmed constants carry no label");
+  // B2O-020 P2 · the badge sits on every figure that rests on an unconfirmed constant
+  {
+    const pa2 = estimateVoyage(base({ settings: { ...S, confirmed: [] }, seaMarginPct: null, vessel: { ...base().vessel, speedLadenKn: null, speedBallastKn: null } }));
+    ok(assumptionsFor("sea", pa2.platformAssumptions).some((p) => p.key === "speeds") && assumptionsFor("seaMargin", pa2.platformAssumptions).length === 1, "sea legs carry the speed and sea-margin assumptions");
+    ok(assumptionsFor("running", pa2.platformAssumptions).length >= 2 && assumptionsFor("port", pa2.platformAssumptions).every((p) => p.key === "portTimeDays"), "running cost and port time are badged from their own constants");
+    eq(assumptionsFor("sea", estimateVoyage(base()).platformAssumptions), [], "confirmed constants put no badge on any figure");
+    eq([legArea("sea"), legArea("port"), legArea("canal"), legArea("anchorage")], ["sea", "port", "canal", null], "legs map to their assumption areas");
+    const v2b = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
+    ok(v2b.includes('legArea(l.kind) ? assumed(legArea(l.kind)!)') && v2b.includes('Running cost{assumed("running")}') && v2b.includes('assumed("seaMargin")'), "the page badges leg days, sea margin, total days and running cost");
+  }
+  ok(!readFileSync(new URL("../lib/portal/data.ts", import.meta.url), "utf8").includes("vlsfo: 585"), "the dead 585/725 fuel fallback is gone (no invented price anywhere)");
   // C2O-050 #4 · an unconfirmed constant is an assumption: the estimate is never trusted on it
   eq(pa.status, "partial", "an unconfirmed platform constant keeps the estimate partial");
   const wait = estimateVoyage(base({ anchorageDays: 1.5, anchorageInEca: false }));
@@ -570,6 +583,43 @@ const base = (over: Partial<VoyageInput> = {}): VoyageInput => ({
   for (const needle of ["suez_tariff_items_reported_ck", "when new.status = 'published' then coalesce(new.published_by, v_actor) else v_actor end", "'notes_changed'", "vc.user_id = coalesce(u.supabase_user_id, u.id)", "a position is linked without its vessel", "must be owned by that organisation", "origin in ('system','command')", "for share", "alter column status set not null", "revoke insert on table public.voyage_estimate_runs, public.voyage_estimate_lines from service_role", "'startZones'", "fn_point_eca_zones", "'verified'"]) ok(mig.includes(needle), `205500 carries: ${needle.slice(0, 50)}`);
   const down = readFileSync(new URL("../supabase/rollback/20261003_suez_voyage_down.sql", import.meta.url), "utf8");
   ok(down.includes("savepoint stream_s_down_requires_a_transaction") && down.includes("where origin = 'command'") && down.includes("perform set_config('asb.stream_s_down', '', false)") && down.includes("export-taken:(.{3,200})"), "the DOWN needs one transaction, reads durable origin and spends the confirmation");
+}
+
+// ── 15 · Wave 3: the port DA from a saved PDA estimate (B2O-020 P2) ─────────
+{
+  const ID = "6f1c2b9e-4a7d-4c1e-9b3a-2d5e8f0a1b2c";
+  const est = (over: Record<string, unknown> = {}) => ({ id: ID, portLocode: "EGALY", coverage: "published", nativeCurrency: "USD", nativeTotal: 18250.456, convertedCurrency: null, convertedTotal: null, ...over });
+  eq(pdaFromEstimate(est(), "EGALY", ID), { ok: true, usd: 18250.46, coverage: "published", estimateId: ID }, "a published USD estimate gives its total, rounded to cents");
+  eq(pdaFromEstimate(est({ nativeCurrency: "EGP", nativeTotal: 900000, convertedCurrency: "USD", convertedTotal: 18500 }), "EGALY", ID), { ok: true, usd: 18500, coverage: "published", estimateId: ID }, "a native-currency estimate uses its USD conversion");
+  ok(!pdaFromEstimate(est({ nativeCurrency: "EGP", nativeTotal: 900000 }), "EGALY", ID).ok, "an estimate with no USD total is refused");
+  ok(!pdaFromEstimate(est(), "SAJED", ID).ok, "an estimate for another port is refused");
+  ok(!pdaFromEstimate(est(), null, ID).ok, "an estimate for a port the voyage has not named is refused");
+  ok(!pdaFromEstimate(est({ id: "00000000-0000-4000-8000-000000000000" }), "EGALY", ID).ok && !pdaFromEstimate(null, "EGALY", ID).ok, "a missing or different estimate is refused (unreadable reads as missing)");
+  ok(!pdaFromEstimate(est({ coverage: "draft" }), "EGALY", ID).ok, "an unrecognised coverage is refused");
+  ok(!pdaFromEstimate(est({ nativeTotal: -5 }), "EGALY", ID).ok, "a negative total is refused");
+  eq([pdaStatusFor("published"), pdaStatusFor("partial"), pdaStatusFor("manual_required"), pdaStatusFor(undefined)], ["trusted", "fallback", "manual", "manual"], "coverage decides the DA status; a tariff DA without coverage is not trusted");
+  const vb = base();
+  const withCov = (cov: "published" | "partial" | "manual_required" | undefined) => estimateVoyage({ ...vb, ports: { ...vb.ports, load: { ...vb.ports.load, pda: { usd: 18000, source: "tariff", coverage: cov } } } });
+  eq(withCov("published").costs.pdaLoad.status, "trusted", "a published PDA estimate is a trusted DA");
+  const partial = withCov("partial");
+  ok(partial.costs.pdaLoad.status === "fallback" && partial.status === "partial", "a partial PDA estimate is a fallback DA and the estimate is partial");
+  ok(withCov("manual_required").costs.pdaLoad.status === "manual" && withCov(undefined).costs.pdaLoad.status === "manual", "a manual-required or coverage-less tariff DA is manual");
+  ok(parseVoyageInput({ ...vb, ports: { ...vb.ports, load: { ...vb.ports.load, pda: { usd: 1, source: "tariff", estimateId: "not-a-uuid" } } } }).ok === false, "the input boundary refuses a malformed estimate id");
+  const mig = readFileSync(new URL("../supabase/migrations/20261007200000_voyage_pda_estimates.sql", import.meta.url), "utf8");
+  ok(mig.includes("public.fn_can_read_pda_estimate(e.id)") && mig.includes("not exists (select 1 from public.pda_estimates s where s.supersedes_id = e.id)") && mig.includes("revoke all on function public.list_voyage_pda_estimates(text) from public, anon, service_role;") && mig.includes("grant execute on function public.list_voyage_pda_estimates(text) to authenticated;") && mig.includes("security definer") && mig.includes("set search_path = pg_catalog, public"), "the picker RPC lists only readable, current estimates, member session only");
+  const down = readFileSync(new URL("../supabase/rollback/20261003_suez_voyage_down.sql", import.meta.url), "utf8");
+  ok(down.includes("drop function if exists public.list_voyage_pda_estimates(text);"), "the DOWN drops the picker RPC");
+  const ui = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
+  ok(ui.includes("listVoyagePdaEstimatesAction(code)") && ui.includes("function PdaPicker(") && ui.includes("disabled={o.usdTotal == null}") && ui.includes("disabled={!!voy.pdaLoadEstimate}"), "the estimator offers the member's saved PDA estimates per port, the manual figure stands aside when one is chosen");
+}
+
+// ── 16 · B2O-028 P3: the total-days badge names every constant behind it ──
+{
+  const ui = readFileSync(new URL("../components/voyage/VoyageEstimatorV2.tsx", import.meta.url), "utf8");
+  ok(ui.includes('Total voyage days{assumed("sea", "port", "canal")}') && !ui.includes('assumed("sea") ?? assumed("port")'), "the total-days badge takes the union of sea, port and canal assumptions");
+  const pa = [{ key: "speeds", label: "speeds" }, { key: "portTimeDays", label: "port time" }, { key: "suez.days", label: "Suez days" }, { key: "seaMargin.defaultPct", label: "margin" }];
+  const union = (["sea", "port", "canal"] as const).flatMap((a) => assumptionsFor(a, pa)).filter((u, i, all) => all.findIndex((x) => x.key === u.key) === i);
+  eq(union.map((u) => u.key), ["speeds", "seaMargin.defaultPct", "portTimeDays", "suez.days"], "the union lists each constant once");
 }
 
 console.log(`voyage-check: ${checks} checks passed`);

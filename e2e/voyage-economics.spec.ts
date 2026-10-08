@@ -13,8 +13,9 @@
  * Self-seeding on the local stack; everything is removed afterwards, and the
  * previously open published version gets its open window back.
  */
+import { randomUUID } from "node:crypto";
 import { test, expect, type Browser } from "@playwright/test";
-import { cleanupAdmin, cleanupFixture, dbExec, seedAdmin, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { cleanupAdmin, cleanupFixture, dbTx, seedAdmin, seedFixture, signInAs, teardownAll, type FixtureSeed } from "./fixture-room.helpers";
 
 const stamp = Date.now().toString(36);
 const plus = (days: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
@@ -25,9 +26,11 @@ const BANDS = ["dry_bulk,laden,0,0,5000,8.0000", "dry_bulk,laden,1,5000,10000,6.
 let admin: { email: string; userId: string };
 let seed: FixtureSeed;
 let versionId: string | null = null;
+const pdaEstimateId = randomUUID();
 
+// One transaction (C2O-075 P0): the guards lifted below come back even if a statement or the connection fails.
 function psql(sql: string) {
-  try { dbExec(sql); } catch { /* disposable rows */ }
+  dbTx("voyage e2e teardown", sql);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -40,7 +43,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   // Published versions, SDR rates and events are immutable by trigger (20261003205000); the disposable e2e rows are
   // removed by the local superuser with the guards lifted for this statement batch only, then the previous version's open window is restored.
-  psql(`
+  teardownAll("voyage e2e teardown", [() => psql(`
 alter table public.suez_tariff_versions disable trigger trg_suez_version_guard;
 alter table public.suez_tariff_versions disable trigger trg_suez_version_events;
 alter table public.suez_tariff_items disable trigger trg_suez_items_guard;
@@ -67,9 +70,13 @@ alter table public.vessel_economics_profile_events disable trigger trg_vep_event
 delete from public.vessel_economics_profile_events where vessel_id = '${seed.vesselId}';
 alter table public.vessel_economics_profile_events enable trigger trg_vep_events_append_only;
 delete from public.vessel_economics_profiles where vessel_id = '${seed.vesselId}';
-`);
-  cleanupFixture(seed);
-  cleanupAdmin(admin);
+alter table public.pda_estimates disable trigger trg_pda_estimates_immutable;
+delete from public.pda_estimates where id = '${pdaEstimateId}' and terminal_name = 'E2E quay ${stamp}';
+alter table public.pda_estimates enable trigger trg_pda_estimates_immutable;
+`),
+    () => cleanupFixture(seed),
+    () => cleanupAdmin(admin),
+  ]);
 });
 
 async function asAdmin(browser: Browser, baseURL: string) {
@@ -216,6 +223,39 @@ test("voyage estimator prices the seeded pairing and saves an immutable estimate
     await page.getByRole("button", { name: "Save estimate" }).click();
     await expect(page.locator(".ve-head")).toContainText("Estimate saved");
     await expect(page.locator(".ve-head")).toContainText("partial");
+  } finally {
+    await context.close();
+  }
+});
+
+// Wave 3 (B2O-020 P2): the load-port DA is taken from a saved PDA estimate; the save re-reads it on the server.
+test("the load port DA comes from a saved PDA estimate", async ({ browser, baseURL }) => {
+  psql(`insert into public.pda_estimates (id, owner_user_id, port_locode, terminal_name, call_date, coverage, input_snapshot, native_currency, native_total, generated_at)
+        values ('${pdaEstimateId}', '${admin.userId}', '${seed.ports.load}', 'E2E quay ${stamp}', current_date + 12, 'manual_required', '{}', 'USD', 18250.5, now());`);
+  const { page, context } = await asAdmin(browser, baseURL!);
+  try {
+    await page.goto("/dashboard/voyage-estimator");
+    const vesselSelect = page.getByRole("combobox", { name: "Vessel", exact: true });
+    const vesselValue = await vesselSelect.locator("option", { hasText: seed.vesselName }).first().getAttribute("value");
+    await vesselSelect.selectOption(vesselValue!);
+    await page.getByRole("combobox", { name: "Cargo" }).selectOption({ index: 1 });
+    await page.getByLabel("Sea · laden residual").fill("20");
+    await page.getByLabel("Sea · laden distillate").fill("1");
+    const ladenLeg = page.locator(".vy-leg", { hasText: "Laden" });
+    await ladenLeg.getByRole("checkbox", { name: "Manual" }).check();
+    await ladenLeg.getByLabel("NM", { exact: true }).fill("1200");
+    await ladenLeg.getByLabel("of which ECA NM").fill("600");
+    await ladenLeg.getByLabel("Reason").fill("owner distance table, e2e");
+
+    const picker = page.getByLabel("Load port DA · saved PDA estimate");
+    await expect(picker.locator("option", { hasText: `E2E quay ${stamp}` })).toHaveCount(1);
+    await picker.selectOption({ label: (await picker.locator("option", { hasText: `E2E quay ${stamp}` }).textContent())!.trim() });
+    await expect(page.getByLabel("Load port DA (USD, manual)")).toBeDisabled();
+    const costsCard = page.locator(".ve-pl-card", { has: page.locator(".ve-pl-card__title", { hasText: /^Voyage costs$/ }) });
+    // manual_required coverage maps to a manual DA (never trusted), with the estimate's own figure
+    await expect(costsCard.locator(".ve-pl-row", { hasText: "Load port DA" })).toContainText("$18,250.50 · manual");
+    await page.getByRole("button", { name: "Save estimate" }).click();
+    await expect(page.locator(".ve-head")).toContainText("Estimate saved");
   } finally {
     await context.close();
   }

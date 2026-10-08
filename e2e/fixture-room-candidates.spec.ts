@@ -11,7 +11,7 @@
  * Runs against the local stack only (see fixture-room.helpers.ts).
  */
 import { test, expect as baseExpect } from "@playwright/test";
-import { apiClientAs, cleanupFixture, cleanupSeat, dismissOverlays, seedFixture, seedOrgSeat, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { apiClientAs, cleanupFixture, cleanupSeat, dismissOverlays, seedFixture, seedOrgSeat, signInAs, type FixtureSeed, teardownAll } from "./fixture-room.helpers";
 
 const expect = baseExpect.configure({ timeout: 180_000 });
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -20,7 +20,7 @@ test.describe.configure({ mode: "serial", timeout: 600_000 });
 let seed: FixtureSeed;
 let seat: { email: string; userId: string } | null = null;
 test.beforeAll(async () => { seed = await seedFixture(); seat = await seedOrgSeat(seed); });
-test.afterAll(async () => { if (seat) cleanupSeat(seat); if (seed) cleanupFixture(seed); });
+test.afterAll(async () => { teardownAll("fixture candidates teardown", [() => { if (seat) cleanupSeat(seat); }, () => { if (seed) cleanupFixture(seed); }]); });
 
 // the raw identifiers of the owner's two positions (C2O-013: the availability ids are hull identifiers too)
 const secrets = () => [seed.tbn.name, seed.tbn.vesselId, seed.vesselId, seed.vesselImo, seed.tbn.availabilityId, seed.availabilityId];
