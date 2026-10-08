@@ -83,6 +83,14 @@ export const proposalRefSchema = commandBaseSchema.extend({ proposalId: uuid });
 
 export const reopenTermSchema = commandBaseSchema.extend({ termId: uuid, reason: z.string().max(500).nullable().optional() });
 
+// the mediator's advisory figure (Wave 3): its own seat only, so no asPartyId / onBehalfOfPartyId
+export const suggestBridgeSchema = z.object({
+  roomId: uuid, expectedVersion, idempotencyKey,
+  termId: uuid,
+  value: fixtureValueSchema,
+  comment: z.string().max(1000).nullable().optional(),
+}).strict();
+
 export const termFlagSchema = commandBaseSchema.extend({
   termId: uuid,
   flag: z.enum(["hold", "resume", "refer", "clear_referral"]),

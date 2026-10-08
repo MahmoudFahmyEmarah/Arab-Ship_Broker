@@ -16,7 +16,7 @@ import type { FixtureError } from "@/lib/fixture-room/errors";
 import {
   addSubjectSchema, closeRoomSchema, extendWindowSchema, createFromCandidateSchema, recreateRoomSchema, extendSubjectSchema, failSubjectSchema, invitePartySchema, postMessageSchema,
   proposalRefSchema, reopenTermSchema, recapRefSchema, redactMessageSchema, respondInvitationSchema, submitProposalSchema, subjectRefSchema,
-  termFlagSchema, commandBaseSchema, listRoomsSchema,
+  termFlagSchema, commandBaseSchema, listRoomsSchema, suggestBridgeSchema,
 } from "@/lib/fixture-room/schemas";
 import type { FixtureRoomListItem, FixtureRoomStatus, FixtureRoomView } from "@/lib/fixture-room/types";
 import type { ZodType } from "zod";
@@ -286,6 +286,12 @@ export async function setFixtureTermFlagAction(input: unknown) {
   const p = parse(termFlagSchema, input);
   if (!p.ok) return p.error;
   return sdk.setFixtureTermFlag(await getSupabaseServerClient(), p.value);
+}
+
+export async function suggestFixtureBridgeAction(input: unknown) {
+  const p = parse(suggestBridgeSchema, input);
+  if (!p.ok) return p.error;
+  return sdk.suggestFixtureBridge(await getSupabaseServerClient(), p.value);
 }
 
 export async function addFixtureSubjectAction(input: unknown) {

@@ -7,7 +7,7 @@ import { FIXTURE_TERMINAL_STATUSES, type FixtureRoomStatus, type FixtureTermStat
 export type FixtureCommand =
   | "create_fixture_room" | "invite_fixture_party" | "respond_fixture_invitation"
   | "submit_fixture_proposal" | "withdraw_fixture_proposal" | "accept_fixture_proposal"
-  | "reopen_fixture_term" | "set_fixture_term_flag"
+  | "reopen_fixture_term" | "set_fixture_term_flag" | "suggest_fixture_bridge"
   | "add_fixture_subject" | "lift_fixture_subject" | "fail_fixture_subject" | "extend_fixture_subject"
   | "fix_fixture_on_subjects" | "publish_fixture_recap" | "acknowledge_fixture_recap"
   | "post_fixture_message" | "agree_fixture_disclosure" | "close_fixture_room" | "redact_fixture_message"
@@ -31,6 +31,7 @@ export const COMMAND_STATUSES: Record<FixtureCommand, readonly FixtureRoomStatus
   accept_fixture_proposal: ["invited", "negotiating"],
   reopen_fixture_term: ["negotiating", "on_subjects"],
   set_fixture_term_flag: ["invited", "negotiating"],
+  suggest_fixture_bridge: ["invited", "negotiating"],
   add_fixture_subject: ["negotiating", "on_subjects"],
   lift_fixture_subject: ["on_subjects"],
   fail_fixture_subject: ["on_subjects"],

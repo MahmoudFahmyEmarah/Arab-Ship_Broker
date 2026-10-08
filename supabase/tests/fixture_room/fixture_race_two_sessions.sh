@@ -268,6 +268,7 @@ ok "$(grep -c 'ERROR' /tmp/fxrace_m.log)" "0" "the in-flight recreate completed"
 ok "$(live_rooms "$A1")" "1" "the recreated room exists on a position that was live when it was checked"
 close_live "$A1"
 
+
 # ── race 6: seat revocation vs create, both orders (C2O-015 item 3) ─────────
 # 6a · the revocation is in flight: the create waits, then refuses (the member no longer represents c6)
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_o.log 2>&1 &

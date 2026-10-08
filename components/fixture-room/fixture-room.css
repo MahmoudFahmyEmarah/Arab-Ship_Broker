@@ -1032,3 +1032,10 @@
 .nr .fx-invite-side { margin: 6px 0 0; padding: 6px 8px; border: var(--bd); border-radius: var(--r-card); display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; }
 .nr .fx-invite-side legend { padding: 0 4px; font-size: 10.5px; color: var(--asb-gray-500); }
 .nr .fx-invite-side label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+/* Wave 3 · the mediator's bridging suggestion */
+.fx-bridge {display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 8px; border-radius: 8px;
+  background: var(--asb-blue-light); color: var(--asb-ink); box-shadow: inset 3px 0 0 var(--asb-blue);}
+.fx-bridge__txt {flex: 1 1 220px; min-width: 0;}
+.fx-bridge__txt em {color: var(--asb-gray-600); font-style: normal;}
+.fx-bridge-form {margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--asb-gray-200);}
