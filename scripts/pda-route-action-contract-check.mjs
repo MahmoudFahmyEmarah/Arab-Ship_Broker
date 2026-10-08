@@ -36,7 +36,18 @@ assert.match(actions, /derivePdaRouteTimeline/);
 assert.match(actions, /aggregatePdaRoutePreview/);
 assert.match(actions, /callDate:\s*input\.leg\.callDate/);
 assert.doesNotMatch(actions, /derivedDate|timeline\.(?:etaLoad|etaDischarge)\.slice/);
-assert.match(actions, /vessel:\s*authoritativeVesselFacts\(input\.vessel\)/);
+// Wave 2 (B2C-035): vessel facts stay authoritative; the flag state is resolved on the server
+// from the governed flag registry, never taken from the browser request.
+assert.match(actions, /vessel:\s*authoritativeVesselFacts\(input\.vessel,\s*input\.flagState\)/);
+// C2O-090 B2C-035: one canonical resolver (lib/pda/flag.ts) for the route, the owned standalone vessel and a
+// declared standalone ISO; the registered maximum draft is never the call draft.
+assert.match(actions, /const flagState = resolveFlagName\(await activeFlagRegistry\(supabase\), vessel\.flag\)/);
+assert.match(actions, /authoritativeVesselFacts\(vessel, resolveFlagName\(registry, vessel\.flag\)\)/);
+assert.match(actions, /flagState: resolveDeclaredFlag\(registry, request\.vessel\.flagState\)/);
+assert.match(actions, /\.from\("flag_states"\)/);
+assert.match(actions, /registeredMaxDraftM: vessel\.draftM \?\? null/);
+assert.doesNotMatch(actions, /\bdraftM: vessel\.draftM\b/);
+assert.doesNotMatch(actions, /flagState:\s*input\.(?:load|discharge|selection|vessel)\b/);
 assert.match(actions, /enteredBy:\s*input\.manualActorLabel/);
 assert.doesNotMatch(actions, /input\.request\.callDate/);
 assert.doesNotMatch(actions, /service_role/i);

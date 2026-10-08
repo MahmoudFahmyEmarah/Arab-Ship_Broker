@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 
-import { calculatePda } from "../lib/pda/calculate";
+import { calculatePda, flagTreatment } from "../lib/pda/calculate";
 import { pdaApplicabilitySchema } from "../lib/pda/schemas";
+import { assertEcbFresh, ecbFeedPayloads, ecbSourceRef, fetchEcbDaily, parseEcbDaily } from "../lib/pda/ecb";
+import { withJobRunStrict } from "../lib/jobs/runs";
+import { resolveDeclaredFlag, resolveFlagName } from "../lib/pda/flag";
 import type { PdaRequest, PdaTariffVersion } from "../lib/pda/types";
 
 const ids = {
@@ -353,6 +356,152 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(calculatePda(call(1), egypt([agentOnly])).warnings.some((w) => w.code === "MISSING_INPUT" && /settlement mode/.test(w.message)), true);
 }
 
+// Wave 2: flag treatment is derived from the flag state against the port country (UN/LOCODE prefix);
+// it is used by applicability, and a rule that names one while the flag state is unknown raises MISSING_INPUT.
+{
+  const portVersion = { ...version, portLocode: "EGALY", rules: [{ ...version.rules[0]!, applicability: { flagTreatments: ["foreign" as const] } }] };
+  const at = (flagState: string | null | undefined) =>
+    calculatePda({ ...request, portLocode: "EGALY", vessel: { ...request.vessel, flagState } }, portVersion);
+  assert.equal(flagTreatment({ ...request, portLocode: "EGALY", vessel: { flagState: "pa" } }), "foreign");
+  assert.equal(flagTreatment({ ...request, portLocode: "EGALY", vessel: { flagState: "EG" } }), "national");
+  assert.equal(flagTreatment({ ...request, portLocode: "EGALY", vessel: { flagState: "Egypt" } }), null, "a name is not a flag state");
+  assert.equal(at("PA").lines.length, 1, "foreign vessel: foreign rule applies");
+  assert.equal(at("EG").lines.length, 0, "national vessel: foreign rule does not apply");
+  assert.equal(at("EG").warnings.some((w) => w.code === "MISSING_INPUT"), false);
+  const unknown = at(null);
+  assert.equal(unknown.lines.length, 0, "never guessed");
+  assert.equal(unknown.warnings.some((w) => w.code === "MISSING_INPUT" && /flag state/.test(w.message)), true);
+  assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["foreign", "foreign"] }).success, false);
+  assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["domestic"] }).success, false);
+  assert.equal(pdaApplicabilitySchema.safeParse({ flagTreatments: ["foreign", "national"] }).success, true);
+}
+
+// C2O-090 B2C-035 P1-1: one canonical flag resolver; unknown, inactive, malformed or ambiguous → null (never foreign).
+{
+  const registry = [
+    { name: "Panama", iso2: "PA", aliases: ["Republic of Panama"], is_active: true },
+    { name: "Malta", iso2: "MT", aliases: ["Valletta", "Shared"], is_active: true },
+    { name: "Liberia", iso2: "LR", aliases: ["Monrovia", "Shared"], is_active: true },
+    { name: "Madeira", iso2: "PT", aliases: ["MAR"], is_active: true },
+    { name: "Portugal", iso2: "PT", aliases: ["MAR"], is_active: true },
+    { name: "Old Register", iso2: "OR", aliases: [], is_active: false },
+    { name: "No Code", iso2: null, aliases: ["Nocode"], is_active: true },
+    { name: "Bad Code", iso2: "B1", aliases: [], is_active: true },
+    { name: "Valletta", iso2: "VA", aliases: [], is_active: true },
+  ];
+  assert.equal(resolveFlagName(registry, "panama"), "PA", "canonical name, case-insensitive");
+  assert.equal(resolveFlagName(registry, " Republic of Panama "), "PA", "alias with a single ISO");
+  assert.equal(resolveFlagName(registry, "Valletta"), "VA", "an exact canonical name wins over another register's alias");
+  assert.equal(resolveFlagName(registry, "Shared"), null, "an alias pointing to two ISO codes is ambiguous");
+  assert.equal(resolveFlagName(registry, "MAR"), "PT", "aliases on two registers with one ISO are not ambiguous");
+  assert.equal(resolveFlagName(registry, "Old Register"), null, "inactive register");
+  assert.equal(resolveFlagName(registry, "No Code"), null, "register without an ISO code");
+  assert.equal(resolveFlagName(registry, "Bad Code"), null, "malformed ISO code");
+  assert.equal(resolveFlagName(registry, "Atlantis"), null, "unknown");
+  assert.equal(resolveFlagName(registry, "—"), null);
+  assert.equal(resolveFlagName(null, "Panama"), null, "registry read failure → unknown");
+  assert.equal(resolveDeclaredFlag(registry, "pa"), "PA", "declared ISO carried by an active register");
+  assert.equal(resolveDeclaredFlag(registry, "ZZ"), null, "declared ZZ is not a flag state");
+  assert.equal(resolveDeclaredFlag(registry, "OR"), null, "declared ISO of an inactive register");
+  assert.equal(resolveDeclaredFlag(registry, null), null);
+  assert.equal(resolveDeclaredFlag(null, "PA"), null, "registry read failure → unknown");
+  // C2O-094: an exact canonical name never falls through to another register's alias
+  const collision = [
+    { name: "Atlantis", iso2: "AT", aliases: [], is_active: false },
+    { name: "Neptune", iso2: "NP", aliases: ["Atlantis"], is_active: true },
+    { name: "Oceania", iso2: "O1", aliases: [], is_active: true },
+    { name: "Pacifica", iso2: "PC", aliases: ["Oceania"], is_active: true },
+  ];
+  assert.equal(resolveFlagName(collision, "Atlantis"), null, "inactive exact canonical → unknown, not the active alias NP");
+  assert.equal(resolveFlagName(collision, "Oceania"), null, "malformed exact canonical → unknown, not the alias PC");
+  assert.equal(resolveFlagName(collision, "Neptune"), "NP");
+  assert.equal(resolveFlagName([{ name: "Gamma", iso2: "GA", aliases: ["Delta"], is_active: false }, { name: "Beta", iso2: "BE", aliases: ["Delta"], is_active: true }], "Delta"), null,
+    "an alias also carried by an inactive register is not trusted");
+  assert.equal(resolveFlagName([{ name: "Panama", iso2: "PA", aliases: [] }], "Panama"), null, "a row without is_active is never trusted");
+  // the engine never prices an unresolved flag as foreign
+  const foreignOnly: PdaTariffVersion = { ...version, portLocode: "EGALY", rules: [{ ...version.rules[0]!, applicability: { flagTreatments: ["foreign"] } }] };
+  const unresolved = calculatePda({ ...request, portLocode: "EGALY", vessel: { ...request.vessel, flagState: resolveDeclaredFlag(registry, "ZZ") } }, foreignOnly);
+  assert.equal(unresolved.lines.length, 0);
+  assert.ok(unresolved.warnings.some((w) => w.code === "MISSING_INPUT" && /flag state/.test(w.message)));
+}
+
+// C2O-090 B2C-035 P1-2: the registered maximum draft never stands in for the call draft.
+{
+  const draftRule: PdaTariffVersion = { ...version, rules: [{ ...version.rules[0]!, applicability: { minDraftM: 12 } }] };
+  const registeredOnly = calculatePda({ ...request, vessel: { ...request.vessel, draftM: null, registeredMaxDraftM: 14.2 } }, draftRule);
+  assert.equal(registeredOnly.lines.length, 0, "a registered 14.2 m maximum does not satisfy a 12 m call-draft rule");
+  assert.ok(registeredOnly.warnings.some((w) => w.code === "MISSING_INPUT" && /draft/.test(w.message)));
+  const declared = calculatePda({ ...request, vessel: { ...request.vessel, draftM: 11.5, registeredMaxDraftM: 14.2 } }, draftRule);
+  assert.equal(declared.lines.length, 0, "a declared 11.5 m call draft is below the 12 m threshold");
+  assert.equal(declared.warnings.some((w) => w.code === "MISSING_INPUT"), false);
+  const atThreshold = calculatePda({ ...request, vessel: { ...request.vessel, draftM: 12, registeredMaxDraftM: 14.2 } }, draftRule);
+  assert.equal(atThreshold.lines.length, 1, "a declared 12 m call draft meets the threshold");
+}
+
+const asyncChecks: Promise<void>[] = [];
+
+// ECB feed (owner request 7 Oct; hardened per Codex C2O-089): one dated set, rates read only inside it, every
+// required currency exactly once, fresh, exact source reference; the fetch stays on the ECB origin.
+{
+  const xml = `<?xml version="1.0"?><gesmes:Envelope><Cube><Cube time='2026-10-07'><Cube currency='USD' rate='1.1050'/><Cube currency='JPY' rate='162.30'/><Cube currency='RON' rate='4.9765'/><Cube currency='TRY' rate='55.41'/></Cube></Cube></gesmes:Envelope>`;
+  const daily = parseEcbDaily(xml);
+  assert.equal(daily.date, "2026-10-07");
+  assert.equal(daily.rates.USD, 1.105);
+  const payloads = ecbFeedPayloads(daily);
+  assert.deepEqual(payloads.map((p) => p.quoteCurrency), ["USD", "RON", "TRY"], "every wanted currency, JPY not wanted");
+  assert.ok(payloads.every((p) => p.baseCurrency === "EUR" && p.sourceKind === "ecb" && p.sourceRef === ecbSourceRef("2026-10-07")));
+  assert.equal(ecbSourceRef("2026-10-07"), "ECB euro foreign exchange reference rates, 2026-10-07 (https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml)");
+  assert.throws(() => parseEcbDaily("<Cube></Cube>"), /expected one dated rate set/);
+  assert.throws(() => parseEcbDaily(xml.replace("<Cube time='2026-10-07'>", "<Cube time='2026-10-07'><Cube time='2026-10-06'>")), /expected one dated rate set/);
+  assert.throws(() => parseEcbDaily("<Cube time='2026-10-07'></Cube>"), /no rates/);
+  assert.throws(() => parseEcbDaily(xml.replace("<Cube currency='TRY' rate='55.41'/>", "")), /required currencies missing: TRY/, "partial file refused");
+  assert.throws(() => parseEcbDaily(xml.replace("<Cube currency='JPY'", "<Cube currency='USD' rate='1.2'/><Cube currency='JPY'")), /USD is listed twice/, "duplicate refused, never last-wins");
+  assert.throws(() => parseEcbDaily(xml.replace("rate='4.9765'", "rate='0'")), /invalid rate for RON/);
+  // a rate outside the dated container is not read
+  const outside = `<Cube><Cube currency='TRY' rate='1'/><Cube time='2026-10-07'><Cube currency='USD' rate='1.1'/><Cube currency='RON' rate='4.9'/></Cube></Cube>`;
+  assert.throws(() => parseEcbDaily(outside), /required currencies missing: TRY/);
+  const now = new Date("2026-10-08T15:30:00Z");
+  assert.doesNotThrow(() => assertEcbFresh("2026-10-08", now));
+  assert.doesNotThrow(() => assertEcbFresh("2026-10-04", now), "weekend + holiday tolerated");
+  assert.throws(() => assertEcbFresh("2026-10-03", now), /stale/);
+  assert.throws(() => assertEcbFresh("2026-10-09", now), /future/);
+}
+
+// ECB fetch guards: ECB origin only, XML only, bounded size.
+asyncChecks.push((async () => {
+  const reply = (body: string, init: { url?: string; type?: string; status?: number; length?: string } = {}) =>
+    (async () => {
+      const response = new Response(body, { status: init.status ?? 200, headers: { "content-type": init.type ?? "text/xml", ...(init.length ? { "content-length": init.length } : {}) } });
+      Object.defineProperty(response, "url", { value: init.url ?? "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml" });
+      return response;
+    }) as unknown as typeof fetch;
+  assert.equal(await fetchEcbDaily(reply("<Cube/>")), "<Cube/>");
+  await assert.rejects(fetchEcbDaily(reply("<Cube/>", { url: "https://evil.example/x.xml" })), /away from the ECB origin/);
+  await assert.rejects(fetchEcbDaily(reply("<html/>", { type: "text/html" })), /unexpected content type/);
+  await assert.rejects(fetchEcbDaily(reply("x".repeat(70_000))), /too large/);
+  await assert.rejects(fetchEcbDaily(reply("<Cube/>", { length: "999999" })), /too large/);
+  await assert.rejects(fetchEcbDaily(reply("", { status: 503 })), /answered 503/);
+})());
+
+// Job record is truthful (C2O-089): a resolved start or finalise error is reported as not persisted, never green.
+asyncChecks.push((async () => {
+  type Answer = { data?: unknown; error: { message: string } | null };
+  const fakeDb = (start: Answer, finish: Answer) => ({
+    from: () => ({
+      insert: () => ({ select: () => ({ single: async () => start }) }),
+      update: () => ({ eq: async () => finish }),
+    }),
+  }) as unknown as Parameters<typeof withJobRunStrict>[0];
+  const work = async () => ({ result: "recorded", rows: 3 });
+  const okRun = await withJobRunStrict(fakeDb({ data: { id: 7 }, error: null }, { error: null }), "fx-ecb", { retries: 0 }, work);
+  assert.equal(okRun.finalization.persisted, true);
+  const startFailed = await withJobRunStrict(fakeDb({ data: null, error: { message: "insert denied" } }, { error: null }), "fx-ecb", { retries: 0 }, work);
+  assert.equal(startFailed.finalization.persisted, false, "a resolved start error is not green");
+  const finishFailed = await withJobRunStrict(fakeDb({ data: { id: 7 }, error: null }, { error: { message: "update denied" } }), "fx-ecb", { retries: 0 }, work);
+  assert.equal(finishFailed.finalization.persisted, false, "a resolved finalise error is not green");
+  assert.match(finishFailed.finalization.error ?? "", /update denied/);
+})());
+
 // C2B-009: the TypeScript schema refuses duplicated two-value lists, like the RPC.
 {
   assert.equal(pdaApplicabilitySchema.safeParse({ settlementModes: ["cash", "agent_account", "cash"] }).success, false);
@@ -361,4 +510,7 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(pdaApplicabilitySchema.safeParse({ settlementModes: ["cash", "agent_account"] }).success, true);
 }
 
-console.log("PDA CHECK: ALL ASSERTIONS PASSED");
+Promise.all(asyncChecks).then(
+  () => console.log("PDA CHECK: ALL ASSERTIONS PASSED"),
+  (error) => { console.error(error); process.exit(1); },
+);

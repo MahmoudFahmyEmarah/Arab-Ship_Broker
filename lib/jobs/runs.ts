@@ -28,6 +28,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type JobName =
   | "refresh-matches"
+  | "fx-ecb"
   | "market-insights"
   | "groupmail-dispatch"
   | "email-sync"

@@ -1,13 +1,14 @@
 {
   "package": "egypt-488-2015",
-  "publishable": false,
+  "publishable": true,
   "ownerRuling": "5 Oct 2026: publish the 2015/2016 face values, labelled as base rates (not escalated), until fresh data is provided.",
-  "blockers": [
+  "blockers": [],
+  "resolved": [
     {
       "id": "flag-treatment",
       "finding": "C2B-007 #2",
-      "text": "These are the foreign-flag USD tables. The PDA request has no governed flag/tariff-treatment input, and PdaEstimator hard-codes voyageScope. Publish only after the engine and both estimator flows carry an explicit treatment (foreign/national); then add that condition to every rule. Until then the Egyptian tariff stays unavailable.",
-      "owner": "PDA owner (Codex)"
+      "text": "Resolved in PDA Wave 2 (20261007300000): every rule declares applicability.flagTreatments ['foreign']. The route flow resolves the flag state server-side (public.flag_states) and the engine derives the treatment against the port country; a national (EG) vessel gets no line from this foreign-USD set, and an unknown flag raises MISSING_INPUT.",
+      "owner": "PDA owner (Opus B, Wave 2; Codex audits)"
     }
   ],
   "sources": {
@@ -60,7 +61,7 @@
     }
   },
   "knownLimits": [
-    "Light dues are charged at the full rate; the 416/2019 reductions for calls combined with a Suez transit cannot be entered (manual amounts are non-negative).",
+    "Light dues are charged at the full rate; the 416/2019 reductions for calls combined with a Suez transit (−10 % / −20 %, Suez-only −25 %) are not applied. OWNER WAIVER (8 Oct 2026, C2O-090 B2C-035 P1-3): accepted as a labelled over-estimate; the line label says so.",
     "One tariff set per port (EGALY, EGDAM, EGPSD, EGSOK, …) with the same rules; minimum towage/mooring hours differ by port (towage instructions)."
   ]
 }
