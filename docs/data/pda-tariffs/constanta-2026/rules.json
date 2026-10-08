@@ -1,0 +1,381 @@
+[
+  {
+    "code": "access_fee",
+    "label": "Access tariff (per GT per entry)",
+    "basis": "per_gt",
+    "rate": 0.155,
+    "priority": 10,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ]
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001101",
+    "sourcePage": "1.1, table 1 (1/9)",
+    "sourceExcerpt": "applied to the ship's GT, for each entry of the ship into the port ... Bulk carrier €/UTB 0.155 in every GT group"
+  },
+  {
+    "code": "basin_fee",
+    "label": "Basin tariff (unit to confirm)",
+    "basis": "manual_quote",
+    "priority": 11,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ]
+    },
+    "manualInstructions": "1.3 basin tariff, bulk carrier row as printed: 0-5000 GT 0,651; 5001-10000 GT 0,576; 10001-20000 GT 0,534; 20001-45000 GT 0,501; 45001- 70000 GT 0,480; >70000 GT 0,448 (€/UTB). The page prints the unit €/UTB (per GT), but its text says it \"is applied to the maximum length of the ship (LOA) and the number of days of call in the port\" and its footnotes use EURO/m - day. Confirm the basis with CN APM or the agent before entering the amount.",
+    "sourceId": "00000000-0000-4000-9000-000000001103",
+    "sourcePage": "1.3 (1/4, 3/4-4/4)",
+    "sourceExcerpt": "Bulk carrier €/UTB 0,651 / 0,576 / 0,534 / 0,501 / 0,480 / 0,448; basis sentence: LOA x days"
+  },
+  {
+    "code": "dockage_other_cargo_1",
+    "label": "Dockage, bulk carrier, other cargoes (GT 0-5000)",
+    "basis": "per_loa_day",
+    "rate": 1.867,
+    "priority": 20,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "vesselTypes": [
+        "Bulk Carrier"
+      ],
+      "cargoTypes": [
+        "Grain"
+      ],
+      "minGt": 0,
+      "maxGt": 5000
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001102",
+    "sourcePage": "1.2, 2.7 (4/6)",
+    "sourceExcerpt": "when operating other cargoes ... Bulk carrier €/m-day 1,867 (GT 0-5000); applies to LOA and the number of days of call"
+  },
+  {
+    "code": "dockage_other_cargo_2",
+    "label": "Dockage, bulk carrier, other cargoes (GT 5001-10000)",
+    "basis": "per_loa_day",
+    "rate": 2.927,
+    "priority": 21,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "vesselTypes": [
+        "Bulk Carrier"
+      ],
+      "cargoTypes": [
+        "Grain"
+      ],
+      "minGt": 5000.000001,
+      "maxGt": 10000
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001102",
+    "sourcePage": "1.2, 2.7 (4/6)",
+    "sourceExcerpt": "when operating other cargoes ... Bulk carrier €/m-day 2,927 (GT 5001-10000); applies to LOA and the number of days of call"
+  },
+  {
+    "code": "dockage_other_cargo_3",
+    "label": "Dockage, bulk carrier, other cargoes (GT 10001-20000)",
+    "basis": "per_loa_day",
+    "rate": 4.981,
+    "priority": 22,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "vesselTypes": [
+        "Bulk Carrier"
+      ],
+      "cargoTypes": [
+        "Grain"
+      ],
+      "minGt": 10000.000001,
+      "maxGt": 20000
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001102",
+    "sourcePage": "1.2, 2.7 (4/6)",
+    "sourceExcerpt": "when operating other cargoes ... Bulk carrier €/m-day 4,981 (GT 10001-20000); applies to LOA and the number of days of call"
+  },
+  {
+    "code": "dockage_other_cargo_4",
+    "label": "Dockage, bulk carrier, other cargoes (GT 20001-45000)",
+    "basis": "per_loa_day",
+    "rate": 5.602,
+    "priority": 23,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "vesselTypes": [
+        "Bulk Carrier"
+      ],
+      "cargoTypes": [
+        "Grain"
+      ],
+      "minGt": 20000.000001,
+      "maxGt": 45000
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001102",
+    "sourcePage": "1.2, 2.7 (4/6)",
+    "sourceExcerpt": "when operating other cargoes ... Bulk carrier €/m-day 5,602 (GT 20001-45000); applies to LOA and the number of days of call"
+  },
+  {
+    "code": "dockage_other_cargo_5",
+    "label": "Dockage, bulk carrier, other cargoes (GT 45001- 70000)",
+    "basis": "per_loa_day",
+    "rate": 9.336,
+    "priority": 24,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "vesselTypes": [
+        "Bulk Carrier"
+      ],
+      "cargoTypes": [
+        "Grain"
+      ],
+      "minGt": 45000.000001,
+      "maxGt": 70000
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001102",
+    "sourcePage": "1.2, 2.7 (4/6)",
+    "sourceExcerpt": "when operating other cargoes ... Bulk carrier €/m-day 9,336 (GT 45001- 70000); applies to LOA and the number of days of call"
+  },
+  {
+    "code": "dockage_other_cargo_6",
+    "label": "Dockage, bulk carrier, other cargoes (GT >70000)",
+    "basis": "per_loa_day",
+    "rate": 13.071,
+    "priority": 25,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "vesselTypes": [
+        "Bulk Carrier"
+      ],
+      "cargoTypes": [
+        "Grain"
+      ],
+      "minGt": 70000.000001
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001102",
+    "sourcePage": "1.2, 2.7 (4/6)",
+    "sourceExcerpt": "when operating other cargoes ... Bulk carrier €/m-day 13,071 (GT >70000); applies to LOA and the number of days of call"
+  },
+  {
+    "code": "dockage_bulk_cargo_class",
+    "label": "Dockage, bulk carrier (cargo class to confirm)",
+    "basis": "manual_quote",
+    "priority": 30,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "vesselTypes": [
+        "Bulk Carrier"
+      ],
+      "cargoTypes": [
+        "Dry Bulk",
+        "Break Bulk"
+      ]
+    },
+    "manualInstructions": "1.2 dockage, €/m-day x LOA x days. (a) \"coal and derivatives, phosphates, apatite, iron ore, bauxite (or other derivatives)\", including idle berthing: 0-5000 GT 3,735; 5001-10000 GT 5,852; 10001-20000 GT 9,96; 20001-45000 GT 11,204; 45001- 70000 GT 18,673; >70000 GT 26,142. (b) other cargoes: 0-5000 GT 1,867; 5001-10000 GT 2,927; 10001-20000 GT 4,981; 20001-45000 GT 5,602; 45001- 70000 GT 9,336; >70000 GT 13,071. Mixed cargo: the class with the highest quantity. Choose the class for this cargo and enter LOA x days x rate.",
+    "sourceId": "00000000-0000-4000-9000-000000001102",
+    "sourcePage": "1.2, 2.7 (3/6-4/6)",
+    "sourceExcerpt": "Bulk cargo (listed cargoes) 3,735 ... 26,142; Bulk carrier (other cargoes) 1,867 ... 13,071 €/m-day"
+  },
+  {
+    "code": "dockage_other_vessel_types",
+    "label": "Dockage, other vessel types",
+    "basis": "manual_quote",
+    "priority": 31,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "vesselTypes": [
+        "Cargo Ship",
+        "General Cargo",
+        "Other"
+      ]
+    },
+    "manualInstructions": "1.2 dockage, €/m-day x LOA x days, 2.8 cargo ships: listed bulk cargoes (coal and derivatives, phosphates, apatite, iron ore, bauxite) 3,921 / 4,673 / 6,914 / 7,090 / 7,282 / 7,522; any other cargo, including idle berthing, 2,614 / 3,116 / 4,609 / 4,727 / 4,855 / 5,015 (GT groups 0-5000 ... >70000). Other ship types: see the 1.2 tables.",
+    "sourceId": "00000000-0000-4000-9000-000000001102",
+    "sourcePage": "1.2, 2.8 (4/6-5/6)",
+    "sourceExcerpt": "Cargo (listed bulk) 3,921 ... 7,522; Cargo (other) 2,614 ... 5,015 €/m-day"
+  },
+  {
+    "code": "pilotage_entry",
+    "label": "Pilotage, port entry manoeuvre",
+    "basis": "tiered_rate",
+    "unit": "gt",
+    "priority": 40,
+    "minimumAmount": 114,
+    "applicability": {
+      "requestedServices": [
+        "pilotage"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 5000,
+        "rate": 0.102
+      },
+      {
+        "order": 2,
+        "lowerBound": 5000,
+        "upperBound": 10000,
+        "rate": 0.067
+      },
+      {
+        "order": 3,
+        "lowerBound": 10000,
+        "upperBound": 20000,
+        "rate": 0.047
+      },
+      {
+        "order": 4,
+        "lowerBound": 20000,
+        "upperBound": 45000,
+        "rate": 0.041
+      },
+      {
+        "order": 5,
+        "lowerBound": 45000,
+        "upperBound": 70000,
+        "rate": 0.037
+      },
+      {
+        "order": 6,
+        "lowerBound": 70000,
+        "upperBound": null,
+        "rate": 0.037
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000001110",
+    "sourcePage": "1.10 (1/8)",
+    "sourceExcerpt": "0,102(*) / 0,067 / 0,047 / 0,041 / 0,037 / 0,037 euros/UTB/maneuver; (*) minimum 114 euro/ship/service in the 0-5000 group"
+  },
+  {
+    "code": "pilotage_exit",
+    "label": "Pilotage, port exit manoeuvre",
+    "basis": "tiered_rate",
+    "unit": "gt",
+    "priority": 41,
+    "minimumAmount": 114,
+    "applicability": {
+      "requestedServices": [
+        "pilotage"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 5000,
+        "rate": 0.102
+      },
+      {
+        "order": 2,
+        "lowerBound": 5000,
+        "upperBound": 10000,
+        "rate": 0.067
+      },
+      {
+        "order": 3,
+        "lowerBound": 10000,
+        "upperBound": 20000,
+        "rate": 0.047
+      },
+      {
+        "order": 4,
+        "lowerBound": 20000,
+        "upperBound": 45000,
+        "rate": 0.041
+      },
+      {
+        "order": 5,
+        "lowerBound": 45000,
+        "upperBound": 70000,
+        "rate": 0.037
+      },
+      {
+        "order": 6,
+        "lowerBound": 70000,
+        "upperBound": null,
+        "rate": 0.037
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000001110",
+    "sourcePage": "1.10 (1/8)",
+    "sourceExcerpt": "The tariffs apply for each arrival/departure/movement maneuver of ships in the port."
+  },
+  {
+    "code": "security_fee",
+    "label": "Safety and security tariff (per GT per call)",
+    "basis": "per_gt",
+    "rate": 0.08,
+    "priority": 50,
+    "minimumAmount": 215,
+    "applicability": {
+      "requestedServices": [
+        "security"
+      ]
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001105",
+    "sourcePage": "1.5 (1/1)",
+    "sourceExcerpt": "for seagoing vessels = 0.080 EURO/UGT (but not less than 215 EURO/ship); each ship that performs loading/unloading operations in the port berths belonging to the Administration, each call"
+  },
+  {
+    "code": "waste_fixed",
+    "label": "Ship waste reception, indirect tariff, fixed component",
+    "basis": "per_call",
+    "amount": 191,
+    "priority": 60,
+    "applicability": {
+      "requestedServices": [
+        "waste"
+      ]
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001109",
+    "sourcePage": "1.9, table no. 1 (1/7)",
+    "sourceExcerpt": "Fixed component 191 EUR/call"
+  },
+  {
+    "code": "waste_variable",
+    "label": "Ship waste reception, indirect tariff, variable component",
+    "basis": "per_gt",
+    "rate": 0.027,
+    "priority": 61,
+    "maximumAmount": 945,
+    "applicability": {
+      "requestedServices": [
+        "waste"
+      ]
+    },
+    "sourceId": "00000000-0000-4000-9000-000000001109",
+    "sourcePage": "1.9, table no. 1 (1/7)",
+    "sourceExcerpt": "Variable component 0.027 EUR/GRT, maximum 35.000 GRT; total maximum 1.136 EUR (= 191 + 0.027 x 35,000; variable part capped at 945)"
+  },
+  {
+    "code": "towage",
+    "label": "Towage (licensed operators' tariffs)",
+    "basis": "manual_quote",
+    "priority": 70,
+    "applicability": {
+      "requestedServices": [
+        "towage"
+      ]
+    },
+    "manualInstructions": "CN APM publishes no towage rates: towage is provided by licensed operators (Harbour Towage S.R.L., Coremar S.A., Black Sea Services S.R.L.; Midia Shipyard for its own vessels). Enter the operator's quotation.",
+    "sourceId": "00000000-0000-4000-9000-000000001199",
+    "sourcePage": "Towage (1/1)",
+    "sourceExcerpt": "since 1 Aug 2012 through specialized and authorised operators, under the contracts concluded between our company and these operators"
+  }
+]

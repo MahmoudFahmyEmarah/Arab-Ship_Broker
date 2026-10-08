@@ -113,7 +113,7 @@ export const RULES: RuleJson[] = [
   { code: "port_dues", label: "Port dues (foreign, per GRT per call)", basis: "per_gt", rate: 0.35, priority: 10,
     applicability: { requestedServices: ["port_dues"] },
     ...src("d488", "Art. 2 §6-1", "Port dues: 35 cents per GRT (foreign vessels, §6)") },
-  { code: "light_dues", label: "Light dues (foreign, per GRT)", basis: "per_gt", rate: 0.15, priority: 11,
+  { code: "light_dues", label: "Light dues (foreign, per GRT; full rate — may be 10–25 % lower when the call is combined with a Suez Canal transit, Decree 416/2019)", basis: "per_gt", rate: 0.15, priority: 11,
     applicability: { requestedServices: ["port_dues"] },
     ...src("d488", "Art. 2 §6-5", "Light dues 15 cents per GRT. Full rate; the 416/2019 reductions for calls combined with a Suez transit are not applied.") },
   { code: "berthing_dues", label: "Berthing dues (USD 0.02 per GRT per day)", basis: "manual_quote", priority: 12,
@@ -183,14 +183,15 @@ export const DEFERRED_CLEANLINESS: RuleJson[] = Object.entries(CLEAN).map(([carg
 
 export const MANIFEST = {
   package: "egypt-488-2015",
-  publishable: false,
+  publishable: true,
   ownerRuling: "5 Oct 2026: publish the 2015/2016 face values, labelled as base rates (not escalated), until fresh data is provided.",
-  blockers: [
+  blockers: [] as { id: string; finding: string; text: string; owner: string }[],
+  resolved: [
     {
       id: "flag-treatment",
       finding: "C2B-007 #2",
-      text: "These are the foreign-flag USD tables. The PDA request has no governed flag/tariff-treatment input, and PdaEstimator hard-codes voyageScope. Publish only after the engine and both estimator flows carry an explicit treatment (foreign/national); then add that condition to every rule. Until then the Egyptian tariff stays unavailable.",
-      owner: "PDA owner (Codex)",
+      text: "Resolved in PDA Wave 2 (20261007300000): every rule declares applicability.flagTreatments ['foreign']. The route flow resolves the flag state server-side (public.flag_states) and the engine derives the treatment against the port country; a national (EG) vessel gets no line from this foreign-USD set, and an unknown flag raises MISSING_INPUT.",
+      owner: "PDA owner (Opus B, Wave 2; Codex audits)",
     },
   ],
   sources: SOURCES,
@@ -207,7 +208,7 @@ export const MANIFEST = {
     },
   },
   knownLimits: [
-    "Light dues are charged at the full rate; the 416/2019 reductions for calls combined with a Suez transit cannot be entered (manual amounts are non-negative).",
+    "Light dues are charged at the full rate; the 416/2019 reductions for calls combined with a Suez transit (−10 % / −20 %, Suez-only −25 %) are not applied. OWNER WAIVER (8 Oct 2026, C2O-090 B2C-035 P1-3): accepted as a labelled over-estimate; the line label says so.",
     "One tariff set per port (EGALY, EGDAM, EGPSD, EGSOK, …) with the same rules; minimum towage/mooring hours differ by port (towage instructions).",
   ],
 };
@@ -222,6 +223,11 @@ function version(rules: RuleJson[]): PdaTariffVersion {
       source: { sourceId: r.sourceId, title: "Egyptian decrees 488/2015 / 800/2016", page: r.sourcePage, excerpt: r.sourceExcerpt },
     })) as PdaTariffRule[],
   };
+}
+
+// Wave 2: these are the foreign-flag USD tables, so every rule says so (C2B-007 #2 resolved).
+for (const r of [...RULES, ...DEFERRED_CLEANLINESS]) {
+  r.applicability = { ...(r.applicability ?? {}), flagTreatments: ["foreign"] };
 }
 
 let passed = 0;
@@ -260,14 +266,19 @@ check("provenance: each instrument's rules cite that instrument", () => {
   assert.deepEqual(by("d417"), []);
 });
 
-check("manifest: unpublishable while a blocker is open", () => {
-  assert.ok(MANIFEST.blockers.length > 0);
-  assert.equal(MANIFEST.publishable, false);
+check("manifest: publishable only with no open blocker", () => {
+  assert.equal(MANIFEST.blockers.length, 0);
+  assert.equal(MANIFEST.publishable, true);
+  assert.ok(MANIFEST.resolved.some((x) => x.id === "flag-treatment"));
+});
+
+check("every rule is foreign-flag only", () => {
+  for (const r of [...RULES, ...DEFERRED_CLEANLINESS]) assert.deepEqual(r.applicability?.flagTreatments, ["foreign"], r.code);
 });
 
 const call = (gt: number, cargoType: string | undefined, loaM: number) => ({
   portLocode: "EGALY", callDate: "2026-10-05",
-  vessel: { gt, nt: Math.round(gt * 0.6), loaM, vesselType: "bulk_carrier" },
+  vessel: { gt, nt: Math.round(gt * 0.6), loaM, vesselType: "bulk_carrier", flagState: "PA" as string | null },
   call: { days: 4, cargoType, cargoStatus: "laden" as const, voyageScope: "international" as const, location: "alongside" as const,
     requestedServices: ["port_dues", "pilotage", "towage", "mooring", "agency", "waste"] },
 });
@@ -317,6 +328,19 @@ check("agency fee: automatic to 300,000 GT, manual above", () => {
   assert.equal(amounts(above).agency_fee, undefined);
   assert.ok(manualCodes(above).includes("agency_fee_above_300000_gt"));
   assert.ok(!manualCodes(at(300000)).includes("agency_fee_above_300000_gt"));
+});
+
+check("flag treatment: a national (EG) vessel gets nothing from the foreign set; an unknown flag is MISSING_INPUT", () => {
+  const national = { ...call(40000, "Dry Bulk", 225) };
+  national.vessel = { ...national.vessel, flagState: "EG" };
+  const n = calculatePda(national, version(RULES));
+  assert.equal(n.lines.length, 0, "no foreign-USD line for an Egyptian-flag vessel");
+  assert.equal(n.warnings.filter((w) => w.code === "MISSING_INPUT").length, 0);
+  const unknown = { ...call(40000, "Dry Bulk", 225) };
+  unknown.vessel = { ...unknown.vessel, flagState: null };
+  const u = calculatePda(unknown, version(RULES));
+  assert.equal(u.lines.length, 0, "never guessed");
+  assert.ok(u.warnings.some((w) => w.code === "MISSING_INPUT" && /flag state/.test(w.message)), "names the missing flag state");
 });
 
 check("pilotage band edges follow the decree wording", () => {

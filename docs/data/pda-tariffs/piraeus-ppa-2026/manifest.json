@@ -1,0 +1,51 @@
+{
+  "package": "piraeus-ppa-2026",
+  "portLocode": "GRPIR",
+  "currency": "EUR",
+  "effectiveFrom": "2026-05-01",
+  "publishable": true,
+  "blockers": [],
+  "dependsOn": [
+    "20261007310000_pda_fx_rates: the route view shows USD; an EUR → USD governed FX rate must be recorded or every Piraeus leg stays FX_RATE_REQUIRED."
+  ],
+  "sources": {
+    "portZone": {
+      "placeholderId": "00000000-0000-4000-9000-000000003005",
+      "title": "PPA S.A. — Regulation and tariffs at the PPA port zone (June 2026)",
+      "authority": "official",
+      "file": "tmp/Data/GREEK PORTS.zip :: GREEK PORTS/REGULATIONS_AND_TARIFFS_at_PPA_PORT_ZONE_EN_JUNE_2026.pdf",
+      "sha256": "032499a3a04a6f0069f7fe2f941497d765d56e381a49dae41dde3fe3315ea7aa"
+    },
+    "liquidWaste": {
+      "placeholderId": "00000000-0000-4000-9000-000000003006",
+      "title": "PPA S.A. — System for covering the costs of liquid waste reception facilities (2026, from 1-5-2026)",
+      "authority": "official",
+      "file": "tmp/Data/GREEK PORTS.zip :: GREEK PORTS/SYSTEM FOR COVERING THE COSTS OF PROVIDING LIQUID WASTE RECEPTION FACILITIES FOR SHIPS  CARGO RESIDUES PPA SA_ 2026.pdf",
+      "sha256": "7c1614f986fbd525f79c8d05ec5774420ede1e3ce4714a0d0981a5c7753d2988"
+    },
+    "solidWaste": {
+      "placeholderId": "00000000-0000-4000-9000-000000003007",
+      "title": "PPA S.A. — System for covering the costs of solid waste reception facilities (Rev_2026_01)",
+      "authority": "official",
+      "file": "tmp/Data/GREEK PORTS.zip :: GREEK PORTS/SYSTEM FOR COVERING THE COSTS OF PROVIDING SOLID WASTE RECEPTION FACILITIES FOR SHIPS  CARGO RESIDUES_2026.pdf",
+      "sha256": "2bf9546862fdf782797f954a600c9435feba11e7189bee06a1441c3f47a16c26"
+    },
+    "tugs": {
+      "placeholderId": "00000000-0000-4000-9000-000000003008",
+      "title": "PPA S.A. — Regulation for the safe mooring and unmooring of ships subject to towing (no rates)",
+      "authority": "official",
+      "file": "tmp/Data/GREEK PORTS.zip :: GREEK PORTS/Tugboats_Regulation_EN.pdf",
+      "sha256": "ff717b6cc61de64fbb52f814a7f8d4eafc25cc46770837dc75aea01178a03566"
+    }
+  },
+  "knownLimits": [
+    "Effective dates differ by document: port-zone rates from 1/4/2024 (June 2026 edition), liquid waste from 1-5-2026, solid waste Rev_2026_01; the version is dated 2026-05-01, the latest of them.",
+    "Port use is charged on every arrival, including a call that only anchors (open question; exemption B.6 waives charges for anchoring ≤ 48 h for supplies or crew change).",
+    "Berthing counts started calendar days (00.01-24.00); the 6-hour two-day rule (6.2), the 50 % alongside-another-ship discount (6.7) and stern berthing at 35 % are not applied.",
+    "Anchorage is 0,397 per GT per started 15-day block; the printed text carries no effective date.",
+    "Waste fees are prepaid on every call (80 % refunded when waste is delivered, per the waste systems); the full fee is shown. GT stands in for GRT. The 70 % transit discount at the anchorage (< 48 h) and the ship-repair coefficient (262,12) are not applied.",
+    "The January CPI indexation clause of the waste systems is not applied beyond the printed figures.",
+    "Mooring is a manual line (steps per call not printed; not charged when pilotage moors). Towage has no PPA rates.",
+    "Not in the PPA pack: pilotage, light dues, agency, health, launch; VAT treatment is not stated."
+  ]
+}

@@ -1,0 +1,1638 @@
+[
+  {
+    "code": "port_dues",
+    "label": "Port dues (TRY, enter the USD equivalent)",
+    "basis": "manual_quote",
+    "priority": 10,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ]
+    },
+    "manualInstructions": "Port dues, 2026, Turkish lira per call by net tonnage: 11–500 1.283,90; 501–2.000 3.424,00; 2.001–4.000 6.848,10; 4.001–8.000 10.272,20; 8.001–10.000 17.120,40; 10.001–30.000 34.240,90; 30.001–50.000 51.361,40; over 50.000 85.602,30 TL. Vessels up to 10 NT are exempt. Enter the USD equivalent at the call date's rate (CBRT USD buying rate, or the governed EUR→TRY and EUR→USD rates: USD = TL ÷ EUR/TRY × EUR/USD). Frequency (per call / per entry) and the issuer are not printed — confirm with the agent; 50.000 NT exactly is read as 30.001–50.000.",
+    "sourceId": "00000000-0000-4000-9000-000000005006",
+    "sourcePage": "Table 1 and the paragraph after it",
+    "sourceExcerpt": "11-500 tonage vessels 1.283,90 TL … 50.000 over tonage vessels 85.602,30 TL; Vessels up to 10 NT are exemption from Port dues."
+  },
+  {
+    "code": "sanitary_dues",
+    "label": "Sanitary dues, per NT (USD 0,5025 × NT, paid in TL)",
+    "basis": "per_nt",
+    "rate": 0.5025,
+    "priority": 20,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "minNt": 50.000001
+    },
+    "sourceId": "00000000-0000-4000-9000-000000005007",
+    "sourcePage": "formula and exemption 4",
+    "sourceExcerpt": "0,5025 x US Dollar daily buying rate x vessel’s NT; exempt: Vessels which are less than 50 NT (including vessels which are 50 NT)"
+  },
+  {
+    "code": "pilotage_arrival",
+    "label": "Pilotage, arrival (USD per service; above 10,000 GT the header increment is continued per started 1,000 GT to the 80,000 GT cap (platform assumption, tables stop at 10,000 GT))",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 30,
+    "applicability": {
+      "requestedServices": [
+        "pilotage"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 1000,
+        "flatAmount": 197
+      },
+      {
+        "order": 2,
+        "lowerBound": 1000,
+        "upperBound": 2000,
+        "flatAmount": 278
+      },
+      {
+        "order": 3,
+        "lowerBound": 2000,
+        "upperBound": 3000,
+        "flatAmount": 359
+      },
+      {
+        "order": 4,
+        "lowerBound": 3000,
+        "upperBound": 4000,
+        "flatAmount": 440
+      },
+      {
+        "order": 5,
+        "lowerBound": 4000,
+        "upperBound": 5000,
+        "flatAmount": 521
+      },
+      {
+        "order": 6,
+        "lowerBound": 5000,
+        "upperBound": 6000,
+        "flatAmount": 602
+      },
+      {
+        "order": 7,
+        "lowerBound": 6000,
+        "upperBound": 7000,
+        "flatAmount": 683
+      },
+      {
+        "order": 8,
+        "lowerBound": 7000,
+        "upperBound": 8000,
+        "flatAmount": 764
+      },
+      {
+        "order": 9,
+        "lowerBound": 8000,
+        "upperBound": 9000,
+        "flatAmount": 845
+      },
+      {
+        "order": 10,
+        "lowerBound": 9000,
+        "upperBound": 10000,
+        "flatAmount": 926
+      },
+      {
+        "order": 11,
+        "lowerBound": 10000,
+        "upperBound": 11000,
+        "flatAmount": 1007
+      },
+      {
+        "order": 12,
+        "lowerBound": 11000,
+        "upperBound": 12000,
+        "flatAmount": 1088
+      },
+      {
+        "order": 13,
+        "lowerBound": 12000,
+        "upperBound": 13000,
+        "flatAmount": 1169
+      },
+      {
+        "order": 14,
+        "lowerBound": 13000,
+        "upperBound": 14000,
+        "flatAmount": 1250
+      },
+      {
+        "order": 15,
+        "lowerBound": 14000,
+        "upperBound": 15000,
+        "flatAmount": 1331
+      },
+      {
+        "order": 16,
+        "lowerBound": 15000,
+        "upperBound": 16000,
+        "flatAmount": 1412
+      },
+      {
+        "order": 17,
+        "lowerBound": 16000,
+        "upperBound": 17000,
+        "flatAmount": 1493
+      },
+      {
+        "order": 18,
+        "lowerBound": 17000,
+        "upperBound": 18000,
+        "flatAmount": 1574
+      },
+      {
+        "order": 19,
+        "lowerBound": 18000,
+        "upperBound": 19000,
+        "flatAmount": 1655
+      },
+      {
+        "order": 20,
+        "lowerBound": 19000,
+        "upperBound": 20000,
+        "flatAmount": 1736
+      },
+      {
+        "order": 21,
+        "lowerBound": 20000,
+        "upperBound": 21000,
+        "flatAmount": 1817
+      },
+      {
+        "order": 22,
+        "lowerBound": 21000,
+        "upperBound": 22000,
+        "flatAmount": 1898
+      },
+      {
+        "order": 23,
+        "lowerBound": 22000,
+        "upperBound": 23000,
+        "flatAmount": 1979
+      },
+      {
+        "order": 24,
+        "lowerBound": 23000,
+        "upperBound": 24000,
+        "flatAmount": 2060
+      },
+      {
+        "order": 25,
+        "lowerBound": 24000,
+        "upperBound": 25000,
+        "flatAmount": 2141
+      },
+      {
+        "order": 26,
+        "lowerBound": 25000,
+        "upperBound": 26000,
+        "flatAmount": 2222
+      },
+      {
+        "order": 27,
+        "lowerBound": 26000,
+        "upperBound": 27000,
+        "flatAmount": 2303
+      },
+      {
+        "order": 28,
+        "lowerBound": 27000,
+        "upperBound": 28000,
+        "flatAmount": 2384
+      },
+      {
+        "order": 29,
+        "lowerBound": 28000,
+        "upperBound": 29000,
+        "flatAmount": 2465
+      },
+      {
+        "order": 30,
+        "lowerBound": 29000,
+        "upperBound": 30000,
+        "flatAmount": 2546
+      },
+      {
+        "order": 31,
+        "lowerBound": 30000,
+        "upperBound": 31000,
+        "flatAmount": 2627
+      },
+      {
+        "order": 32,
+        "lowerBound": 31000,
+        "upperBound": 32000,
+        "flatAmount": 2708
+      },
+      {
+        "order": 33,
+        "lowerBound": 32000,
+        "upperBound": 33000,
+        "flatAmount": 2789
+      },
+      {
+        "order": 34,
+        "lowerBound": 33000,
+        "upperBound": 34000,
+        "flatAmount": 2870
+      },
+      {
+        "order": 35,
+        "lowerBound": 34000,
+        "upperBound": 35000,
+        "flatAmount": 2951
+      },
+      {
+        "order": 36,
+        "lowerBound": 35000,
+        "upperBound": 36000,
+        "flatAmount": 3032
+      },
+      {
+        "order": 37,
+        "lowerBound": 36000,
+        "upperBound": 37000,
+        "flatAmount": 3113
+      },
+      {
+        "order": 38,
+        "lowerBound": 37000,
+        "upperBound": 38000,
+        "flatAmount": 3194
+      },
+      {
+        "order": 39,
+        "lowerBound": 38000,
+        "upperBound": 39000,
+        "flatAmount": 3275
+      },
+      {
+        "order": 40,
+        "lowerBound": 39000,
+        "upperBound": 40000,
+        "flatAmount": 3356
+      },
+      {
+        "order": 41,
+        "lowerBound": 40000,
+        "upperBound": 41000,
+        "flatAmount": 3437
+      },
+      {
+        "order": 42,
+        "lowerBound": 41000,
+        "upperBound": 42000,
+        "flatAmount": 3518
+      },
+      {
+        "order": 43,
+        "lowerBound": 42000,
+        "upperBound": 43000,
+        "flatAmount": 3599
+      },
+      {
+        "order": 44,
+        "lowerBound": 43000,
+        "upperBound": 44000,
+        "flatAmount": 3680
+      },
+      {
+        "order": 45,
+        "lowerBound": 44000,
+        "upperBound": 45000,
+        "flatAmount": 3761
+      },
+      {
+        "order": 46,
+        "lowerBound": 45000,
+        "upperBound": 46000,
+        "flatAmount": 3842
+      },
+      {
+        "order": 47,
+        "lowerBound": 46000,
+        "upperBound": 47000,
+        "flatAmount": 3923
+      },
+      {
+        "order": 48,
+        "lowerBound": 47000,
+        "upperBound": 48000,
+        "flatAmount": 4004
+      },
+      {
+        "order": 49,
+        "lowerBound": 48000,
+        "upperBound": 49000,
+        "flatAmount": 4085
+      },
+      {
+        "order": 50,
+        "lowerBound": 49000,
+        "upperBound": 50000,
+        "flatAmount": 4166
+      },
+      {
+        "order": 51,
+        "lowerBound": 50000,
+        "upperBound": 51000,
+        "flatAmount": 4247
+      },
+      {
+        "order": 52,
+        "lowerBound": 51000,
+        "upperBound": 52000,
+        "flatAmount": 4328
+      },
+      {
+        "order": 53,
+        "lowerBound": 52000,
+        "upperBound": 53000,
+        "flatAmount": 4409
+      },
+      {
+        "order": 54,
+        "lowerBound": 53000,
+        "upperBound": 54000,
+        "flatAmount": 4490
+      },
+      {
+        "order": 55,
+        "lowerBound": 54000,
+        "upperBound": 55000,
+        "flatAmount": 4571
+      },
+      {
+        "order": 56,
+        "lowerBound": 55000,
+        "upperBound": 56000,
+        "flatAmount": 4652
+      },
+      {
+        "order": 57,
+        "lowerBound": 56000,
+        "upperBound": 57000,
+        "flatAmount": 4733
+      },
+      {
+        "order": 58,
+        "lowerBound": 57000,
+        "upperBound": 58000,
+        "flatAmount": 4814
+      },
+      {
+        "order": 59,
+        "lowerBound": 58000,
+        "upperBound": 59000,
+        "flatAmount": 4895
+      },
+      {
+        "order": 60,
+        "lowerBound": 59000,
+        "upperBound": 60000,
+        "flatAmount": 4976
+      },
+      {
+        "order": 61,
+        "lowerBound": 60000,
+        "upperBound": 61000,
+        "flatAmount": 5057
+      },
+      {
+        "order": 62,
+        "lowerBound": 61000,
+        "upperBound": 62000,
+        "flatAmount": 5138
+      },
+      {
+        "order": 63,
+        "lowerBound": 62000,
+        "upperBound": 63000,
+        "flatAmount": 5219
+      },
+      {
+        "order": 64,
+        "lowerBound": 63000,
+        "upperBound": 64000,
+        "flatAmount": 5300
+      },
+      {
+        "order": 65,
+        "lowerBound": 64000,
+        "upperBound": 65000,
+        "flatAmount": 5381
+      },
+      {
+        "order": 66,
+        "lowerBound": 65000,
+        "upperBound": 66000,
+        "flatAmount": 5462
+      },
+      {
+        "order": 67,
+        "lowerBound": 66000,
+        "upperBound": 67000,
+        "flatAmount": 5543
+      },
+      {
+        "order": 68,
+        "lowerBound": 67000,
+        "upperBound": 68000,
+        "flatAmount": 5624
+      },
+      {
+        "order": 69,
+        "lowerBound": 68000,
+        "upperBound": 69000,
+        "flatAmount": 5705
+      },
+      {
+        "order": 70,
+        "lowerBound": 69000,
+        "upperBound": 70000,
+        "flatAmount": 5786
+      },
+      {
+        "order": 71,
+        "lowerBound": 70000,
+        "upperBound": 71000,
+        "flatAmount": 5867
+      },
+      {
+        "order": 72,
+        "lowerBound": 71000,
+        "upperBound": 72000,
+        "flatAmount": 5948
+      },
+      {
+        "order": 73,
+        "lowerBound": 72000,
+        "upperBound": 73000,
+        "flatAmount": 6029
+      },
+      {
+        "order": 74,
+        "lowerBound": 73000,
+        "upperBound": 74000,
+        "flatAmount": 6110
+      },
+      {
+        "order": 75,
+        "lowerBound": 74000,
+        "upperBound": 75000,
+        "flatAmount": 6191
+      },
+      {
+        "order": 76,
+        "lowerBound": 75000,
+        "upperBound": 76000,
+        "flatAmount": 6272
+      },
+      {
+        "order": 77,
+        "lowerBound": 76000,
+        "upperBound": 77000,
+        "flatAmount": 6353
+      },
+      {
+        "order": 78,
+        "lowerBound": 77000,
+        "upperBound": 78000,
+        "flatAmount": 6434
+      },
+      {
+        "order": 79,
+        "lowerBound": 78000,
+        "upperBound": 79000,
+        "flatAmount": 6515
+      },
+      {
+        "order": 80,
+        "lowerBound": 79000,
+        "upperBound": 80000,
+        "flatAmount": 6596
+      },
+      {
+        "order": 81,
+        "lowerBound": 80000,
+        "upperBound": null,
+        "flatAmount": 6596
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000005012",
+    "sourcePage": "§1 Table 1 and §2 Table 5, Other Cargo Vessels; §1 principle 8",
+    "sourceExcerpt": "Other Cargo Vessels \"197+81\": 197 / 278 / 359 / 440 / 521 / 602 / 683 / 764 / 845 / 926 (1-1000 … 9001-10000 GT); For vessels over 80.000 GT, the fees of 80.000 GT are applied."
+  },
+  {
+    "code": "pilotage_departure",
+    "label": "Pilotage, departure (USD per service; above 10,000 GT the header increment is continued per started 1,000 GT to the 80,000 GT cap (platform assumption, tables stop at 10,000 GT))",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 31,
+    "applicability": {
+      "requestedServices": [
+        "pilotage"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 1000,
+        "flatAmount": 197
+      },
+      {
+        "order": 2,
+        "lowerBound": 1000,
+        "upperBound": 2000,
+        "flatAmount": 278
+      },
+      {
+        "order": 3,
+        "lowerBound": 2000,
+        "upperBound": 3000,
+        "flatAmount": 359
+      },
+      {
+        "order": 4,
+        "lowerBound": 3000,
+        "upperBound": 4000,
+        "flatAmount": 440
+      },
+      {
+        "order": 5,
+        "lowerBound": 4000,
+        "upperBound": 5000,
+        "flatAmount": 521
+      },
+      {
+        "order": 6,
+        "lowerBound": 5000,
+        "upperBound": 6000,
+        "flatAmount": 602
+      },
+      {
+        "order": 7,
+        "lowerBound": 6000,
+        "upperBound": 7000,
+        "flatAmount": 683
+      },
+      {
+        "order": 8,
+        "lowerBound": 7000,
+        "upperBound": 8000,
+        "flatAmount": 764
+      },
+      {
+        "order": 9,
+        "lowerBound": 8000,
+        "upperBound": 9000,
+        "flatAmount": 845
+      },
+      {
+        "order": 10,
+        "lowerBound": 9000,
+        "upperBound": 10000,
+        "flatAmount": 926
+      },
+      {
+        "order": 11,
+        "lowerBound": 10000,
+        "upperBound": 11000,
+        "flatAmount": 1007
+      },
+      {
+        "order": 12,
+        "lowerBound": 11000,
+        "upperBound": 12000,
+        "flatAmount": 1088
+      },
+      {
+        "order": 13,
+        "lowerBound": 12000,
+        "upperBound": 13000,
+        "flatAmount": 1169
+      },
+      {
+        "order": 14,
+        "lowerBound": 13000,
+        "upperBound": 14000,
+        "flatAmount": 1250
+      },
+      {
+        "order": 15,
+        "lowerBound": 14000,
+        "upperBound": 15000,
+        "flatAmount": 1331
+      },
+      {
+        "order": 16,
+        "lowerBound": 15000,
+        "upperBound": 16000,
+        "flatAmount": 1412
+      },
+      {
+        "order": 17,
+        "lowerBound": 16000,
+        "upperBound": 17000,
+        "flatAmount": 1493
+      },
+      {
+        "order": 18,
+        "lowerBound": 17000,
+        "upperBound": 18000,
+        "flatAmount": 1574
+      },
+      {
+        "order": 19,
+        "lowerBound": 18000,
+        "upperBound": 19000,
+        "flatAmount": 1655
+      },
+      {
+        "order": 20,
+        "lowerBound": 19000,
+        "upperBound": 20000,
+        "flatAmount": 1736
+      },
+      {
+        "order": 21,
+        "lowerBound": 20000,
+        "upperBound": 21000,
+        "flatAmount": 1817
+      },
+      {
+        "order": 22,
+        "lowerBound": 21000,
+        "upperBound": 22000,
+        "flatAmount": 1898
+      },
+      {
+        "order": 23,
+        "lowerBound": 22000,
+        "upperBound": 23000,
+        "flatAmount": 1979
+      },
+      {
+        "order": 24,
+        "lowerBound": 23000,
+        "upperBound": 24000,
+        "flatAmount": 2060
+      },
+      {
+        "order": 25,
+        "lowerBound": 24000,
+        "upperBound": 25000,
+        "flatAmount": 2141
+      },
+      {
+        "order": 26,
+        "lowerBound": 25000,
+        "upperBound": 26000,
+        "flatAmount": 2222
+      },
+      {
+        "order": 27,
+        "lowerBound": 26000,
+        "upperBound": 27000,
+        "flatAmount": 2303
+      },
+      {
+        "order": 28,
+        "lowerBound": 27000,
+        "upperBound": 28000,
+        "flatAmount": 2384
+      },
+      {
+        "order": 29,
+        "lowerBound": 28000,
+        "upperBound": 29000,
+        "flatAmount": 2465
+      },
+      {
+        "order": 30,
+        "lowerBound": 29000,
+        "upperBound": 30000,
+        "flatAmount": 2546
+      },
+      {
+        "order": 31,
+        "lowerBound": 30000,
+        "upperBound": 31000,
+        "flatAmount": 2627
+      },
+      {
+        "order": 32,
+        "lowerBound": 31000,
+        "upperBound": 32000,
+        "flatAmount": 2708
+      },
+      {
+        "order": 33,
+        "lowerBound": 32000,
+        "upperBound": 33000,
+        "flatAmount": 2789
+      },
+      {
+        "order": 34,
+        "lowerBound": 33000,
+        "upperBound": 34000,
+        "flatAmount": 2870
+      },
+      {
+        "order": 35,
+        "lowerBound": 34000,
+        "upperBound": 35000,
+        "flatAmount": 2951
+      },
+      {
+        "order": 36,
+        "lowerBound": 35000,
+        "upperBound": 36000,
+        "flatAmount": 3032
+      },
+      {
+        "order": 37,
+        "lowerBound": 36000,
+        "upperBound": 37000,
+        "flatAmount": 3113
+      },
+      {
+        "order": 38,
+        "lowerBound": 37000,
+        "upperBound": 38000,
+        "flatAmount": 3194
+      },
+      {
+        "order": 39,
+        "lowerBound": 38000,
+        "upperBound": 39000,
+        "flatAmount": 3275
+      },
+      {
+        "order": 40,
+        "lowerBound": 39000,
+        "upperBound": 40000,
+        "flatAmount": 3356
+      },
+      {
+        "order": 41,
+        "lowerBound": 40000,
+        "upperBound": 41000,
+        "flatAmount": 3437
+      },
+      {
+        "order": 42,
+        "lowerBound": 41000,
+        "upperBound": 42000,
+        "flatAmount": 3518
+      },
+      {
+        "order": 43,
+        "lowerBound": 42000,
+        "upperBound": 43000,
+        "flatAmount": 3599
+      },
+      {
+        "order": 44,
+        "lowerBound": 43000,
+        "upperBound": 44000,
+        "flatAmount": 3680
+      },
+      {
+        "order": 45,
+        "lowerBound": 44000,
+        "upperBound": 45000,
+        "flatAmount": 3761
+      },
+      {
+        "order": 46,
+        "lowerBound": 45000,
+        "upperBound": 46000,
+        "flatAmount": 3842
+      },
+      {
+        "order": 47,
+        "lowerBound": 46000,
+        "upperBound": 47000,
+        "flatAmount": 3923
+      },
+      {
+        "order": 48,
+        "lowerBound": 47000,
+        "upperBound": 48000,
+        "flatAmount": 4004
+      },
+      {
+        "order": 49,
+        "lowerBound": 48000,
+        "upperBound": 49000,
+        "flatAmount": 4085
+      },
+      {
+        "order": 50,
+        "lowerBound": 49000,
+        "upperBound": 50000,
+        "flatAmount": 4166
+      },
+      {
+        "order": 51,
+        "lowerBound": 50000,
+        "upperBound": 51000,
+        "flatAmount": 4247
+      },
+      {
+        "order": 52,
+        "lowerBound": 51000,
+        "upperBound": 52000,
+        "flatAmount": 4328
+      },
+      {
+        "order": 53,
+        "lowerBound": 52000,
+        "upperBound": 53000,
+        "flatAmount": 4409
+      },
+      {
+        "order": 54,
+        "lowerBound": 53000,
+        "upperBound": 54000,
+        "flatAmount": 4490
+      },
+      {
+        "order": 55,
+        "lowerBound": 54000,
+        "upperBound": 55000,
+        "flatAmount": 4571
+      },
+      {
+        "order": 56,
+        "lowerBound": 55000,
+        "upperBound": 56000,
+        "flatAmount": 4652
+      },
+      {
+        "order": 57,
+        "lowerBound": 56000,
+        "upperBound": 57000,
+        "flatAmount": 4733
+      },
+      {
+        "order": 58,
+        "lowerBound": 57000,
+        "upperBound": 58000,
+        "flatAmount": 4814
+      },
+      {
+        "order": 59,
+        "lowerBound": 58000,
+        "upperBound": 59000,
+        "flatAmount": 4895
+      },
+      {
+        "order": 60,
+        "lowerBound": 59000,
+        "upperBound": 60000,
+        "flatAmount": 4976
+      },
+      {
+        "order": 61,
+        "lowerBound": 60000,
+        "upperBound": 61000,
+        "flatAmount": 5057
+      },
+      {
+        "order": 62,
+        "lowerBound": 61000,
+        "upperBound": 62000,
+        "flatAmount": 5138
+      },
+      {
+        "order": 63,
+        "lowerBound": 62000,
+        "upperBound": 63000,
+        "flatAmount": 5219
+      },
+      {
+        "order": 64,
+        "lowerBound": 63000,
+        "upperBound": 64000,
+        "flatAmount": 5300
+      },
+      {
+        "order": 65,
+        "lowerBound": 64000,
+        "upperBound": 65000,
+        "flatAmount": 5381
+      },
+      {
+        "order": 66,
+        "lowerBound": 65000,
+        "upperBound": 66000,
+        "flatAmount": 5462
+      },
+      {
+        "order": 67,
+        "lowerBound": 66000,
+        "upperBound": 67000,
+        "flatAmount": 5543
+      },
+      {
+        "order": 68,
+        "lowerBound": 67000,
+        "upperBound": 68000,
+        "flatAmount": 5624
+      },
+      {
+        "order": 69,
+        "lowerBound": 68000,
+        "upperBound": 69000,
+        "flatAmount": 5705
+      },
+      {
+        "order": 70,
+        "lowerBound": 69000,
+        "upperBound": 70000,
+        "flatAmount": 5786
+      },
+      {
+        "order": 71,
+        "lowerBound": 70000,
+        "upperBound": 71000,
+        "flatAmount": 5867
+      },
+      {
+        "order": 72,
+        "lowerBound": 71000,
+        "upperBound": 72000,
+        "flatAmount": 5948
+      },
+      {
+        "order": 73,
+        "lowerBound": 72000,
+        "upperBound": 73000,
+        "flatAmount": 6029
+      },
+      {
+        "order": 74,
+        "lowerBound": 73000,
+        "upperBound": 74000,
+        "flatAmount": 6110
+      },
+      {
+        "order": 75,
+        "lowerBound": 74000,
+        "upperBound": 75000,
+        "flatAmount": 6191
+      },
+      {
+        "order": 76,
+        "lowerBound": 75000,
+        "upperBound": 76000,
+        "flatAmount": 6272
+      },
+      {
+        "order": 77,
+        "lowerBound": 76000,
+        "upperBound": 77000,
+        "flatAmount": 6353
+      },
+      {
+        "order": 78,
+        "lowerBound": 77000,
+        "upperBound": 78000,
+        "flatAmount": 6434
+      },
+      {
+        "order": 79,
+        "lowerBound": 78000,
+        "upperBound": 79000,
+        "flatAmount": 6515
+      },
+      {
+        "order": 80,
+        "lowerBound": 79000,
+        "upperBound": 80000,
+        "flatAmount": 6596
+      },
+      {
+        "order": 81,
+        "lowerBound": 80000,
+        "upperBound": null,
+        "flatAmount": 6596
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000005012",
+    "sourcePage": "§1 Table 1 and §2 Table 5, Other Cargo Vessels; §1 principle 8",
+    "sourceExcerpt": "Other Cargo Vessels \"197+81\": 197 … 926 per service (1-1000 … 9001-10000 GT)"
+  },
+  {
+    "code": "towage",
+    "label": "Towage (USD per tug per service)",
+    "basis": "manual_quote",
+    "priority": 40,
+    "applicability": {
+      "requestedServices": [
+        "towage"
+      ]
+    },
+    "manualInstructions": "Towage, Other Cargo Vessels, USD per tug per service: 373 up to 1,000 GT plus 70 per further started 1,000 GT (printed to 10,000 GT = 1003; above that the same increment is a platform assumption, capped at 80,000 GT = 5903). The number of tugs is set by the port regulations (a ship with working bow and stern thrusters takes one tug). Enter (tugs on arrival + tugs on departure) × the per-tug fee. +50 % on public holidays; shifting between berths −50 %.",
+    "sourceId": "00000000-0000-4000-9000-000000005012",
+    "sourcePage": "§1 Table 2 and application principles 1, 2, 4, 7, 8; §2 Table 6",
+    "sourceExcerpt": "Other Cargo Vessels \"373+70\": 373 / 443 / … / 1003 (0-1000 … 9001-10000 GT)"
+  },
+  {
+    "code": "mooring",
+    "label": "Mooring and unmooring, once per call (USD; above 10,000 GT the header increment is continued per started 1,000 GT to the 80,000 GT cap (platform assumption, tables stop at 10,000 GT))",
+    "basis": "tiered_flat",
+    "unit": "gt",
+    "priority": 50,
+    "applicability": {
+      "requestedServices": [
+        "mooring"
+      ]
+    },
+    "bands": [
+      {
+        "order": 1,
+        "lowerBound": 0,
+        "upperBound": 1000,
+        "flatAmount": 22
+      },
+      {
+        "order": 2,
+        "lowerBound": 1000,
+        "upperBound": 2000,
+        "flatAmount": 33
+      },
+      {
+        "order": 3,
+        "lowerBound": 2000,
+        "upperBound": 3000,
+        "flatAmount": 44
+      },
+      {
+        "order": 4,
+        "lowerBound": 3000,
+        "upperBound": 4000,
+        "flatAmount": 55
+      },
+      {
+        "order": 5,
+        "lowerBound": 4000,
+        "upperBound": 5000,
+        "flatAmount": 66
+      },
+      {
+        "order": 6,
+        "lowerBound": 5000,
+        "upperBound": 6000,
+        "flatAmount": 77
+      },
+      {
+        "order": 7,
+        "lowerBound": 6000,
+        "upperBound": 7000,
+        "flatAmount": 88
+      },
+      {
+        "order": 8,
+        "lowerBound": 7000,
+        "upperBound": 8000,
+        "flatAmount": 99
+      },
+      {
+        "order": 9,
+        "lowerBound": 8000,
+        "upperBound": 9000,
+        "flatAmount": 110
+      },
+      {
+        "order": 10,
+        "lowerBound": 9000,
+        "upperBound": 10000,
+        "flatAmount": 121
+      },
+      {
+        "order": 11,
+        "lowerBound": 10000,
+        "upperBound": 11000,
+        "flatAmount": 132
+      },
+      {
+        "order": 12,
+        "lowerBound": 11000,
+        "upperBound": 12000,
+        "flatAmount": 143
+      },
+      {
+        "order": 13,
+        "lowerBound": 12000,
+        "upperBound": 13000,
+        "flatAmount": 154
+      },
+      {
+        "order": 14,
+        "lowerBound": 13000,
+        "upperBound": 14000,
+        "flatAmount": 165
+      },
+      {
+        "order": 15,
+        "lowerBound": 14000,
+        "upperBound": 15000,
+        "flatAmount": 176
+      },
+      {
+        "order": 16,
+        "lowerBound": 15000,
+        "upperBound": 16000,
+        "flatAmount": 187
+      },
+      {
+        "order": 17,
+        "lowerBound": 16000,
+        "upperBound": 17000,
+        "flatAmount": 198
+      },
+      {
+        "order": 18,
+        "lowerBound": 17000,
+        "upperBound": 18000,
+        "flatAmount": 209
+      },
+      {
+        "order": 19,
+        "lowerBound": 18000,
+        "upperBound": 19000,
+        "flatAmount": 220
+      },
+      {
+        "order": 20,
+        "lowerBound": 19000,
+        "upperBound": 20000,
+        "flatAmount": 231
+      },
+      {
+        "order": 21,
+        "lowerBound": 20000,
+        "upperBound": 21000,
+        "flatAmount": 242
+      },
+      {
+        "order": 22,
+        "lowerBound": 21000,
+        "upperBound": 22000,
+        "flatAmount": 253
+      },
+      {
+        "order": 23,
+        "lowerBound": 22000,
+        "upperBound": 23000,
+        "flatAmount": 264
+      },
+      {
+        "order": 24,
+        "lowerBound": 23000,
+        "upperBound": 24000,
+        "flatAmount": 275
+      },
+      {
+        "order": 25,
+        "lowerBound": 24000,
+        "upperBound": 25000,
+        "flatAmount": 286
+      },
+      {
+        "order": 26,
+        "lowerBound": 25000,
+        "upperBound": 26000,
+        "flatAmount": 297
+      },
+      {
+        "order": 27,
+        "lowerBound": 26000,
+        "upperBound": 27000,
+        "flatAmount": 308
+      },
+      {
+        "order": 28,
+        "lowerBound": 27000,
+        "upperBound": 28000,
+        "flatAmount": 319
+      },
+      {
+        "order": 29,
+        "lowerBound": 28000,
+        "upperBound": 29000,
+        "flatAmount": 330
+      },
+      {
+        "order": 30,
+        "lowerBound": 29000,
+        "upperBound": 30000,
+        "flatAmount": 341
+      },
+      {
+        "order": 31,
+        "lowerBound": 30000,
+        "upperBound": 31000,
+        "flatAmount": 352
+      },
+      {
+        "order": 32,
+        "lowerBound": 31000,
+        "upperBound": 32000,
+        "flatAmount": 363
+      },
+      {
+        "order": 33,
+        "lowerBound": 32000,
+        "upperBound": 33000,
+        "flatAmount": 374
+      },
+      {
+        "order": 34,
+        "lowerBound": 33000,
+        "upperBound": 34000,
+        "flatAmount": 385
+      },
+      {
+        "order": 35,
+        "lowerBound": 34000,
+        "upperBound": 35000,
+        "flatAmount": 396
+      },
+      {
+        "order": 36,
+        "lowerBound": 35000,
+        "upperBound": 36000,
+        "flatAmount": 407
+      },
+      {
+        "order": 37,
+        "lowerBound": 36000,
+        "upperBound": 37000,
+        "flatAmount": 418
+      },
+      {
+        "order": 38,
+        "lowerBound": 37000,
+        "upperBound": 38000,
+        "flatAmount": 429
+      },
+      {
+        "order": 39,
+        "lowerBound": 38000,
+        "upperBound": 39000,
+        "flatAmount": 440
+      },
+      {
+        "order": 40,
+        "lowerBound": 39000,
+        "upperBound": 40000,
+        "flatAmount": 451
+      },
+      {
+        "order": 41,
+        "lowerBound": 40000,
+        "upperBound": 41000,
+        "flatAmount": 462
+      },
+      {
+        "order": 42,
+        "lowerBound": 41000,
+        "upperBound": 42000,
+        "flatAmount": 473
+      },
+      {
+        "order": 43,
+        "lowerBound": 42000,
+        "upperBound": 43000,
+        "flatAmount": 484
+      },
+      {
+        "order": 44,
+        "lowerBound": 43000,
+        "upperBound": 44000,
+        "flatAmount": 495
+      },
+      {
+        "order": 45,
+        "lowerBound": 44000,
+        "upperBound": 45000,
+        "flatAmount": 506
+      },
+      {
+        "order": 46,
+        "lowerBound": 45000,
+        "upperBound": 46000,
+        "flatAmount": 517
+      },
+      {
+        "order": 47,
+        "lowerBound": 46000,
+        "upperBound": 47000,
+        "flatAmount": 528
+      },
+      {
+        "order": 48,
+        "lowerBound": 47000,
+        "upperBound": 48000,
+        "flatAmount": 539
+      },
+      {
+        "order": 49,
+        "lowerBound": 48000,
+        "upperBound": 49000,
+        "flatAmount": 550
+      },
+      {
+        "order": 50,
+        "lowerBound": 49000,
+        "upperBound": 50000,
+        "flatAmount": 561
+      },
+      {
+        "order": 51,
+        "lowerBound": 50000,
+        "upperBound": 51000,
+        "flatAmount": 572
+      },
+      {
+        "order": 52,
+        "lowerBound": 51000,
+        "upperBound": 52000,
+        "flatAmount": 583
+      },
+      {
+        "order": 53,
+        "lowerBound": 52000,
+        "upperBound": 53000,
+        "flatAmount": 594
+      },
+      {
+        "order": 54,
+        "lowerBound": 53000,
+        "upperBound": 54000,
+        "flatAmount": 605
+      },
+      {
+        "order": 55,
+        "lowerBound": 54000,
+        "upperBound": 55000,
+        "flatAmount": 616
+      },
+      {
+        "order": 56,
+        "lowerBound": 55000,
+        "upperBound": 56000,
+        "flatAmount": 627
+      },
+      {
+        "order": 57,
+        "lowerBound": 56000,
+        "upperBound": 57000,
+        "flatAmount": 638
+      },
+      {
+        "order": 58,
+        "lowerBound": 57000,
+        "upperBound": 58000,
+        "flatAmount": 649
+      },
+      {
+        "order": 59,
+        "lowerBound": 58000,
+        "upperBound": 59000,
+        "flatAmount": 660
+      },
+      {
+        "order": 60,
+        "lowerBound": 59000,
+        "upperBound": 60000,
+        "flatAmount": 671
+      },
+      {
+        "order": 61,
+        "lowerBound": 60000,
+        "upperBound": 61000,
+        "flatAmount": 682
+      },
+      {
+        "order": 62,
+        "lowerBound": 61000,
+        "upperBound": 62000,
+        "flatAmount": 693
+      },
+      {
+        "order": 63,
+        "lowerBound": 62000,
+        "upperBound": 63000,
+        "flatAmount": 704
+      },
+      {
+        "order": 64,
+        "lowerBound": 63000,
+        "upperBound": 64000,
+        "flatAmount": 715
+      },
+      {
+        "order": 65,
+        "lowerBound": 64000,
+        "upperBound": 65000,
+        "flatAmount": 726
+      },
+      {
+        "order": 66,
+        "lowerBound": 65000,
+        "upperBound": 66000,
+        "flatAmount": 737
+      },
+      {
+        "order": 67,
+        "lowerBound": 66000,
+        "upperBound": 67000,
+        "flatAmount": 748
+      },
+      {
+        "order": 68,
+        "lowerBound": 67000,
+        "upperBound": 68000,
+        "flatAmount": 759
+      },
+      {
+        "order": 69,
+        "lowerBound": 68000,
+        "upperBound": 69000,
+        "flatAmount": 770
+      },
+      {
+        "order": 70,
+        "lowerBound": 69000,
+        "upperBound": 70000,
+        "flatAmount": 781
+      },
+      {
+        "order": 71,
+        "lowerBound": 70000,
+        "upperBound": 71000,
+        "flatAmount": 792
+      },
+      {
+        "order": 72,
+        "lowerBound": 71000,
+        "upperBound": 72000,
+        "flatAmount": 803
+      },
+      {
+        "order": 73,
+        "lowerBound": 72000,
+        "upperBound": 73000,
+        "flatAmount": 814
+      },
+      {
+        "order": 74,
+        "lowerBound": 73000,
+        "upperBound": 74000,
+        "flatAmount": 825
+      },
+      {
+        "order": 75,
+        "lowerBound": 74000,
+        "upperBound": 75000,
+        "flatAmount": 836
+      },
+      {
+        "order": 76,
+        "lowerBound": 75000,
+        "upperBound": 76000,
+        "flatAmount": 847
+      },
+      {
+        "order": 77,
+        "lowerBound": 76000,
+        "upperBound": 77000,
+        "flatAmount": 858
+      },
+      {
+        "order": 78,
+        "lowerBound": 77000,
+        "upperBound": 78000,
+        "flatAmount": 869
+      },
+      {
+        "order": 79,
+        "lowerBound": 78000,
+        "upperBound": 79000,
+        "flatAmount": 880
+      },
+      {
+        "order": 80,
+        "lowerBound": 79000,
+        "upperBound": 80000,
+        "flatAmount": 891
+      },
+      {
+        "order": 81,
+        "lowerBound": 80000,
+        "upperBound": null,
+        "flatAmount": 891
+      }
+    ],
+    "sourceId": "00000000-0000-4000-9000-000000005012",
+    "sourcePage": "§1 Table 3 and notes 2, 5; §2 Table 8",
+    "sourceExcerpt": "ALL TYPE OF VESSELS (22+11): 22 / 33 / … / 121 (0-1000 … 9001-10000 GT); The fees specified on table are applied for once for mooring and unmooring."
+  },
+  {
+    "code": "wharfage",
+    "label": "Wharfage / berth occupation (USD)",
+    "basis": "manual_quote",
+    "priority": 60,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "locations": [
+        "alongside"
+      ]
+    },
+    "manualInstructions": "The pack contradicts itself for a TCDD berth: T12 §1 prints wharfage \"10+10\" USD per service per 1,000 GT (10 up to 1,000 GT … 90 at 8,001–9,000 GT); T9 prints the Haydarpaşa–İzmir table \"35+35\" USD per 3,500 GT per day of stay; the Ministry tariff charges 0,010 USD per GT per day. Ask the agent or TCDD İzmir which applies and enter the USD amount for the stay. Unlawful occupation is charged double.",
+    "sourceId": "00000000-0000-4000-9000-000000005012",
+    "sourcePage": "§1 Table 4 and §4 Table 14 note 1",
+    "sourceExcerpt": "Wharfage \"10+10\" USD / PER SERVICE; It is paid 0,010 USD by vessels arriving to port per each gross tonnage of vessel for each day which they stayed in the port."
+  },
+  {
+    "code": "anchoring",
+    "label": "Anchoring fee (USD, stays over 72 hours)",
+    "basis": "manual_quote",
+    "priority": 70,
+    "applicability": {
+      "requestedServices": [
+        "port_dues"
+      ],
+      "locations": [
+        "anchorage"
+      ]
+    },
+    "manualInstructions": "Charged only when the total anchoring time exceeds 72 hours, then daily from the anchoring time. Outside the TBDTDY anchorages: foreign flag 0,004 USD per GT per day up to 168 hours, 0,006 after; Turkish flag 0,002 / 0,003. TBDTDY Annex-2 anchorages: foreign 0,008 / 0,012, Turkish 0,004 / 0,006. Example printed: 10.000 GT foreign, 5 days = 5 × 40 = 200 USD. Enter 0 when the stay at anchor is 72 hours or less.",
+    "sourceId": "00000000-0000-4000-9000-000000005012",
+    "sourcePage": "§4 E, anchoring tariff for all ports, and Table 17 example",
+    "sourceExcerpt": "USD 0,002 per GT for Turkish flagged ships and USD 0,004 per GT for foreign flagged ships with an anchorage period up to 168 hours"
+  },
+  {
+    "code": "agency_fee",
+    "label": "Agency fee (EUR tariff, enter the USD equivalent)",
+    "basis": "manual_quote",
+    "priority": 80,
+    "applicability": {
+      "requestedServices": [
+        "agency"
+      ]
+    },
+    "manualInstructions": "Agency Tariff No 1 (Gazette 32314, 19.09.2023), EUR per call by net tonnage: 0–500 600; 501–1000 1000; 1001–2000 1500; 2001–3000 1850; 3001–4000 2300; 4001–5000 2750; 5001–7500 3200; 7501–10000 4000; then per started 1,000 NT: 10001–20000 +125, 20001–30000 +100, over 30001 +75 (read as layered on top of 4000 — not printed, confirm). Covers 7 days; +20 % per further 5 days or part. Enter the USD equivalent at the governed EUR→USD rate of the call date.",
+    "sourceId": "00000000-0000-4000-9000-000000005001",
+    "sourcePage": "Table 8 and conditions a)–b)",
+    "sourceExcerpt": "0 – 500 600 … 7501 – 10000 4000; 10001 – 20000 in addition per each 1000 NT or fraction thereof 125"
+  },
+  {
+    "code": "supervision_fee",
+    "label": "Cargo supervision (EUR tariff, only if a supervising agent is appointed)",
+    "basis": "manual_quote",
+    "priority": 90,
+    "applicability": {
+      "requestedServices": [
+        "agency"
+      ]
+    },
+    "manualInstructions": "Supervision Tariff No 5 (Gazette 26812, 10.03.2008), EUR per metric ton, bulk: dry cargo 0.15 up to 10,000 t, 0.10 for 10,001–20,000 t, 0.05 for the part over 20,000 t; grains and seeds 0.10 up to 10,000 t, 0.075 for 10,001–25,000 t, 0.045 for the part over 25,000 t (bands read as marginal). Charged only when a supervising/protecting agent is appointed; enter the USD equivalent at the governed EUR→USD rate, or 0.",
+    "sourceId": "00000000-0000-4000-9000-000000005008",
+    "sourcePage": "Table 1 R2–R10",
+    "sourceExcerpt": "a) Dry Cargo … I- 0 up to 10000 tons 0.15; II- 10001 up to 20000 tons 0.10; III- For part over 20000 tons 0.05"
+  },
+  {
+    "code": "waste_fixed_fee",
+    "label": "Ship waste, fixed fee (EUR tariff, enter the USD equivalent)",
+    "basis": "manual_quote",
+    "priority": 100,
+    "applicability": {
+      "requestedServices": [
+        "waste"
+      ]
+    },
+    "manualInstructions": "Waste collection fixed fee (Gazette 27249, valid 1.1.2010), EUR per call by GRT: 0–1000 80; 1001–5000 140; 5001–10000 210; 10001–15000 250; 15001–20000 300; 20001–25000 350; 25001–35000 400; 35001–60000 540; over 60000 720. Not charged again at a later Turkish port when it was paid at the first one. Waste above the allowance is per m³ (Annex I bilge/sludge 35 €, IV 15 €, V 25 €). Enter the USD equivalent at the governed EUR→USD rate.",
+    "sourceId": "00000000-0000-4000-9000-000000005012",
+    "sourcePage": "§5 Table 18 (Annex-1) and notes 2, 3, 6",
+    "sourceExcerpt": "0-1000 80 | 1001-5000 140 | 5001-10000 210 | … | 35001-60000 540 | Over 60000 720 (1. Part Fixed Fee €)"
+  }
+]

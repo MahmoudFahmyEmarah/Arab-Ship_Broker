@@ -1,0 +1,77 @@
+{
+  "package": "constanta-2026",
+  "portLocode": "ROCND",
+  "currency": "EUR",
+  "effectiveFrom": "2026-09-15",
+  "publishable": true,
+  "blockers": [],
+  "dependsOn": [
+    "20261007310000_pda_fx_rates: the route view shows USD; an EUR → USD governed FX rate must be recorded (admin, Port Tariffs → FX rates) or every Constanta leg stays FX_RATE_REQUIRED."
+  ],
+  "sources": {
+    "access": {
+      "placeholderId": "00000000-0000-4000-9000-000000001101",
+      "title": "CN APM Constanta tariffs 1.1 — access tariff",
+      "authority": "official",
+      "file": "tmp/Data/ROMANIA PORTS.zip :: ROMANIA PORTS/1. Tariffs for services attached to water transport in the port of Constanta (Constanta area, Midia area, Mangalia area and partially Basarabi area)/1.Port of Constanta – Tariffs.pdf",
+      "sha256": "3aee32646aadb9df54d9bbecad62ae0576ab7efc384ea913e8ca3c60c77d2838"
+    },
+    "dockage": {
+      "placeholderId": "00000000-0000-4000-9000-000000001102",
+      "title": "CN APM Constanta tariffs 1.2 — key (dockage) tariff",
+      "authority": "official",
+      "file": "tmp/Data/ROMANIA PORTS.zip :: ROMANIA PORTS/1. Tariffs for services attached to water transport in the port of Constanta (Constanta area, Midia area, Mangalia area and partially Basarabi area)/2.Port of Constanta – Tariffs.pdf",
+      "sha256": "b7e319f16c02121c2537dfc66fb82e5874b73388ac8177d52fe0dc40aef67dd0"
+    },
+    "basin": {
+      "placeholderId": "00000000-0000-4000-9000-000000001103",
+      "title": "CN APM Constanta tariffs 1.3 — basin tariff",
+      "authority": "official",
+      "file": "tmp/Data/ROMANIA PORTS.zip :: ROMANIA PORTS/1. Tariffs for services attached to water transport in the port of Constanta (Constanta area, Midia area, Mangalia area and partially Basarabi area)/3.Port of Constanta – Tariffs.pdf",
+      "sha256": "914cea186fd9b5edf14e44995ebacf8cbac8e1ac05f2909312e0b5457f748bcc"
+    },
+    "security": {
+      "placeholderId": "00000000-0000-4000-9000-000000001105",
+      "title": "CN APM Constanta tariffs 1.5 — special tariffs (safety and security)",
+      "authority": "official",
+      "file": "tmp/Data/ROMANIA PORTS.zip :: ROMANIA PORTS/1. Tariffs for services attached to water transport in the port of Constanta (Constanta area, Midia area, Mangalia area and partially Basarabi area)/5.Port of Constanta – Tariffs.pdf",
+      "sha256": "00c2761e157f26f0396cfd53dbc91ec38c41114f838780d580386fb9873c7317"
+    },
+    "waste": {
+      "placeholderId": "00000000-0000-4000-9000-000000001109",
+      "title": "CN APM Constanta tariffs 1.9 — ship waste reception tariffs (GO 9/2022)",
+      "authority": "official",
+      "file": "tmp/Data/ROMANIA PORTS.zip :: ROMANIA PORTS/1. Tariffs for services attached to water transport in the port of Constanta (Constanta area, Midia area, Mangalia area and partially Basarabi area)/9.Port of Constanta – Tariffs.pdf",
+      "sha256": "6e2f58faefe0d374654bc20967e25571d57543d00b3b272d5ac94d190734b44d"
+    },
+    "pilotage": {
+      "placeholderId": "00000000-0000-4000-9000-000000001110",
+      "title": "CN APM Constanta tariffs 1.10 — maritime vessel pilotage tariffs",
+      "authority": "official",
+      "file": "tmp/Data/ROMANIA PORTS.zip :: ROMANIA PORTS/1. Tariffs for services attached to water transport in the port of Constanta (Constanta area, Midia area, Mangalia area and partially Basarabi area)/10.Port of Constanta – Tariffs.pdf",
+      "sha256": "71e5dd08de32c1843b3446ee66f9c1cee3ede6e90ea05ca95e5159e5cb6f94b3",
+      "duplicate": {
+        "file": "tmp/Data/ROMANIA PORTS.zip :: ROMANIA PORTS/1. Tariffs for services attached to water transport in the port of Constanta (Constanta area, Midia area, Mangalia area and partially Basarabi area)/10.0Port of Constanta – Tariffs.pdf",
+        "sha256": "3bdd66387cf87e6a0dbc62fb34e8a52800eb868ed6d930672b6f0c6ce1e9907d",
+        "note": "same content; only the print timestamps differ"
+      }
+    },
+    "towage": {
+      "placeholderId": "00000000-0000-4000-9000-000000001199",
+      "title": "CN APM Constanta — towage (licensed operators, no rates)",
+      "authority": "official",
+      "file": "tmp/Data/ROMANIA PORTS.zip :: ROMANIA PORTS/TOWAGE Port of Constanta – Tariffs.pdf",
+      "sha256": "38b537ab31367986db7889d725f69abf621c04dc523345e2cbdd4a3dc6e1be15"
+    }
+  },
+  "knownLimits": [
+    "Basin tariff 1.3 is a manual line: the page prints €/UTB but describes LOA x days (open question for CN APM).",
+    "Dockage for Dry Bulk / Break Bulk needs the tariff cargo class (listed coal/ore/phosphate/apatite/bauxite vs other); only Grain is automatic (other cargoes).",
+    "Dockage days are the call days as entered; the page prints no started-day rule or minimum. The repair/idle/2nd-line rate is cut off on the printed page.",
+    "Pilotage counts one entry and one exit manoeuvre; shifting, split legs (outer dock → inner dock → berth) and the +30 % weekend/holiday, +10 % night, +15 % dangerous goods, +100 % dead ship surcharges and the -10 % return-within-30-days discount are not applied.",
+    "Access: the 0,132 re-call-within-30-days rate and the liner rates are not applied (no call-history input).",
+    "Safety and security applies to calls that load/unload at Administration berths; deselect 'Security' for a call that does not.",
+    "Waste: GRT is taken as GT. The 50 % green reduction and the liner fixed component (47.75 €/call) are not applied.",
+    "Not in the CN APM pack: towage rates (operators), mooring/boatmen, Romanian Naval Authority/harbour-master fees, light dues, agency, sanitary fees, cargo handling."
+  ]
+}

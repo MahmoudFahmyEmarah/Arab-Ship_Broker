@@ -5,6 +5,7 @@ import type {
   PdaRouteServiceCode,
   PdaRouteTimelineInput,
   PdaRouteTimelineResult,
+  PdaRouteTransitsInput,
 } from "./route-types";
 import { PDA_ROUTE_SERVICE_OPTIONS } from "./route-types";
 import type { PdaCalculationResult, PdaRequest, PdaWarning } from "./types";
@@ -194,6 +195,8 @@ export function aggregatePdaRoutePreview(input: {
   load: PdaCalculationResult;
   discharge: PdaCalculationResult;
   timeline: PdaRouteTimelineResult;
+  fxRates?: PdaRoutePreviewResult["fxRates"];
+  transitFacts?: PdaRouteTransitsInput;
   generatedAt?: string;
 }): PdaRoutePreviewResult {
   const requiredInclusiveServices: PdaRouteServiceCode[] = ["cargo_handling", "agency"];
@@ -236,14 +239,42 @@ export function aggregatePdaRoutePreview(input: {
     }
   }
 
-  notSourced.push({
-    code: "canal_and_strait_transits",
-    label: "Canal and strait transits",
-    amount: null,
-    reasonCode: "NO_GOVERNED_SOURCE",
-    message: "Transit cost is not sourced until an approved governed tariff is available.",
-    provenance: { leg: null, tariffVersionId: null },
-  });
+  // Transits (Wave 3): with no measured route it is unknown whether the passage transits anything.
+  // On a measured route, each chokepoint is either priced complete by its governed engine or
+  // listed NOT SOURCED; a route with no chokepoint has no transit cost.
+  const transitInput = input.transitFacts;
+  const pricedTransits = transitInput?.priced ?? [];
+  let transitTotal: number | null = null;
+  if (!transitInput?.measured) {
+    notSourced.push({
+      code: "canal_and_strait_transits",
+      label: "Canal and strait transits",
+      amount: null,
+      reasonCode: "NO_GOVERNED_SOURCE",
+      message: "Transit cost is not sourced: there is no measured route for this passage, so its canals and straits are unknown.",
+      provenance: { leg: null, tariffVersionId: null },
+    });
+  } else {
+    let sum = 0;
+    let complete = true;
+    for (const chokepoint of transitInput.chokepoints) {
+      const priced = pricedTransits.find((transit) => transit.chokepoint === chokepoint);
+      if (priced && priced.amountUsd != null && input.displayCurrency === "USD") {
+        sum += priced.amountUsd;
+        continue;
+      }
+      complete = false;
+      notSourced.push({
+        code: `transit_${chokepoint.toLowerCase()}`,
+        label: priced?.label ?? `${chokepoint} transit`,
+        amount: null,
+        reasonCode: "NO_GOVERNED_SOURCE",
+        message: priced?.note ?? `${chokepoint} is on the measured route, but no governed ${chokepoint} tariff is connected.`,
+        provenance: { leg: null, tariffVersionId: priced?.tariffVersionId ?? null },
+      });
+    }
+    transitTotal = complete ? round(sum, 2) : null;
+  }
 
   const handlingAndAgencyComplete = requiredInclusiveServices.every((service) => (
     loadSourcedServices.has(service) && dischargeSourcedServices.has(service)
@@ -253,6 +284,8 @@ export function aggregatePdaRoutePreview(input: {
 
   return {
     displayCurrency: input.displayCurrency,
+    fxRates: input.fxRates ?? [],
+    transits: pricedTransits,
     allocation: input.allocation,
     canonical: input.canonical,
     legs: { load: input.load, discharge: input.discharge },
@@ -264,9 +297,11 @@ export function aggregatePdaRoutePreview(input: {
       dischargePortKnown: discharge.knownAmount,
       bothPortsKnown,
       handlingAndAgencyComplete,
-      transit: null,
-      allInKnown: bothPortsKnown,
-      allInComplete: null,
+      transit: transitTotal,
+      // Known = both ports' known subtotals plus the transits when every one of them is priced.
+      allInKnown: bothPortsKnown != null ? round(bothPortsKnown + (transitTotal ?? 0), 2) : null,
+      // Complete = both ports complete incl. handling and agency, and every transit priced.
+      allInComplete: handlingAndAgencyComplete != null && transitTotal != null ? round(handlingAndAgencyComplete + transitTotal, 2) : null,
       voyageOpex: input.timeline.voyageOpex,
     },
     notSourced,

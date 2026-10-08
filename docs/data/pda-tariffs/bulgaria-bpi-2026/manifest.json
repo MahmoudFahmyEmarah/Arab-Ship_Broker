@@ -1,0 +1,52 @@
+{
+  "package": "bulgaria-bpi-2026",
+  "ports": [
+    "BGVAR",
+    "BGBOJ"
+  ],
+  "currency": "EUR",
+  "effectiveFrom": "2026-03-05",
+  "publishable": true,
+  "blockers": [],
+  "dependsOn": [
+    "20261007310000_pda_fx_rates (+ the 20261007320000 ECB feed): the USD route view needs a governed EUR → USD rate."
+  ],
+  "sources": {
+    "burgas": {
+      "placeholderId": "00000000-0000-4000-9000-000000004013",
+      "title": "BPI — Tariff for port fees, port under Art. 106a — Burgas (board protocol 188/15.11.2023)",
+      "authority": "official",
+      "file": "tmp/Data/BULGARIAN PORTS.zip :: BULGARIAN PORTS/Tariff for port fees collected by Bulgarian Ports Infrastructure Company in a port within the meaning of Art. 106a of the Law on Maritime Spaces, Inland Waterways and Ports of thebourgas_15112023_tariffa.pdf",
+      "sha256": "41d802dd5a992617d2a2496f52e09ea4acd767c0b973781d864cb91edd5791aa"
+    },
+    "varna": {
+      "placeholderId": "00000000-0000-4000-9000-000000004015",
+      "title": "BPI — Tariff for port fees, port under Art. 106a — Varna (board protocol 188/15.11.2023)",
+      "authority": "official",
+      "file": "tmp/Data/BULGARIAN PORTS.zip :: BULGARIAN PORTS/Tariff for port fees collected by State Enterprise Port Infrastructure in a port within the meaning of Art. 106a of the Law on Maritime Spaces, Inland Waterways and Ports of the Repvarna_15112023_tariffa.pdf",
+      "sha256": "071271508457ca0ed516fc01e34f186ae9e299b20d950395edd5ff598501aad6"
+    },
+    "waste": {
+      "placeholderId": "00000000-0000-4000-9000-000000004016",
+      "title": "BPI — Tariff for port fees for reception and handling of ship waste (protocols 203/14.10.2024, 224/23.01.2026)",
+      "authority": "official",
+      "file": "tmp/Data/BULGARIAN PORTS.zip :: BULGARIAN PORTS/Tariff for port fees for reception and handling of waste collected by Bulgarian Ports Infrastructure Companytarifa-otpadaczi-dppi_05032026.pdf",
+      "sha256": "597ea501fdc6eee56874a402a1055bd1df4ff080a66e2e20dc49914b9c1e2feb"
+    },
+    "priceList": {
+      "placeholderId": "00000000-0000-4000-9000-000000004007",
+      "title": "BPI — Price list of services (order РД09-24/24.02.2026)",
+      "authority": "official",
+      "file": "tmp/Data/BULGARIAN PORTS.zip :: BULGARIAN PORTS/Price list of services offered by Bulgarian Ports Infrastrczenorazpis-rd-09-24.pdf",
+      "sha256": "a2499b8c857f2fdb661e2a799476bea03678e79f6a7ea566844c08900e9fbf23"
+    }
+  },
+  "knownLimits": [
+    "Version date 2026-03-05 is the waste tariff's publication (file name); the port fees are in force since 15.11.2023 and the clearance price list since its order of 24.02.2026 (handwritten effective date read as 01.03.2026).",
+    "ITD is a manual line: the rate depends on the berth's district (a meridian), which the tariffs do not map to terminals; the call-count, no-cargo and cabotage multipliers (one only) are applied by hand.",
+    "OIT reads Art. 2(15) with (16): 0,10 € per started LOA metre for each started hour from arrival to departure, roads excluded. (15) does not literally say 'per hour' — confirm with BPI or the agent. The engine does not round LOA up (the tariff does); enter the LOA as a whole number.",
+    "SIT applies from 41 GT; smaller craft pay an annual fee instead (not modelled).",
+    "Waste: the fixed indirect fees only; landing above the free m³ (Б/Б1/Б2) is paid to the waste operators at their own tariff (no € figure in B16). A ship of exactly 50 001 GT is read as the top band.",
+    "Not in the BPI pack: pilotage (state pilotage tariff), towage, mooring at the public terminals, agency, sanitary dues, cargo handling (terminal operators)."
+  ]
+}

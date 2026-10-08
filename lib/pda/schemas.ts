@@ -14,6 +14,7 @@ export const pdaApplicabilitySchema = z.object({
   voyageScopes: z.array(z.enum(["domestic", "international"])).max(2).optional(),
   locations: z.array(z.enum(["alongside", "anchorage"])).max(2).optional(),
   settlementModes: z.array(z.enum(["cash", "agent_account"])).max(2).optional(),
+  flagTreatments: z.array(z.enum(["foreign", "national"])).max(2).optional(),
   minGt: nonNegative.optional(), maxGt: nonNegative.optional(),
   minNt: nonNegative.optional(), maxNt: nonNegative.optional(),
   minScnrt: nonNegative.optional(), maxScnrt: nonNegative.optional(),
@@ -24,7 +25,7 @@ export const pdaApplicabilitySchema = z.object({
   percentageBaseCodes: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,79}$/)).min(1).max(100).optional(),
 }).strict().superRefine((value, ctx) => {
   // C2B-009: same rule as pda_replace_tariff_rules — each value at most once.
-  for (const key of ["cargoStatuses", "voyageScopes", "locations", "settlementModes"] as const) {
+  for (const key of ["cargoStatuses", "voyageScopes", "locations", "settlementModes", "flagTreatments"] as const) {
     const list = value[key] as string[] | undefined;
     if (list && new Set(list).size !== list.length) {
       ctx.addIssue({ code: "custom", path: [key], message: `${key} lists a value more than once` });
@@ -57,7 +58,9 @@ export const pdaRequestSchema = z.object({
     dwt: nonNegative.nullable().optional(),
     loaM: nonNegative.nullable().optional(),
     draftM: nonNegative.nullable().optional(),
+    registeredMaxDraftM: nonNegative.nullable().optional(),
     vesselType: z.string().trim().max(100).nullable().optional(),
+    flagState: z.string().trim().regex(/^[A-Za-z]{2}$/).nullable().optional(),
   }),
   call: z.object({
     days: positive,
