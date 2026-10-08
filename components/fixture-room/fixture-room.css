@@ -1042,3 +1042,8 @@
 .fx-bridge__txt {flex: 1 1 220px; min-width: 0;}
 .fx-bridge__txt em {color: var(--asb-gray-600); font-style: normal;}
 .fx-bridge-form {margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--asb-gray-200);}
+
+/* O2ALL-005: the stored recap PDF fingerprint and its error, beside the document actions */
+.nr-print__sha {align-self: center; font-size: 11px; color: var(--asb-gray-500); font-family: var(--asb-font-mono, monospace);}
+.nr-print__err {align-self: center; font-size: 12px; color: var(--asb-red);}
+@media print {.nr-print__sha, .nr-print__err {display: none;}}

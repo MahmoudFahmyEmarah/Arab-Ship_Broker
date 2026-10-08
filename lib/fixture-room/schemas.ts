@@ -109,6 +109,8 @@ export const failSubjectSchema = subjectRefSchema.extend({ reason: z.string().ma
 export const extendSubjectSchema = subjectRefSchema.extend({ deadlineAt: z.string().datetime({ offset: true }) });
 
 export const recapRefSchema = commandBaseSchema.extend({ recapVersionId: uuid });
+/** O2ALL-005: a stored recap PDF is addressed by room and recap version number (a read, no version or key). */
+export const recapPdfRefSchema = z.object({ roomId: uuid, versionNo: z.number().int().min(1).max(100000) });
 
 export const postMessageSchema = commandBaseSchema.extend({
   body: z.string().min(1).max(4000),

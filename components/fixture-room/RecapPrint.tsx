@@ -1,12 +1,13 @@
 "use client";
 
 // The printable Fixture Recap: a published version rendered as the designed
-// document (lib/fixture-room/documents.ts). Decision D7: in-app and print /
-// "Save as PDF" in v1; the server PDF of the same model follows (O2C-009).
+// document (lib/fixture-room/documents.ts), with the STORED PDF of that version
+// (O2ALL-005: generated once at publish, fingerprinted) and printing kept.
 import Link from "next/link";
 import type { FixtureRecapView, FixtureRoomView } from "@/lib/fixture-room/types";
 import { recapDocument } from "@/lib/fixture-room/documents";
 import { FixtureDocumentView } from "./FixtureDocumentView";
+import { RecapPdfButton } from "./RecapPdfButton";
 
 export function RecapPrint({ view, recap }: { view: FixtureRoomView; recap: FixtureRecapView | null }) {
   const back = `/dashboard/fixture-room/${view.room.id}`;
@@ -26,5 +27,6 @@ export function RecapPrint({ view, recap }: { view: FixtureRoomView; recap: Fixt
       </div>
     );
   }
-  return <FixtureDocumentView doc={recapDocument(view, recap)} backHref={back} otherHref={`${back}/summary`} otherLabel="Negotiation summary" />;
+  return <FixtureDocumentView doc={recapDocument(view, recap)} backHref={back} otherHref={`${back}/summary`} otherLabel="Negotiation summary"
+    pdfAction={<RecapPdfButton roomId={view.room.id} versionNo={recap.versionNo} />} />;
 }

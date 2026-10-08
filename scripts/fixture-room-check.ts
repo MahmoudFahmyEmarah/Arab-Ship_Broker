@@ -709,7 +709,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(wrap(bd) === wrap(read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql")), "the DOWN restores the 208000 room read verbatim");
   ok(/drop function if exists public\.suggest_fixture_bridge\(uuid, uuid, jsonb, text, integer, text\);/.test(bd) && /drop function if exists public\.fn_fixture_live_bridges\(uuid\);/.test(bd) && /FX_DOWN_REFUSED/.test(bd) && !/the wider event CHECK stays/.test(bd) && bd.indexOf("FX_DOWN_REFUSED") < bd.indexOf("drop function") && /set constraints all immediate;/.test(bd), "C2O-089: the DOWN refuses while suggestion events exist (before dropping anything), never deletes ledger rows, fires deferred checks first");
   const h = read("scripts/fixture-room-harness.sh");
-  ok(/20261007400000_fixture_bridge_suggestion\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" )?(?:"supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" )?(?:"supabase\/rollback\/20261008052000_shared_notification_semantics_down\.sql" "supabase\/rollback\/20261008050000_shared_fixture_services_down\.sql" )?(?:"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" )?"supabase\/rollback\/20261007_fixture_bridge_suggestion_down\.sql" /.test(h) && /\[bridge\]="FIXTURE BRIDGE SMOKE"/.test(h) && / enforcement bridge(?: lineage)?(?: notify)?(?: deadlines)?; do/.test(h), "the harness applies the bridge, runs its suite and reverses it first");
+  ok(/20261007400000_fixture_bridge_suggestion\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261009300000_fixture_recap_pdf_down\.sql" )?(?:"supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" )?(?:"supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" )?(?:"supabase\/rollback\/20261008052000_shared_notification_semantics_down\.sql" "supabase\/rollback\/20261008050000_shared_fixture_services_down\.sql" )?(?:"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" )?"supabase\/rollback\/20261007_fixture_bridge_suggestion_down\.sql" /.test(h) && /\[bridge\]="FIXTURE BRIDGE SMOKE"/.test(h) && / enforcement bridge(?: lineage)?(?: notify)?(?: deadlines)?(?: recappdf)?; do/.test(h), "the harness applies the bridge, runs its suite and reverses it first");
   const tr = read("components/fixture-room/TermRow.tsx");
   ok(/view\.bridges\?\.find\(\(b\) => b\.termId === term\.id\)/.test(tr) && /onClick=\{\(\) => submit\(\{ value: bridge\.value, expiresInMinutes: null, comment: "Adopted the mediator's suggestion\." \}\)\}/.test(tr), "either side adopts the suggestion through its own bid / offer (submit_fixture_proposal)");
   ok(/run\("bridge", \(base\) => \(\{ \.\.\.base, termId: term\.id, value: r\.value, comment: bridgeComment\.trim\(\) \|\| null \}\)\)/.test(tr) && /data-testid=\{`suggest-\$\{term\.code\}`\}/.test(tr), "the mediator console sends the suggestion from its own seat (no acting-for)");
@@ -748,7 +748,16 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const rails = read("components/fixture-room/RoomRails.tsx");
   ok(/subject-overdue-\$\{s\.id\}/.test(rails) && /subject-due-\$\{s\.id\}/.test(rails) && /"subject\.overdue": \(p\) => `subject \$\{p\.seq\}/.test(rails), "the room shows OVERDUE / DUE SOON on an open subject and names clock events by number");
   const h = read("scripts/fixture-room-harness.sh");
-  ok(/20261009200000_fixture_subject_deadlines\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" /.test(h) && /\[deadlines\]="FIXTURE SUBJECT DEADLINES SMOKE"/.test(h), "the harness applies the deadline clock, runs its suite and reverses it first");
+  ok(/20261009200000_fixture_subject_deadlines\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261009300000_fixture_recap_pdf_down\.sql" )?"supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" /.test(h) && /\[deadlines\]="FIXTURE SUBJECT DEADLINES SMOKE"/.test(h), "the harness applies the deadline clock, runs its suite and reverses it first");
+}
+
+// Stored recap PDF (O2ALL-005): the harness applies it, runs its suite and reverses it first
+{
+  const h = read("scripts/fixture-room-harness.sh");
+  ok(/20261009300000_fixture_recap_pdf\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261009300000_fixture_recap_pdf_down\.sql" /.test(h) && /\[recappdf\]="FIXTURE RECAP PDF SMOKE"/.test(h), "the harness applies the recap PDF module, runs its suite and reverses it first");
+  const dn = read("supabase/rollback/20261009300000_fixture_recap_pdf_down.sql");
+  ok(/FX_DOWN_REFUSED/.test(dn) && dn.indexOf("FX_DOWN_REFUSED") < dn.indexOf("drop table"), "the recap PDF DOWN refuses while PDFs are recorded");
+  ok(/scripts\/fixture-recap-pdf-check\.ts/.test(read("package.json")), "the recap PDF byte-level checks run with the Fixture checks");
 }
 
 // Lineage (C2O-084): predecessor-bound idempotency, one successor, lineage through the ledger
@@ -768,7 +777,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const released = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").split("create or replace function public.recreate_fixture_room(")[1].split("end $$;")[0];
   ok(down.includes(released) && /FX_DOWN_REFUSED/.test(down) && down.indexOf("FX_DOWN_REFUSED") < down.indexOf("create or replace function") && /drop index if exists public\.fixture_rooms_one_successor_uq/.test(down) && !/'room\.continued_from'/.test(down.split("FX_DOWN_REFUSED")[1]), "the DOWN refuses with lineage events, else restores the released recreate verbatim, drops the index and narrows the CHECK");
   const h = read("scripts/fixture-room-harness.sh");
-  ok(/20261007500000_fixture_room_lineage\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" )?(?:"supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" )?(?:"supabase\/rollback\/20261008052000_shared_notification_semantics_down\.sql" "supabase\/rollback\/20261008050000_shared_fixture_services_down\.sql" )?"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" /.test(h) && /\[lineage\]="FIXTURE LINEAGE SMOKE"/.test(h), "the harness applies the lineage migration, runs its suite and reverses it first");
+  ok(/20261007500000_fixture_room_lineage\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261009300000_fixture_recap_pdf_down\.sql" )?(?:"supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" )?(?:"supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" )?(?:"supabase\/rollback\/20261008052000_shared_notification_semantics_down\.sql" "supabase\/rollback\/20261008050000_shared_fixture_services_down\.sql" )?"supabase\/rollback\/20261007_fixture_room_lineage_down\.sql" /.test(h) && /\[lineage\]="FIXTURE LINEAGE SMOKE"/.test(h), "the harness applies the lineage migration, runs its suite and reverses it first");
 }
 
 // Wave 4 · the notification projector (O2ALL-003: in-app and email now)
@@ -788,7 +797,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const down = read("supabase/rollback/20261008100000_fixture_room_notifications_down.sql");
   ok(/drop trigger if exists trg_fixture_events_notify/.test(down) && (down.match(/drop function if exists public\.fn_fixture_notify_/g) ?? []).length === 8 && /drop table if exists public\.fixture_notification_projections/.test(down) && down.indexOf("NTF_DOWN_REFUSED") < down.indexOf("drop trigger"), "the DOWN refuses while events wait for notifications, then removes the trigger, the ledger and the eight functions");
   const h = read("scripts/fixture-room-harness.sh");
-  ok(/20261008100000_fixture_room_notifications\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" )?"supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" /.test(h) && /\[notify\]="FIXTURE NOTIFY SMOKE"/.test(h), "the harness applies the projector, runs its suite and reverses it first");
+  ok(/20261008100000_fixture_room_notifications\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261009300000_fixture_recap_pdf_down\.sql" )?(?:"supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" )?"supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" /.test(h) && /\[notify\]="FIXTURE NOTIFY SMOKE"/.test(h), "the harness applies the projector, runs its suite and reverses it first");
   ok(/fn_fixture_notify_rule\(/.test(read("scripts/fixture-notify-parity.ts")), "a parity check runs the SQL rule against the model on the same events");
 }
 
