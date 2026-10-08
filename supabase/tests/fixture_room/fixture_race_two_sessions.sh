@@ -268,27 +268,6 @@ ok "$(grep -c 'ERROR' /tmp/fxrace_m.log)" "0" "the in-flight recreate completed"
 ok "$(live_rooms "$A1")" "1" "the recreated room exists on a position that was live when it was checked"
 close_live "$A1"
 
-# ── race 8: two identical recreates (C2O-094): the second waits, then replays — never a refusal ──
-TERMINAL2=$(q "select id from public.fixture_rooms where create_idempotency_key = 'race-recreate-b'")
-$PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrace_w.log 2>&1 &
-$(claims $U_CH1)
-begin;
-select public.recreate_fixture_room('$TERMINAL2', '$TERMS'::jsonb, 'race-recreate-same', '{}'::jsonb);
-select pg_sleep(3);
-commit;
-SQL
-PID_W=$!
-sleep 1.5
-$PSQL -At -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrace_x.log 2>&1 &
-$(claims $U_CH1)
-select public.recreate_fixture_room('$TERMINAL2', '$TERMS'::jsonb, 'race-recreate-same', '{}'::jsonb)->>'replayed';
-SQL
-PID_X=$!
-wait $PID_W; wait $PID_X
-ok "$(grep -c 'ERROR' /tmp/fxrace_w.log)" "0" "the first identical recreate completed"
-ok "$(grep -c '^true$' /tmp/fxrace_x.log)" "1" "the second identical recreate waited, then replayed the first"
-ok "$(q "select count(*) from public.fixture_rooms where supersedes_room_id = '$TERMINAL2'")" "1" "two identical recreates open exactly one successor"
-close_live "$A1"
 
 # ── race 6: seat revocation vs create, both orders (C2O-015 item 3) ─────────
 # 6a · the revocation is in flight: the create waits, then refuses (the member no longer represents c6)

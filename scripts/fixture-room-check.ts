@@ -721,7 +721,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/'predecessor', r\.id,\s*'terms', p_terms, 'options', coalesce\(p_options/.test(body) && /'recreate_fixture_room', p_idempotency_key, v_hash,/.test(body) && /e\.request_hash is distinct from v_hash[\s\S]*FX_IDEMPOTENCY_MISMATCH/.test(body), "the predecessor, terms and options are hashed onto the lineage event; changed arguments under a used key are refused");
   ok(/'version', e\.seq, 'eventId', e\.id, 'replayed', true/.test(body), "a replay returns the lineage event and its version");
   ok(body.indexOf("pg_advisory_xact_lock(") < body.indexOf("for update") && body.indexOf("for update") < body.indexOf("select * into v_prior"), "(actor, key) and the predecessor are locked before any decision");
-  ok(/race-recreate-same/.test(read("supabase/tests/fixture_room/fixture_race_two_sessions.sh")) && /L3 ok/.test(read("supabase/tests/fixture_room/bodies/lineage.sql")), "two-session identical recreates and the changed-argument regressions are proven");
+  ok(/race-recreate-same/.test(read("supabase/tests/fixture_room/fixture_recreate_race.sh")) && /L3 ok/.test(read("supabase/tests/fixture_room/bodies/lineage.sql")), "two-session identical recreates and the changed-argument regressions are proven");
   ok(/'room\.continued_from'/.test(lm.split("-- ── 2")[0]) && /comment on constraint fixture_events_type_check/.test(lm), "the event CHECK gains room.continued_from and keeps the saved DOWN comment");
   const down = read("supabase/rollback/20261007_fixture_room_lineage_down.sql");
   const released = read("supabase/migrations/20260923208000_fixture_room_candidate_handles.sql").split("create or replace function public.recreate_fixture_room(")[1].split("end $$;")[0];
