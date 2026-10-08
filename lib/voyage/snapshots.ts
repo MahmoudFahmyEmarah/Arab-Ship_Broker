@@ -76,9 +76,10 @@ export interface SuezCostSnapshot {
 
 export interface PortCostSnapshot {
   kind: "port_cost";
-  status: SnapshotStatus;
-  load: { port: string | null; usd: number | null; source: "tariff" | "manual" | "none"; estimateId?: string | null; manual?: ManualProvenance };
-  disch: { port: string | null; usd: number | null; source: "tariff" | "manual" | "none"; estimateId?: string | null; manual?: ManualProvenance };
+  /** fallback = a DA taken from a partial PDA estimate */
+  status: SnapshotStatus | "fallback";
+  load: { port: string | null; usd: number | null; source: "tariff" | "manual" | "none"; estimateId?: string | null; coverage?: string | null; manual?: ManualProvenance };
+  disch: { port: string | null; usd: number | null; source: "tariff" | "manual" | "none"; estimateId?: string | null; coverage?: string | null; manual?: ManualProvenance };
   warnings: string[];
   canonicalSha256?: string;
 }

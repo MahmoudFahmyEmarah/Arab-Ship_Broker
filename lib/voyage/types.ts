@@ -121,7 +121,8 @@ export interface PortCallInput {
   inEcaSource?: "governed" | "coarse" | "manual";
   /** listing = the handling rate of the linked cargo listing; manual = typed for this estimate (a broker input) */
   rateSource?: "listing" | "manual";
-  pda: { usd: number | null; source: "tariff" | "manual" | "none"; manual?: ManualProvenance };
+  /** tariff = a saved PDA estimate (estimateId); its coverage decides the status (published trusted, partial fallback, manual_required manual) */
+  pda: { usd: number | null; source: "tariff" | "manual" | "none"; manual?: ManualProvenance; estimateId?: string | null; coverage?: "published" | "partial" | "manual_required" };
 }
 
 export interface VoyageInput {

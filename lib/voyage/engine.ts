@@ -33,6 +33,7 @@ import type {
   VoyageStatus,
 } from "./types";
 import { PLATFORM_CONSTANTS, VOYAGE_ALGORITHM_VERSION } from "./types";
+import { pdaStatusFor } from "./pda-link";
 
 const round1 = (n: number) => Math.round((n + Number.EPSILON) * 10) / 10;
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -322,7 +323,8 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   // ── port DAs and extras ─────────────────────────────────────────────
   const pda = (p: VoyageInput["ports"]["load"]): VoyageEstimate["costs"]["pdaLoad"] => {
     if (p.pda.source === "none" || p.pda.usd == null) { unavailable.push({ code: `pda_${p.key}`, reason: `${p.key === "load" ? "Load" : "Discharge"} port DA not available (no tariff estimate, no manual figure).` }); return { usd: null, status: "unavailable" }; }
-    return { usd: round2(p.pda.usd), status: p.pda.source === "manual" ? "manual" : "trusted" };
+    // a saved PDA estimate is as trusted as its coverage; a tariff figure without one is not governed (fail closed)
+    return { usd: round2(p.pda.usd), status: p.pda.source === "manual" ? "manual" : pdaStatusFor(p.pda.coverage) };
   };
   const pdaLoad = pda(input.ports.load);
   const pdaDisch = pda(input.ports.disch);
@@ -344,7 +346,7 @@ export function estimateVoyage(rawInput: VoyageInput): VoyageEstimate {
   let status: VoyageStatus;
   if (anyLegUnavailable && legs.filter((l) => l.kind === "sea").every((l) => l.status === "unavailable")) status = "unavailable";
   // an unconfirmed platform constant is an assumption: never trusted (C2O-050 #4)
-  else if (!complete || fuelStatus !== "trusted" || platformAssumptions.length > 0 || canal.status === "manual" || canal.status === "fallback" || classAssumed || asserted.length > 0 || brokerInputs.length > 0 || pdaLoad.status === "manual" || pdaDisch.status === "manual" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
+  else if (!complete || fuelStatus !== "trusted" || platformAssumptions.length > 0 || canal.status === "manual" || canal.status === "fallback" || classAssumed || asserted.length > 0 || brokerInputs.length > 0 || pdaLoad.status !== "trusted" || pdaDisch.status !== "trusted" || legs.some((l) => l.status === "manual" || l.status === "fallback") || input.settingsSource === "defaults" || input.vessel.hasScrubber == null) status = "partial";
   else status = "trusted";
 
   return {

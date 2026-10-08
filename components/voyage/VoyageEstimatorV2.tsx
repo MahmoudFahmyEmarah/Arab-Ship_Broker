@@ -22,9 +22,10 @@ import { needsSuez } from "@/lib/portal/econ";
 import { logEvent } from "@/lib/portal/events";
 import type { VesselEconomicsProfile } from "@/sdk/app/suez";
 import { loadSuezContextAction, loadVesselEconomicsAction, saveVesselEconomicsAction } from "@/app/(dashboard)/dashboard/suez-toll/actions";
-import { routeLegAction, saveVoyageEstimateAction, type RouteLegResult } from "@/app/(dashboard)/dashboard/voyage-estimator/actions";
+import { listVoyagePdaEstimatesAction, routeLegAction, saveVoyageEstimateAction, type RouteLegResult, type VoyagePdaEstimateOption } from "@/app/(dashboard)/dashboard/voyage-estimator/actions";
 import { canalFromSuez, downgradeCanalForFacts, suezTransitDate } from "@/lib/voyage/canal";
 import { suezFactReasons } from "@/lib/voyage/save-rules";
+import { assumptionsFor, legArea, type AssumptionArea } from "@/lib/voyage/assumption-badges";
 import { createRequestGate, type RequestGate } from "@/lib/voyage/request-gate";
 import { acceptedLegResult, bindLegResult, legLookupKey, matchesLegEndpoints, matchesLegLookup, rebindManualLeg, voyagePdaHref, type BoundLegResult, type LegEndpoints, type LegLookupKey } from "@/lib/voyage/leg-state";
 import "@/lib/portal/voyage-estimator.css";
@@ -87,8 +88,10 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     canalManualUsd: "", canalManualReason: "", ballastCanalManualUsd: "", ballastCanalManualReason: "",
     suezConditionsDeclared: false, arrivalDraftFt: "", manualSuezDir: "" as "" | "SB" | "NB",
     loadAllowance: "0.5", dischAllowance: "0.5", loadInEca: false, dischInEca: false, loadOpenLoopBan: false, dischOpenLoopBan: false, loadEuBerth: false, dischEuBerth: false,
-    pdaLoad: "", pdaLoadReason: "", pdaDisch: "", pdaDischReason: "", freight: "", commission: "", insurance: "", stevedoring: "", other: "",
+    pdaLoad: "", pdaLoadReason: "", pdaDisch: "", pdaDischReason: "", pdaLoadEstimate: "", pdaDischEstimate: "", freight: "", commission: "", insurance: "", stevedoring: "", other: "",
   });
+  // the member's saved PDA estimates per port (the DA picker); a chosen one replaces the manual figure
+  const [pdaOptions, setPdaOptions] = React.useState<{ load: VoyagePdaEstimateOption[]; disch: VoyagePdaEstimateOption[] }>({ load: [], disch: [] });
   const [save, setSave] = React.useState<{ busy: boolean; note: string | null; error: boolean; id?: string }>({ busy: false, note: null, error: false });
   const [profileSave, setProfileSave] = React.useState<{ busy: boolean; note: string | null; error: boolean }>({ busy: false, note: null, error: false });
   const [, startTransition] = React.useTransition();
@@ -127,6 +130,17 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   React.useEffect(() => { fetchLeg(openCode, polCode, setBallast, voyageDate, ballastGate.current); }, [openCode, polCode, voyageDate]);
   React.useEffect(() => { fetchLeg(polCode, podCode, setLaden, voyageDate, ladenGate.current); }, [polCode, podCode, voyageDate]);
 
+  // saved PDA estimates for each port; a choice that no longer belongs to the port is cleared
+  React.useEffect(() => {
+    let live = true;
+    const load = (code: string | null) => (code ? listVoyagePdaEstimatesAction(code).then((r) => (r.ok ? r.data : [])).catch(() => []) : Promise.resolve([] as VoyagePdaEstimateOption[]));
+    Promise.all([load(polCode), load(podCode)]).then(([l, d]) => {
+      if (!live) return;
+      setPdaOptions({ load: l, disch: d });
+      setVoy((v) => ({ ...v, pdaLoadEstimate: l.some((o) => o.id === v.pdaLoadEstimate) ? v.pdaLoadEstimate : "", pdaDischEstimate: d.some((o) => o.id === v.pdaDischEstimate) ? v.pdaDischEstimate : "" }));
+    });
+    return () => { live = false; };
+  }, [polCode, podCode]);
   React.useEffect(() => { if (vesselId && cargoId) logEvent("voyage_estimate", { target: vesselId, meta: { cargo: cargoId } }); }, [vesselId, cargoId]);
 
   // ── engine input (the same rules as the server save, so the preview matches what is saved) ──
@@ -140,7 +154,12 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     if (!a?.found || !from || !to) return { key, from, to, nm: null, ecaNm: null, method: "none" };
     return { key, from, to, nm: a.nm, ecaNm: a.method === "waypoints" ? a.ecaNm : null, method: a.method === "waypoints" ? "waypoints" : "distance_only", routeSource: a.source, routeVerified: a.verified, ecaConfidence: a.geometryConfidence, canalNm: a.chokepoints.includes("SUEZ") ? settings.suez.nm : null };
   }, [actor, sessionAt, settings.suez.nm]);
-  const pdaInput = React.useCallback((usdStr: string, reason: string): PortCallInput["pda"] => {
+  const pdaInput = React.useCallback((usdStr: string, reason: string, estimateId: string, options: VoyagePdaEstimateOption[]): PortCallInput["pda"] => {
+    // a saved PDA estimate: the preview uses its USD total and coverage; the save re-reads it on the server
+    const est = estimateId ? options.find((o) => o.id === estimateId) : undefined;
+    if (est && est.usdTotal != null && (est.coverage === "published" || est.coverage === "partial" || est.coverage === "manual_required")) {
+      return { usd: Number(est.usdTotal), source: "tariff", estimateId: est.id, coverage: est.coverage };
+    }
     const usd = num(usdStr);
     return usd == null ? { usd: null, source: "none" } : { usd, source: "manual", manual: { actorUserId: actor, reason: reason.trim(), at: sessionAt } };
   }, [actor, sessionAt]);
@@ -193,8 +212,8 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
       // the server takes the laycan from the linked listing; a market cargo's date is a broker input
       scheduleSource: cargo.ownedListingId && cargo.laycanFrom ? "listing" : "manual",
       ports: {
-        load: { key: "load", port: polCode, qtyMt: qty, rateMtDay: cargo.loadRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.loadAllowance) ?? 0, inEca: loadInEca, inEcaSource: ladenStartZones != null ? (ladenAuto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.loadOpenLoopBan, euBerthOver2h: voy.loadEuBerth, pda: pdaInput(voy.pdaLoad, voy.pdaLoadReason) },
-        disch: { key: "disch", port: podCode, qtyMt: qty, rateMtDay: cargo.dischRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.dischAllowance) ?? 0, inEca: dischInEca, inEcaSource: ladenEndZones != null ? (ladenAuto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.dischOpenLoopBan, euBerthOver2h: voy.dischEuBerth, pda: pdaInput(voy.pdaDisch, voy.pdaDischReason) },
+        load: { key: "load", port: polCode, qtyMt: qty, rateMtDay: cargo.loadRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.loadAllowance) ?? 0, inEca: loadInEca, inEcaSource: ladenStartZones != null ? (ladenAuto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.loadOpenLoopBan, euBerthOver2h: voy.loadEuBerth, pda: pdaInput(voy.pdaLoad, voy.pdaLoadReason, voy.pdaLoadEstimate, pdaOptions.load) },
+        disch: { key: "disch", port: podCode, qtyMt: qty, rateMtDay: cargo.dischRate, rateSource: cargo.ownedListingId ? "listing" : "manual", allowanceDays: num(voy.dischAllowance) ?? 0, inEca: dischInEca, inEcaSource: ladenEndZones != null ? (ladenAuto?.geometryConfidence === "official" ? "governed" : "coarse") : "manual", openLoopBan: voy.dischOpenLoopBan, euBerthOver2h: voy.dischEuBerth, pda: pdaInput(voy.pdaDisch, voy.pdaDischReason, voy.pdaDischEstimate, pdaOptions.disch) },
       },
       anchorageDays: num(voy.anchorageDays) ?? 0,
       anchorageInEca: ladenEndZones != null ? dischInEca : voy.anchorageInEca,
@@ -208,7 +227,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
       revenue: freight != null && freight > 0 && qty > 0 ? { qtyMt: qty, freightUsdMt: freight, commissionPct: num(voy.commission) ?? 0 } : null,
       extras: { insuranceUsd: num(voy.insurance) ?? 0, stevedoringUsd: num(voy.stevedoring) ?? 0, otherUsd: num(voy.other) ?? 0 },
     };
-  }, [vessel, cargo, form, consumption, vesselSource, hasBallast, openCode, polCode, podCode, ballast, laden, ballastAuto, ladenAuto, legInput, pdaInput, loadInEca, dischInEca, ladenStartZones, ladenEndZones, settings, settingsSource, fuel, qty, voy]);
+  }, [vessel, cargo, form, consumption, vesselSource, hasBallast, openCode, polCode, podCode, ballast, laden, ballastAuto, ladenAuto, legInput, pdaInput, loadInEca, dischInEca, ladenStartZones, ladenEndZones, settings, settingsSource, fuel, qty, voy, pdaOptions]);
   const pre: VoyageEstimate | null = React.useMemo(() => (baseInput ? estimateVoyage(baseInput) : null), [baseInput]);
 
   // ── Suez: one transit per leg that crosses the canal, priced on its own transit date ──
@@ -470,17 +489,23 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
                       <label className="vy-field"><span>Waiting at anchorage (days)</span><input type="number" step="0.5" min="0" value={voy.anchorageDays} onChange={(e) => setVoy({ ...voy, anchorageDays: e.target.value })} /></label>
                       <label className="vy-check"><input type="checkbox" checked={voy.anchorageInEca} onChange={(e) => setVoy({ ...voy, anchorageInEca: e.target.checked })} /> Anchorage inside ECA</label>
                     </div>
-                    <div className="vy-row2">
-                      <label className="vy-field"><span>Load port DA (USD, manual)</span><input type="number" min="0" value={voy.pdaLoad} onChange={(e) => setVoy({ ...voy, pdaLoad: e.target.value })} placeholder="not entered → unavailable" /></label>
-                      <label className="vy-field"><span>Disch port DA (USD, manual)</span><input type="number" min="0" value={voy.pdaDisch} onChange={(e) => setVoy({ ...voy, pdaDisch: e.target.value })} placeholder="not entered → unavailable" /></label>
-                    </div>
-                    {(voy.pdaLoad.trim() !== "" || voy.pdaDisch.trim() !== "") && (
+                    {(pdaOptions.load.length > 0 || pdaOptions.disch.length > 0) && (
                       <div className="vy-row2">
-                        {voy.pdaLoad.trim() !== "" && <label className="vy-field"><span>Reason · load DA</span><input value={voy.pdaLoadReason} onChange={(e) => setVoy({ ...voy, pdaLoadReason: e.target.value })} placeholder="e.g. agent proforma 3 Oct" aria-label="Load DA reason" /></label>}
-                        {voy.pdaDisch.trim() !== "" && <label className="vy-field"><span>Reason · disch DA</span><input value={voy.pdaDischReason} onChange={(e) => setVoy({ ...voy, pdaDischReason: e.target.value })} placeholder="e.g. Ports DA calculator figure" aria-label="Discharge DA reason" /></label>}
+                        <PdaPicker label="Load port DA · saved PDA estimate" options={pdaOptions.load} value={voy.pdaLoadEstimate} onChange={(id) => setVoy({ ...voy, pdaLoadEstimate: id })} />
+                        <PdaPicker label="Disch port DA · saved PDA estimate" options={pdaOptions.disch} value={voy.pdaDischEstimate} onChange={(id) => setVoy({ ...voy, pdaDischEstimate: id })} />
                       </div>
                     )}
-                    <div className="vy-muted">Port DAs: enter the Ports DA Calculator figure or an agent quote with its reason (labelled manual). <Link href={portsDaHref} className="sz-link">Ports DA →</Link></div>
+                    <div className="vy-row2">
+                      <label className="vy-field"><span>Load port DA (USD, manual)</span><input type="number" min="0" value={voy.pdaLoadEstimate ? "" : voy.pdaLoad} disabled={!!voy.pdaLoadEstimate} onChange={(e) => setVoy({ ...voy, pdaLoad: e.target.value })} placeholder={voy.pdaLoadEstimate ? "from the PDA estimate" : "not entered → unavailable"} /></label>
+                      <label className="vy-field"><span>Disch port DA (USD, manual)</span><input type="number" min="0" value={voy.pdaDischEstimate ? "" : voy.pdaDisch} disabled={!!voy.pdaDischEstimate} onChange={(e) => setVoy({ ...voy, pdaDisch: e.target.value })} placeholder={voy.pdaDischEstimate ? "from the PDA estimate" : "not entered → unavailable"} /></label>
+                    </div>
+                    {((voy.pdaLoad.trim() !== "" && !voy.pdaLoadEstimate) || (voy.pdaDisch.trim() !== "" && !voy.pdaDischEstimate)) && (
+                      <div className="vy-row2">
+                        {voy.pdaLoad.trim() !== "" && !voy.pdaLoadEstimate && <label className="vy-field"><span>Reason · load DA</span><input value={voy.pdaLoadReason} onChange={(e) => setVoy({ ...voy, pdaLoadReason: e.target.value })} placeholder="e.g. agent proforma 3 Oct" aria-label="Load DA reason" /></label>}
+                        {voy.pdaDisch.trim() !== "" && !voy.pdaDischEstimate && <label className="vy-field"><span>Reason · disch DA</span><input value={voy.pdaDischReason} onChange={(e) => setVoy({ ...voy, pdaDischReason: e.target.value })} placeholder="e.g. Ports DA calculator figure" aria-label="Discharge DA reason" /></label>}
+                      </div>
+                    )}
+                    <div className="vy-muted">Port DAs: choose a saved PDA estimate for the port (a published tariff reads trusted, a partial one fallback), or enter an agent quote with its reason (labelled manual). <Link href={portsDaHref} className="sz-link">Ports DA →</Link></div>
                     <div className="vy-row3">
                       <label className="vy-field"><span>Insurance (USD)</span><input type="number" min="0" value={voy.insurance} onChange={(e) => setVoy({ ...voy, insurance: e.target.value })} /></label>
                       <label className="vy-field"><span>Stevedoring (USD)</span><input type="number" min="0" value={voy.stevedoring} onChange={(e) => setVoy({ ...voy, stevedoring: e.target.value })} /></label>
@@ -563,22 +588,28 @@ function statusSummary(e: VoyageEstimate): string {
 function Results({ estimate, settings }: { estimate: VoyageEstimate; settings: VoyageSettings }) {
   const c = estimate.costs;
   const money = (v: { usd: number | null; status: ComponentStatus }, missingText: string) => v.usd == null ? <span className="is-unavailable">{missingText}</span> : <span className={v.status === "trusted" ? "is-auto" : v.status === "manual" ? "is-manual" : "is-fallback"}>{fmtUSD2(v.usd)}{v.status !== "trusted" ? ` · ${v.status}` : ""}</span>;
+  // the "platform assumption" badge on every figure that rests on an unconfirmed constant (B2O-020 P2)
+  // one or several areas: a total that rests on sea, port and canal time names every constant behind it (B2O-028)
+  const assumed = (...areas: AssumptionArea[]) => {
+    const used = areas.flatMap((a) => assumptionsFor(a, estimate.platformAssumptions)).filter((u, i, all) => all.findIndex((x) => x.key === u.key) === i);
+    return used.length ? <span className="vy-badge vy-badge--fallback" title={`Platform assumption, not yet confirmed by the owner: ${used.map((u) => u.label).join("; ")}`}>platform assumption</span> : null;
+  };
   return (
     <>
       <div className={`vy-status vy-status--${estimate.status}`}><span className="vy-status__k">{estimate.status}</span><span>{statusSummary(estimate)}</span></div>
       {estimate.status === "invalid" && estimate.errors && <div className="vy-unavailable"><b>Fix the input:</b><ul className="vy-unavailable-list">{estimate.errors.map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
       {estimate.unavailable.length > 0 && <div className="vy-unavailable"><b>Not priced:</b><ul className="vy-unavailable-list">{estimate.unavailable.map((u) => <li key={u.code}>{u.reason}</li>)}</ul></div>}
       <div className="ve-results">
-        <div className="ve-result"><div className="ve-result__k">Total voyage days</div><div className="ve-result__v ve-result__v--navy">{fmtDays(estimate.days.total)}</div><div className="ve-note-sub">sea {fmtDays(estimate.days.seaBallast + estimate.days.seaLaden)} · port {fmtDays(estimate.days.portLoad + estimate.days.portDisch)} · canal {fmtDays(estimate.days.canalTransit + estimate.days.canalAnchorage)} · wait {fmtDays(estimate.days.anchorage)} · margin {estimate.seaMarginPct}%</div></div>
+        <div className="ve-result"><div className="ve-result__k">Total voyage days{assumed("sea", "port", "canal")}</div><div className="ve-result__v ve-result__v--navy">{fmtDays(estimate.days.total)}</div><div className="ve-note-sub">sea {fmtDays(estimate.days.seaBallast + estimate.days.seaLaden)} · port {fmtDays(estimate.days.portLoad + estimate.days.portDisch)} · canal {fmtDays(estimate.days.canalTransit + estimate.days.canalAnchorage)} · wait {fmtDays(estimate.days.anchorage)} · margin {estimate.seaMarginPct}%</div></div>
         <div className="ve-result"><div className="ve-result__k">Fuel cost</div><div className="ve-result__v ve-result__v--amber">{fmtUSD(c.fuel.usd)}</div><div className="ve-note-sub">{fmtMT(estimate.fuel.pricedMt)} of {fmtMT(estimate.fuel.totalMt)} MT priced{estimate.fuel.ecaMt > 0 ? ` · ${fmtMT(estimate.fuel.ecaMt)} MT in ECA` : ""} · {c.fuel.status}</div></div>
         <div className="ve-result"><div className="ve-result__k">Total voyage cost</div><div className="ve-result__v ve-result__v--navy">{fmtUSD(c.totalUsd)}</div><div className="ve-note-sub">{c.complete ? <>voyage costs {fmtUSD(c.voyageCostsUsd)} + running {fmtUSD(c.opexUsd)}</> : <span className="is-unavailable">incomplete: {estimate.unavailable.length} part{estimate.unavailable.length > 1 ? "s" : ""} excluded</span>}</div></div>
         <div className="ve-result ve-result--tce"><div className="ve-result__k">{estimate.revenue ? "TCE estimate" : "Running cost / day"}</div><div className="ve-result__v">{estimate.revenue ? fmtUSD(estimate.revenue.tceUsdDay) : fmtUSD(estimate.opex.usdDay)}<span className="ve-result__unit">/day</span></div><div className="ve-note-sub">{estimate.revenue ? `net freight ${fmtUSD(estimate.revenue.netFreightUsd)}${c.complete ? "" : " · on an incomplete cost base"}` : `class ${estimate.opex.vesselClass}${estimate.opex.classAssumed ? " (assumed)" : ""} × ${estimate.opex.multiplier}`}</div></div>
       </div>
 
       <div className="ve-pl-card" style={{ marginTop: 16 }}>
-        <div className="ve-pl-card__title">Legs <span className="sz-muted">· sea margin {estimate.seaMarginPct}% — {estimate.seaMarginBasis}</span></div>
+        <div className="ve-pl-card__title">Legs <span className="sz-muted">· sea margin {estimate.seaMarginPct}% — {estimate.seaMarginBasis}</span>{assumed("seaMargin")}</div>
         <table className="vy-table"><thead><tr><th>Leg</th><th>From → To</th><th className="num">NM</th><th className="num">ECA NM</th><th className="num">Days</th><th>Fuel</th><th>Status</th></tr></thead>
-          <tbody>{estimate.legs.map((l) => <tr key={l.key}><td>{l.label}<small>{l.note}</small></td><td>{l.from ?? "—"}{l.to && l.to !== l.from ? ` → ${l.to}` : ""}</td><td className="num">{l.kind === "sea" || l.kind === "canal" ? fmtNM(l.nm) : "—"}</td><td className="num">{l.ecaShareKnown ? (l.ecaNm ? fmtNM(l.ecaNm) : "0") : "?"}</td><td className="num">{fmtDays(l.days)}</td><td>{l.burns.map((b) => `${b.productKey} ${fmtMT(b.mt)}`).join(" · ") || "—"}</td><td><span className={`vy-badge vy-badge--${BADGE[l.status]}`}>{l.status}</span></td></tr>)}
+          <tbody>{estimate.legs.map((l) => <tr key={l.key}><td>{l.label}<small>{l.note}</small></td><td>{l.from ?? "—"}{l.to && l.to !== l.from ? ` → ${l.to}` : ""}</td><td className="num">{l.kind === "sea" || l.kind === "canal" ? fmtNM(l.nm) : "—"}</td><td className="num">{l.ecaShareKnown ? (l.ecaNm ? fmtNM(l.ecaNm) : "0") : "?"}</td><td className="num">{fmtDays(l.days)}{legArea(l.kind) ? assumed(legArea(l.kind)!) : null}</td><td>{l.burns.map((b) => `${b.productKey} ${fmtMT(b.mt)}`).join(" · ") || "—"}</td><td><span className={`vy-badge vy-badge--${BADGE[l.status]}`}>{l.status}</span></td></tr>)}
             <tr><td><b>Total</b></td><td /><td className="num"><b>{fmtNM(estimate.legs.reduce((a, l) => a + (l.kind === "sea" || l.kind === "canal" ? l.nm ?? 0 : 0), 0))}</b></td><td className="num"><b>{fmtNM(estimate.legs.reduce((a, l) => a + (l.ecaNm ?? 0), 0))}</b></td><td className="num"><b>{fmtDays(estimate.days.total)}</b></td><td><b>{fmtMT(estimate.fuel.totalMt)} MT</b></td><td /></tr></tbody></table>
       </div>
 
@@ -599,7 +630,7 @@ function Results({ estimate, settings }: { estimate: VoyageEstimate; settings: V
           <div className="ve-pl-row"><span>Discharge port DA</span>{money(c.pdaDisch, "not entered — unavailable")}</div>
           <div className="ve-pl-row"><span>Insurance, stevedoring, other</span><span>{fmtUSD2(c.extrasUsd)}</span></div>
           <div className="ve-pl-row is-subtotal"><span>Voyage costs{c.complete ? "" : " (computable parts)"}</span><span>{fmtUSD2(c.voyageCostsUsd)}</span></div>
-          <div className="ve-pl-row ve-pl-row--linked"><span>Running cost{estimate.platformAssumptions.some((p) => p.key.startsWith("opex") || p.key === "classMultipliers") ? <span className="vy-badge vy-badge--fallback">platform assumption</span> : null}<small className="sz-muted">crew ${settings.opex.crewUsdDay} + maintenance ${settings.opex.maintenanceUsdDay} = ${estimate.opex.baseUsdDay}/day × class {estimate.opex.vesselClass} ({estimate.opex.multiplier}) × {fmtDays(estimate.days.total)} days</small></span><span>{fmtUSD2(c.opexUsd)}</span></div>
+          <div className="ve-pl-row ve-pl-row--linked"><span>Running cost{assumed("running")}<small className="sz-muted">crew ${settings.opex.crewUsdDay} + maintenance ${settings.opex.maintenanceUsdDay} = ${estimate.opex.baseUsdDay}/day × class {estimate.opex.vesselClass} ({estimate.opex.multiplier}) × {fmtDays(estimate.days.total)} days</small></span><span>{fmtUSD2(c.opexUsd)}</span></div>
           <div className="ve-pl-row is-grand"><span>Total voyage cost</span><span>{fmtUSD2(c.totalUsd)}{c.complete ? "" : <small className="is-unavailable"> incomplete</small>}</span></div>
         </div>
         {estimate.revenue && (
@@ -652,4 +683,20 @@ function profileToForm(p: VesselEconomicsProfile, vessel: VoyageVesselOption): P
     if (c && (c.residual != null || c.distillate != null)) base.cons[s] = { residual: str(c.residual ?? null), distillate: str(c.distillate ?? null) };
   }
   return { ...base, speedLaden: str(p.speedLadenKn ?? vessel.serviceSpeedKn ?? null), speedBallast: str(p.speedBallastKn ?? null), hasScrubber: boolToTri(p.hasScrubber ?? vessel.scrubberFitted), vesselClass: p.vesselClass ?? "", scnt: str(p.scnt ?? vessel.scnrt ?? null), gt: str(p.gt ?? vessel.gt ?? null) };
+}
+
+/** A saved PDA estimate for one port; estimates without a USD total cannot be used and are shown disabled. */
+function PdaPicker({ label, options, value, onChange }: { label: string; options: VoyagePdaEstimateOption[]; value: string; onChange: (id: string) => void }) {
+  return (
+    <label className="vy-field"><span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} disabled={options.length === 0} aria-label={label}>
+        <option value="">{options.length ? "— none, enter manually —" : "no saved estimate for this port"}</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id} disabled={o.usdTotal == null}>
+            {`${o.callDate ?? "no call date"} · ${o.terminalName ?? "port"} · ${o.usdTotal == null ? `${o.currency} only` : fmtUSD(Number(o.usdTotal))} · ${o.coverage === "published" ? "published tariff" : o.coverage === "partial" ? "partial tariff" : "manual"}`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
