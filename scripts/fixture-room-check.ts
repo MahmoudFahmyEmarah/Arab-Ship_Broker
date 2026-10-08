@@ -588,11 +588,16 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok((race.match(/fn_refresh_matches\(\)/g) ?? []).length === 6
      && /delete from public\.ports[^;]*;\s*set session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);/.test(race)
      && /values \('cargo', '\$C6'[^;]*;\s*set session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);/.test(race)
-     && /open_date = current_date \+ 60[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(4\);/.test(race)
+     && /open_date = current_date \+ 60[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(6\);/.test(race)
      && race.includes("open_date = current_date + 5 where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()")
-     && /status = 'FIXED'[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(4\);/.test(race)
+     && /status = 'FIXED'[^;]*;\s*set local session_replication_role = origin;\s*select public\.fn_refresh_matches\(\);\s*select pg_sleep\(6\);/.test(race)
      && race.includes("status = 'OPEN' where id = '$A1'; set session_replication_role = origin; select public.fn_refresh_matches()"),
      "the race harness refreshes exactly at cleanup, C6 seed, both invalidations and both restorations");
+  // the races wait for real lock state: every competitor waits in the database for its holder's sleep (no fixed delays)
+  for (const f of ["fixture_race_two_sessions.sh", "fixture_recreate_race.sh"]) {
+    const t = read(`supabase/tests/fixture_room/${f}`);
+    ok(!/^sleep [0-9.]+$/m.test(t) && (t.match(/set application_name = 'fx\w+';/g) ?? []).length === (t.match(/pg_stat_clear_snapshot\(\)/g) ?? []).length && /RACE_SETUP/.test(t), `${f}: no fixed shell delay; each holder is awaited in the database`);
+  }
 
   const normalize = (value: string) => value.replace(/\r\n/g, "\n");
   const shared = normalize(seed).trimEnd();

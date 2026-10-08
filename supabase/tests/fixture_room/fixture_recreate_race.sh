@@ -17,6 +17,12 @@
 #
 #   supabase/tests/fixture_room/fixture_race_two_sessions.sh [psql-command]
 #
+# Timing: each in-flight session names itself (application_name) and holds its locks inside a pg_sleep; its
+# competitor first waits INSIDE the database until that session is sleeping (refreshing the per-transaction
+# pg_stat_activity snapshot on every pass; RACE_SETUP if it never gets there) (refreshing the per-transaction
+# pg_stat_activity snapshot on every pass; RACE_SETUP if it never gets there) — never a fixed shell delay, which a
+# slow docker exec or candidate lookup on a loaded machine outruns.
+#
 # Default psql: docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres
 # (the local disposable database). Run it ONLY against a disposable database:
 # the sessions COMMIT (a race cannot be rolled back) and the seed rows are
@@ -104,15 +110,16 @@ ok() { if [ "$1" = "$2" ]; then echo "  ok   $3 ($1)"; else echo " FAIL  $3 — 
 # close it, so it can be started again
 q "$(claims $U_CH1) select public.close_fixture_room('$ROOM', 'withdrawn', 'race', (select version from public.fixture_rooms where id = '$ROOM'), 'race-close-same')->>'ok'" > /dev/null
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /tmp/fxrr_w.log 2>&1 &
+set application_name = 'fxrr_w';
 $(claims $U_CH1)
 begin;
 select public.recreate_fixture_room('$ROOM', '$TERMS'::jsonb, 'race-recreate-same', '{}'::jsonb)->>'replayed';
-select pg_sleep(3);
+select pg_sleep(6);
 commit;
 SQL
 PID_W=$!
-sleep 1.5
 $PSQL -At -q -v ON_ERROR_STOP=0 <<SQL > /tmp/fxrr_x.log 2>&1 &
+do \$w\$ declare ready boolean := false; begin for i in 1..600 loop perform pg_stat_clear_snapshot(); ready := exists (select 1 from pg_stat_activity where application_name = 'fxrr_w' and state = 'active' and query like '%pg_sleep%'); exit when ready; perform pg_sleep(0.05); end loop; if not ready then raise exception 'RACE_SETUP: fxrr_w never reached its sleep'; end if; end \$w\$;   -- wait, inside the database, until fxrr_w holds its locks
 $(claims $U_CH1)
 select public.recreate_fixture_room('$ROOM', '$TERMS'::jsonb, 'race-recreate-same', '{}'::jsonb)->>'replayed';
 SQL
