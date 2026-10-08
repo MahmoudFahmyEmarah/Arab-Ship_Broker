@@ -1,17 +1,31 @@
 /**
- * Fixture Room · browser-suite seeding (Fixture Room-only file, 23 Sep 2026).
+ * Fixture Room · browser-suite seeding (23 Sep 2026; hosted-safe 7 Oct 2026, C2O-075 / C2O-078).
  *
- * The shared global-setup seeds ADMIN seats; a fixture needs two real MEMBER
- * seats on opposite sides. This helper creates them on the LOCAL stack only
- * (a charterer with a live cargo, an owner with a live position that the
- * platform's own match rules pair with it), signs them in through the real
- * login form, and removes everything afterwards.
+ * The shared global-setup seeds ADMIN seats; a fixture needs two real MEMBER seats on opposite sides. This helper
+ * creates them (a charterer with a live cargo, an owner with a live position that the platform's own match rules
+ * pair with it), signs them in through the real login form, and removes everything afterwards.
+ *
+ * One target (e2e/e2e-db.ts resolveTarget) is bound for seeding, sign-in and teardown alike: the local stack, or a
+ * named staging project whose API and database URL carry the same ref. Every id a seed writes is generated and
+ * recorded BEFORE the call that writes it; a seed that fails part-way undoes itself (e2e/e2e-cleanup.ts).
  */
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
+import { randomBytes, randomUUID } from "node:crypto";
+import { dbExec, dbQuery, dbTx, isForeignSupabaseRequest, isHostedTarget, resolveTarget } from "./e2e-db";
+import { cleanupSql, noneCreated, teardownAll, teardownRows, undoPartialSeed, type Created, type RecoveryClient } from "./e2e-cleanup";
 
-export const PASSWORD = "e2e-Fixture-Passw0rd!";
+export { dbExec, dbQuery, dbTx, cleanupSql, teardownAll };
+
+/** A run against a hosted project; an unresolvable environment counts as hosted (fail closed). */
+export const HOSTED = isHostedTarget();
+/**
+ * A known password must never sit on a hosted account (C2O-075 P0): a hosted run gets a random password per test
+ * process (Playwright creates and signs in a spec's seeds in the same worker, and a restarted worker re-seeds).
+ * The local stack keeps the fixed one.
+ */
+export const PASSWORD = HOSTED ? `e2e-${randomBytes(18).toString("base64url")}-Aa1!` : "e2e-Fixture-Passw0rd!";
 
 export interface FixtureSeed {
   stamp: string;
@@ -25,130 +39,129 @@ export interface FixtureSeed {
   availabilityId: string;
   /** a TBN hull of the owner that also matches the cargo (C2O-011): its name and id must never reach the cargo side */
   tbn: { vesselId: string; name: string; availabilityId: string };
+  /** this run's own ports (random ZY… codes named "E2E Port <stamp>"), created and removed by this seed only */
+  ports: { load: string; disch: string };
+  portCodes: string[];
 }
 
-/**
- * Runs SQL as the database owner. Default: the local Supabase container. With E2E_DB_URL set (a staging
- * session-pooler string) the same statements run there through the local image's psql. The production
- * project is refused by ref, whatever the environment says.
- */
-export function dbExec(sql: string): void {
-  const remote = process.env.E2E_DB_URL;
-  if (remote && /rezfejaxbmdzkslrrefr/.test(remote)) throw new Error("e2e refuses to run SQL against the production project");
-  const cmd = remote
-    ? `docker run --rm -i --entrypoint psql ${process.env.E2E_PG_IMAGE ?? "public.ecr.aws/supabase/postgres:17.6.1.127"} --dbname="${remote}" -q -v ON_ERROR_STOP=0`
-    : "docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0";
-  // A hosted session pooler can refuse a connection while the app under test holds its slots; psql then exits
-  // non-zero before running anything (statement errors alone exit 0 here). Retry the whole batch a few times.
-  for (let attempt = 1; ; attempt++) {
-    try {
-      execSync(cmd, { input: sql, stdio: ["pipe", "ignore", "ignore"], env: { ...process.env, MSYS_NO_PATHCONV: "1" } });
-      return;
-    } catch (e) {
-      if (attempt >= 4) throw e;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000 * attempt);
-    }
-  }
-}
-
-function localKeys() {
-  let url = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
-  let service = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
-  if (!service) {
+function keys(): { url: string; service: string; anon: string | null } {
+  const t = resolveTarget();
+  let service = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY ?? null;
+  let anon = process.env.E2E_SUPABASE_ANON_KEY ?? null;
+  if (t.kind === "local" && (!service || !anon)) {
     const out = execSync("npx supabase status -o env", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    service = out.match(/^SERVICE_ROLE_KEY="?([^"\n]+)"?/m)?.[1];
-    url = out.match(/^API_URL="?([^"\n]+)"?/m)?.[1] ?? url;
+    service ??= out.match(/^SERVICE_ROLE_KEY="?([^"\n]+)"?/m)?.[1] ?? null;
+    anon ??= out.match(/^ANON_KEY="?([^"\n]+)"?/m)?.[1] ?? null;
   }
-  if (!service) throw new Error("no local service role key (E2E_SUPABASE_SERVICE_ROLE_KEY or `supabase status`)");
-  // Remote seeding only for the staging project named in E2E_ALLOW_REMOTE (never production).
-  const allowed = process.env.E2E_ALLOW_REMOTE;
-  if (!/127\.0\.0\.1|localhost/.test(url) && !(allowed && url.includes(allowed) && !/rezfejaxbmdzkslrrefr/.test(url))) throw new Error(`refusing to seed members against ${url}`);
-  return { url, service };
+  if (!service) throw new Error(t.kind === "local" ? "no local service role key (E2E_SUPABASE_SERVICE_ROLE_KEY or `supabase status`)" : "a hosted run needs E2E_SUPABASE_SERVICE_ROLE_KEY");
+  return { url: t.apiUrl, service, anon };
+}
+const adminClient = () => { const k = keys(); return createClient(k.url, k.service, { auth: { persistSession: false } }); };
+const must = (what: string, r: { error: { message: string } | null }) => { if (r.error) throw new Error(`${what}: ${r.error.message}`); };
+
+/** creates an Auth account with a pre-generated id, recorded (id and email) before the call */
+async function createAccount(admin: SupabaseClient, created: Created, email: string, attrs: Record<string, unknown> = {}): Promise<string> {
+  const id = randomUUID();
+  created.emails.push(email);
+  created.userIds.push(id);
+  const { data, error } = await admin.auth.admin.createUser({ id, email, password: PASSWORD, email_confirm: true, ...attrs });
+  if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message ?? "no user returned"}`);
+  if (data.user.id !== id) { created.userIds.push(data.user.id); throw new Error(`createUser ${email}: the server ignored the pre-generated id`); }
+  return id;
+}
+
+/** runs a seed; if it fails part-way, what it created is removed (or neutralised) and the failure re-raised */
+async function seeded<T>(work: (admin: SupabaseClient, created: Created) => Promise<T>): Promise<T> {
+  const admin = adminClient();
+  const created = noneCreated();
+  try {
+    return await work(admin, created);
+  } catch (e) {
+    return undoPartialSeed(admin as unknown as RecoveryClient, created, e);
+  }
 }
 
 export async function seedFixture(): Promise<FixtureSeed> {
-  const { url, service } = localKeys();
-  const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
-  const stamp = Date.now().toString(36);
-  const testImo = String(1_000_000 + (Number.parseInt(stamp, 36) % 9_000_000));
-  const mk = async (email: string, role: string, company: string) => {
-    const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
-    if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
-    const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: `E2E ${role}`, company, role, subscription_tier: "T3", is_active: true });
-    if (e2) throw new Error(`users: ${e2.message}`);
-    const { data: org, error: e3 } = await admin.from("organizations").insert({ name: company, org_type: role === "cargo_owner" ? "charterer" : "owner", desk_contact_name: "Desk" }).select("id").single();
-    if (e3) throw new Error(`org: ${e3.message}`);
-    await admin.from("organization_members").insert({ org_id: org.id, user_id: data.user.id, member_role: "admin", is_current: true, status: "active" });
-    // the account's profile row lets the dashboard shell show the workspace
-    await admin.from("profiles").insert({ account_id: data.user.id, profile_type: role === "cargo_owner" ? "cargo" : "vessel", display_name: `E2E ${role}`, is_active: true });
-    return { email, userId: data.user.id as string, orgId: org.id as string };
-  };
-  const charterer = await mk(`e2e-fx-ch-${stamp}@arabshipbroker.test`, "cargo_owner", `E2E Charterers ${stamp}`);
-  const owner = await mk(`e2e-fx-ow-${stamp}@arabshipbroker.test`, "vessel_owner", `E2E Owners ${stamp}`);
-  await admin.from("ports").upsert([
-    { locode: "ZZFXA", trade_name: "Fixture Load Port", country: "Egypt", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
-    { locode: "ZZFXB", trade_name: "Fixture Disch Port", country: "Turkey", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
-  ], { onConflict: "locode", ignoreDuplicates: true });
-  const d = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
-  const { data: c, error: ce } = await admin.from("cargo_listings").insert({
-    ref: `E2EFX-${stamp}`, status: "IN", review_status: "APPROVED", cargo_type: "Dry Bulk", commodity_name: "E2E Wheat, Bulk", is_dg_cargo: false, is_grain_cargo: true,
-    qty_min_mt: 25000, qty_max_mt: 27500, load_port_locode: "ZZFXA", load_port_name: "Fixture Load Port", load_zone: "E.MED",
-    disch_port_locode: "ZZFXB", disch_port_name: "Fixture Disch Port", disch_zone: "E.MED", laycan_from: d(10), laycan_to: d(20), is_spot: false, load_terms: "FIOST", freight_idea_usd_mt: 24.5,
-  }).select("id").single();
-  if (ce) throw new Error(`cargo: ${ce.message}`);
-  await admin.from("cargo_listings").update({ status: "IN", review_status: "APPROVED" }).eq("id", c.id);
-  const { data: v, error: ve } = await admin.from("vessels").insert({ vessel_name: `E2E HULL ${stamp.toUpperCase()}`, imo_number: testImo, vessel_type: "Bulk Carrier", dwt_grain: 30000, build_year: 2012, flag: "Malta", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false }).select("id").single();
-  if (ve) throw new Error(`vessel: ${ve.message}`);
-  const { data: a, error: ae } = await admin.from("vessel_availability").insert({ vessel_id: v.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(5), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 26, accepts_part_cargo: false }).select("id").single();
-  if (ae) throw new Error(`availability: ${ae.message}`);
-  await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", a.id);
-  const tbnName = `E2E SECRET HULL ${stamp.toUpperCase()}`;
-  const { data: tv, error: tve } = await admin.from("vessels").insert({ vessel_name: tbnName, imo_number: null, vessel_type: "Bulk Carrier", dwt_grain: 29000, build_year: 2016, flag: "Liberia", is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false, is_tbn: true }).select("id").single();
-  if (tve) throw new Error(`tbn vessel: ${tve.message}`);
-  const { data: ta, error: tae } = await admin.from("vessel_availability").insert({ vessel_id: tv.id, open_port_locode: "ZZFXA", open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(7), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: 27, accepts_part_cargo: false }).select("id").single();
-  if (tae) throw new Error(`tbn availability: ${tae.message}`);
-  await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", ta.id);
-  const { error: oe } = await admin.from("listing_ownership").insert([
-    { listing_type: "cargo", listing_id: c.id, owner_user_id: charterer.userId, owner_org_id: charterer.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
-    { listing_type: "vessel_availability", listing_id: a.id, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
-    { listing_type: "vessel_availability", listing_id: ta.id, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
-  ]);
-  if (oe) throw new Error(`ownership: ${oe.message}`);
-  return { stamp, charterer, owner, cargoId: c.id, vesselId: v.id, vesselImo: testImo, vesselName: `E2E HULL ${stamp.toUpperCase()}`, availabilityId: a.id, tbn: { vesselId: tv.id, name: tbnName, availabilityId: ta.id } };
+  return seeded(async (admin, created) => {
+    const stamp = `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
+    created.portStamp = stamp;
+    const testImo = String(1_000_000 + (Number.parseInt(stamp.slice(-9), 36) % 9_000_000));
+    const mk = async (email: string, role: string, company: string) => {
+      const userId = await createAccount(admin, created, email);
+      must("users", await admin.from("users").insert({ id: userId, supabase_user_id: userId, email, full_name: `E2E ${role}`, company, role, subscription_tier: "T3", is_active: true }));
+      const orgId = randomUUID();
+      created.orgIds.push(orgId);
+      must("org", await admin.from("organizations").insert({ id: orgId, name: company, org_type: role === "cargo_owner" ? "charterer" : "owner", desk_contact_name: "Desk" }));
+      must("membership", await admin.from("organization_members").insert({ org_id: orgId, user_id: userId, member_role: "admin", is_current: true, status: "active" }));
+      // the account's profile row lets the dashboard shell show the workspace
+      must("profile", await admin.from("profiles").insert({ account_id: userId, profile_type: role === "cargo_owner" ? "cargo" : "vessel", display_name: `E2E ${role}`, is_active: true }));
+      return { email, userId, orgId };
+    };
+    const charterer = await mk(`e2e-fx-ch-${stamp}@arabshipbroker.test`, "cargo_owner", `E2E Charterers ${stamp}`);
+    const owner = await mk(`e2e-fx-ow-${stamp}@arabshipbroker.test`, "vessel_owner", `E2E Owners ${stamp}`);
+    // this run's own ports (C2O-084 P1): random ZY codes named for the run, so two runs never share one and the
+    // teardown removes only a port that is listed AND carries this e2e name (a real port can never match)
+    const portCode = () => `ZY${[...randomBytes(3)].map((b) => "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[b % 36]).join("")}`;
+    const loadPort = portCode();
+    let dischPort = portCode();
+    while (dischPort === loadPort) dischPort = portCode();
+    for (const [locode, side, country] of [[loadPort, "Load", "Egypt"], [dischPort, "Disch", "Turkey"]] as const) {
+      created.portCodes.push(locode);
+      must(`port ${locode}`, await admin.from("ports").insert({ locode, trade_name: `E2E Port ${stamp} ${side}`, country, zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true }));
+    }
+    const d = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    const cargoId = randomUUID();
+    created.cargoIds.push(cargoId);
+    must("cargo", await admin.from("cargo_listings").insert({
+      id: cargoId, ref: `E2EFX-${stamp}`, status: "IN", review_status: "APPROVED", cargo_type: "Dry Bulk", commodity_name: "E2E Wheat, Bulk", is_dg_cargo: false, is_grain_cargo: true,
+      qty_min_mt: 25000, qty_max_mt: 27500, load_port_locode: loadPort, load_port_name: "Fixture Load Port", load_zone: "E.MED",
+      disch_port_locode: dischPort, disch_port_name: "Fixture Disch Port", disch_zone: "E.MED", laycan_from: d(10), laycan_to: d(20), is_spot: false, load_terms: "FIOST", freight_idea_usd_mt: 24.5,
+    }));
+    must("cargo status", await admin.from("cargo_listings").update({ status: "IN", review_status: "APPROVED" }).eq("id", cargoId));
+    const hull = async (name: string, imo: string | null, dwt: number, build: number, flag: string, tbn: boolean, open: number, idea: number) => {
+      const vesselId = randomUUID();
+      created.vesselIds.push(vesselId);
+      must(`vessel ${name}`, await admin.from("vessels").insert({ id: vesselId, vessel_name: name, imo_number: imo, vessel_type: "Bulk Carrier", dwt_grain: dwt, build_year: build, flag, is_geared: true, grain_certified: true, dg_certified: false, is_sanctioned: false, ...(tbn ? { is_tbn: true } : {}) }));
+      const availabilityId = randomUUID();
+      created.availabilityIds.push(availabilityId);
+      must(`availability ${name}`, await admin.from("vessel_availability").insert({ id: availabilityId, vessel_id: vesselId, open_port_locode: loadPort, open_port_name: "Fixture Load Port", open_zone: "E.MED", open_date: d(open), status: "OPEN", review_status: "APPROVED", freight_idea_usd_mt: idea, accepts_part_cargo: false }));
+      must(`availability status ${name}`, await admin.from("vessel_availability").update({ status: "OPEN", review_status: "APPROVED" }).eq("id", availabilityId));
+      return { vesselId, availabilityId };
+    };
+    const vesselName = `E2E HULL ${stamp.toUpperCase()}`;
+    const named = await hull(vesselName, testImo, 30000, 2012, "Malta", false, 5, 26);
+    const tbnName = `E2E SECRET HULL ${stamp.toUpperCase()}`;
+    const tbn = await hull(tbnName, null, 29000, 2016, "Liberia", true, 7, 27);
+    must("ownership", await admin.from("listing_ownership").insert([
+      { listing_type: "cargo", listing_id: cargoId, owner_user_id: charterer.userId, owner_org_id: charterer.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
+      { listing_type: "vessel_availability", listing_id: named.availabilityId, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
+      { listing_type: "vessel_availability", listing_id: tbn.availabilityId, owner_user_id: owner.userId, owner_org_id: owner.orgId, role: "primary", is_current: true, transfer_reason: "initial_post" },
+    ]));
+    return {
+      stamp, charterer, owner, cargoId, vesselId: named.vesselId, vesselImo: testImo, vesselName, availabilityId: named.availabilityId,
+      tbn: { vesselId: tbn.vesselId, name: tbnName, availabilityId: tbn.availabilityId }, ports: { load: loadPort, disch: dischPort }, portCodes: [...created.portCodes],
+    };
+  });
 }
 
 /**
- * A second active seat in the charterer's organisation (re-audit C2O-011 item 3):
- * it did not post the cargo, but represents it through the organisation, so the
- * match builder must offer it. Local stack only; removed by cleanupSeat.
+ * A second active seat in the charterer's organisation (re-audit C2O-011 item 3): it did not post the cargo, but
+ * represents it through the organisation, so the match builder must offer it. Removed by cleanupSeat.
  */
 export async function seedOrgSeat(seed: FixtureSeed): Promise<{ email: string; userId: string }> {
-  const { url, service } = localKeys();
-  const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
-  const email = `e2e-fx-seat-${seed.stamp}@arabshipbroker.test`;
-  const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
-  if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
-  const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: "E2E second seat", company: `E2E Charterers ${seed.stamp}`, role: "cargo_owner", subscription_tier: "T3", is_active: true });
-  if (e2) throw new Error(`users (seat): ${e2.message}`);
-  const { error: e3 } = await admin.from("organization_members").insert({ org_id: seed.charterer.orgId, user_id: data.user.id, member_role: "broker", is_current: true, status: "active" });
-  if (e3) throw new Error(`seat membership: ${e3.message}`);
-  await admin.from("profiles").insert({ account_id: data.user.id, profile_type: "cargo", display_name: "E2E second seat", is_active: true });
-  return { email, userId: data.user.id as string };
+  return seeded(async (admin, created) => {
+    const email = `e2e-fx-seat-${seed.stamp}@arabshipbroker.test`;
+    const userId = await createAccount(admin, created, email);
+    must("users (seat)", await admin.from("users").insert({ id: userId, supabase_user_id: userId, email, full_name: "E2E second seat", company: `E2E Charterers ${seed.stamp}`, role: "cargo_owner", subscription_tier: "T3", is_active: true }));
+    must("seat membership", await admin.from("organization_members").insert({ org_id: seed.charterer.orgId, user_id: userId, member_role: "broker", is_current: true, status: "active" }));
+    must("seat profile", await admin.from("profiles").insert({ account_id: userId, profile_type: "cargo", display_name: "E2E second seat", is_active: true }));
+    return { email, userId };
+  });
 }
 
+/** Removes the seat in one guarded transaction; throws on failure (spec afterAll hooks wrap it in teardownAll). */
 export function cleanupSeat(seat: { userId: string }) {
-  const sql = `
-set session_replication_role = replica;
-delete from public.profiles where account_id = '${seat.userId}';
-delete from public.organization_members where user_id = '${seat.userId}';
-delete from public.users where id = '${seat.userId}';
-delete from auth.users where id = '${seat.userId}';
-`;
-  try {
-    dbExec(sql);
-  } catch {
-    // leaving rows behind on a disposable database is not a test failure
-  }
+  teardownRows("e2e seat teardown", { userIds: [seat.userId] });
 }
 
 /**
@@ -171,80 +184,39 @@ export async function openRoomViaApi(seed: FixtureSeed, idempotencyKey: string, 
 export interface AdminSeed { email: string; userId: string }
 
 /**
- * A super admin whose session carries the claim the ledger's admin check reads
- * (app_metadata.role = 'admin'), set through the Auth admin API — the shared
- * global setup seeds sub-admins without it. Local stack only; removed by
- * cleanupAdmin.
+ * A super admin whose session carries the claim the ledger's admin check reads (app_metadata.role = 'admin'), set
+ * through the Auth admin API — the shared global setup seeds sub-admins without it. Removed by cleanupAdmin.
  */
 export async function seedAdmin(stamp: string): Promise<AdminSeed> {
-  const { url, service } = localKeys();
-  const admin: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
-  const email = `e2e-fx-adm-${stamp}@arabshipbroker.test`;
-  const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true, app_metadata: { role: "admin" } });
-  if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
-  const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: "E2E Fixture Admin", company: "Arab ShipBroker", role: "admin", admin_tier: "super", subscription_tier: "T4", is_active: true });
-  if (e2) throw new Error(`users (admin): ${e2.message}`);
-  return { email, userId: data.user.id as string };
+  return seeded(async (admin, created) => {
+    const email = `e2e-fx-adm-${stamp}@arabshipbroker.test`;
+    const userId = await createAccount(admin, created, email, { app_metadata: { role: "admin" } });
+    must("users (admin)", await admin.from("users").insert({ id: userId, supabase_user_id: userId, email, full_name: "E2E Fixture Admin", company: "Arab ShipBroker", role: "admin", admin_tier: "super", subscription_tier: "T4", is_active: true }));
+    return { email, userId };
+  });
 }
 
+/** Removes the admin seat in one guarded transaction; throws on failure (spec afterAll hooks wrap it in teardownAll). */
 export function cleanupAdmin(a: AdminSeed) {
-  const sql = `
-set session_replication_role = replica;
-delete from public.fixture_access_log where user_id = '${a.userId}';
-delete from public.users where id = '${a.userId}';
-delete from auth.users where id = '${a.userId}';
-`;
-  try {
-    dbExec(sql);
-  } catch {
-    // leaving rows behind on a disposable database is not a test failure
-  }
+  teardownRows("e2e admin teardown", { userIds: [a.userId] });
 }
 
 /** A supabase-js client signed in as a seeded member, for API calls the browser is not needed for. */
 export async function apiClientAs(email: string): Promise<SupabaseClient> {
-  const url = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
-  let anon = process.env.E2E_SUPABASE_ANON_KEY;
-  if (!anon) {
-    const out = execSync("npx supabase status -o env", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    anon = out.match(/^ANON_KEY="?([^"\n]+)"?/m)?.[1];
-  }
-  if (!anon) throw new Error("no local anon key (E2E_SUPABASE_ANON_KEY or `supabase status`)");
-  const c = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
+  const k = keys();
+  if (!k.anon) throw new Error("no anon key (E2E_SUPABASE_ANON_KEY or `supabase status`)");
+  const c = createClient(k.url, k.anon, { auth: { persistSession: false, autoRefreshToken: false } });
   const { error } = await c.auth.signInWithPassword({ email, password: PASSWORD });
   if (error) throw new Error(`sign in ${email}: ${error.message}`);
   return c;
 }
 
+/** Removes the whole seed (rooms and their ledgers included) in one guarded transaction; throws on failure. */
 export function cleanupFixture(s: FixtureSeed) {
-  const sql = `
-set session_replication_role = replica;
-delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_events where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_recap_versions where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_messages where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_subjects where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-update public.fixture_terms set cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, agreed_proposal_id = null, status = 'open' where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_proposals where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${s.cargoId}');
-delete from public.fixture_rooms where cargo_listing_id = '${s.cargoId}';
-delete from public.listing_ownership where listing_id in ('${s.cargoId}', '${s.availabilityId}', '${s.tbn.availabilityId}');
-delete from public.matches where cargo_id = '${s.cargoId}' or vessel_avail_id in ('${s.availabilityId}', '${s.tbn.availabilityId}');
-delete from public.vessel_availability where id in ('${s.availabilityId}', '${s.tbn.availabilityId}');
-delete from public.vessels where id in ('${s.vesselId}', '${s.tbn.vesselId}');
-delete from public.cargo_listings where id = '${s.cargoId}';
-delete from public.profiles where account_id in ('${s.charterer.userId}', '${s.owner.userId}');
-delete from public.organization_members where user_id in ('${s.charterer.userId}', '${s.owner.userId}');
-delete from public.users where id in ('${s.charterer.userId}', '${s.owner.userId}');
-delete from auth.users where id in ('${s.charterer.userId}', '${s.owner.userId}');
-delete from public.organizations where id in ('${s.charterer.orgId}', '${s.owner.orgId}');
-`;
-  try {
-    dbExec(sql);
-  } catch {
-    // leaving rows behind on a disposable database is not a test failure
-  }
+  teardownRows("e2e fixture teardown", {
+    userIds: [s.charterer.userId, s.owner.userId], orgIds: [s.charterer.orgId, s.owner.orgId], cargoIds: [s.cargoId],
+    availabilityIds: [s.availabilityId, s.tbn.availabilityId], vesselIds: [s.vesselId, s.tbn.vesselId], portCodes: s.portCodes, portStamp: s.stamp,
+  });
 }
 
 /**
@@ -266,9 +238,33 @@ export async function dismissOverlays(page: Page) {
   }
 }
 
+/**
+ * Binds a browser context to the e2e target (C2O-084 P0): every request to a Supabase service path on another
+ * origin — the app under test was built against another project — is aborted and recorded, WebSockets included.
+ * Callers check `violations` and fail with the offending URL.
+ */
+export async function bindSupabaseOrigin(context: BrowserContext): Promise<{ violations: string[] }> {
+  const apiUrl = resolveTarget().apiUrl;
+  const violations: string[] = [];
+  await context.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (isForeignSupabaseRequest(url, apiUrl)) { violations.push(url); await route.abort("blockedbyclient"); return; }
+    await route.fallback();
+  });
+  await context.routeWebSocket(/.*/, (ws) => {
+    if (isForeignSupabaseRequest(ws.url(), apiUrl)) { violations.push(ws.url()); ws.close(); return; }
+    ws.connectToServer();
+  });
+  return { violations };
+}
+
 /** A fresh context signed in through the real login form, with the shell's overlays answered. */
 export async function signInAs(browser: Browser, baseURL: string, email: string): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  const guard = await bindSupabaseOrigin(context);
+  const failForeign = () => {
+    if (guard.violations.length) throw new Error(`the app under test called Supabase outside the e2e target (${new URL(resolveTarget().apiUrl).origin}): ${guard.violations[0]}`);
+  };
   const page = await context.newPage();
   await page.goto("/auth/login");
   await page.locator('input[name="email"]').fill(email);
@@ -277,12 +273,23 @@ export async function signInAs(browser: Browser, baseURL: string, email: string)
   // The app uses client-side routing after the auth call. Waiting for a page
   // `load` event can miss that transition even when the dashboard is already
   // rendered, so assert the observable URL instead.
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 90_000 });
+  try {
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 90_000 });
+  } catch (e) {
+    failForeign();
+    throw e;
+  }
   // Wait for the router transition itself, not only its early URL update.
   // Starting the next navigation while the login transition is still
   // rendering can let its pending router.push win and send the test back to
   // /dashboard after it has requested a Fixture page.
-  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible({ timeout: 90_000 });
+  try {
+    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible({ timeout: 90_000 });
+  } catch (e) {
+    failForeign();
+    throw e;
+  }
+  failForeign();
   await dismissOverlays(page);
   return { context, page };
 }

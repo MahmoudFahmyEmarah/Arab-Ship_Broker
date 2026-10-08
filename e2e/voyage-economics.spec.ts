@@ -15,7 +15,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { test, expect, type Browser } from "@playwright/test";
-import { cleanupAdmin, cleanupFixture, dbExec, seedAdmin, seedFixture, signInAs, type FixtureSeed } from "./fixture-room.helpers";
+import { cleanupAdmin, cleanupFixture, dbTx, seedAdmin, seedFixture, signInAs, teardownAll, type FixtureSeed } from "./fixture-room.helpers";
 
 const stamp = Date.now().toString(36);
 const plus = (days: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
@@ -28,8 +28,9 @@ let seed: FixtureSeed;
 let versionId: string | null = null;
 const pdaEstimateId = randomUUID();
 
+// One transaction (C2O-075 P0): the guards lifted below come back even if a statement or the connection fails.
 function psql(sql: string) {
-  try { dbExec(sql); } catch { /* disposable rows */ }
+  dbTx("voyage e2e teardown", sql);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -42,7 +43,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   // Published versions, SDR rates and events are immutable by trigger (20261003205000); the disposable e2e rows are
   // removed by the local superuser with the guards lifted for this statement batch only, then the previous version's open window is restored.
-  psql(`
+  teardownAll("voyage e2e teardown", [() => psql(`
 alter table public.suez_tariff_versions disable trigger trg_suez_version_guard;
 alter table public.suez_tariff_versions disable trigger trg_suez_version_events;
 alter table public.suez_tariff_items disable trigger trg_suez_items_guard;
@@ -72,9 +73,10 @@ delete from public.vessel_economics_profiles where vessel_id = '${seed.vesselId}
 alter table public.pda_estimates disable trigger trg_pda_estimates_immutable;
 delete from public.pda_estimates where id = '${pdaEstimateId}' and terminal_name = 'E2E quay ${stamp}';
 alter table public.pda_estimates enable trigger trg_pda_estimates_immutable;
-`);
-  cleanupFixture(seed);
-  cleanupAdmin(admin);
+`),
+    () => cleanupFixture(seed),
+    () => cleanupAdmin(admin),
+  ]);
 });
 
 async function asAdmin(browser: Browser, baseURL: string) {
@@ -229,7 +231,7 @@ test("voyage estimator prices the seeded pairing and saves an immutable estimate
 // Wave 3 (B2O-020 P2): the load-port DA is taken from a saved PDA estimate; the save re-reads it on the server.
 test("the load port DA comes from a saved PDA estimate", async ({ browser, baseURL }) => {
   psql(`insert into public.pda_estimates (id, owner_user_id, port_locode, terminal_name, call_date, coverage, input_snapshot, native_currency, native_total, generated_at)
-        values ('${pdaEstimateId}', '${admin.userId}', 'ZZFXA', 'E2E quay ${stamp}', current_date + 12, 'manual_required', '{}', 'USD', 18250.5, now());`);
+        values ('${pdaEstimateId}', '${admin.userId}', '${seed.ports.load}', 'E2E quay ${stamp}', current_date + 12, 'manual_required', '{}', 'USD', 18250.5, now());`);
   const { page, context } = await asAdmin(browser, baseURL!);
   try {
     await page.goto("/dashboard/voyage-estimator");

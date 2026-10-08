@@ -10,7 +10,7 @@
  */
 import { test, expect as baseExpect } from "@playwright/test";
 import { buildTermCatalogue, FIXTURE_TERM_CATALOGUE_VERSION } from "../lib/fixture-room/terms";
-import { apiClientAs, cleanupAdmin, dismissOverlays, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed, openRoomViaApi } from "./fixture-room.helpers";
+import { apiClientAs, cleanupAdmin, dismissOverlays, cleanupFixture, seedAdmin, seedFixture, signInAs, type AdminSeed, type FixtureSeed, openRoomViaApi, teardownAll } from "./fixture-room.helpers";
 
 const expect = baseExpect.configure({ timeout: 60_000 });
 
@@ -37,7 +37,7 @@ test.beforeAll(async () => {
   });
   if (posted.error) throw new Error(`post_fixture_message: ${posted.error.message}`);
 });
-test.afterAll(async () => { if (seed) cleanupFixture(seed); if (admin) cleanupAdmin(admin); });
+test.afterAll(async () => { teardownAll("fixture admin teardown", [() => { if (seed) cleanupFixture(seed); }, () => { if (admin) cleanupAdmin(admin); }]); });
 
 test("a member is bounced off the admin console", async ({ browser, baseURL }) => {
   const { context, page } = await signInAs(browser, baseURL!, seed.charterer.email);
