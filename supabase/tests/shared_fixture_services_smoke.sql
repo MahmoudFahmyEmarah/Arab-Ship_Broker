@@ -63,8 +63,8 @@ declare
   n integer;
   refused boolean := false;
 begin
-  if has_function_privilege('anon', 'public.list_my_notifications(integer,timestamptz)', 'EXECUTE')
-     or not has_function_privilege('authenticated', 'public.list_my_notifications(integer,timestamptz)', 'EXECUTE') then
+  if has_function_privilege('anon', 'public.list_my_notifications(integer,timestamptz,uuid)', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.list_my_notifications(integer,timestamptz,uuid)', 'EXECUTE') then
     raise exception 'N0: notification feed RPC grants are not private-by-default';
   end if;
 
@@ -407,6 +407,26 @@ begin
   perform pg_temp.ntf_owner();
   if has_function_privilege('anon', 'public.get_my_notification_preferences()', 'execute') then raise exception 'P4: anon must not read preferences'; end if;
   raise notice 'P4 ok: preferences read back the defaults, then the member''s choice';
+
+  -- P5 · the feed cursor is (created_at, id): rows sharing one timestamp (here, one transaction) are never skipped
+  perform pg_temp.ntf_as(u3);
+  select count(*) into n from public.list_my_notifications(100, null, null);
+  if n < 2 then raise exception 'P5: setup needs two feed rows with one timestamp (got %)', n; end if;
+  select x.created_at, x.id into r from public.list_my_notifications(1, null, null) x;
+  if (select count(*) from public.list_my_notifications(100, r.created_at, r.id) x where x.id <> r.id) <> n - 1
+     or exists (select 1 from public.list_my_notifications(100, r.created_at, r.id) x where x.id = r.id) then
+    raise exception 'P5: the second page must hold every other row, and never the first'; end if;
+  perform pg_temp.ntf_owner();
+  raise notice 'P5 ok: the feed pages by (created_at, id); equal timestamps are never skipped';
+
+  -- P6 · a digest child cannot point at another member's envelope
+  begin
+    update public.notification_deliveries d set digest_batch_id = v_new
+      from public.notifications x where x.id = d.notification_id and x.recipient_user_id = u3;
+    raise exception 'P6: a cross-recipient digest link was accepted';
+  exception when check_violation then null;
+  end;
+  raise notice 'P6 ok: the schema refuses a digest item from another member''s envelope';
   raise notice 'SHARED FIXTURE SERVICES WAVE 4 SMOKE: ALL ASSERTIONS PASSED';
 end;
 $$;

@@ -27,12 +27,14 @@ begin
 end;
 $$;
 
+drop trigger if exists notification_deliveries_digest_recipient on public.notification_deliveries;
+drop function if exists public.fn_notification_digest_recipient_guard();
 drop function if exists public.get_my_notification_preferences();
 drop function if exists public.fn_notification_email_settle(text, uuid, uuid, text, text, integer);
 drop function if exists public.fn_notification_email_snapshot(text, uuid, uuid, integer);
 drop function if exists public.fn_notification_email_claim(integer, integer);
 
-drop function if exists public.list_my_notifications(integer, timestamptz);
+drop function if exists public.list_my_notifications(integer, timestamptz, uuid);
 create function public.list_my_notifications(
   p_limit integer default 30,
   p_before timestamptz default null

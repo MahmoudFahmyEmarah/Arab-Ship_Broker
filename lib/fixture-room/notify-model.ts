@@ -30,6 +30,27 @@ export interface NotifyActor {
 /** The only three labels an outbound message may name an actor by. */
 export type MaskedActorLabel = "Charterer side" | "Owner side" | "Arab ShipBroker";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}(:?\d{2})?)$/;
+
+/**
+ * The offer's deadline, named in the copy — mirrors public.fn_fixture_notify_deadline_label. Only an ISO timestamp
+ * with an explicit offset is named ("until 08 Oct 2026 12:00 UTC", minutes truncated); anything else, including an
+ * impossible calendar date, reads "for a limited time".
+ */
+export function deadlineLabel(at: string): string {
+  if (!ISO_WITH_OFFSET.test(at)) return "for a limited time";
+  // V8 reads only ±HH:MM offsets; PostgreSQL also takes ±HH and ±HHMM
+  const t = Date.parse(at.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00").replace(/([+-]\d{2})(\d{2})$/, "$1:$2"));
+  const [y, mo, d] = at.slice(0, 10).split("-").map(Number);
+  // V8 rolls 30 Feb over into March; PostgreSQL refuses it — both read it as "for a limited time"
+  const local = new Date(Date.UTC(y!, mo! - 1, d!));
+  if (Number.isNaN(t) || local.getUTCMonth() !== mo! - 1 || local.getUTCDate() !== d) return "for a limited time";
+  const u = new Date(t);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `until ${two(u.getUTCDate())} ${MONTHS[u.getUTCMonth()]} ${u.getUTCFullYear()} ${two(u.getUTCHours())}:${two(u.getUTCMinutes())} UTC`;
+}
+
 export function maskedActorLabel(actor: NotifyActor | null): MaskedActorLabel {
   if (!actor || actor.isPlatform) return "Arab ShipBroker";
   if (actor.side === "cargo") return "Charterer side";
@@ -96,7 +117,7 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
       return {
         audience: "other_side", importance: deadline ? "urgent" : "normal",
         title: `${room}: ${p.kind === "bid" ? "bid" : "offer"} on ${termOf(p)}`,
-        body: `${who} ${p.kind === "bid" ? "bid" : "offered"} ${outboundValue(p)} on ${termOf(p)}${p.isFinal ? " (final)" : ""}${deadline ? ", valid until the time shown" : ""}. Your move.`,
+        body: `${who} ${p.kind === "bid" ? "bid" : "offered"} ${outboundValue(p)} on ${termOf(p)}${p.isFinal ? " (final)" : ""}${deadline ? `, valid ${deadlineLabel(deadline)}` : ""}. Your move.`,
         href: `${base}#term-${str(p.termCode)}`, deadlineAt: deadline,
       };
     }
@@ -150,29 +171,13 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
 }
 
 /**
- * A lapse warning, emitted two minutes before a validity window ends. A delayed
- * run never warns about a window that has already closed: null once expiresAt is past.
- */
-export function lapseWarning(ctx: NotifyContext & { expiresAt: string }, now: Date = new Date()): NotifyRule | null {
-  const ends = Date.parse(ctx.expiresAt);
-  if (Number.isNaN(ends) || ends <= now.getTime()) return null;
-  const p = ctx.payload;
-  return {
-    audience: "other_side", importance: "urgent",
-    title: `${ctx.roomRef}: ${termOf(p)} lapses in 2 minutes`,
-    body: `${maskedActorLabel(ctx.actor)}'s ${outboundValue(p)} on ${termOf(p)} lapses soon. Accept or counter before it does.`,
-    href: `/dashboard/fixture-room/${ctx.roomId}#term-${str(p.termCode)}`, deadlineAt: ctx.expiresAt,
-  };
-}
-
-/**
  * The dedupe key of one logical notification. The core's unique key is
  * (recipient, dedupe key), and the core creates the email delivery itself, so
- * the key names the event (and a variant such as the lapse warning) only:
- * never a channel.
+ * the key names the event only: never a channel. (C2O-092 P2: there is no
+ * separate lapse warning — an offer with validity is urgent and names its deadline.)
  */
-export function notificationKey(eventId: number, variant?: "lapse-warning"): string {
-  return variant ? `fixture:${eventId}:${variant}` : `fixture:${eventId}`;
+export function notificationKey(eventId: number): string {
+  return `fixture:${eventId}`;
 }
 
 /** The only fields sent to the shared core with a notification (never the source event payload). */
@@ -184,5 +189,7 @@ export function notificationPayload(ctx: NotifyContext, eventSeq: number, eventT
   return { roomId: ctx.roomId, roomRef: ctx.roomRef, eventSeq, eventType, termCode, deadlineAt: rule.deadlineAt };
 }
 
-/** p_expires_at for the core: always none. The deadline travels in the payload; an expired row would vanish from the bell. */
-export const NOTIFICATION_EXPIRES_AT: null = null;
+/** p_expires_at for the core (C2O-092 #2): the offer's deadline is the email cut-off; the bell keeps the row, marked expired. */
+export function notificationExpiresAt(rule: NotifyRule): string | null {
+  return rule.deadlineAt;
+}

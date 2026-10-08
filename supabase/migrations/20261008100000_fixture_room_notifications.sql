@@ -46,6 +46,22 @@ as $$
 $$;
 revoke all on function public.fn_fixture_notify_outbound_value(jsonb) from public, anon, authenticated;
 
+-- C2O-092 P2: the offer's deadline, named in the copy — mirrors lib/fixture-room/notify-model.ts#deadlineLabel.
+-- Only an ISO timestamp with an explicit offset is named ("08 Oct 2026 12:00 UTC", minutes truncated); anything
+-- else reads "for a limited time", so a malformed value can never break or leak through the rule.
+create or replace function public.fn_fixture_notify_deadline_label(p_at text)
+ returns text language plpgsql immutable set search_path to ''
+as $$
+begin
+  if p_at is null or p_at !~ '^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}(:?\d{2})?)$' then
+    return 'for a limited time';
+  end if;
+  return 'until ' || to_char(p_at::timestamptz at time zone 'UTC', 'DD Mon YYYY HH24:MI') || ' UTC';
+exception when others then
+  return 'for a limited time';
+end $$;
+revoke all on function public.fn_fixture_notify_deadline_label(text) from public, anon, authenticated;
+
 create or replace function public.fn_fixture_notify_rule(p_type text, p_payload jsonb, p_actor_label text, p_room_ref text, p_room_id uuid)
  returns jsonb language plpgsql immutable set search_path to ''
 as $$
@@ -70,7 +86,7 @@ begin
       'title', room || ': ' || case when p->>'kind' = 'bid' then 'bid' else 'offer' end || ' on ' || term,
       'body', who || ' ' || case when p->>'kind' = 'bid' then 'bid' else 'offered' end || ' ' || v || ' on ' || term
               || case when coalesce((p->>'isFinal')::boolean, false) then ' (final)' else '' end
-              || case when deadline is not null then ', valid until the time shown' else '' end || '. Your move.',
+              || case when deadline is not null then ', valid ' || public.fn_fixture_notify_deadline_label(deadline) else '' end || '. Your move.',
       'href', base || '#term-' || coalesce(p->>'termCode', ''), 'deadlineAt', deadline)
     when 'proposal.lapsed' then jsonb_build_object('audience', 'both_sides', 'importance', 'normal',
       'title', room || ': figure lapsed on ' || term, 'body', 'The ' || coalesce(p->>'side', '') || ' side''s ' || v || ' on ' || term || ' lapsed without an answer.',

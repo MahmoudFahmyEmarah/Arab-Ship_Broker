@@ -90,9 +90,11 @@ $$;
 -- The return row gains authoritative server-clock expiry state. Dropping and
 -- recreating is required because PostgreSQL cannot replace an OUT row shape.
 drop function public.list_my_notifications(integer, timestamptz);
+-- C2O-092 P2: a composite (created_at, id) cursor, so rows sharing one timestamp are never skipped between pages
 create function public.list_my_notifications(
   p_limit integer default 30,
-  p_before timestamptz default null
+  p_before timestamptz default null,
+  p_before_id uuid default null
 )
 returns table (
   id uuid,
@@ -123,7 +125,8 @@ begin
     from public.notifications n
    where n.recipient_user_id = v_actor
      and n.in_app_visible
-     and (p_before is null or n.created_at < p_before)
+     and (p_before is null or n.created_at < p_before
+          or (p_before_id is not null and n.created_at = p_before and n.id < p_before_id))
    order by n.created_at desc, n.id desc
    limit v_limit;
 end;
@@ -658,13 +661,32 @@ revoke select on table public.notifications from service_role;
 revoke all on function public.fn_notification_delivery_claim(integer, integer, integer) from service_role;
 revoke all on function public.fn_notification_delivery_settle(uuid, uuid, boolean, text, integer) from service_role;
 
-revoke all on function public.list_my_notifications(integer, timestamptz) from public, anon, authenticated;
+-- C2O-092 P2: a digest child always belongs to its envelope's recipient, enforced by the schema, not only the code
+create or replace function public.fn_notification_digest_recipient_guard()
+ returns trigger language plpgsql security definer set search_path to ''
+as $$
+begin
+  if new.digest_batch_id is not null and not exists (
+       select 1 from public.notification_digest_batches b join public.notifications n on n.id = new.notification_id
+        where b.id = new.digest_batch_id and b.recipient_user_id = n.recipient_user_id) then
+    raise exception using errcode = '23514', message = 'NTF_DIGEST_RECIPIENT: a digest item must belong to its envelope''s recipient';
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_notification_digest_recipient_guard() from public, anon, authenticated;
+drop trigger if exists notification_deliveries_digest_recipient on public.notification_deliveries;
+create trigger notification_deliveries_digest_recipient
+  before insert or update of digest_batch_id, notification_id on public.notification_deliveries
+  for each row when (new.digest_batch_id is not null)
+  execute function public.fn_notification_digest_recipient_guard();
+
+revoke all on function public.list_my_notifications(integer, timestamptz, uuid) from public, anon, authenticated;
 revoke all on function public.fn_notification_digest_window(timestamptz, integer) from public, anon, authenticated, service_role;
 revoke all on function public.fn_notification_email_claim(integer, integer) from public, anon, authenticated;
 revoke all on function public.fn_notification_email_snapshot(text, uuid, uuid, integer) from public, anon, authenticated;
 revoke all on function public.fn_notification_email_settle(text, uuid, uuid, text, text, integer) from public, anon, authenticated;
 
-grant execute on function public.list_my_notifications(integer, timestamptz) to authenticated;
+grant execute on function public.list_my_notifications(integer, timestamptz, uuid) to authenticated;
 grant execute on function public.fn_notification_email_claim(integer, integer) to service_role;
 grant execute on function public.fn_notification_email_snapshot(text, uuid, uuid, integer) to service_role;
 grant execute on function public.fn_notification_email_settle(text, uuid, uuid, text, text, integer) to service_role;

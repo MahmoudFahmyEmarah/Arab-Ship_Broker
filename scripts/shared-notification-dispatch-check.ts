@@ -4,6 +4,7 @@ import {
   buildNotificationDigestMail,
   dispatchNotificationDeliveries,
   processNotificationClaims,
+  redactDeliveryError,
   type DeliveryTransport,
   type NotificationClaim,
   type NotificationRecipient,
@@ -91,7 +92,7 @@ assert.deepEqual(settled.map(({ id, outcome }) => ({ id, outcome })), [
   { id: "c4", outcome: "failed" },
   { id: "c5", outcome: "sent" },
 ]);
-assert.match(settled[1]?.error ?? "", /fake SMTP refusal/);
+assert.equal(settled[1]?.error, "delivery failed");   // C2O-092 P2: the server text is never stored
 assert.match(settled[2]?.error ?? "", /no deliverable notification items/);
 assert.match(settled[3]?.error ?? "", /email invalid/);
 
@@ -144,9 +145,36 @@ const timed = await processNotificationClaims(
 );
 slowTransport.close();
 assert.equal(slowClosed, true);
-assert.deepEqual(timed, { claimed: 1, sent: 0, retried: 1, failed: 0, suppressed: 0, lost: 0 });
-assert.equal(timeoutSettles[0]?.outcome, "failed");
-assert.match(timeoutSettles[0]?.error ?? "", /invocation budget/);
+// C2O-092 P2: a send that outlives the budget but completes within the grace is recorded as sent, not retried
+assert.deepEqual(timed, { claimed: 1, sent: 1, retried: 0, failed: 0, suppressed: 0, lost: 0 });
+assert.equal(timeoutSettles[0]?.outcome, "sent");
+
+// …and one that never completes is a retryable timeout, stored without server text
+const hungSettles: Array<{ outcome: string; error: string | null }> = [];
+const hung = await processNotificationClaims(
+  [claims[0]], snapshots, recipients,
+  { send: () => new Promise<void>(() => undefined), close() {} },
+  async (_claim, outcome, error) => { hungSettles.push({ outcome, error }); return true; },
+  { siteUrl: null, maxAttempts: 8, deadlineAt: Date.now() + 10, lateGraceMs: 20 },
+);
+assert.deepEqual(hung, { claimed: 1, sent: 0, retried: 1, failed: 0, suppressed: 0, lost: 0 });
+assert.deepEqual(hungSettles[0], { outcome: "failed", error: "timeout" });
+
+// SMTP text never reaches the database: a fixed category and, at most, the reply code
+const rejectSettles: Array<string | null> = [];
+await processNotificationClaims(
+  [claims[0]], snapshots, recipients,
+  { async send() { throw new Error("550 5.1.1 <tasos@secret.gr>: Recipient address rejected: User unknown in mail.secret.gr"); }, close() {} },
+  async (_claim, _outcome, error) => { rejectSettles.push(error); return true; },
+  { siteUrl: null, maxAttempts: 8 },
+);
+assert.equal(rejectSettles[0], "recipient rejected (SMTP 550)");
+assert.equal(redactDeliveryError("Invalid login: 535 5.7.8 Authentication failed for alerts@arabshipbroker.com"), "authentication failed (SMTP 535)");
+assert.equal(redactDeliveryError("connect ECONNREFUSED 10.0.0.4:465"), "connection failed");
+assert.equal(redactDeliveryError("something odd at smtp.host.example:2525"), "delivery failed");
+for (const raw of ["550 5.1.1 <tasos@secret.gr>", "Invalid login: 535 for alerts@x.com", "connect ECONNREFUSED 10.0.0.4:465"]) {
+  assert.doesNotMatch(redactDeliveryError(raw), /@|\d+\.\d+\.\d+|secret|tasos/i);
+}
 
 await assert.rejects(
   dispatchNotificationDeliveries(

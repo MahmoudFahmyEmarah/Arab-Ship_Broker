@@ -63,7 +63,7 @@ export function NotificationBell() {
 
   const refreshItems = React.useCallback(async () => {
     setLoading(true);
-    const { data, error } = await client.rpc("list_my_notifications", { p_limit: 20, p_before: null });
+    const { data, error } = await client.rpc("list_my_notifications", { p_limit: 20, p_before: null, p_before_id: null });
     setLoading(false);
     if (error) {
       setUnavailable(true);

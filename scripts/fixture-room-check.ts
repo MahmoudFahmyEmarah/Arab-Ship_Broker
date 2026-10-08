@@ -19,7 +19,7 @@
  *      idempotency_key and an explicit grant; no internal helper is granted; the
  *      excluded PDA objects appear nowhere in the Fixture migrations
  */
-import { notificationFor, lapseWarning, notificationKey, maskedActorLabel, notificationPayload, NOTIFICATION_EXPIRES_AT } from "../lib/fixture-room/notify-model";
+import { notificationFor, notificationKey, maskedActorLabel, notificationPayload, notificationExpiresAt, deadlineLabel } from "../lib/fixture-room/notify-model";
 import { newSince, termsTouched, lastSeenKey, nextLastSeen } from "../lib/fixture-room/last-seen";
 import fs from "node:fs";
 import path from "node:path";
@@ -345,8 +345,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const offer = notificationFor("proposal.submitted", ctx);
   ok(!!offer && offer.importance === "urgent" && offer.audience === "other_side" && offer.deadlineAt === "2026-09-28T12:00:00Z", "an offer with a validity window is urgent, for the other side, with its deadline");
   const all = ["party.invited", "party.accepted", "proposal.submitted", "proposal.lapsed", "term.agreed", "term.reopened", "term.referred", "term.bridge_suggested", "room.fixed_on_subjects", "subject.lifted", "subject.failed", "room.fixed", "recap.published", "room.counterparty_disclosed", "message.posted", "room.closed"] as const;
-  const early = new Date("2026-09-28T11:57:00Z");
-  const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n") + (lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, early)?.body ?? "");
+  const texts = all.map((t) => notificationFor(t, ctx)).filter(Boolean).map((r) => `${r!.title} ${r!.body} ${r!.href}`).join("\n");
   ok(!/Secret Owners|MV HIDDEN|9876543|Tasos|\+30 690/.test(texts), "no notification text or link carries an organisation, vessel, IMO or a member's free text, even when the payload holds them (hostile actorLabel ignored)");
   // C2O-010 item 3: the actor label is derived from the governed side, never taken from the caller
   ok(maskedActorLabel({ side: "cargo", isPlatform: false }) === "Charterer side" && maskedActorLabel({ side: "vessel", isPlatform: false }) === "Owner side"
@@ -355,7 +354,8 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(!/actorLabel/.test(read("lib/fixture-room/notify-model.ts").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")), "the model accepts no caller-supplied actor label");
   const pl = notificationPayload(ctx, 7, "proposal.submitted", offer!);
   ok(JSON.stringify(Object.keys(pl).sort()) === JSON.stringify(["deadlineAt", "eventSeq", "eventType", "roomId", "roomRef", "termCode"]) && !/Secret|HIDDEN|9876543|Tasos/.test(JSON.stringify(pl)), "the payload sent to the core is a whitelist, never the source event payload");
-  ok(NOTIFICATION_EXPIRES_AT === null && lapseWarning({ ...ctx, expiresAt: "2026-09-28T12:00:00Z" }, new Date("2026-09-28T12:00:01Z")) === null, "no expiry is sent, and a delayed run never warns about a window already closed");
+  ok(notificationExpiresAt(notificationFor("proposal.submitted", ctx)!) === "2026-09-28T12:00:00Z" && /valid until 28 Sep 2026 12:00 UTC/.test(notificationFor("proposal.submitted", ctx)!.body) && deadlineLabel("2026-02-30T10:00:00Z") === "for a limited time", "the deadline is the email cut-off and is named in the copy (UTC); a malformed one is never named");
+  ok(!/lapseWarning|lapse-warning/.test(read("lib/fixture-room/notify-model.ts")), "no unscheduled lapse warning remains (C2O-092 P2)");
   // C2O-010 item 1: importance is urgent | normal | info; the email preference decides digest
   const kinds = new Set(all.map((t) => notificationFor(t, ctx)?.importance).filter(Boolean));
   ok([...kinds].every((k) => k === "urgent" || k === "normal" || k === "info"), "importance is only urgent, normal or info (the shared table's check)");
@@ -365,7 +365,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(notificationFor("term.referred", ctx)!.audience === "mediator" && notificationFor("room.fixed", ctx)!.audience === "all", "referrals reach the mediator; outcomes reach everyone");
   ok(notificationFor("term.held", ctx) === null && notificationFor("recap.acknowledged", ctx) === null, "routine bookkeeping events notify no one");
   // C2O-010 item 2: one logical notification per event and recipient
-  ok(notificationKey(42) === "fixture:42" && notificationKey(42, "lapse-warning") === "fixture:42:lapse-warning" && !/in_app|email|channel/.test(read("lib/fixture-room/notify-model.ts").split("export function notificationKey")[1].split("\n}")[0]), "one logical notification per event (the dedupe key names no channel)");
+  ok(notificationKey(42) === "fixture:42" && !/in_app|email|channel/.test(read("lib/fixture-room/notify-model.ts").split("export function notificationKey")[1].split("\n}")[0]), "one logical notification per event (the dedupe key names no channel)");
   // C2O-012 item 2: a subject's title is member free text and never enters a notification
   const hostile = { ...ctx, payload: { seq: 2, title: "Sub details - call Tasos +30 690 000 0000 tasos@seed-owners.test" } };
   const subjTexts = ["subject.lifted", "subject.failed"].map((t) => notificationFor(t as "subject.lifted", hostile)).map((r) => `${r!.title} ${r!.body}`).join(" ");
@@ -762,7 +762,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/'fixture:' \|\| e\.id::text/.test(nm) && /true, null::timestamptz,\s*-- C2O-092 #2[^\n]*\n\s*nullif\(v_rule->>'deadlineAt', ''\)::timestamptz\);/.test(nm), "one idempotent enqueue per event and recipient, email requested, the offer's validity as the email cutoff");
   ok(/revoke all on function public\.fn_fixture_notify_rule\(text, jsonb, text, text, uuid\) from public, anon, authenticated;/.test(nm) && /revoke all on function public\.fn_fixture_notify_recipients/.test(nm) && /revoke all on function public\.fn_fixture_notify_project\(\)/.test(nm), "every projector function is private");
   const down = read("supabase/rollback/20261008100000_fixture_room_notifications_down.sql");
-  ok(/drop trigger if exists trg_fixture_events_notify/.test(down) && (down.match(/drop function if exists public\.fn_fixture_notify_/g) ?? []).length === 7 && /drop table if exists public\.fixture_notification_projections/.test(down) && down.indexOf("NTF_DOWN_REFUSED") < down.indexOf("drop trigger"), "the DOWN refuses while events wait for notifications, then removes the trigger, the ledger and the seven functions");
+  ok(/drop trigger if exists trg_fixture_events_notify/.test(down) && (down.match(/drop function if exists public\.fn_fixture_notify_/g) ?? []).length === 8 && /drop table if exists public\.fixture_notification_projections/.test(down) && down.indexOf("NTF_DOWN_REFUSED") < down.indexOf("drop trigger"), "the DOWN refuses while events wait for notifications, then removes the trigger, the ledger and the eight functions");
   const h = read("scripts/fixture-room-harness.sh");
   ok(/20261008100000_fixture_room_notifications\.sql/.test(h) && /DOWNS=\("supabase\/rollback\/20261008100000_fixture_room_notifications_down\.sql" /.test(h) && /\[notify\]="FIXTURE NOTIFY SMOKE"/.test(h), "the harness applies the projector, runs its suite and reverses it first");
   ok(/fn_fixture_notify_rule\(/.test(read("scripts/fixture-notify-parity.ts")), "a parity check runs the SQL rule against the model on the same events");
@@ -783,7 +783,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   const nm = read("supabase/migrations/20261008100000_fixture_room_notifications.sql");
   const model = read("lib/fixture-room/notify-model.ts");
   ok(/v text := public\.fn_fixture_notify_outbound_value\(p\);/.test(nm) && !/coalesce\(p->>'displayValue', ''\);/.test(nm.split("fn_fixture_notify_rule(")[1] ?? ""), "every figure in a message goes through the outbound filter");
-  ok((model.match(/outboundValue\(p\)/g) ?? []).length >= 5 && !/\$\{str\(p\.displayValue\)\}/.test(model), "the model's messages use only the outbound value");
+  ok((model.match(/outboundValue\(p\)/g) ?? []).length >= 4 && !/\$\{str\(p\.displayValue\)\}/.test(model), "the model's messages use only the outbound value");
   ok(/x\.participation_mode = 'relayed'/.test(nm) && /v_admins := true;/.test(nm), "a relayed side's notifications reach the mediator desk");
   ok(/create or replace function public\.fn_fixture_notify_reconcile/.test(nm) && /grant execute on function public\.fn_fixture_notify_reconcile\(integer\) to service_role;/.test(nm) && /fn_fixture_notify_health/.test(nm), "recorded projections are replayed by a service-only reconcile, with an observable health read");
   ok(/when 'room\.window_extended' then/.test(nm) && /case "room\.window_extended":/.test(model), "the window extension is notified on both sides");

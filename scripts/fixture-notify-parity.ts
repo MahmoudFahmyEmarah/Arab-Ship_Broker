@@ -24,6 +24,10 @@ const cases: [FixtureEventType, Record<string, unknown>][] = [
   ["proposal.submitted", { ...term, kind: "bid", displayValue: "$25.00/MT", isFinal: false }],
   ["proposal.submitted", { ...term, kind: "offer", displayValue: "$27.00/MT", isFinal: true, expiresAt: "2026-10-08T12:00:00Z" }],
   ["proposal.submitted", { termCode: "freight", kind: "offer", displayValue: "$26/MT", expiresAt: null }],
+  // C2O-092 P2: the deadline named in the copy — offsets, fractions, and values that must read "for a limited time"
+  ...["2026-10-08T12:00:59.987654+00:00", "2026-10-08 15:30:00+03", "2026-12-31T23:59:00-05:00", "2026-02-30T10:00:00Z",
+      "2026-10-08T12:00:00", "tomorrow at noon", "2026-13-01T00:00:00Z"].map((expiresAt) =>
+    ["proposal.submitted", { ...term, kind: "offer", displayValue: "$27.00/MT", expiresAt }] as [FixtureEventType, Record<string, unknown>]),
   ["proposal.submitted", { kind: "bid", displayValue: "x" }],
   ["proposal.submitted", { ...textTerm, kind: "offer", displayValue: hostile, value: { text: hostile } }],
   ["proposal.submitted", { ...portTerm, portsVerified: true, kind: "bid", displayValue: "Tasos jetty → Secret berth", value: { load: "EGALY", disch: "ZZFXB", load_name: "Tasos jetty" } }],

@@ -22,3 +22,4 @@ drop table if exists public.fixture_notification_projections;
 drop function if exists public.fn_fixture_notify_recipients(uuid, text[], boolean, uuid);
 drop function if exists public.fn_fixture_notify_rule(text, jsonb, text, text, uuid);
 drop function if exists public.fn_fixture_notify_outbound_value(jsonb);
+drop function if exists public.fn_fixture_notify_deadline_label(text);

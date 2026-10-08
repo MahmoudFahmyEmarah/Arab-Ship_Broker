@@ -160,13 +160,37 @@ export function buildNotificationDigestMail(
   };
 }
 
+/**
+ * C2O-092 P2: what may be stored about a failed attempt. SMTP servers echo addresses, hosts, credentials hints and
+ * message text; none of it is kept. Only a fixed category and, when present, the three-digit SMTP reply code.
+ */
+export function redactDeliveryError(raw: string | null | undefined): string {
+  const text = String(raw ?? "");
+  // a reply code opens an SMTP response line ("550 5.1.1 …"); digits inside hosts, ports or addresses are not codes
+  const code = text.match(/(?:^|\n|:\s)([245]\d{2})(?=[ -]|$)/)?.[1];
+  const category =
+    // the dispatcher's own reasons first; they carry no server text
+    /^recipient inactive or unavailable$/.test(text) ? "recipient inactive or unavailable"
+    : /^recipient email invalid$/.test(text) ? "recipient email invalid"
+    : /^no deliverable notification items remain$/.test(text) ? "no deliverable notification items remain"
+    : /deadline|budget|timed? ?out|timeout|ETIMEDOUT/i.test(text) ? "timeout"
+    : /auth|login|credential|535|534/i.test(text) ? "authentication failed"
+    : /ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|socket|connect|greeting|TLS|certificate/i.test(text) ? "connection failed"
+    : /recipient|mailbox|user unknown|no such user|550|551|553/i.test(text) ? "recipient rejected"
+    : "delivery failed";
+  return code ? `${category} (SMTP ${code})` : category;
+}
+
+/** How long, after the loop, a timed-out SMTP attempt may still complete before it is recorded as failed. */
+const LATE_COMPLETION_GRACE_MS = 5_000;
+
 export async function processNotificationClaims(
   claims: NotificationClaim[],
   notifications: Map<string, NotificationSnapshot[]>,
   recipients: Map<string, NotificationRecipient>,
   transport: DeliveryTransport,
   settle: SettleDelivery,
-  options: { siteUrl: string | null; maxAttempts: number; deadlineAt?: number },
+  options: { siteUrl: string | null; maxAttempts: number; deadlineAt?: number; lateGraceMs?: number },
 ): Promise<NotificationDispatchResult> {
   const result: NotificationDispatchResult = {
     claimed: claims.length,
@@ -177,13 +201,24 @@ export async function processNotificationClaims(
     lost: 0,
   };
 
+  const late: { claim: NotificationClaim; sending: Promise<void> }[] = [];
+  const settleFailed = async (claim: NotificationClaim, failure: string) => {
+    try {
+      if (!(await settle(claim, "failed", redactDeliveryError(failure)))) result.lost += 1;
+      else if (claim.attempts >= options.maxAttempts) result.failed += 1;
+      else result.retried += 1;
+    } catch {
+      result.lost += 1;
+    }
+  };
+
   for (const claim of claims) {
     const jobItems = notifications.get(claim.id) ?? [];
     const recipient = recipients.get(claim.recipient_user_id);
     let failure: string | null = null;
     if (!jobItems.length) {
       try {
-        if (await settle(claim, "suppressed", "no deliverable notification items remain")) result.suppressed += 1;
+        if (await settle(claim, "suppressed", redactDeliveryError("no deliverable notification items remain"))) result.suppressed += 1;
         else result.lost += 1;
       } catch {
         result.lost += 1;
@@ -204,13 +239,20 @@ export async function processNotificationClaims(
           const remaining = options.deadlineAt - Date.now();
           if (remaining <= 0) throw new Error("notification dispatch deadline reached before SMTP send");
           let timer: ReturnType<typeof setTimeout> | undefined;
+          const sending = transport.send(mail);
+          sending.catch(() => undefined);   // observed below; never an unhandled rejection
+          const timedOut = Symbol("timeout");
           try {
-            await Promise.race([
-              transport.send(mail),
-              new Promise<never>((_, reject) => {
-                timer = setTimeout(() => reject(new Error("notification SMTP attempt exceeded the invocation budget")), remaining);
-              }),
+            const first = await Promise.race([
+              sending.then(() => null),
+              new Promise<typeof timedOut>((resolve) => { timer = setTimeout(() => resolve(timedOut), remaining); }),
             ]);
+            if (first === timedOut) {
+              // C2O-092 P2: the server may still accept this message. Do not record a failure now (a retry would send
+              // it twice); settle it after the loop by what the attempt actually did, within a short grace.
+              late.push({ claim, sending });
+              continue;
+            }
           } finally {
             if (timer) clearTimeout(timer);
           }
@@ -223,12 +265,28 @@ export async function processNotificationClaims(
       }
     }
 
-    try {
-      if (!(await settle(claim, "failed", failure))) result.lost += 1;
-      else if (claim.attempts >= options.maxAttempts) result.failed += 1;
-      else result.retried += 1;
-    } catch {
-      result.lost += 1;
+    await settleFailed(claim, failure ?? "delivery failed");
+  }
+
+  // timed-out attempts: sent if the server accepted them within the grace, otherwise a (retryable) timeout — the
+  // stable Message-ID lets the receiving side drop a duplicate if a slow server accepted it after all
+  for (const { claim, sending } of late) {
+    const grace = options.lateGraceMs ?? LATE_COMPLETION_GRACE_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      sending.then(() => "sent" as const, () => "failed" as const),
+      new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), grace); }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (outcome === "sent") {
+      try {
+        if (await settle(claim, "sent", null)) result.sent += 1;
+        else result.lost += 1;
+      } catch {
+        result.lost += 1;
+      }
+    } else {
+      await settleFailed(claim, "notification SMTP attempt exceeded the invocation budget");
     }
   }
 

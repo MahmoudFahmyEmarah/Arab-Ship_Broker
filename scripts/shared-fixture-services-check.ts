@@ -98,7 +98,7 @@ assert.match(semantics, /snapshot_at = coalesce\(b\.snapshot_at, (?:clock_timest
 assert.doesNotMatch(semantics, /snapshot_at\s*=\s*null/i);
 assert.match(semantics, /where b\.status = 'queued'[\s\S]*?b\.claim_token is null[\s\S]*?b\.snapshot_at is null/i);
 assert.match(semantics, /v_digest := v_digest \+ interval '1 day'/i);
-assert.match(semantics, /revoke all on function public\.list_my_notifications\(integer, timestamptz\) from public, anon, authenticated/i);
+assert.match(semantics, /revoke all on function public\.list_my_notifications\(integer, timestamptz, uuid\) from public, anon, authenticated/i);
 assert.match(semantics, /power\(2, least\(v_(?:delivery|batch)\.attempts, 8\)\)/i);
 assert.match(semantics, /fn_notification_digest_window/i);
 assert.match(semantics, /suppressed because notification expires before digest window/i);
