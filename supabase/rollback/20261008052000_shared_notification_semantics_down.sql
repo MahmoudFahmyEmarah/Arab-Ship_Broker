@@ -35,6 +35,8 @@ drop function if exists public.fn_notification_email_snapshot(text, uuid, uuid, 
 drop function if exists public.fn_notification_email_claim(integer, integer);
 
 drop function if exists public.list_my_notifications(integer, timestamptz, uuid);
+-- an environment that applied an earlier draft of 052000 carries the two-argument form; the base one is recreated below
+drop function if exists public.list_my_notifications(integer, timestamptz);
 create function public.list_my_notifications(
   p_limit integer default 30,
   p_before timestamptz default null
