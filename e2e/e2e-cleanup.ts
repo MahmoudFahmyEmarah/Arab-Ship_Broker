@@ -128,14 +128,26 @@ delete from public.fixture_terms where room_id in (select id from e2e_r);
 update public.fixture_rooms set supersedes_room_id = null where id in (select id from e2e_r) and supersedes_room_id is not null;
 delete from public.fixture_rooms where id in (select id from e2e_r);
 -- notifications: the e2e accounts' own, and anyone's about this run's rooms (staff are told of some room events);
--- deliveries go with them, digest batches of the e2e accounts after them; preferences go with the user
+-- deliveries go with them; preferences go with the user. C2O-094 P1: every digest batch those deliveries sat in —
+-- a staff member's too — is captured first; afterwards only captured batches left empty are removed, and a batch
+-- that still holds a legitimate (non-run) item is kept
+create temp table e2e_nb (id uuid primary key) on commit drop;
 do $ntf$ begin
   if to_regclass('public.notifications') is not null then
+    if to_regclass('public.notification_digest_batches') is not null then
+      execute $q$insert into e2e_nb select distinct d.digest_batch_id from public.notification_deliveries d
+        join public.notifications n on n.id = d.notification_id
+       where d.digest_batch_id is not null
+         and (n.recipient_user_id in (select id from e2e_u)
+              or (n.kind like 'fixture.%' and n.payload->>'roomId' in (select id::text from e2e_r)))$q$;
+      execute $q$insert into e2e_nb select b.id from public.notification_digest_batches b
+       where b.recipient_user_id in (select id from e2e_u) on conflict do nothing$q$;
+    end if;
     delete from public.notifications where recipient_user_id in (select id from e2e_u)
         or (kind like 'fixture.%' and payload->>'roomId' in (select id::text from e2e_r));
     if to_regclass('public.notification_digest_batches') is not null then
-      delete from public.notification_digest_batches b where b.recipient_user_id in (select id from e2e_u)
-         and not exists (select 1 from public.notification_deliveries d where d.digest_batch_id = b.id);
+      execute $q$delete from public.notification_digest_batches b where b.id in (select id from e2e_nb)
+         and not exists (select 1 from public.notification_deliveries d where d.digest_batch_id = b.id)$q$;
     end if;
   end if;
 end $ntf$;
@@ -160,7 +172,7 @@ delete from public.users where id in (select id from e2e_u);
 delete from auth.users where id in (select id from e2e_u);
 delete from public.organizations where id in (select id from e2e_o);
 ${guardAlter("enable")}
-do $residue$ begin
+do $residue$ declare v_empty boolean; begin
   if exists (select 1 from auth.users where id in (select id from e2e_u)) or exists (select 1 from public.users where id in (select id from e2e_u))
      or exists (select 1 from public.organizations where id in (select id from e2e_o)) or exists (select 1 from public.cargo_listings where id in (select id from e2e_c))
      or exists (select 1 from public.vessel_availability where id in (select id from e2e_a)) or exists (select 1 from public.vessels where id in (select id from e2e_v))
@@ -175,6 +187,12 @@ do $residue$ begin
     if exists (select 1 from public.notifications where recipient_user_id in (select id from e2e_u))
        or exists (select 1 from public.notifications where kind like 'fixture.%' and payload->>'roomId' in (select id::text from e2e_r)) then
       raise exception 'E2E_RESIDUE: a notification of the run survived the teardown';
+    end if;
+    if to_regclass('public.notification_digest_batches') is not null then
+      -- (EXECUTE does not set FOUND; the answer comes back INTO a variable)
+      execute $q$select exists (select 1 from public.notification_digest_batches b where b.id in (select id from e2e_nb)
+         and not exists (select 1 from public.notification_deliveries d where d.digest_batch_id = b.id))$q$ into v_empty;
+      if v_empty then raise exception 'E2E_RESIDUE: an affected digest batch was left empty'; end if;
     end if;
   end if;
 end $residue$;
@@ -272,9 +290,16 @@ export async function undoPartialSeed(admin: RecoveryClient, created: Created, c
     const back = await admin.auth.admin.getUserById(id);
     const gone = !!back.error && (back.error.status === 404 || /not found/i.test(back.error.message));
     const bannedNow = !back.error && !!back.data.user?.banned_until && Date.parse(back.data.user.banned_until) > Date.now();
-    if (gone) neutralised.push(`${id} (removed)`);
-    else if (banned && bannedNow && sessionsRevoked && !deactivated.error) neutralised.push(`${id} (banned)`);
-    else unresolved.push(`${id} (${[!(banned && bannedNow) && "ban not verified", !sessionsRevoked && "sessions not revoked", deactivated.error && "public row not deactivated"].filter(Boolean).join(", ")})`);
+    // C2O-094 P1: an Auth 404 alone proves nothing about a stateless access token or the app row. Removed means both
+    // containments held (sessions revoked AND the row deactivated), or the bound database proves the row absent/inactive.
+    let rowState = "unknown";
+    try { rowState = deps.query(`select coalesce((select is_active::text from public.users where id::text = ${sqlText([id])}), 'absent');`)[0] ?? "unknown"; }
+    catch (e) { notes.push(`public row re-read failed for ${id} (${(e as Error).message})`); }
+    const rowContained = rowState === "absent" || rowState === "false";
+    const contained = (sessionsRevoked && !deactivated.error) || rowContained;
+    if (gone && contained) neutralised.push(`${id} (removed)`);
+    else if (!gone && banned && bannedNow && sessionsRevoked && (!deactivated.error || rowContained)) neutralised.push(`${id} (banned)`);
+    else unresolved.push(`${id} (${[!gone && !(banned && bannedNow) && "ban not verified", gone && "auth account gone", !sessionsRevoked && "sessions not revoked", deactivated.error && !rowContained && "public row not deactivated"].filter(Boolean).join(", ")})`);
   }
   // an intended email we could not look up may still be an account: never reported as handled
   if (!reconciled) unresolved.push(...pending.map((e) => `email ${e}`));

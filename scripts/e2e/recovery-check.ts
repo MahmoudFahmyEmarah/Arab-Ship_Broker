@@ -29,12 +29,17 @@ function fakeAdmin(opts: { banFailures?: number; banAlwaysFails?: boolean; gone?
   };
   return { admin, calls };
 }
-const deps = (o: { txFails?: boolean; queryRows?: string[]; queryFails?: boolean }): RecoveryDeps & { sql: string[] } => {
+const deps = (o: { txFails?: boolean; queryRows?: string[]; queryFails?: boolean; publicRow?: "absent" | "true" | "false" }): RecoveryDeps & { sql: string[] } => {
   const sql: string[] = [];
   return {
     sql,
     tx: (label, s) => { sql.push(`${label}: ${s.slice(0, 40)}`); if (o.txFails && label === "e2e partial-seed undo") throw new Error("undo: rolled back (psql exit 3) — boom"); },
-    query: (s) => { sql.push(`query: ${s.slice(0, 40)}`); if (o.queryFails) throw new Error("e2e query failed — refused"); return o.queryRows ?? []; },
+    query: (s) => {
+      sql.push(`query: ${s.slice(0, 40)}`);
+      if (/from public\.users/.test(s)) return [o.publicRow ?? "true"];   // the public-row re-read
+      if (o.queryFails) throw new Error("e2e query failed — refused");
+      return o.queryRows ?? [];
+    },
   };
 };
 const run = async (created: ReturnType<typeof noneCreated>, admin: RecoveryClient, d: RecoveryDeps) => {
@@ -89,6 +94,24 @@ const run = async (created: ReturnType<typeof noneCreated>, admin: RecoveryClien
     const d = deps({ txFails: true });
     await run(c, fakeAdmin({}).admin, d);
     ok(d.sql.some((s) => s.startsWith("e2e session revocation")), "the fallback revokes the accounts' sessions and refresh tokens");
+  }
+  // 8 · C2O-094 P1: Auth says 404, but revocation AND deactivation failed and the app row is still active: UNRESOLVED
+  {
+    const c = noneCreated(); c.userIds.push(A);
+    const d = deps({ txFails: true, publicRow: "true" });
+    const real = d.tx;
+    d.tx = (label, s) => { if (label === "e2e session revocation") throw new Error("revocation refused"); real(label, s); };
+    const m = await run(c, fakeAdmin({ gone: [A], deactivateFails: true }).admin, d);
+    ok(new RegExp(`UNRESOLVED: \\[${A} \\(auth account gone, sessions not revoked, public row not deactivated\\)\\]`).test(m) && /neutralised: \[\]/.test(m), "an Auth 404 with failed revocation and an active app row is UNRESOLVED, never removed");
+  }
+  // 9 · …the same failures, but the bound database proves the app row absent: removed (contained)
+  {
+    const c = noneCreated(); c.userIds.push(A);
+    const d = deps({ txFails: true, publicRow: "absent" });
+    const real = d.tx;
+    d.tx = (label, s) => { if (label === "e2e session revocation") throw new Error("revocation refused"); real(label, s); };
+    const m = await run(c, fakeAdmin({ gone: [A], deactivateFails: true }).admin, d);
+    ok(new RegExp(`neutralised: \\[${A} \\(removed\\)\\]; UNRESOLVED: \\[\\]`).test(m), "an Auth 404 whose app row is proven absent counts as removed");
   }
   // 7 · the original failure is always carried
   {

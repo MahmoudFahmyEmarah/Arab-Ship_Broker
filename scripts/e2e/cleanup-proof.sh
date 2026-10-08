@@ -8,6 +8,7 @@
 #   D  target binding: rows absent in teardown mode are refused (E2E_TARGET); absent in replay mode is the proved
 #      replay state; a mixed state is refused in replay mode
 #   E  a guard already disabled before the teardown is refused (E2E_GUARD)
+#   G  (with the notification core) an affected staff digest batch keeps a legitimate item; one left empty goes
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 DB="${E2E_PROOF_DB:-asb_e2e}"
@@ -76,6 +77,39 @@ out=$(run eval 'cat "$ROWS"; echo "$PORT_ROWS"; PROOF_PORTS=ZYP01,ZYP02 cleanup 
 out=$(run eval 'cat "$ROWS"; echo "$PORT_ROWS"; PROOF_PORTS=ZYP01,ZYP03 cleanup teardown "$E2E_USERS"'); rc=$?; show "$out"
 [ $rc != 0 ] && echo "$out" | grep -q "E2E_GUARD: a named port is not this run's e2e port" || fail "case F3: another run's port must be refused (rc=$rc)"
 echo "F ok: this run's port is removed; a real port or another run's e2e port in the list is refused"
+# G · C2O-094 P1: a staff digest batch that also holds a legitimate item survives with it; one left empty is removed
+STAFF="00000000-0000-4000-8000-0000000000a5"
+G_LEGIT="select public.fn_notification_enqueue('$STAFF', 'proof.legit', 'proof:legit:g', 'Legit', 'Legit.', null, 'normal');
+do \$\$ begin
+  if not exists (select 1 from public.notification_deliveries d join public.notifications n on n.id = d.notification_id
+                  where n.recipient_user_id = '$STAFF' and n.kind like 'fixture.%' and d.digest_batch_id is not null) then
+    raise exception 'G: setup — the run gave the staff member no digest item'; end if;
+  if not exists (select 1 from public.notification_deliveries a join public.notifications x on x.id = a.notification_id
+                   join public.notification_deliveries b on b.digest_batch_id = a.digest_batch_id join public.notifications y on y.id = b.notification_id
+                  where x.dedupe_key = 'proof:legit:g' and y.kind like 'fixture.%') then
+    raise exception 'G: setup — the legitimate item must share a batch with a run item'; end if;
+end \$\$;"
+G_KEPT="do \$\$ begin
+  if not exists (select 1 from public.notification_deliveries d join public.notifications n on n.id = d.notification_id
+                   join public.notification_digest_batches b on b.id = d.digest_batch_id where n.dedupe_key = 'proof:legit:g') then
+    raise exception 'G1: the batch holding a legitimate item must survive with it'; end if;
+  raise notice 'G1 ok';
+end \$\$;"
+G_GONE="do \$\$ begin
+  if exists (select 1 from public.notification_digest_batches b where b.recipient_user_id = '$STAFF'
+              and not exists (select 1 from public.notification_deliveries d where d.digest_batch_id = b.id)) then
+    raise exception 'G2: an affected staff batch was left empty'; end if;
+  raise notice 'G2 ok';
+end \$\$;"
+if [ "$($PSQL -At -c "select to_regclass('public.notification_digest_batches') is not null")" = t ]; then
+  out=$(run eval 'cat "$ROWS"; echo "$G_LEGIT"; cleanup teardown "$E2E_USERS"; echo "$G_KEPT"'); rc=$?; show "$out"
+  [ $rc = 0 ] && echo "$out" | grep -q "G1 ok" || fail "case G1 (rc=$rc)"
+  out=$(run eval 'cat "$ROWS"; cleanup teardown "$E2E_USERS"; echo "$G_GONE"'); rc=$?; show "$out"
+  [ $rc = 0 ] && echo "$out" | grep -q "G2 ok" || fail "case G2 (rc=$rc)"
+  echo "G ok: an affected staff digest batch keeps its legitimate item; one left empty is removed"
+else
+  echo "G skipped: no notification core on $DB"
+fi
 # nothing committed
 n=$($PSQL -At -c "select count(*) from pg_trigger where tgname like 'trg_fixture_%immutable' and tgenabled = 'O'")
 r=$($PSQL -At -c "select count(*) from public.users where email like 'e2e-fx-%-proof@arabshipbroker.test'")
