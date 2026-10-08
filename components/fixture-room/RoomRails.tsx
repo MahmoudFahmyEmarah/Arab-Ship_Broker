@@ -191,6 +191,13 @@ export function SubjectsRail({ view, run, busy, actForPartyId, now }: { view: Fi
                 <span className="nr-subj__name">{s.title}</span>
                 <span className="nr-subj__desc">
                   {s.responsibleSide ? `${s.responsibleSide} side` : "either side"}{s.deadlineAt ? ` · by ${shortDateTime(s.deadlineAt)}` : ""}{s.status !== "open" ? ` · ${s.status} ${relativeTime(s.resolvedAt, now)}` : ""}
+                  {/* O2ALL-005: flagged, never failed automatically — the parties lift, extend or fail it */}
+                  {s.status === "open" && s.deadlineAt && now > 0 && Date.parse(s.deadlineAt) <= now && (
+                    <span className="nr-subj__flag is-overdue" data-testid={`subject-overdue-${s.id}`} title="The deadline has passed. Nothing fails automatically: lift it, agree an extension or fail it.">OVERDUE</span>
+                  )}
+                  {s.status === "open" && s.deadlineAt && now > 0 && Date.parse(s.deadlineAt) > now && Date.parse(s.deadlineAt) - now <= 2 * 3600_000 && (
+                    <span className="nr-subj__flag is-due" data-testid={`subject-due-${s.id}`} title="Due within two hours">DUE SOON</span>
+                  )}
                 </span>
               </span>
             </button>
@@ -303,6 +310,8 @@ export const EVENT_TEXT: Record<string, (p: Record<string, unknown>) => string> 
   "subject.failed": (p) => `failed “${p.title}”${p.reason ? ` · ${p.reason}` : ""}`,
   "subject.extended": (p) => `extended “${p.title}”`,
   "subject.reinstated": (p) => `“${p.title}” is open again · a term was reopened`,
+  "subject.deadline_near": (p) => `subject ${p.seq} is due within two hours`,
+  "subject.overdue": (p) => `subject ${p.seq} passed its deadline · nothing fails automatically`,
   "room.fix_confirmed": (p) => p.awaitingSide ? `confirmed the fixture · awaiting the ${p.awaitingSide === "cargo" ? "charterer" : "owner"} side` : "confirmed the fixture · both sides agree",
   "room.window_extended": () => "extended the negotiation window",
   "room.fixed_on_subjects": () => "recorded FIXED ON SUBS",

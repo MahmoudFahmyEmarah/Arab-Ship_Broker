@@ -147,6 +147,17 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
       return { audience: "both_sides", importance: "normal", title: `${room}: subject lifted`, body: `${who} lifted ${subjectRef(p)}.`, href: base, deadlineAt: null };
     case "subject.failed":
       return { audience: "all", importance: "urgent", title: `${room}: subject failed`, body: `${subjectRef(p)[0].toUpperCase()}${subjectRef(p).slice(1)} failed. The fixture fails with it.`, href: base, deadlineAt: null };
+    // O2ALL-005: the deadline clock (never fails a subject); only the subject's number and deadline leave the room
+    case "subject.deadline_near": {
+      const at = str(p.deadlineAt) || null;
+      return { audience: "both_sides", importance: "urgent", title: `${room}: ${subjectRef(p)} is due within 2 hours`,
+        body: `${subjectRef(p)[0].toUpperCase()}${subjectRef(p).slice(1)} is open ${at ? deadlineLabel(at) : "for a limited time"}. Lift it, agree an extension or fail it before then.`,
+        href: base, deadlineAt: at };
+    }
+    case "subject.overdue":
+      return { audience: "all", importance: "urgent", title: `${room}: ${subjectRef(p)} is overdue`,
+        body: `${subjectRef(p)[0].toUpperCase()}${subjectRef(p).slice(1)} passed its deadline without being lifted. Nothing fails automatically: lift it, agree an extension or fail it.`,
+        href: base, deadlineAt: null };
     case "room.fixed":
       return { audience: "all", importance: "urgent", title: `${room}: clean fixed`, body: `All subjects lifted. The fixture is clean.`, href: `${base}/recap`, deadlineAt: null };
     case "recap.published":
