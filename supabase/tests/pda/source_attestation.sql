@@ -111,7 +111,7 @@ begin
      or has_table_privilege('service_role', 'public.tariff_source_attestations', 'insert') then
     raise exception 'A8: the attestation table is over-granted'; end if;
 
-  -- A9 · registration and attestation are the only write paths for sources (20261008110000)
+  -- A9 · registration and attestation are the only write paths for sources (20261008210000)
   if exists (select 1 from unnest(array['INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
              where has_table_privilege('service_role', 'public.tariff_sources', p)) then
     raise exception 'A9: service_role holds a non-SELECT privilege on tariff_sources'; end if;

@@ -1,4 +1,4 @@
--- PDA FX ECB feed (20261007320000, hardened by 20261008100000): service_role only, ECB source only, exact
+-- PDA FX ECB feed (20261007320000, hardened by 20261008200000): service_role only, ECB source only, exact
 -- publication binding, never in the future, atomic and idempotent per pair and day, never overwrites or relabels,
 -- and the resolver uses the feed's rate. Rolled back.
 begin;
