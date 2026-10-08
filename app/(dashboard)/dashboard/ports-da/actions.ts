@@ -87,7 +87,7 @@ function numberFromDisplay(value: string): number | null {
  * The active flag-state registry (public.flag_states). A failed read is null, so every flag resolves unknown and a
  * rule that needs the treatment raises MISSING_INPUT (C2O-090 B2C-035 P1-1); nothing is ever guessed as foreign.
  */
-async function activeFlagRegistry(
+async function flagRegistry(
   supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
 ): Promise<FlagStateRow[] | null> {
   // The whole registry, inactive rows included: an exact inactive name must stay unknown (C2O-094), not fall
@@ -124,7 +124,7 @@ function authoritativeVesselFacts(vessel: VesselView, flagState: string | null):
 async function canonicalStandaloneRequest(request: PdaRequest): Promise<PdaRequest> {
   const requestedVesselId = request.vessel.vesselId;
   const supabase = await getSupabaseServerClient();
-  const registry = await activeFlagRegistry(supabase);
+  const registry = await flagRegistry(supabase);
   if (!requestedVesselId) {
     // A declared flag counts only when an active register carries that ISO code; otherwise it is unknown.
     return { ...request, vessel: { ...request.vessel, flagState: resolveDeclaredFlag(registry, request.vessel.flagState) } };
@@ -321,7 +321,7 @@ export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<Action
       requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
     ]);
     const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
-    const flagState = resolveFlagName(await activeFlagRegistry(supabase), vessel.flag);
+    const flagState = resolveFlagName(await flagRegistry(supabase), vessel.flag);
     let loadRequest = canonicalRouteLeg({
       leg: input.load,
       vessel,

@@ -41,7 +41,7 @@ assert.doesNotMatch(actions, /derivedDate|timeline\.(?:etaLoad|etaDischarge)\.sl
 assert.match(actions, /vessel:\s*authoritativeVesselFacts\(input\.vessel,\s*input\.flagState\)/);
 // C2O-090 B2C-035: one canonical resolver (lib/pda/flag.ts) for the route, the owned standalone vessel and a
 // declared standalone ISO; the registered maximum draft is never the call draft.
-assert.match(actions, /const flagState = resolveFlagName\(await activeFlagRegistry\(supabase\), vessel\.flag\)/);
+assert.match(actions, /const flagState = resolveFlagName\(await flagRegistry\(supabase\), vessel\.flag\)/);
 assert.match(actions, /authoritativeVesselFacts\(vessel, resolveFlagName\(registry, vessel\.flag\)\)/);
 assert.match(actions, /flagState: resolveDeclaredFlag\(registry, request\.vessel\.flagState\)/);
 assert.match(actions, /\.from\("flag_states"\)/);
