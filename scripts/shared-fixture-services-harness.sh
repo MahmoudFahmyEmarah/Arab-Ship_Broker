@@ -123,7 +123,7 @@ prove_missing_storage_refused
 prove_preexisting_bucket_refused
 apply_forward
 run_smoke
-bash supabase/tests/shared_fixture_services_claim_race.sh "$PSQL_CMD"
+NTF_RACE_DISPOSABLE="$TEST_DB" bash supabase/tests/shared_fixture_services_claim_race.sh "$PSQL_CMD"   # the confirmed disposable target (C2O-097 #4)
 prove_nonempty_down_refused
 prove_history_down_refused
 run_down confirm

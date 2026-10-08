@@ -16,7 +16,8 @@
 --   * the same tick replays Fixture projections that were deferred (fn_fixture_notify_reconcile, when present) and
 --     raises an alert to the platform's super admins — in the bell and by email, at most once an hour per condition —
 --     when an urgent email has waited more than 10 minutes, an email failed in the last hour, a Fixture projection is
---     failing or stuck, or email work has waited an hour while this environment has no dispatch URL;
+--     failing or stuck, email work has waited an hour while this environment has no dispatch URL, or (C2O-097 #3)
+--     a configured channel has left normal or digest email due for over an hour (SLO: sent within one hour of due);
 --   * every function here is service-role only.
 --
 -- DOWN: supabase/rollback/20261008110000_notification_dispatch_schedule_down.sql
@@ -94,7 +95,16 @@ begin
                      then 'Fixture Room notifications are failing or waiting to be written.' end),
       ('no-dispatch-url', case when v_url is null and exists (select 1 from public.notification_deliveries d
                                                                 where d.status = 'queued' and d.created_at < clock_timestamp() - interval '1 hour')
-                          then 'Email notifications are waiting, but email delivery is not configured in this environment.' end)
+                          then 'Email notifications are waiting, but email delivery is not configured in this environment.' end),
+      -- C2O-097 #3: a CONFIGURED channel that is not draining (route down, SMTP unreachable before claim). SLO: a normal
+      -- instant email, or a digest envelope, leaves within one hour of becoming due; past that the backlog is an alert.
+      ('backlog', case when v_url is not null and (
+                         exists (select 1 from public.notification_deliveries d
+                                  where d.digest_batch_id is null and d.status in ('queued', 'sending')
+                                    and d.next_attempt_at < clock_timestamp() - interval '1 hour')
+                         or exists (select 1 from public.notification_digest_batches b
+                                     where b.status in ('queued', 'sending') and b.next_attempt_at < clock_timestamp() - interval '1 hour'))
+                       then 'Email notifications have been due for more than an hour without being sent: the delivery route or the mail server may be failing.' end)
     ) x(cond, body)
     where x.body is not null
   loop

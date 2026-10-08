@@ -27,6 +27,43 @@ begin
 end;
 $$;
 
+-- the base preference setter of 20261008050000 (without the scheduler lock and the opt-out suppression)
+create or replace function public.set_notification_preferences(
+  p_in_app_enabled boolean,
+  p_email_mode text,
+  p_digest_hour_utc integer
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to ''
+as $$
+declare
+  v_actor uuid := public.fn_notification_actor();
+  v_row public.notification_preferences%rowtype;
+begin
+  if p_email_mode is null or p_email_mode not in ('instant', 'digest', 'off') then
+    raise exception using errcode = '22023', message = 'NTF_INPUT: invalid email mode';
+  end if;
+  if p_digest_hour_utc is null or p_digest_hour_utc not between 0 and 23 then
+    raise exception using errcode = '22023', message = 'NTF_INPUT: digest hour must be 0..23 UTC';
+  end if;
+
+  insert into public.notification_preferences as p
+    (user_id, in_app_enabled, email_mode, digest_hour_utc, updated_at)
+  values
+    (v_actor, coalesce(p_in_app_enabled, true), p_email_mode, p_digest_hour_utc, now())
+  on conflict (user_id) do update
+    set in_app_enabled = excluded.in_app_enabled,
+        email_mode = excluded.email_mode,
+        digest_hour_utc = excluded.digest_hour_utc,
+        updated_at = now()
+  returning * into v_row;
+
+  return to_jsonb(v_row);
+end;
+$$;
+
 drop trigger if exists notification_deliveries_digest_recipient on public.notification_deliveries;
 drop function if exists public.fn_notification_digest_recipient_guard();
 drop function if exists public.get_my_notification_preferences();

@@ -102,5 +102,20 @@ begin
   raise notice 'D6 ok: a late urgent email alerts the super admins once an hour; members cannot call it';
 end $$;
 
+-- D7 · C2O-097 #3: a CONFIGURED channel that is not draining raises the backlog alert (normal and digest work)
+do $$
+begin
+  perform public.admin_set_notification_dispatch_url('https://staging.example.com/api/cron/fixture-notifications');
+  insert into public.notification_preferences (user_id, email_mode) values ('00000000-0000-4000-8000-0000000d1501', 'instant')
+    on conflict (user_id) do update set email_mode = 'instant';
+  perform public.fn_notification_enqueue('00000000-0000-4000-8000-0000000d1501', 'proof.normal', 'proof:backlog', 'Backlog', 'Backlog body', null, 'normal', '{}'::jsonb, true, null, null);
+  update public.notification_deliveries d set next_attempt_at = clock_timestamp() - interval '61 minutes'
+    from public.notifications x where x.id = d.notification_id and x.dedupe_key = 'proof:backlog';
+  perform public.fn_notification_dispatch_alert();
+  if not exists (select 1 from public.notifications where recipient_user_id = '00000000-0000-4000-8000-0000000d1502' and payload->>'condition' = 'backlog') then
+    raise exception 'D7: a configured channel with normal email due over an hour must raise the backlog alert'; end if;
+  raise notice 'D7 ok: a configured but stalled channel raises the backlog alert (SLO: sent within an hour of due)';
+end $$;
+
 do $$ begin raise notice 'NOTIFICATION DISPATCH SCHEDULE SMOKE: ALL ASSERTIONS PASSED'; end $$;
 rollback;

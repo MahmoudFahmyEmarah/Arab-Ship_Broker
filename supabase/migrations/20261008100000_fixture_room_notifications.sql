@@ -152,8 +152,12 @@ as $$
      and (case when p_party_id is not null then p.id = p_party_id
                else p.side = any (p_sides) and p.status = 'active' end)
   union
+  -- C2O-097 #1: Fixture administration is owner-only (lib/admin/sections.ts OWNER_ONLY.fixtures), so the broker desk
+  -- is the owner tier: an active admin whose tier is 'super' (a NULL tier is the owner, as requireAdmin reads it).
+  -- A sub-admin never hears room references, terms or figures it cannot open.
   select u.id from public.users u
-   where p_include_admins and u.is_active and lower(coalesce(u.role, '')) = 'admin';
+   where p_include_admins and u.is_active and lower(coalesce(u.role, '')) = 'admin'
+     and coalesce(u.admin_tier, 'super') = 'super';
 $$;
 revoke all on function public.fn_fixture_notify_recipients(uuid, text[], boolean, uuid) from public, anon, authenticated;
 

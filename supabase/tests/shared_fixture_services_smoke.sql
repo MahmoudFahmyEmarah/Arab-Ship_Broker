@@ -427,6 +427,28 @@ begin
   exception when check_violation then null;
   end;
   raise notice 'P6 ok: the schema refuses a digest item from another member''s envelope';
+
+  -- P7 · C2O-097 #2: opting out takes effect at once — waiting work is suppressed by the setter itself, and a job a
+  -- worker already claimed sends nothing because the snapshot re-checks the current preference
+  perform pg_temp.ntf_owner();
+  update public.notification_deliveries set next_attempt_at = now() + interval '1 day' where status = 'queued';
+  update public.notification_digest_batches set next_attempt_at = now() + interval '1 day' where status = 'queued';
+  perform pg_temp.ntf_as(u2);
+  perform public.set_notification_preferences(true, 'instant', 7);
+  perform pg_temp.ntf_owner();
+  perform public.fn_notification_enqueue(u2, 'proof.optout', 'proof:optout:claimed', 'Claimed', 'Claimed.', null, 'urgent');
+  select * into r from public.fn_notification_email_claim(60, 8) limit 1;
+  if r.id is null or r.job_kind <> 'instant' then raise exception 'P7: setup must claim the urgent item (got %)', r; end if;
+  perform public.fn_notification_enqueue(u2, 'proof.optout', 'proof:optout:waiting', 'Waiting', 'Waiting.', null, 'urgent');
+  perform pg_temp.ntf_as(u2);
+  perform public.set_notification_preferences(true, 'off', 7);
+  perform pg_temp.ntf_owner();
+  if exists (select 1 from public.notification_deliveries d join public.notifications n on n.id = d.notification_id
+              where n.recipient_user_id = u2 and d.status = 'queued') then
+    raise exception 'P7: turning email off must suppress waiting work in the same transaction'; end if;
+  if exists (select 1 from public.fn_notification_email_snapshot('instant', r.id, r.claim_token, 25)) then
+    raise exception 'P7: a job claimed before the opt-out must send nothing (the snapshot re-checks the preference)'; end if;
+  raise notice 'P7 ok: an opt-out suppresses waiting email at once and an already-claimed job sends nothing';
   raise notice 'SHARED FIXTURE SERVICES WAVE 4 SMOKE: ALL ASSERTIONS PASSED';
 end;
 $$;

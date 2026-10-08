@@ -161,6 +161,13 @@ begin
   if to_regprocedure('public.fn_notification_enqueue(uuid, text, text, text, text, text, text, jsonb, boolean, timestamptz, timestamptz)') is null then
     raise notice 'N11 skipped: no core'; return;
   end if;
+  -- C2O-097 #1: an active NON-owner admin (tier 'sub') exists and must hear nothing of the room
+  perform pg_temp.fx_owner();
+  set local session_replication_role = replica;
+  insert into auth.users (id, email, aud, role) values ('00000000-0000-4000-8000-0000000000af', 'u_sub@fixture.test', 'authenticated', 'authenticated');
+  insert into public.users (id, supabase_user_id, email, full_name, company, role, admin_tier, subscription_tier, is_active)
+  values ('00000000-0000-4000-8000-0000000000af', '00000000-0000-4000-8000-0000000000af', 'u_sub@fixture.test', 'Seed Sub-admin', 'Arab ShipBroker', 'admin', 'sub', 'T4', true);
+  set local session_replication_role = origin;
   perform pg_temp.fx_as('u_ow1');
   v := pg_temp.fx_create(pg_temp.fx_id('c4'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'ntf-relayed-create', '{}'::jsonb);
   v_room := (v->'data'->>'roomId')::uuid;
@@ -170,5 +177,7 @@ begin
   if n <> 1 then raise exception 'N11: the mediator desk must hear the offer to the relayed side, got %', n; end if;
   if exists (select 1 from public.notifications x where x.payload->>'roomId' = v_room::text and (x.title || x.body) ~* 'seed brokers|desk@') then
     raise exception 'N11: the relayed principal must stay masked'; end if;
-  raise notice 'N11 ok: an offer to a relayed side reaches the mediator desk, masked';
+  if exists (select 1 from public.notifications x where x.payload->>'roomId' = v_room::text and x.recipient_user_id = '00000000-0000-4000-8000-0000000000af') then
+    raise exception 'N11: a non-owner admin must never hear Fixture notifications (owner-only administration)'; end if;
+  raise notice 'N11 ok: an offer to a relayed side reaches the owner desk, masked; a sub-admin hears nothing';
 end $$;

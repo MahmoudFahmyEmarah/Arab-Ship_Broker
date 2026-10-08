@@ -208,4 +208,34 @@ assert.match(semantics, /grant execute on function public\.get_my_notification_p
 assert.match(down, /NTF_DOWN_REFUSED/);
 assert.match(smoke, /SHARED FIXTURE SERVICES WAVE 4 SMOKE: ALL ASSERTIONS PASSED/);
 
+// C2O-097 #1: Fixture notifications reach only the owner tier (Fixture administration is owner-only)
+const projector = readFileSync("supabase/migrations/20261008100000_fixture_room_notifications.sql", "utf8");
+const recipientsFn = projector.split("create or replace function public.fn_fixture_notify_recipients(")[1]!.split("$$;")[0]!;
+assert.match(recipientsFn, /p_include_admins and u\.is_active and lower\(coalesce\(u\.role, ''\)\) = 'admin'\s+and coalesce\(u\.admin_tier, 'super'\) = 'super'/);
+assert.match(readFileSync("supabase/tests/fixture_room/bodies/notify.sql", "utf8"), /a non-owner admin must never hear Fixture notifications/);
+// C2O-097 #2: an opt-out serializes with the scheduler, suppresses waiting work at once, and the snapshot re-checks
+const setter = semantics.split("create or replace function public.set_notification_preferences(")[1]!.split("$$;")[0]!;
+assert.match(setter, /pg_advisory_xact_lock\(1095978574\)/);
+assert.ok(setter.indexOf("pg_advisory_xact_lock") < setter.indexOf("insert into public.notification_preferences"));
+assert.match(setter, /if p_email_mode = 'off' then[\s\S]*update public\.notification_deliveries[\s\S]*d\.status = 'queued'[\s\S]*update public\.notification_digest_batches[\s\S]*b\.status = 'queued'/);
+const snapshotFn = semantics.split("create or replace function public.fn_notification_email_snapshot(")[1]!.split("$$;")[0]!;
+assert.equal((snapshotFn.match(/pf\.email_mode = 'off'/g) ?? []).length, 2);
+assert.match(semanticsDown, /create or replace function public\.set_notification_preferences\(/);
+assert.match(readFileSync("components/portal/NotificationDeliveryCard.tsx", "utf8"), /an email already on its way at that moment may still arrive/);
+// C2O-097 #3: a configured channel that stops draining raises the backlog alert
+const schedule = readFileSync("supabase/migrations/20261008110000_notification_dispatch_schedule.sql", "utf8");
+assert.match(schedule, /\('backlog', case when v_url is not null and \(/);
+assert.match(readFileSync("supabase/tests/notifications/dispatch_schedule_smoke.sql", "utf8"), /D7 ok: a configured but stalled channel raises the backlog alert/);
+// C2O-097 #4: the claim race has the destructive-harness contract
+const race = readFileSync("supabase/tests/shared_fixture_services_claim_race.sh", "utf8");
+assert.doesNotMatch(race, /^sleep [0-9.]+$/m);
+assert.doesNotMatch(race, /PSQL="\$\{1:\?/);
+assert.match(race, /\[ "\$\{NTF_RACE_DISPOSABLE:-\}" = "\$DB" \] \|\| refuse/);
+assert.match(race, /asb_shared_fixture_services_test_\[0-9\]\*\|asb_race_\[0-9a-z_\]\*\)/);
+assert.match(race, /trap teardown EXIT/);
+assert.match(race, /u1="\$\(q "select gen_random_uuid\(\)"\)"/);
+assert.ok(race.indexOf("residue || fail") < race.indexOf("ALL ASSERTIONS PASSED"));
+assert.equal((race.match(/set application_name = 'ntfrace_\$\{RUN\}_[a-z]';/g) ?? []).length, 4);
+assert.match(readFileSync("scripts/shared-fixture-services-harness.sh", "utf8"), /NTF_RACE_DISPOSABLE="\$TEST_DB" bash supabase\/tests\/shared_fixture_services_claim_race\.sh/);
+
 console.log("SHARED FIXTURE SERVICES CONTRACT: ALL ASSERTIONS PASSED");

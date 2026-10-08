@@ -530,7 +530,9 @@ begin
       join public.notifications n on n.id = d.notification_id
       join public.users u on u.id = n.recipient_user_id
      where d.id = p_id and d.status = 'sending' and d.claim_token = p_token
-       and u.is_active and (n.expires_at is null or n.expires_at > now());
+       and u.is_active and (n.expires_at is null or n.expires_at > now())
+       -- C2O-097 #2: the CURRENT preference decides at the last moment before sending; email off sends nothing
+       and not exists (select 1 from public.notification_preferences pf where pf.user_id = n.recipient_user_id and pf.email_mode = 'off');
   elsif p_job_kind = 'digest' then
     update public.notification_digest_batches b
        set snapshot_at = coalesce(b.snapshot_at, now()), updated_at = now()
@@ -548,6 +550,7 @@ begin
           join public.users u on u.id = n.recipient_user_id
          where b.id = p_id and b.status = 'sending' and b.claim_token = p_token
             and d.status = 'queued' and u.is_active
+            and not exists (select 1 from public.notification_preferences pf where pf.user_id = n.recipient_user_id and pf.email_mode = 'off')
             and d.created_at <= b.snapshot_at
             and (n.expires_at is null or n.expires_at > b.snapshot_at)
          order by n.created_at, n.id
@@ -660,6 +663,60 @@ $$;
 revoke select on table public.notifications from service_role;
 revoke all on function public.fn_notification_delivery_claim(integer, integer, integer) from service_role;
 revoke all on function public.fn_notification_delivery_settle(uuid, uuid, boolean, text, integer) from service_role;
+
+-- C2O-097 #2: an opt-out serializes with the scheduler. The setter takes the same advisory lock as enqueue and claim,
+-- so a claim either finishes before it (its job is already 'sending') or sees the new preference. Turning email off
+-- suppresses, in the same transaction, every email of this member still waiting (instant deliveries and digest
+-- envelopes); the snapshot taken just before sending re-checks the preference as well. Only an email already being
+-- sent at that instant can still arrive — the settings card says so.
+create or replace function public.set_notification_preferences(
+  p_in_app_enabled boolean,
+  p_email_mode text,
+  p_digest_hour_utc integer
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to ''
+as $$
+declare
+  v_actor uuid := public.fn_notification_actor();
+  v_row public.notification_preferences%rowtype;
+begin
+  if p_email_mode is null or p_email_mode not in ('instant', 'digest', 'off') then
+    raise exception using errcode = '22023', message = 'NTF_INPUT: invalid email mode';
+  end if;
+  if p_digest_hour_utc is null or p_digest_hour_utc not between 0 and 23 then
+    raise exception using errcode = '22023', message = 'NTF_INPUT: digest hour must be 0..23 UTC';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(1095978574);
+
+  insert into public.notification_preferences as p
+    (user_id, in_app_enabled, email_mode, digest_hour_utc, updated_at)
+  values
+    (v_actor, coalesce(p_in_app_enabled, true), p_email_mode, p_digest_hour_utc, now())
+  on conflict (user_id) do update
+    set in_app_enabled = excluded.in_app_enabled,
+        email_mode = excluded.email_mode,
+        digest_hour_utc = excluded.digest_hour_utc,
+        updated_at = now()
+  returning * into v_row;
+
+  if p_email_mode = 'off' then
+    update public.notification_deliveries d
+       set status = 'suppressed', claim_token = null, lease_until = null, updated_at = clock_timestamp(),
+           last_error = 'suppressed because the member turned email off'
+      from public.notifications n
+     where n.id = d.notification_id and n.recipient_user_id = v_actor and d.status = 'queued';
+    update public.notification_digest_batches b
+       set status = 'suppressed', claim_token = null, lease_until = null, updated_at = clock_timestamp(),
+           last_error = 'suppressed because the member turned email off'
+     where b.recipient_user_id = v_actor and b.status = 'queued';
+  end if;
+
+  return to_jsonb(v_row);
+end;
+$$;
 
 -- C2O-092 P2: a digest child always belongs to its envelope's recipient, enforced by the schema, not only the code
 create or replace function public.fn_notification_digest_recipient_guard()

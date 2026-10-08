@@ -613,12 +613,15 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
 
   const normalize = (value: string) => value.replace(/\r\n/g, "\n");
   const shared = normalize(seed).trimEnd();
-  const smokeNames = ["state", "rls", "masking", "idempotency", "immutability", "snapshot", "candidates", "liftall", "handles", "enforcement"];
-  ok(smokeNames.every((name) => {
+  // C2O-097 #5: the suite list comes from the harness itself, so every suite it regenerates is covered (no fixed list)
+  const smokeNames = (read("scripts/fixture-room-harness.sh").match(/^for name in ([a-z ]+); do$/m)?.[1] ?? "").trim().split(/\s+/);
+  const stale = smokeNames.filter((name) => {
     const body = normalize(read(`supabase/tests/fixture_room/bodies/${name}.sql`)).trimEnd();
     const generated = normalize(read(`supabase/tests/fixture_room/fixture_${name}_smoke.sql`));
-    return generated.includes(`${shared}\n\n${body}`);
-  }), "all ten generated Fixture smokes contain the exact current shared seed and authoritative body");
+    return !generated.includes(`${shared}\n\n${body}`);
+  });
+  ok(smokeNames.length >= 13 && ["bridge", "lineage", "notify"].every((n) => smokeNames.includes(n)) && stale.length === 0,
+    `every generated Fixture smoke the harness runs (${smokeNames.length}) contains the exact current shared seed and authoritative body${stale.length ? ` — stale: ${stale.join(", ")}` : ""}`);
 }
 
 // -- PR-07 / PR-08 . enforcement (20261006100000) --

@@ -75,7 +75,7 @@ export function NotificationDeliveryCard() {
           )}
           <div style={{ fontSize: 11, color: "var(--asb-gray-500)", lineHeight: 1.45 }}>
             {shown.emailMode === "off"
-              ? "No email at all, including anything already waiting to be sent. The bell still shows everything."
+              ? "No email at all: anything still waiting is cancelled straight away (an email already on its way at that moment may still arrive). The bell still shows everything."
               : "Urgent items — an invitation, an offer with a deadline, the other side confirming a fixture, a recap to acknowledge — are emailed at once. "
                 + (shown.emailMode === "digest" ? `Everything else arrives in one email at ${hour(shown.digestHourUtc)}.` : "Everything else is emailed as it happens.")}
             {prefs?.isDefault && !draft && " These are the platform defaults (daily digest at 07:00 UTC); you have not changed them."}
