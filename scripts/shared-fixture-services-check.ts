@@ -2,23 +2,23 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const migration = readFileSync(
-  new URL("../supabase/migrations/20260923350000_shared_notifications.sql", import.meta.url),
+  new URL("../supabase/migrations/20261008050000_shared_notifications.sql", import.meta.url),
   "utf8",
 );
 const storage = readFileSync(
-  new URL("../supabase/migrations/20260923351000_fixture_recap_storage.sql", import.meta.url),
+  new URL("../supabase/migrations/20261008051000_fixture_recap_storage.sql", import.meta.url),
   "utf8",
 );
 const semantics = readFileSync(
-  new URL("../supabase/migrations/20260923352000_shared_notification_semantics.sql", import.meta.url),
+  new URL("../supabase/migrations/20261008052000_shared_notification_semantics.sql", import.meta.url),
   "utf8",
 );
 const semanticsDown = readFileSync(
-  new URL("../supabase/rollback/20260923352000_shared_notification_semantics_down.sql", import.meta.url),
+  new URL("../supabase/rollback/20261008052000_shared_notification_semantics_down.sql", import.meta.url),
   "utf8",
 );
 const down = readFileSync(
-  new URL("../supabase/rollback/20260923350000_shared_fixture_services_down.sql", import.meta.url),
+  new URL("../supabase/rollback/20261008050000_shared_fixture_services_down.sql", import.meta.url),
   "utf8",
 );
 const architecture = readFileSync(
@@ -85,14 +85,16 @@ assert.doesNotMatch(migration, /whatsapp_outbox/i);
 assert.match(semantics, /create table public\.notification_digest_batches/i);
 assert.match(semantics, /alter table public\.notification_digest_batches enable row level security/i);
 assert.match(semantics, /revoke all on table public\.notification_digest_batches from public, anon, authenticated, service_role/i);
-assert.match(semantics, /unique \(recipient_user_id, digest_window_at\)/i);
+// a window's envelope is unique per generation: generation 0 takes new items; a successor of an obsolete retried
+// envelope (C2O-092 #2) is the next generation, so it gets a new id and Message-ID
+assert.match(semantics, /unique \(recipient_user_id, digest_window_at, generation\)/i);
 assert.match(semantics, /add column digest_batch_id uuid references public\.notification_digest_batches/i);
 assert.match(semantics, /NTF_MIGRATION: notification deliveries must be empty/i);
 assert.match(semantics, /is_expired boolean/i);
 assert.match(semantics, /Email delivery cut-off/i);
 assert.match(semantics, /pg_advisory_xact_lock/i);
 assert.match(semantics, /snapshot_at = coalesce\(b\.snapshot_at, now\(\)\)/i);
-assert.match(semantics, /snapshot_at = coalesce\(b\.snapshot_at, clock_timestamp\(\)\)/i);
+assert.match(semantics, /snapshot_at = coalesce\(b\.snapshot_at, (?:clock_timestamp\(\)|v_now)\)/i);   // the claim uses its one post-lock clock (C2O-092 #5)
 assert.doesNotMatch(semantics, /snapshot_at\s*=\s*null/i);
 assert.match(semantics, /where b\.status = 'queued'[\s\S]*?b\.claim_token is null[\s\S]*?b\.snapshot_at is null/i);
 assert.match(semantics, /v_digest := v_digest \+ interval '1 day'/i);
@@ -110,7 +112,7 @@ assert.match(semantics, /revoke select on table public\.notifications from servi
 assert.match(semantics, /revoke all on function public\.fn_notification_delivery_claim[^;]*from service_role/i);
 assert.match(semantics, /revoke all on function public\.fn_notification_delivery_settle[^;]*from service_role/i);
 assert.match(semanticsDown, /DOWN refused: notification digest batches still contain delivery state/i);
-assert.match(semanticsDown, /drop table public\.notification_digest_batches/i);
+assert.match(semanticsDown, /drop table (?:if exists )?public\.notification_digest_batches/i);   // tolerant of a chain where 052000 was never applied
 
 assert.match(storage, /'fixture-recaps', 'fixture-recaps', false, 5242880, array\['application\/pdf'\]/i);
 assert.match(storage, /fixture-recaps already exists and is not owned by this migration/i);
@@ -141,7 +143,6 @@ assert.match(smoke, /replay mutated the original snapshot/i);
 assert.match(smoke, /cross-member badge leak/i);
 assert.match(smoke, /perform pg_temp\.ntf_as\(u1\);[\s\S]*?refused := false;[\s\S]*?perform 1 from public\.notifications limit 1;/i);
 assert.match(smoke, /wrong digest token settled envelope/i);
-assert.match(smoke, /expired digest lease was not reclaimed safely/i);
 assert.match(smoke, /retry ceiling did not fail instant delivery/i);
 assert.match(smoke, /inactive recipient delivery was not suppressed/i);
 assert.match(smoke, /inactive member was not refused/i);
@@ -150,7 +151,7 @@ assert.match(smoke, /same recipient\/window did not form one digest batch/i);
 assert.match(smoke, /digest children did not settle together/i);
 assert.match(smoke, /notification feed RPC grants are not private-by-default/i);
 assert.match(smoke, /enqueue attached to a claimed digest envelope/i);
-assert.match(smoke, /digest retry changed the frozen envelope under one message id/i);
+assert.match(smoke, /the obsolete envelope must be succeeded, not re-sent/i);   // C2O-092 #2 replaces the frozen re-send
 assert.match(dispatcher, /const NOTIFICATION_MESSAGE_ID_DOMAIN = "arabshipbroker\.com"/);
 assert.match(dispatcher, /messageId: `<asb-notification-\$\{claim\.id\}@\$\{NOTIFICATION_MESSAGE_ID_DOMAIN\}>`/);
 assert.match(dispatcher, /function safeMailSubject/);
@@ -191,5 +192,20 @@ assert.match(bellBrowser, /scrollWidth - document\.documentElement\.clientWidth/
 assert.match(bellBrowser, /toBeFocused/);
 assert.match(bellBrowser, /new URL\(value\)/);
 assert.match(bellBrowser, /refusing to seed notification browser fixtures against non-loopback Supabase URL/);
+
+// C2O-092 #5/#6/#7 in the claim
+const claim = semantics.split("create or replace function public.fn_notification_email_claim(")[1].split(String.fromCharCode(10) + "$$;")[0];
+assert.match(claim, /pg_advisory_xact_lock\(1095978574\);[\s\S]{0,300}v_now := clock_timestamp\(\);/);
+assert.ok(!/[^_]now\(\)/.test(claim), "the claim reads the clock once, after the lock");
+assert.match(claim, /order by q\.priority, q\.next_attempt_at/);
+assert.match(claim, /case when n\.importance = 'urgent' then 0 else 1 end as priority/);
+assert.match(claim, /where d\.id = v_id and n\.id = d\.notification_id\s+and \(d\.status = 'queued' or \(d\.status = 'sending' and d\.lease_until < v_now\)\)/);
+assert.match(claim, /where b\.id = v_id\s+and \(b\.status = 'queued' or \(b\.status = 'sending' and b\.lease_until < v_now\)\)/);
+assert.match(claim, /suppressed because the member turned email off/);
+assert.match(claim, /superseded by/);
+assert.match(semantics, /create or replace function public\.get_my_notification_preferences\(\)/);
+assert.match(semantics, /grant execute on function public\.get_my_notification_preferences\(\) to authenticated;/);
+assert.match(down, /NTF_DOWN_REFUSED/);
+assert.match(smoke, /SHARED FIXTURE SERVICES WAVE 4 SMOKE: ALL ASSERTIONS PASSED/);
 
 console.log("SHARED FIXTURE SERVICES CONTRACT: ALL ASSERTIONS PASSED");

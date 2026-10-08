@@ -61,6 +61,24 @@ const termOf = (p: Record<string, unknown>) => str(p.termLabel || p.termCode).to
 // a close reason is one of the governed values; anything else is shown as "closed"
 const subjectRef = (p: Record<string, unknown>) => (Number.isInteger(Number(p.seq)) && Number(p.seq) > 0 ? `subject ${Number(p.seq)}` : "a subject");
 const closeReason = (v: unknown) => (v === "withdrawn" || v === "failed" || v === "expired" ? v : "closed");
+const LOCODE = /^[A-Z]{2}[A-Z0-9]{3}$/;
+/**
+ * The figure an outbound message may carry (C2O-092 #1). Values of a governed numeric/date kind are server-formatted
+ * from validated input and pass; a free-text term never leaves the room (generic words instead); a port pair carries
+ * only UN/LOCODEs found in the ports registry (portsVerified), never member-typed names. An unknown kind is free text.
+ */
+export function outboundValue(p: Record<string, unknown>): string {
+  const kind = str(p.valueKind);
+  if (kind === "number" || kind === "money_per_mt" || kind === "rate_pair" || kind === "date_range") return str(p.displayValue);
+  if (kind === "port_pair") {
+    const v = (p.value ?? {}) as Record<string, unknown>;
+    const load = str(v.load).toUpperCase(), disch = str(v.disch).toUpperCase();
+    // shape is not enough (a five-letter word looks like a code): the projector marks codes it found in the ports
+    // registry; only those are shown
+    return p.portsVerified === true && LOCODE.test(load) && LOCODE.test(disch) ? `${load} → ${disch}` : "new ports";
+  }
+  return "a new wording";
+}
 
 /** One rule per event type that deserves a notification; null for the rest. */
 export function notificationFor(type: FixtureEventType, ctx: NotifyContext): NotifyRule | null {
@@ -78,14 +96,14 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
       return {
         audience: "other_side", importance: deadline ? "urgent" : "normal",
         title: `${room}: ${p.kind === "bid" ? "bid" : "offer"} on ${termOf(p)}`,
-        body: `${who} ${p.kind === "bid" ? "bid" : "offered"} ${str(p.displayValue)} on ${termOf(p)}${p.isFinal ? " (final)" : ""}${deadline ? ", valid until the time shown" : ""}. Your move.`,
+        body: `${who} ${p.kind === "bid" ? "bid" : "offered"} ${outboundValue(p)} on ${termOf(p)}${p.isFinal ? " (final)" : ""}${deadline ? ", valid until the time shown" : ""}. Your move.`,
         href: `${base}#term-${str(p.termCode)}`, deadlineAt: deadline,
       };
     }
     case "proposal.lapsed":
-      return { audience: "both_sides", importance: "normal", title: `${room}: figure lapsed on ${termOf(p)}`, body: `The ${str(p.side)} side's ${str(p.displayValue)} on ${termOf(p)} lapsed without an answer.`, href: `${base}#term-${str(p.termCode)}`, deadlineAt: null };
+      return { audience: "both_sides", importance: "normal", title: `${room}: figure lapsed on ${termOf(p)}`, body: `The ${str(p.side)} side's ${outboundValue(p)} on ${termOf(p)} lapsed without an answer.`, href: `${base}#term-${str(p.termCode)}`, deadlineAt: null };
     case "term.agreed":
-      return { audience: "both_sides", importance: "normal", title: `${room}: ${termOf(p)} agreed`, body: `${termOf(p)} agreed at ${str(p.displayValue)}.`, href: base, deadlineAt: null };
+      return { audience: "both_sides", importance: "normal", title: `${room}: ${termOf(p)} agreed`, body: `${termOf(p)} agreed at ${outboundValue(p)}.`, href: base, deadlineAt: null };
     case "term.reopened":
       // the reason is free text a member typed: it stays in the room, never in a notification
       return { audience: "both_sides", importance: "normal", title: `${room}: ${termOf(p)} reopened`, body: `${who} reopened ${termOf(p)}.`, href: base, deadlineAt: null };
@@ -93,7 +111,7 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
       return { audience: "mediator", importance: "urgent", title: `${room}: ${termOf(p)} referred to principal`, body: `${who} referred ${termOf(p)}. The item waits for a decision.`, href: base, deadlineAt: null };
     case "term.bridge_suggested":
       // the mediator's comment is free text: it stays in the room; the governed figure is what both sides weigh
-      return { audience: "both_sides", importance: "normal", title: `${room}: suggested figure on ${termOf(p)}`, body: `${who} suggested ${str(p.displayValue)} on ${termOf(p)} to bridge the gap. Either side may adopt it.`, href: `${base}#term-${str(p.termCode)}`, deadlineAt: null };
+      return { audience: "both_sides", importance: "normal", title: `${room}: suggested figure on ${termOf(p)}`, body: `${who} suggested ${outboundValue(p)} on ${termOf(p)} to bridge the gap. Either side may adopt it.`, href: `${base}#term-${str(p.termCode)}`, deadlineAt: null };
     case "room.fix_confirmed":
       // PR-07: the first side's confirmation is what the other side must act on; the second fixes the room
       if (!p.awaitingSide) return null;
@@ -121,6 +139,9 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
       return p.kind === "nudge"
         ? { audience: "other_side", importance: "urgent", title: `${room}: your answer is awaited`, body: `${who} is waiting for your answer.`, href: base, deadlineAt: null }
         : { audience: "other_side", importance: "info", title: `${room}: new message`, body: `${who} posted a message in the room.`, href: base, deadlineAt: null };
+    case "room.window_extended":
+      // C2O-092 #3: both sides learn the negotiation has more time (the date stays in the room)
+      return { audience: "both_sides", importance: "normal", title: `${room}: negotiation window extended`, body: `${who} extended the negotiation window.`, href: base, deadlineAt: null };
     case "room.closed":
       return { audience: "all", importance: "urgent", title: `${room}: negotiation ${closeReason(p.reason)}`, body: `${who} closed the room (${closeReason(p.reason)}).`, href: base, deadlineAt: null };
     default:
@@ -139,7 +160,7 @@ export function lapseWarning(ctx: NotifyContext & { expiresAt: string }, now: Da
   return {
     audience: "other_side", importance: "urgent",
     title: `${ctx.roomRef}: ${termOf(p)} lapses in 2 minutes`,
-    body: `${maskedActorLabel(ctx.actor)}'s ${str(p.displayValue)} on ${termOf(p)} lapses soon. Accept or counter before it does.`,
+    body: `${maskedActorLabel(ctx.actor)}'s ${outboundValue(p)} on ${termOf(p)} lapses soon. Accept or counter before it does.`,
     href: `/dashboard/fixture-room/${ctx.roomId}#term-${str(p.termCode)}`, deadlineAt: ctx.expiresAt,
   };
 }

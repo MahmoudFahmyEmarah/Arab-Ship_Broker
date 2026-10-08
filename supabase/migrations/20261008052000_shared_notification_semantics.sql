@@ -2,7 +2,7 @@
 --   * a digest is one leased SMTP envelope per recipient/window, not a set of
 --     individually delayed messages;
 --   * expires_at is an email cut-off, never an in-app retention cut-off.
--- DOWN: supabase/rollback/20260923352000_shared_notification_semantics_down.sql
+-- DOWN: supabase/rollback/20261008052000_shared_notification_semantics_down.sql
 
 set local lock_timeout = '5s';
 set local statement_timeout = '10min';
@@ -24,6 +24,8 @@ create table public.notification_digest_batches (
   id                 uuid primary key default gen_random_uuid(),
   recipient_user_id  uuid not null references public.users(id) on delete restrict,
   digest_window_at   timestamptz not null,
+  -- 0 for the window's envelope; a successor minted when a retried frozen envelope became obsolete is 1, 2, …
+  generation         integer not null default 0 check (generation >= 0),
   status             text not null default 'queued'
                      check (status in ('queued', 'sending', 'sent', 'failed', 'suppressed')),
   claim_token        uuid,
@@ -35,7 +37,7 @@ create table public.notification_digest_batches (
   last_error         text check (last_error is null or char_length(last_error) <= 500),
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now(),
-  unique (recipient_user_id, digest_window_at),
+  unique (recipient_user_id, digest_window_at, generation),
   check ((status = 'sending') = (claim_token is not null and lease_until is not null))
 );
 
@@ -238,10 +240,10 @@ begin
 
       v_batch := null;
       insert into public.notification_digest_batches as b
-        (recipient_user_id, digest_window_at, status, next_attempt_at)
+        (recipient_user_id, digest_window_at, generation, status, next_attempt_at)
       values
-        (p_recipient_user_id, v_digest, 'queued', v_digest)
-      on conflict (recipient_user_id, digest_window_at) do update
+        (p_recipient_user_id, v_digest, 0, 'queued', v_digest)
+      on conflict (recipient_user_id, digest_window_at, generation) do update
         set updated_at = clock_timestamp()
         where b.status = 'queued'
           and b.claim_token is null
@@ -296,14 +298,72 @@ declare
   v_max integer := greatest(1, least(coalesce(p_max_attempts, 8), 50));
   v_kind text;
   v_id uuid;
+  v_now timestamptz;
+  r_old record;
+  v_successor uuid;
 begin
   perform pg_catalog.pg_advisory_xact_lock(1095978574);
+  -- the clock is read AFTER the lock (C2O-092 #5): a claimant that waited behind another never receives a lease
+  -- that is already expired, and every comparison below uses this one instant
+  v_now := clock_timestamp();
+
+  -- C2O-092 #2: a frozen digest envelope whose retry would carry an item that expired since its snapshot is obsolete.
+  -- Its expired items are suppressed, the still-valid ones move to a successor envelope (a new id, so a new
+  -- Message-ID) in the same window, and the obsolete envelope is closed as superseded — never re-sent.
+  for r_old in
+    select b.id, b.recipient_user_id, b.digest_window_at
+      from public.notification_digest_batches b
+     where b.snapshot_at is not null
+       and (b.status = 'queued' or (b.status = 'sending' and b.lease_until < v_now))
+       and exists (
+         select 1 from public.notification_deliveries d
+           join public.notifications n on n.id = d.notification_id
+          where d.digest_batch_id = b.id and d.status = 'queued'
+            and n.expires_at is not null and n.expires_at <= v_now)
+  loop
+    update public.notification_deliveries d
+       set status = 'suppressed', updated_at = v_now, last_error = 'suppressed because notification expired before a retry'
+      from public.notifications n
+     where d.notification_id = n.id and d.digest_batch_id = r_old.id and d.status = 'queued'
+       and n.expires_at is not null and n.expires_at <= v_now;
+    v_successor := null;
+    if exists (select 1 from public.notification_deliveries d where d.digest_batch_id = r_old.id and d.status = 'queued') then
+      insert into public.notification_digest_batches as nb (recipient_user_id, digest_window_at, generation, status, next_attempt_at)
+      values (r_old.recipient_user_id, r_old.digest_window_at,
+              (select max(g.generation) + 1 from public.notification_digest_batches g
+                where g.recipient_user_id = r_old.recipient_user_id and g.digest_window_at = r_old.digest_window_at),
+              'queued', v_now)
+      returning nb.id into v_successor;
+      update public.notification_deliveries d set digest_batch_id = v_successor, updated_at = v_now
+       where d.digest_batch_id = r_old.id and d.status = 'queued';
+    end if;
+    update public.notification_digest_batches ob
+       set status = 'suppressed', claim_token = null, lease_until = null, updated_at = v_now,
+           last_error = case when v_successor is null then 'superseded: every item expired before a retry'
+                             else 'superseded by ' || v_successor::text || ': an item expired before a retry' end
+     where ob.id = r_old.id;
+  end loop;
+
+  -- C2O-092 #7: a member who turned email off gets no further email, including work already queued
+  update public.notification_deliveries d
+     set status = 'suppressed', claim_token = null, lease_until = null, updated_at = v_now,
+         last_error = 'suppressed because the member turned email off'
+    from public.notifications n
+    join public.notification_preferences pr on pr.user_id = n.recipient_user_id and pr.email_mode = 'off'
+   where d.notification_id = n.id
+     and (d.status = 'queued' or (d.status = 'sending' and d.lease_until < v_now));
+  update public.notification_digest_batches b
+     set status = 'suppressed', claim_token = null, lease_until = null, updated_at = v_now,
+         last_error = 'suppressed because the member turned email off'
+    from public.notification_preferences pr
+   where pr.user_id = b.recipient_user_id and pr.email_mode = 'off'
+     and (b.status = 'queued' or (b.status = 'sending' and b.lease_until < v_now));
 
   -- Expiry and account state suppress email only. The notification row remains
   -- in the member feed and continues through the ordinary read-state RPCs.
   update public.notification_deliveries d
      set status = 'suppressed', claim_token = null, lease_until = null,
-         updated_at = now(),
+         updated_at = v_now,
          last_error = case
            when not u.is_active then 'suppressed because recipient is inactive'
            else 'suppressed because notification expired'
@@ -311,7 +371,7 @@ begin
     from public.notifications n
     join public.users u on u.id = n.recipient_user_id
    where d.notification_id = n.id
-     and (d.status = 'queued' or (d.status = 'sending' and d.lease_until < now()))
+     and (d.status = 'queued' or (d.status = 'sending' and d.lease_until < v_now))
      and (
        not u.is_active
        or (
@@ -320,37 +380,37 @@ begin
            (select b.snapshot_at
               from public.notification_digest_batches b
              where b.id = d.digest_batch_id),
-           clock_timestamp()
+           v_now
          )
        )
      );
 
   update public.notification_deliveries d
      set status = 'failed', claim_token = null, lease_until = null,
-         updated_at = now(),
+         updated_at = v_now,
          last_error = coalesce(d.last_error, format('abandoned after %s attempts', d.attempts))
    where d.digest_batch_id is null
      and d.attempts >= v_max
-     and (d.status = 'queued' or (d.status = 'sending' and d.lease_until < now()));
+     and (d.status = 'queued' or (d.status = 'sending' and d.lease_until < v_now));
 
   update public.notification_digest_batches b
      set status = 'suppressed', claim_token = null, lease_until = null,
-         updated_at = now(), last_error = 'suppressed because recipient is inactive'
+         updated_at = v_now, last_error = 'suppressed because recipient is inactive'
     from public.users u
    where u.id = b.recipient_user_id
      and not u.is_active
-     and (b.status = 'queued' or (b.status = 'sending' and b.lease_until < now()));
+     and (b.status = 'queued' or (b.status = 'sending' and b.lease_until < v_now));
 
   update public.notification_digest_batches b
      set status = 'failed', claim_token = null, lease_until = null,
-         updated_at = now(),
+         updated_at = v_now,
          last_error = coalesce(b.last_error, format('abandoned after %s attempts', b.attempts))
    where b.attempts >= v_max
-     and (b.status = 'queued' or (b.status = 'sending' and b.lease_until < now()));
+     and (b.status = 'queued' or (b.status = 'sending' and b.lease_until < v_now));
 
   update public.notification_deliveries d
      set status = case when b.status = 'failed' then 'failed' else 'suppressed' end,
-         claim_token = null, lease_until = null, updated_at = now(),
+         claim_token = null, lease_until = null, updated_at = v_now,
          last_error = coalesce(d.last_error, b.last_error)
     from public.notification_digest_batches b
    where d.digest_batch_id = b.id
@@ -360,8 +420,8 @@ begin
   -- A batch can become empty when every child expires before its window.
   update public.notification_digest_batches b
      set status = 'suppressed', claim_token = null, lease_until = null,
-         updated_at = now(), last_error = 'suppressed because no deliverable digest items remain'
-   where (b.status = 'queued' or (b.status = 'sending' and b.lease_until < now()))
+         updated_at = v_now, last_error = 'suppressed because no deliverable digest items remain'
+   where (b.status = 'queued' or (b.status = 'sending' and b.lease_until < v_now))
      and not exists (
        select 1
          from public.notification_deliveries d
@@ -370,28 +430,30 @@ begin
         where d.digest_batch_id = b.id
           and d.status = 'queued'
            and u.is_active
-           and (n.expires_at is null or n.expires_at > coalesce(b.snapshot_at, clock_timestamp()))
+           and (n.expires_at is null or n.expires_at > coalesce(b.snapshot_at, v_now))
      );
 
   select q.job_kind, q.id
     into v_kind, v_id
     from (
-      select 'instant'::text as job_kind, d.id, d.next_attempt_at
+      select 'instant'::text as job_kind, d.id, d.next_attempt_at,
+             -- urgent first; everything else (normal instant and digests alike) stays oldest-first
+             case when n.importance = 'urgent' then 0 else 1 end as priority
         from public.notification_deliveries d
         join public.notifications n on n.id = d.notification_id
         join public.users u on u.id = n.recipient_user_id
        where d.digest_batch_id is null
-         and (d.status = 'queued' or (d.status = 'sending' and d.lease_until < now()))
-         and d.next_attempt_at <= now()
+         and (d.status = 'queued' or (d.status = 'sending' and d.lease_until < v_now))
+         and d.next_attempt_at <= v_now
          and d.attempts < v_max
           and u.is_active
-          and (n.expires_at is null or n.expires_at > clock_timestamp())
+          and (n.expires_at is null or n.expires_at > v_now)
       union all
-      select 'digest'::text, b.id, b.next_attempt_at
+      select 'digest'::text, b.id, b.next_attempt_at, 1
         from public.notification_digest_batches b
         join public.users u on u.id = b.recipient_user_id
-       where (b.status = 'queued' or (b.status = 'sending' and b.lease_until < now()))
-         and b.next_attempt_at <= now()
+       where (b.status = 'queued' or (b.status = 'sending' and b.lease_until < v_now))
+         and b.next_attempt_at <= v_now
          and b.attempts < v_max
          and u.is_active
          and exists (
@@ -399,10 +461,11 @@ begin
              from public.notification_deliveries d
              join public.notifications n on n.id = d.notification_id
             where d.digest_batch_id = b.id and d.status = 'queued'
-               and (n.expires_at is null or n.expires_at > coalesce(b.snapshot_at, clock_timestamp()))
+               and (n.expires_at is null or n.expires_at > coalesce(b.snapshot_at, v_now))
          )
     ) q
-   order by q.next_attempt_at, q.job_kind, q.id
+   -- C2O-092 #6: an urgent instant item is never starved behind a digest or a normal backlog
+   order by q.priority, q.next_attempt_at, q.job_kind, q.id
    limit 1;
 
   if v_id is null then return; end if;
@@ -411,19 +474,23 @@ begin
     return query
     update public.notification_deliveries d
        set status = 'sending', claim_token = gen_random_uuid(),
-           lease_until = now() + v_ttl, attempts = d.attempts + 1,
-           updated_at = now()
+           lease_until = v_now + v_ttl, attempts = d.attempts + 1,
+           updated_at = v_now
       from public.notifications n
      where d.id = v_id and n.id = d.notification_id
+       and (d.status = 'queued' or (d.status = 'sending' and d.lease_until < v_now))
+       and d.next_attempt_at <= v_now
     returning 'instant'::text, d.id, d.claim_token, d.attempts, n.recipient_user_id;
   else
     return query
     update public.notification_digest_batches b
        set status = 'sending', claim_token = gen_random_uuid(),
-            lease_until = now() + v_ttl, attempts = b.attempts + 1,
-            snapshot_at = coalesce(b.snapshot_at, clock_timestamp()),
-            updated_at = now()
+            lease_until = v_now + v_ttl, attempts = b.attempts + 1,
+            snapshot_at = coalesce(b.snapshot_at, v_now),
+            updated_at = v_now
      where b.id = v_id
+       and (b.status = 'queued' or (b.status = 'sending' and b.lease_until < v_now))
+       and b.next_attempt_at <= v_now
     returning 'digest'::text, b.id, b.claim_token, b.attempts, b.recipient_user_id;
   end if;
 end;
@@ -601,3 +668,30 @@ grant execute on function public.list_my_notifications(integer, timestamptz) to 
 grant execute on function public.fn_notification_email_claim(integer, integer) to service_role;
 grant execute on function public.fn_notification_email_snapshot(text, uuid, uuid, integer) to service_role;
 grant execute on function public.fn_notification_email_settle(text, uuid, uuid, text, text, integer) to service_role;
+
+-- C2O-092 #7: what the member's delivery settings are now, and whether they are still the platform defaults
+-- (in-app on; email as a daily digest at 07:00 UTC; urgent items — invitations, offers with a deadline, fix
+-- confirmations, recaps — email at once unless email is off). Written only through set_notification_preferences.
+create or replace function public.get_my_notification_preferences()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to ''
+as $$
+declare v_actor uuid := public.fn_notification_actor(); v_row public.notification_preferences%rowtype;
+begin
+  select * into v_row from public.notification_preferences p where p.user_id = v_actor;
+  return jsonb_build_object(
+    'inAppEnabled', coalesce(v_row.in_app_enabled, true),
+    'emailMode', coalesce(v_row.email_mode, 'digest'),
+    'digestHourUtc', coalesce(v_row.digest_hour_utc, 7),
+    'isDefault', v_row.user_id is null,
+    'updatedAt', v_row.updated_at,
+    'defaults', jsonb_build_object('inAppEnabled', true, 'emailMode', 'digest', 'digestHourUtc', 7),
+    'urgentEmailsAtOnce', coalesce(v_row.email_mode, 'digest') <> 'off');
+end;
+$$;
+revoke all on function public.get_my_notification_preferences() from public, anon;
+grant execute on function public.get_my_notification_preferences() to authenticated;
+

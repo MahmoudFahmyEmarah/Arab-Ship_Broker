@@ -37,7 +37,7 @@ PSQL_CMD="docker exec -i $CONTAINER psql -U postgres -d $TEST_DB"
 prove_missing_storage_refused() {
   psql_test -c "alter schema storage rename to storage_unavailable"
   local accepted=0
-  if psql_test -1 -f - < supabase/migrations/20260923351000_fixture_recap_storage.sql >/dev/null 2>&1; then
+  if psql_test -1 -f - < supabase/migrations/20261008051000_fixture_recap_storage.sql >/dev/null 2>&1; then
     accepted=1
   fi
   psql_test -c "alter schema storage_unavailable rename to storage"
@@ -49,7 +49,7 @@ prove_missing_storage_refused() {
 
 prove_preexisting_bucket_refused() {
   psql_test -c "insert into storage.buckets(id, name, public) values ('fixture-recaps', 'fixture-recaps', true)"
-  if psql_test -1 -f - < supabase/migrations/20260923351000_fixture_recap_storage.sql >/dev/null 2>&1; then
+  if psql_test -1 -f - < supabase/migrations/20261008051000_fixture_recap_storage.sql >/dev/null 2>&1; then
     echo "FAIL: storage migration adopted a pre-existing bucket" >&2
     return 1
   fi
@@ -57,17 +57,30 @@ prove_preexisting_bucket_refused() {
 }
 
 apply_forward() {
-  psql_test -1 -f - < supabase/migrations/20260923350000_shared_notifications.sql
-  psql_test -1 -f - < supabase/migrations/20260923351000_fixture_recap_storage.sql
-  psql_test -1 -f - < supabase/migrations/20260923352000_shared_notification_semantics.sql
+  psql_test -1 -f - < supabase/migrations/20261008050000_shared_notifications.sql
+  psql_test -1 -f - < supabase/migrations/20261008051000_fixture_recap_storage.sql
+  psql_test -1 -f - < supabase/migrations/20261008052000_shared_notification_semantics.sql
 }
 run_smoke() {
   { printf 'begin;\n'; cat supabase/tests/shared_fixture_services_smoke.sql; printf '\nrollback;\n'; } \
     | psql_test -f -
 }
 run_down() {
-  psql_test -1 -f - < supabase/rollback/20260923352000_shared_notification_semantics_down.sql
-  psql_test -1 -f - < supabase/rollback/20260923350000_shared_fixture_services_down.sql
+  # $1 = "confirm": notification history exists (committed by the claim race); the base DOWN needs the export ack
+  if [ "${1:-}" = confirm ]; then
+    # without the confirmation the semantics DOWN refuses too (its digest state is history)
+    if psql_test -1 -f - < supabase/rollback/20261008052000_shared_notification_semantics_down.sql >/dev/null 2>&1; then
+      echo "FAIL: the semantics DOWN destroyed digest history without the export confirmation" >&2
+      return 1
+    fi
+    { printf "set local asb.notifications_down = 'history-exported:shared-services-harness';
+"; cat supabase/rollback/20261008052000_shared_notification_semantics_down.sql; } | psql_test -1 -f -
+    { printf "set local asb.notifications_down = 'history-exported:shared-services-harness';
+"; cat supabase/rollback/20261008050000_shared_fixture_services_down.sql; } | psql_test -1 -f -
+  else
+    psql_test -1 -f - < supabase/rollback/20261008052000_shared_notification_semantics_down.sql
+    psql_test -1 -f - < supabase/rollback/20261008050000_shared_fixture_services_down.sql
+  fi
   local after
   after="$(schema_fingerprint)"
   if [ "$after" != "$baseline" ]; then
@@ -80,9 +93,26 @@ run_down() {
   fi
 }
 
+# C2O-092 #8: with notification history present, the base DOWN refuses unless the export is confirmed
+prove_history_down_refused() {
+  # one committed notification is enough history; the confirmed DOWN that follows removes it with the tables
+  psql_test -q -c "insert into auth.users (id, email, aud, role) values ('10000000-0000-4000-8000-0000000000d1', 'ntf-history@test.invalid', 'authenticated', 'authenticated') on conflict do nothing"
+  psql_test -q -c "insert into public.users (id, supabase_user_id, email, full_name, role, subscription_tier, is_active) values ('10000000-0000-4000-8000-0000000000d1', '10000000-0000-4000-8000-0000000000d1', 'ntf-history@test.invalid', 'History', 'broker', 'T3', true) on conflict do nothing"
+  psql_test -q -c "select public.fn_notification_enqueue('10000000-0000-4000-8000-0000000000d1', 'proof.history', 'proof:history', 'History', 'History.', null, 'normal')" >/dev/null
+  local out
+  # inside one rolled-back transaction: the base DOWN's guard runs first, so nothing is changed either way
+  out="$({ printf 'begin;
+'; cat supabase/rollback/20261008050000_shared_fixture_services_down.sql; printf 'rollback;
+'; } | psql_test -f - 2>&1 || true)"   # the refusal is the expected outcome
+  if ! printf '%s' "$out" | grep -q 'NTF_DOWN_REFUSED'; then
+    echo "FAIL: the base DOWN destroyed notification history without the export confirmation" >&2
+    return 1
+  fi
+}
+
 prove_nonempty_down_refused() {
   psql_test -c "insert into storage.objects(bucket_id, name) values ('fixture-recaps', 'release-gate.pdf')"
-  if psql_test -1 -f - < supabase/rollback/20260923350000_shared_fixture_services_down.sql >/dev/null 2>&1; then
+  if psql_test -1 -f - < supabase/rollback/20261008050000_shared_fixture_services_down.sql >/dev/null 2>&1; then
     echo "FAIL: shared-services DOWN removed a bucket containing a PDF" >&2
     return 1
   fi
@@ -95,7 +125,8 @@ apply_forward
 run_smoke
 bash supabase/tests/shared_fixture_services_claim_race.sh "$PSQL_CMD"
 prove_nonempty_down_refused
-run_down
+prove_history_down_refused
+run_down confirm
 apply_forward
 run_smoke
 run_down

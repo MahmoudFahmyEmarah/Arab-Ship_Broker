@@ -105,6 +105,74 @@ if [ "$digest_claimed" != "1" ] || [ "$digest_children" != "2" ] || [ -z "$late_
   exit 1
 fi
 
+# ── C2O-092 #5a · settle vs reclaim: a row settled while a claimant waits is never resurrected ──────────────────
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL
+select public.fn_notification_enqueue('$u2', 'fixture.settle-race', 'fixture:settle-race:1', 'Settle race', 'Settle race.', null, 'urgent');
+update public.notification_deliveries d set next_attempt_at = now() - interval '1 minute'
+  from public.notifications n where n.id = d.notification_id and n.dedupe_key = 'fixture:settle-race:1';
+SQL
+claim_x="$($PSQL -At -q -v ON_ERROR_STOP=1 -c "select id || '|' || claim_token from public.fn_notification_email_claim(30, 8) where job_kind = 'instant'" | head -1 || true)"
+row_x="${claim_x%%|*}"; tok_x="${claim_x##*|}"
+if [ -z "$row_x" ]; then echo "FAIL: settle race setup claimed nothing" >&2; exit 1; fi
+# the first lease expires; worker A (still holding its token) settles while worker B tries to reclaim the same row
+$PSQL -q -v ON_ERROR_STOP=1 -c "update public.notification_deliveries set lease_until = now() - interval '1 second' where id = '$row_x'"
+log_f="$(mktemp)"; log_g="$(mktemp)"
+$PSQL -At -q -v ON_ERROR_STOP=1 >"$log_f" 2>&1 <<SQL &
+begin;
+select id from public.notification_deliveries where id = '$row_x' for update;
+select pg_sleep(3);
+select public.fn_notification_email_settle('instant', '$row_x', '$tok_x', 'sent', null, 8);
+commit;
+SQL
+pid_f=$!
+sleep 1
+$PSQL -At -q -v ON_ERROR_STOP=1 >"$log_g" 2>&1 <<'SQL' &
+select coalesce((select id::text from public.fn_notification_email_claim(30, 8) limit 1), 'none');
+SQL
+pid_g=$!
+wait "$pid_f"; wait "$pid_g"
+state_x="$($PSQL -At -q -v ON_ERROR_STOP=1 -c "select status || ':' || coalesce(claim_token::text, '-') from public.notification_deliveries where id = '$row_x'")"
+if [ "$state_x" != "sent:-" ] || grep -q "$row_x" "$log_g"; then
+  echo "FAIL: a settled row was reclaimed or resurrected (state=$state_x)" >&2
+  echo "--- settle" >&2; cat "$log_f" >&2; echo "--- reclaim" >&2; cat "$log_g" >&2
+  exit 1
+fi
+rm -f "$log_f" "$log_g"
+
+# ── C2O-092 #5b · a claimant that waited behind the scheduler lock longer than a lease still gets a full lease ──
+$PSQL -q -v ON_ERROR_STOP=1 <<SQL
+select public.fn_notification_enqueue('$u2', 'fixture.ttl-race', 'fixture:ttl-race:1', 'TTL race', 'TTL race.', null, 'urgent');
+update public.notification_deliveries d set next_attempt_at = now() - interval '1 minute'
+  from public.notifications n where n.id = d.notification_id and n.dedupe_key = 'fixture:ttl-race:1';
+SQL
+log_h="$(mktemp)"; log_i="$(mktemp)"
+$PSQL -At -q -v ON_ERROR_STOP=1 >"$log_h" 2>&1 <<'SQL' &
+begin;
+select pg_advisory_xact_lock(1095978574);
+select pg_sleep(32);
+commit;
+SQL
+pid_h=$!
+sleep 1
+$PSQL -At -q -v ON_ERROR_STOP=1 >"$log_i" 2>&1 <<'SQL' &
+begin;
+-- the claim and the read are separate statements: one statement's snapshot predates its own claim's update
+create temp table ttl_claim on commit drop as select x.id from public.fn_notification_email_claim(30, 8) x;
+select extract(epoch from (c.lease_until - clock_timestamp()))::int
+  from ttl_claim x join public.notification_deliveries c on c.id = x.id;
+commit;
+SQL
+pid_i=$!
+wait "$pid_h"; wait "$pid_i"
+left_s="$(grep -E '^-?[0-9]+$' "$log_i" | head -1 || true)"
+if [ -z "$left_s" ] || [ "$left_s" -lt 25 ]; then
+  echo "FAIL: a claimant that waited behind the lock got a stale lease (seconds left: ${left_s:-none})" >&2
+  cat "$log_i" >&2
+  $PSQL -At -c "select n.dedupe_key, d.status, d.next_attempt_at > now(), d.lease_until, d.attempts from public.notification_deliveries d join public.notifications n on n.id = d.notification_id order by d.created_at" >&2
+  exit 1
+fi
+rm -f "$log_h" "$log_i"
+
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL
 set session_replication_role = replica;
 delete from public.notification_deliveries where notification_id in (

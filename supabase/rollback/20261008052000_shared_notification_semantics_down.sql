@@ -1,25 +1,38 @@
 -- DOWN for true digest batching and durable expired in-app notifications.
--- Refuse to collapse a populated digest into the old one-message-per-row model.
+-- Refuse to collapse a populated digest into the old one-message-per-row model. History loss here is limited to
+-- digest batches and the deliveries' digest link, and is refused while any exists (C2O-092 #8); notifications,
+-- deliveries and preferences themselves are kept (the base DOWN guards those).
 
+-- Only where 20261008052000 was applied (its digest table exists); in a chain that never received it, this DOWN is a
+-- no-op (psql \if), so a DOWN chain may meet either state.
+select to_regclass('public.notification_digest_batches') is not null as ntf_semantics_applied \gset
+\if :ntf_semantics_applied
 set local lock_timeout = '5s';
 set local statement_timeout = '10min';
 
 do $$
 begin
-  if exists (select 1 from public.notification_deliveries where digest_batch_id is not null)
-     or exists (select 1 from public.notification_digest_batches) then
-    raise exception using
-      errcode = '55000',
-      message = 'DOWN refused: notification digest batches still contain delivery state';
+  -- applied or not: on a database that never received 20261008052000 there is no digest state to protect
+  -- nested, so the digest objects are planned only where they exist
+  if to_regclass('public.notification_digest_batches') is not null then
+    -- the same export confirmation as the base DOWN (C2O-092 #8) lets an exported history go
+    if (exists (select 1 from public.notification_digest_batches)
+        or exists (select 1 from public.notification_deliveries where digest_batch_id is not null))
+       and coalesce(current_setting('asb.notifications_down', true), '') !~ '^history-exported:.{3,200}$' then
+      raise exception using
+        errcode = '55000',
+        message = 'DOWN refused: notification digest batches still contain delivery state; export them, then set asb.notifications_down = ''history-exported:<ref>'' in this transaction';
+    end if;
   end if;
 end;
 $$;
 
+drop function if exists public.get_my_notification_preferences();
 drop function if exists public.fn_notification_email_settle(text, uuid, uuid, text, text, integer);
 drop function if exists public.fn_notification_email_snapshot(text, uuid, uuid, integer);
 drop function if exists public.fn_notification_email_claim(integer, integer);
 
-drop function public.list_my_notifications(integer, timestamptz);
+drop function if exists public.list_my_notifications(integer, timestamptz);
 create function public.list_my_notifications(
   p_limit integer default 30,
   p_before timestamptz default null
@@ -156,9 +169,9 @@ begin
 end;
 $$;
 
-alter table public.notification_deliveries drop column digest_batch_id;
-drop table public.notification_digest_batches;
-drop function public.fn_notification_digest_window(timestamptz, integer);
+alter table public.notification_deliveries drop column if exists digest_batch_id;
+drop table if exists public.notification_digest_batches;
+drop function if exists public.fn_notification_digest_window(timestamptz, integer);
 comment on column public.notifications.expires_at is null;
 
 revoke all on function public.list_my_notifications(integer, timestamptz) from public, anon, authenticated;
@@ -166,3 +179,6 @@ grant execute on function public.list_my_notifications(integer, timestamptz) to 
 grant select on table public.notifications to service_role;
 grant execute on function public.fn_notification_delivery_claim(integer, integer, integer) to service_role;
 grant execute on function public.fn_notification_delivery_settle(uuid, uuid, boolean, text, integer) to service_role;
+\else
+\echo 'shared notification semantics DOWN: 20261008052000 is not applied here; nothing to undo'
+\endif

@@ -4,6 +4,7 @@
 // tabbed (Account & Profile / Preferences / Security & Privacy / Subscription),
 // two-column settings-card grid. Uses the real signed-in account (no demo
 // identity) and the existing server actions so editing is fully wired.
+import { NotificationDeliveryCard } from "./NotificationDeliveryCard";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -495,6 +496,7 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
                   <ToggleRow key={k} label={label} on={notifs[k]} onToggle={() => toggleNotif(k)} />
                 ))}
               </div>
+              <NotificationDeliveryCard />
               {/* Vessel position check-in reminder (Pre_Final §13) — shares its
                   source of truth with the popup via PosCheckinFreqRow. */}
               <div className="settings-card">

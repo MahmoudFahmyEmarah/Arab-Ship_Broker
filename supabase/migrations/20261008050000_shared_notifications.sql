@@ -1,7 +1,7 @@
 -- Shared member notifications: private-by-default records plus a leased,
 -- service-only email delivery queue. Fixture Room owns masking-aware event
 -- projection; this core accepts only render-ready safe snapshots.
--- DOWN: supabase/rollback/20260923350000_shared_fixture_services_down.sql
+-- DOWN: supabase/rollback/20261008050000_shared_fixture_services_down.sql
 
 set local lock_timeout = '5s';
 set local statement_timeout = '10min';

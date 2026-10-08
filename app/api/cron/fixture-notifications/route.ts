@@ -8,12 +8,25 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+/**
+ * The cron bearer secret, or the database timer's own token (pg_cron + pg_net, 20261008110000): minted into Vault
+ * per environment and compared inside the database, so the secret never leaves it.
+ */
+async function authorized(req: NextRequest, client: ReturnType<typeof getSupabaseAdminClient>): Promise<boolean> {
+  const header = req.headers.get("authorization");
+  if (cronAuthorized(header)) return true;
+  const token = /^Bearer (\S{32,200})$/.exec(header ?? "")?.[1];
+  if (!token) return false;
+  const { data, error } = await client.rpc("fn_notification_dispatch_token_matches", { p_token: token });
+  return !error && data === true;
+}
+
 async function run(req: NextRequest) {
-  if (!cronAuthorized(req.headers.get("authorization"))) {
+  const client = getSupabaseAdminClient();
+  if (!(await authorized(req, client))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const client = getSupabaseAdminClient();
   // Leave 15 seconds for the claim settlement and job-run finalisation inside
   // the platform's 60-second function limit.
   const deadlineAt = Date.now() + 45_000;

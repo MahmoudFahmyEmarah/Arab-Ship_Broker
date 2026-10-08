@@ -15,13 +15,24 @@ const REF = "FX-2026-00042";
 const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 const actors: NotifyActor[] = [{ side: "cargo", isPlatform: false }, { side: "vessel", isPlatform: false }, { side: "mediator", isPlatform: true }, { side: null, isPlatform: false }];
-const term = { termLabel: "Freight & terms", termCode: "freight" };
+const term = { termLabel: "Freight & terms", termCode: "freight", valueKind: "money_per_mt" };
+const hostile = "Call Tasos +30 690 111 2222 tasos@secret.gr, Secret Owners SA, MV HIDDEN <b>x</b>";
+const textTerm = { termLabel: "Cargo & grade", termCode: "cargo_grade", valueKind: "text" };
+const portTerm = { termLabel: "Ports", termCode: "ports", valueKind: "port_pair" };
 const cases: [FixtureEventType, Record<string, unknown>][] = [
   ["party.invited", { partyId: "x", isPlatform: false }], ["party.accepted", {}],
   ["proposal.submitted", { ...term, kind: "bid", displayValue: "$25.00/MT", isFinal: false }],
   ["proposal.submitted", { ...term, kind: "offer", displayValue: "$27.00/MT", isFinal: true, expiresAt: "2026-10-08T12:00:00Z" }],
   ["proposal.submitted", { termCode: "freight", kind: "offer", displayValue: "$26/MT", expiresAt: null }],
   ["proposal.submitted", { kind: "bid", displayValue: "x" }],
+  ["proposal.submitted", { ...textTerm, kind: "offer", displayValue: hostile, value: { text: hostile } }],
+  ["proposal.submitted", { ...portTerm, portsVerified: true, kind: "bid", displayValue: "Tasos jetty → Secret berth", value: { load: "EGALY", disch: "ZZFXB", load_name: "Tasos jetty" } }],
+  ["proposal.submitted", { ...portTerm, portsVerified: false, kind: "bid", displayValue: "x", value: { load: "Tasos", disch: "ZZFXB" } }],
+  ["proposal.submitted", { ...portTerm, kind: "bid", displayValue: "x", value: { load: "TASOS", disch: "ZZFXB" } }],
+  ["term.agreed", { ...textTerm, displayValue: hostile }], ["term.bridge_suggested", { ...textTerm, displayValue: hostile }],
+  ["proposal.submitted", { termCode: "ld_rates", valueKind: "rate_pair", kind: "offer", displayValue: "8,000 / 6,000 MT/day" }],
+  ["proposal.submitted", { termCode: "laycan", valueKind: "date_range", kind: "bid", displayValue: "05 – 12 Oct" }],
+  ["proposal.submitted", { termCode: "quantity", valueKind: "number", kind: "bid", displayValue: "26,000 MT" }],
   ["proposal.lapsed", { ...term, side: "vessel", displayValue: "$27.00/MT" }],
   ["term.agreed", { ...term, displayValue: "$26.00/MT" }], ["term.reopened", { ...term, reason: "call Tasos" }],
   ["term.referred", term], ["term.bridge_suggested", { ...term, displayValue: "$26.25/MT", comment: "call Tasos on +30 690" }],
@@ -57,4 +68,7 @@ out.forEach((line, i) => {
   checked++;
 });
 const notifying = expected.filter(Boolean).length;
+const all = out.join(String.fromCharCode(10));
+const leaks = out.filter((l) => /tasos|\+30|secret|hidden|<b>/i.test(l));
+assert.ok(leaks.length === 0, `no free text reaches any SQL-produced message: ${leaks.join(" | ")}`);
 console.log(`FIXTURE NOTIFY PARITY: ${checked} cases identical (${notifying} notify, ${checked - notifying} silent) across ${actors.length} actor kinds`);

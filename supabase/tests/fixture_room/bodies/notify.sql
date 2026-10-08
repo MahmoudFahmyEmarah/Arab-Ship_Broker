@@ -41,9 +41,9 @@ begin
   v_tid := pg_temp.fx_term(v_room, 'freight');
   v := public.submit_fixture_proposal(v_room, v_tid, '{"num": 26.5}'::jsonb, null, false, 30, pg_temp.fx_ver(v_room), 'ntf-offer');
   perform pg_temp.fx_owner();
-  select count(*) into n from public.notifications x where x.recipient_user_id = pg_temp.fx_id('u_ch1') and x.kind = 'fixture.proposal.submitted' and x.importance = 'urgent' and x.expires_at is null and x.payload->>'deadlineAt' is not null and x.href like '%#term-freight';
+  select count(*) into n from public.notifications x where x.recipient_user_id = pg_temp.fx_id('u_ch1') and x.kind = 'fixture.proposal.submitted' and x.importance = 'urgent' and x.expires_at is not null and x.expires_at = (x.payload->>'deadlineAt')::timestamptz and x.href like '%#term-freight';
   if n <> 1 then raise exception 'N3: the charterer must get one urgent offer with a deadline and a term link, got %', n; end if;
-  raise notice 'N3 ok: an offer with validity is urgent, carries its deadline, stays in the bell, and is deep-linked';
+  raise notice 'N3 ok: an offer with validity is urgent, its deadline is the email cutoff (the bell keeps it, marked expired later), deep-linked';
 
   -- N4 · a side-private message notifies no one
   perform pg_temp.fx_as('u_ow1');
@@ -95,7 +95,7 @@ begin
   if public.fn_fixture_notify_rule('room.fix_confirmed', '{"awaitingSide": "vessel"}'::jsonb, 'Charterer side', 'FX-1', v_room)->>'audience' <> 'other_side'
      or public.fn_fixture_notify_rule('room.fix_confirmed', '{}'::jsonb, 'Charterer side', 'FX-1', v_room) is not null
      or public.fn_fixture_notify_rule('subject.reinstated', '{"seq": 2}'::jsonb, 'Owner side', 'FX-1', v_room)->>'body' <> 'A term was reopened, so subject 2 is open again.'
-     or public.fn_fixture_notify_rule('room.window_extended', '{}'::jsonb, 'Arab ShipBroker', 'FX-1', v_room) is not null
+     or public.fn_fixture_notify_rule('room.window_extended', '{}'::jsonb, 'Arab ShipBroker', 'FX-1', v_room)->>'audience' <> 'both_sides'
      or public.fn_fixture_notify_rule('message.posted', '{"visibility": "mediator"}'::jsonb, 'Owner side', 'FX-1', v_room) is not null then
     raise exception 'N8: rule shapes'; end if;
   raise notice 'N8 ok: the second fix confirmation and private messages notify no one; reinstated subjects name only their number';
@@ -119,4 +119,56 @@ begin
     raise exception 'N9: an inactive member must not be notified'; end if;
   update public.users set is_active = true where id = pg_temp.fx_id('u_ch1');
   raise notice 'N9 ok: a failing core never breaks a command (the event commits, a warning is logged); inactive members are never recipients';
+
+  -- N12 · the failure of N9 is recorded and replayed: once the core is back, reconcile writes the notification
+  if not exists (select 1 from public.fixture_notification_projections pr join public.fixture_events e on e.id = pr.event_id
+                  where e.idempotency_key = 'ntf-broken-core' and pr.status = 'failed') then
+    raise exception 'N12: the failed projection must be recorded'; end if;
+  v := public.fn_fixture_notify_reconcile(50);
+  if (v->>'done')::int < 1 or exists (select 1 from public.fixture_notification_projections where status <> 'done') then raise exception 'N12: reconcile must replay it: %', v; end if;
+  if not exists (select 1 from public.notifications x join public.fixture_events e on x.dedupe_key = 'fixture:' || e.id
+                  where e.idempotency_key = 'ntf-broken-core' and x.recipient_user_id = pg_temp.fx_id('u_ch1')) then
+    raise exception 'N12: the replayed notification must exist'; end if;
+  v := public.fn_fixture_notify_reconcile(50);
+  if (v->>'retried')::int <> 0 then raise exception 'N12: a done projection is not replayed twice'; end if;
+  raise notice 'N12 ok: a failed projection is recorded and replayed once by reconcile — never lost';
+
+  -- N10 · free text never leaves the room: a hostile text value and member-typed port names
+  perform pg_temp.fx_as('u_ow1');
+  v := public.submit_fixture_proposal(v_room, pg_temp.fx_term(v_room, 'cargo_grade'),
+         jsonb_build_object('text', 'Call Tasos Papadakis +30 690 111 2222 tasos@secret-owners.gr, Secret Owners SA, MV HIDDEN STAR <script>x</script>'),
+         null, false, null, pg_temp.fx_ver(v_room), 'ntf-hostile-text');
+  v := public.submit_fixture_proposal(v_room, pg_temp.fx_term(v_room, 'ports'),
+         '{"load": "ZZFXA", "disch": "ZZFXB", "load_name": "Tasos private jetty", "disch_name": "Secret Owners SA berth"}'::jsonb,
+         null, false, null, pg_temp.fx_ver(v_room), 'ntf-hostile-ports');
+  perform pg_temp.fx_as('u_ch1');
+  v := public.submit_fixture_proposal(v_room, pg_temp.fx_term(v_room, 'ports'),
+         '{"load": "TASOS", "disch": "ZZFXB", "load_name": "x", "disch_name": "y"}'::jsonb,
+         null, false, null, pg_temp.fx_ver(v_room), 'ntf-fake-code');
+  perform pg_temp.fx_as('u_ow1');
+  perform pg_temp.fx_owner();
+  select string_agg(x.title || ' ' || x.body || ' ' || x.payload::text, E'\n') into t from public.notifications x
+   where x.payload->>'roomId' = v_room::text and x.dedupe_key in (select 'fixture:' || e.id from public.fixture_events e where e.idempotency_key in ('ntf-hostile-text', 'ntf-hostile-ports', 'ntf-fake-code'));
+  if t is null or t ~* '(tasos|papadakis|\+30|secret|hidden star|<script|jetty|berth)' then raise exception 'N10: free text reached a notification: %', t; end if;
+  if t !~ 'a new wording' or t !~ 'ZZFXA → ZZFXB' or t !~ 'new ports' then raise exception 'N10: generic wording, registered LOCODEs and "new ports" for a fake code expected: %', t; end if;
+  raise notice 'N10 ok: a hostile text value and member-typed port names never reach a notification (generic wording, bare UN/LOCODEs)';
+end $$;
+
+-- N11 · a relayed side (a contact-backed charterer, no member seat) is represented by the mediator desk, which hears
+do $$
+declare v jsonb; v_room uuid; n int;
+begin
+  if to_regprocedure('public.fn_notification_enqueue(uuid, text, text, text, text, text, text, jsonb, boolean, timestamptz, timestamptz)') is null then
+    raise notice 'N11 skipped: no core'; return;
+  end if;
+  perform pg_temp.fx_as('u_ow1');
+  v := pg_temp.fx_create(pg_temp.fx_id('c4'), pg_temp.fx_id('a1'), pg_temp.fx_terms(), 'ntf-relayed-create', '{}'::jsonb);
+  v_room := (v->'data'->>'roomId')::uuid;
+  v := public.submit_fixture_proposal(v_room, pg_temp.fx_term(v_room, 'freight'), '{"num": 31}'::jsonb, null, false, null, pg_temp.fx_ver(v_room), 'ntf-relayed-offer');
+  perform pg_temp.fx_owner();
+  select count(*) into n from public.notifications x where x.kind = 'fixture.proposal.submitted' and x.payload->>'roomId' = v_room::text and x.recipient_user_id = pg_temp.fx_id('u_adm');
+  if n <> 1 then raise exception 'N11: the mediator desk must hear the offer to the relayed side, got %', n; end if;
+  if exists (select 1 from public.notifications x where x.payload->>'roomId' = v_room::text and (x.title || x.body) ~* 'seed brokers|desk@') then
+    raise exception 'N11: the relayed principal must stay masked'; end if;
+  raise notice 'N11 ok: an offer to a relayed side reaches the mediator desk, masked';
 end $$;

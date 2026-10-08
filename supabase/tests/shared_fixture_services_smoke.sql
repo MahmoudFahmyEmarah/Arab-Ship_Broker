@@ -207,9 +207,9 @@ begin
     raise exception 'N5: same recipient/window did not form one digest batch';
   end if;
 
-  -- Model an item that was valid when the envelope was first rendered but
-  -- expires before an ambiguous SMTP attempt is reclaimed. The original
-  -- envelope must remain byte-stable under its stable Message-ID.
+  -- Model an item that was valid when the envelope was first rendered but expires before an ambiguous SMTP
+  -- attempt is reclaimed. C2O-092 #2: the frozen envelope is then obsolete — it is never re-sent; its still-valid
+  -- items go out in a successor envelope (a new id, so a new Message-ID) and the expired item is suppressed.
   insert into public.notifications
     (recipient_user_id, dedupe_key, kind, importance, title, body, in_app_visible, expires_at)
   values
@@ -235,9 +235,18 @@ begin
   update public.notification_deliveries set next_attempt_at = now() - interval '1 minute'
    where notification_id = n8;
 
+  -- C2O-092 #6: an urgent item is claimed before an older due digest (no digest backlog starves it)
+  select * into j from public.fn_notification_email_claim(600, 8);
+  if j.job_kind <> 'instant' or j.id <> (select d.id from public.notification_deliveries d where d.notification_id = n8) then
+    raise exception 'N5: an urgent item must be claimed before an older due digest';
+  end if;
+  -- park the urgent item (back to queued, an hour away) so the digest checks below run on their own; it is made
+  -- due again before the bounded-failure check
+  update public.notification_deliveries set status = 'queued', claim_token = null, lease_until = null, attempts = 0,
+         next_attempt_at = now() + interval '1 hour' where id = j.id;
   select * into j from public.fn_notification_email_claim(600, 8);
   if j.job_kind <> 'digest' or j.id <> digest_batch or j.claim_token is null or j.attempts <> 1 then
-    raise exception 'N5: due digest envelope not claimed first';
+    raise exception 'N5: due digest envelope not claimed next';
   end if;
   select jsonb_agg(to_jsonb(s) order by s.created_at, s.id)
     into first_snapshot
@@ -268,23 +277,29 @@ begin
   perform pg_sleep(5.1);
   update public.notification_digest_batches set lease_until = now() - interval '1 second' where id = j.id;
   select * into j from public.fn_notification_email_claim(600, 8);
-  if j.job_kind <> 'digest' or j.claim_token = first_token or j.attempts <> 2 then
-    raise exception 'N5: expired digest lease was not reclaimed safely';
+  if j.job_kind <> 'digest' or j.id = digest_batch or j.claim_token = first_token or j.attempts <> 1 then
+    raise exception 'N5: the obsolete envelope must be succeeded, not re-sent (claimed % attempt %)', j.id, j.attempts;
+  end if;
+  if (select status from public.notification_digest_batches where id = digest_batch) <> 'suppressed'
+     or (select generation from public.notification_digest_batches where id = j.id) <> 1
+     or (select status from public.notification_deliveries where notification_id = n_retry_expiring) <> 'suppressed' then
+    raise exception 'N5: the obsolete envelope is closed, its expired item suppressed, the successor is generation 1';
   end if;
   select jsonb_agg(to_jsonb(s) order by s.created_at, s.id)
     into retry_snapshot
     from public.fn_notification_email_snapshot('digest', j.id, j.claim_token, 25) s;
-  if retry_snapshot is distinct from first_snapshot
-     or (select snapshot_at from public.notification_digest_batches where id = digest_batch) is distinct from first_snapshot_at then
-    raise exception 'N5: digest retry changed the frozen envelope under one message id';
+  if jsonb_array_length(retry_snapshot) <> 2 or retry_snapshot::text like '%Digest retry expiry%' then
+    raise exception 'N5: the successor carries exactly the two still-valid items';
   end if;
   if not public.fn_notification_email_settle('digest', j.id, j.claim_token, 'sent', null, 8) then
     raise exception 'N5: valid digest claim did not settle';
   end if;
-  if (select count(*) from public.notification_deliveries where digest_batch_id = digest_batch and status = 'sent') <> 3
+  if (select count(*) from public.notification_deliveries where digest_batch_id = j.id and status = 'sent') <> 2
      or (select status from public.notification_deliveries where notification_id = n_late) <> 'queued' then
     raise exception 'N5: digest children did not settle together';
   end if;
+  -- the urgent item is due again for the bounded-failure check
+  update public.notification_deliveries set next_attempt_at = now() - interval '1 minute' where notification_id = n8;
 
   select * into j from public.fn_notification_email_claim(600, 1);
   if j.job_kind <> 'instant'
@@ -317,5 +332,81 @@ begin
   perform pg_temp.ntf_owner();
 
   raise notice 'SHARED FIXTURE SERVICES SMOKE: ALL ASSERTIONS PASSED';
+end;
+$$;
+
+-- ── C2O-092 #2/#6/#7 · urgent first, email off stops queued work, an obsolete retry is succeeded, preferences read ──
+do $$
+declare u2 uuid := '10000000-0000-4000-8000-000000000002'; u3 uuid := '10000000-0000-4000-8000-000000000003';
+        r record; v_old uuid; v_new uuid; j jsonb; n int;
+begin
+  perform pg_temp.ntf_owner();
+  update public.users set is_active = true where id = u2;   -- the inactive-recipient checks above left u2 inactive
+  insert into auth.users (id, email, aud, role) values (u3, 'ntf-three@test.invalid', 'authenticated', 'authenticated') on conflict (id) do nothing;
+  insert into public.users (id, supabase_user_id, email, full_name, role, subscription_tier, is_active)
+  values (u3, u3, 'ntf-three@test.invalid', 'Notification Three', 'broker', 'T3', true) on conflict (id) do nothing;
+  update public.notification_deliveries set status = 'sent', claim_token = null, lease_until = null where status in ('queued', 'sending');
+  update public.notification_digest_batches set status = 'sent', claim_token = null, lease_until = null where status in ('queued', 'sending');
+
+  -- urgent first: an older normal instant item (member on instant) and a newer urgent one; the urgent is claimed first
+  insert into public.notification_preferences (user_id, email_mode) values (u3, 'instant') on conflict (user_id) do update set email_mode = 'instant';
+  perform public.fn_notification_enqueue(u3, 'proof.normal', 'proof:prio:normal', 'Normal', 'Normal.', null, 'normal');
+  perform public.fn_notification_enqueue(u3, 'proof.urgent', 'proof:prio:urgent', 'Urgent', 'Urgent.', null, 'urgent');
+  update public.notification_deliveries d set next_attempt_at = now() - case when n.dedupe_key = 'proof:prio:normal' then interval '10 minutes' else interval '1 minute' end
+    from public.notifications n where n.id = d.notification_id and n.recipient_user_id = u3;
+  select * into r from public.fn_notification_email_claim(60, 8) limit 1;
+  if (select n.dedupe_key from public.notification_deliveries d join public.notifications n on n.id = d.notification_id where d.id = r.id) <> 'proof:prio:urgent' then
+    raise exception 'P1: the urgent item must be claimed before an older normal one'; end if;
+  raise notice 'P1 ok: an urgent item is claimed before an older normal backlog';
+
+  -- email off stops queued work, also what is already waiting
+  update public.notification_preferences set email_mode = 'off' where user_id = u3;
+  perform public.fn_notification_email_claim(60, 8);
+  if exists (select 1 from public.notification_deliveries d join public.notifications n on n.id = d.notification_id
+              where n.recipient_user_id = u3 and d.status = 'queued') then raise exception 'P2: email off must suppress queued work'; end if;
+  if (select d.last_error from public.notification_deliveries d join public.notifications n on n.id = d.notification_id where n.dedupe_key = 'proof:prio:normal') <> 'suppressed because the member turned email off' then
+    raise exception 'P2: the suppression must say why'; end if;
+  raise notice 'P2 ok: turning email off suppresses work already queued';
+
+  -- an obsolete retry: a frozen digest whose item expired since its snapshot is succeeded (new id) and never re-sent
+  delete from public.notification_preferences where user_id = u2;
+  perform public.fn_notification_enqueue(u2, 'proof.digest', 'proof:dg:keep', 'Keep', 'Keep.', null, 'normal');
+  select b.id into v_old from public.notification_digest_batches b where b.recipient_user_id = u2 and b.status = 'queued' order by b.created_at desc limit 1;
+  -- an item valid at the first render that expires before the retry (enqueue would keep it out of the window, so
+  -- it is placed as N5 does)
+  with x as (
+    insert into public.notifications (recipient_user_id, dedupe_key, kind, importance, title, body, in_app_visible, expires_at)
+    values (u2, 'proof:dg:expire', 'proof.digest', 'normal', 'Expire', 'Expire.', true, clock_timestamp() + interval '3 seconds')
+    returning id)
+  insert into public.notification_deliveries (notification_id, channel, status, next_attempt_at, digest_batch_id)
+  select x.id, 'email', 'queued', now() - interval '1 minute', v_old from x;
+  update public.notification_digest_batches set next_attempt_at = now() - interval '1 minute' where id = v_old;
+  select * into r from public.fn_notification_email_claim(60, 8) limit 1;   -- first attempt: frozen snapshot
+  if r.id is distinct from v_old then raise exception 'P3: setup must claim the digest (got %)', r.id; end if;
+  perform public.fn_notification_email_snapshot('digest', v_old, r.claim_token, 25);
+  perform public.fn_notification_email_settle('digest', v_old, r.claim_token, 'failed', 'smtp down', 8);   -- first send fails
+  perform pg_sleep(3);   -- the item expires (the ledger is immutable, so real time passes)
+  update public.notification_digest_batches set next_attempt_at = now() - interval '1 second' where id = v_old;
+  select * into r from public.fn_notification_email_claim(60, 8) limit 1;
+  select b.id into v_new from public.notification_digest_batches b where b.recipient_user_id = u2 and b.generation = 1;
+  if v_new is null or r.id is distinct from v_new then raise exception 'P3: the retry must claim a successor envelope (claimed %, successor %)', r.id, v_new; end if;
+  if (select status from public.notification_digest_batches where id = v_old) <> 'suppressed' then raise exception 'P3: the obsolete envelope must be closed'; end if;
+  if (select d.status from public.notification_deliveries d join public.notifications n on n.id = d.notification_id where n.dedupe_key = 'proof:dg:expire') <> 'suppressed'
+     or (select d.digest_batch_id from public.notification_deliveries d join public.notifications n on n.id = d.notification_id where n.dedupe_key = 'proof:dg:keep') <> v_new then
+    raise exception 'P3: the expired item is suppressed and the valid one moves to the successor'; end if;
+  raise notice 'P3 ok: a retry after an item expired sends a successor envelope (new id, so a new Message-ID) without it';
+
+  -- the member's preferences: defaults said out loud, then the saved value
+  perform pg_temp.ntf_as(u2);
+  j := public.get_my_notification_preferences();
+  if (j->>'isDefault')::boolean is not true or j->>'emailMode' <> 'digest' or (j->>'digestHourUtc')::int <> 7 or (j->>'urgentEmailsAtOnce')::boolean is not true then
+    raise exception 'P4: defaults expected: %', j; end if;
+  perform public.set_notification_preferences(true, 'off', 9);
+  j := public.get_my_notification_preferences();
+  if (j->>'isDefault')::boolean or j->>'emailMode' <> 'off' or (j->>'urgentEmailsAtOnce')::boolean then raise exception 'P4: saved value expected: %', j; end if;
+  perform pg_temp.ntf_owner();
+  if has_function_privilege('anon', 'public.get_my_notification_preferences()', 'execute') then raise exception 'P4: anon must not read preferences'; end if;
+  raise notice 'P4 ok: preferences read back the defaults, then the member''s choice';
+  raise notice 'SHARED FIXTURE SERVICES WAVE 4 SMOKE: ALL ASSERTIONS PASSED';
 end;
 $$;

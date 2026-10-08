@@ -53,9 +53,13 @@ CHAIN=(
   "$M/20261007100000_fixture_match_label.sql"
   "$M/20261007400000_fixture_bridge_suggestion.sql"
   "$M/20261007500000_fixture_room_lineage.sql"
+  # the shared notification core the projector writes into (C2O-092 #8); its recap-PDF bucket (051000) is the
+  # shared harness's concern and needs Supabase Storage
+  "$M/20261008050000_shared_notifications.sql"
+  "$M/20261008052000_shared_notification_semantics.sql"
   "$M/20261008100000_fixture_room_notifications.sql"
 )
-DOWNS=("supabase/rollback/20261008100000_fixture_room_notifications_down.sql" "supabase/rollback/20261007_fixture_room_lineage_down.sql" "supabase/rollback/20261007_fixture_bridge_suggestion_down.sql" "supabase/rollback/20261007_fixture_match_label_down.sql" "supabase/rollback/20261006_fixture_room_enforcement_down.sql" "supabase/rollback/20260923_fixture_room_down.sql")
+DOWNS=("supabase/rollback/20261008100000_fixture_room_notifications_down.sql" "supabase/rollback/20261008052000_shared_notification_semantics_down.sql" "supabase/rollback/20261008050000_shared_fixture_services_down.sql" "supabase/rollback/20261007_fixture_room_lineage_down.sql" "supabase/rollback/20261007_fixture_bridge_suggestion_down.sql" "supabase/rollback/20261007_fixture_match_label_down.sql" "supabase/rollback/20261006_fixture_room_enforcement_down.sql" "supabase/rollback/20260923_fixture_room_down.sql")
 
 # ── 0 · starting state (FR-L2) ──────────────────────────────────────────────
 if [ "$TARGET" = local ]; then
