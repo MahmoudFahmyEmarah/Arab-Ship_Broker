@@ -71,7 +71,7 @@ set session_replication_role = origin;
 select public.fn_refresh_matches();
 SQL
 }
-cleanup || exit 1
+{ cleanup && race_cleanup_notifications; } || exit 1
 { echo 'begin;'; cat "$SEED"; echo 'commit;'; } | $PSQL -q -v ON_ERROR_STOP=1 > /dev/null || { echo "seed failed"; exit 1; }
 # c6: a grain cargo of the charterer organisation that both the named hull (a1) and the TBN hull (a3) match
 $PSQL -q -v ON_ERROR_STOP=1 <<SQL > /dev/null || { echo "c6 seed failed"; cleanup; exit 1; }

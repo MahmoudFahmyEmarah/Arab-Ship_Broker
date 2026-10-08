@@ -61,8 +61,42 @@ race_stop_sessions() {
   wait 2>/dev/null
 }
 
+# Fixture notifications the run produced (needs the shared notification core; a no-op without it). The scripts'
+# cleanup deletes rooms and users with triggers off, so their notifications would stay behind as orphans: after it,
+# every fixture.* notification whose room or recipient no longer exists is the run's own residue on this disposable
+# database. Deliveries cascade; the core's snapshot guard is lifted inside the transaction and restored, and empty
+# digest batches of vanished recipients go too.
+race_cleanup_notifications() {
+  $PSQL -1 -q -X -v ON_ERROR_STOP=1 >"$LOGDIR/cleanup-notifications.log" 2>&1 <<'SQL' || { echo "NOTIFICATION CLEANUP FAILED:" >&2; cat "$LOGDIR/cleanup-notifications.log" >&2; return 1; }
+do $race_ntf$
+begin
+  if to_regclass('public.notifications') is null then return; end if;
+  execute 'alter table public.notifications disable trigger notifications_snapshot_guard';
+  execute $q$delete from public.notifications n where n.kind like 'fixture.%'
+    and (not exists (select 1 from public.users u where u.id = n.recipient_user_id)
+         or not exists (select 1 from public.fixture_rooms r where r.id::text = n.payload->>'roomId'))$q$;
+  execute 'alter table public.notifications enable trigger notifications_snapshot_guard';
+  if to_regclass('public.notification_digest_batches') is not null then
+    execute $q$delete from public.notification_digest_batches b
+      where not exists (select 1 from public.notification_deliveries d where d.digest_batch_id = b.id)
+        and not exists (select 1 from public.users u where u.id = b.recipient_user_id)$q$;
+  end if;
+end
+$race_ntf$;
+SQL
+}
+
+race_notification_residue() {
+  [ "$(race_q "select to_regclass('public.notifications') is not null")" = t ] || { echo 0; return 0; }
+  race_q "select count(*) from public.notifications n where n.kind like 'fixture.%'
+    and (not exists (select 1 from public.users u where u.id = n.recipient_user_id)
+         or not exists (select 1 from public.fixture_rooms r where r.id::text = n.payload->>'roomId'))"
+}
+
 race_assert_no_residue() {
-  local n
+  local n m
+  m="$(race_notification_residue)" || { echo "RESIDUE CHECK FAILED: notifications could not be counted" >&2; return 1; }
+  if [ "$m" != 0 ]; then echo "RESIDUE: $m fixture notification(s) about removed rooms or recipients survived" >&2; return 1; fi
   n="$(race_q "select (select count(*) from public.users where email like '%@fixture.test')
     + (select count(*) from auth.users where email like '%@fixture.test')
     + (select count(*) from public.fixture_rooms where cargo_listing_id::text like '00000000-0000-4000-8000-0000000000e_' or vessel_availability_id::text like '00000000-0000-4000-8000-0000000000b_')
@@ -79,6 +113,7 @@ race_assert_no_residue() {
 race_finish() { # $1 = suite label
   race_stop_sessions
   cleanup || { echo "$1: CLEANUP FAILED" >&2; exit 1; }
+  race_cleanup_notifications || { echo "$1: CLEANUP FAILED (notifications)" >&2; exit 1; }
   race_assert_no_residue || { echo "$1: FAILED (residue)" >&2; exit 1; }
   RACE_CLEAN=1
   if [ "$fail" = 0 ]; then echo "$1: ALL ASSERTIONS PASSED (cleanup proven, zero residue)"; else echo "$1: FAILED"; exit 1; fi
@@ -92,6 +127,7 @@ race_teardown() {
       race_stop_sessions
       if declare -F cleanup >/dev/null; then
         cleanup || { echo "TEARDOWN: CLEANUP FAILED" >&2; rc=1; }
+        race_cleanup_notifications || { echo "TEARDOWN: NOTIFICATION CLEANUP FAILED" >&2; rc=1; }
         race_assert_no_residue || rc=1
       fi
     fi
