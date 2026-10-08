@@ -1,4 +1,4 @@
--- DOWN for 20261008100000_pda_fx_hardening: restores the 20261007310000 resolver and service_role INSERT grant and the
+-- DOWN for 20261008200000_pda_fx_hardening: restores the 20261007310000 resolver and service_role INSERT grant and the
 -- 20261007320000 feed function (uuid return) byte for byte. Rows recorded meanwhile are governed history and stay.
 grant insert on table public.pda_fx_rates to service_role;
 

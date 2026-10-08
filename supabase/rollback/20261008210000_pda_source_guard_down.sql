@@ -1,4 +1,4 @@
--- DOWN for 20261008110000_pda_source_guard: restores service_role ALL on tariff_sources (baseline 20260923100000)
+-- DOWN for 20261008210000_pda_source_guard: restores service_role ALL on tariff_sources (baseline 20260923100000)
 -- and the 20260923101000 publication function byte for byte.
 grant all on table public.tariff_sources to service_role;
 

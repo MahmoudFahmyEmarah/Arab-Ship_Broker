@@ -72,7 +72,7 @@ begin
   if not has_function_privilege('authenticated', 'public.fn_pda_fx_rate(text, text, date)', 'execute') then raise exception 'FX5: members cannot resolve a rate'; end if;
   if has_function_privilege('anon', 'public.fn_pda_fx_rate(text, text, date)', 'execute') then raise exception 'FX5: anon can resolve a rate'; end if;
 
-  -- FX6 · direct first (20261008100000): an older direct row beats a newer reciprocal row, in both directions
+  -- FX6 · direct first (20261008200000): an older direct row beats a newer reciprocal row, in both directions
   perform public.pda_record_fx_rate(admin, '{"baseCurrency":"USD","quoteCurrency":"EUR","rate":0.8,"effectiveOn":"2024-10-07","sourceKind":"agent","sourceRef":"Agent quote 7 Oct 2024"}');
   fx := public.fn_pda_fx_rate('EUR', 'USD', '2024-10-08');
   if (fx->>'inverse')::boolean or (fx->>'rate')::numeric <> 1.10 then raise exception 'FX6: a newer inverse beat the direct EUR/USD rate: %', fx; end if;
