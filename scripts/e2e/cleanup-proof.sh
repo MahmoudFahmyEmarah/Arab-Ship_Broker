@@ -79,11 +79,13 @@ out=$(run eval 'cat "$ROWS"; echo "$PORT_ROWS"; PROOF_PORTS=ZYP01,ZYP03 cleanup 
 echo "F ok: this run's port is removed; a real port or another run's e2e port in the list is refused"
 # G · C2O-094 P1: a staff digest batch that also holds a legitimate item survives with it; one left empty is removed
 STAFF="00000000-0000-4000-8000-0000000000a5"
+G_RUN="select public.fn_notification_enqueue('$STAFF', 'fixture.proof', 'proof:run:g', 'Run', 'Run.', null, 'normal',
+  jsonb_build_object('roomId', (select id from public.fixture_rooms where cargo_listing_id = '00000000-0000-4000-8000-00000000e0e1' order by created_at limit 1)), true, null, null);"
 G_LEGIT="select public.fn_notification_enqueue('$STAFF', 'proof.legit', 'proof:legit:g', 'Legit', 'Legit.', null, 'normal');
 do \$\$ begin
   if not exists (select 1 from public.notification_deliveries d join public.notifications n on n.id = d.notification_id
                   where n.recipient_user_id = '$STAFF' and n.kind like 'fixture.%' and d.digest_batch_id is not null) then
-    raise exception 'G: setup — the run gave the staff member no digest item'; end if;
+    raise exception 'G: setup — the staff member has no digest item about the run'; end if;
   if not exists (select 1 from public.notification_deliveries a join public.notifications x on x.id = a.notification_id
                    join public.notification_deliveries b on b.digest_batch_id = a.digest_batch_id join public.notifications y on y.id = b.notification_id
                   where x.dedupe_key = 'proof:legit:g' and y.kind like 'fixture.%') then
@@ -102,9 +104,9 @@ G_GONE="do \$\$ begin
   raise notice 'G2 ok';
 end \$\$;"
 if [ "$($PSQL -At -c "select to_regclass('public.notification_digest_batches') is not null")" = t ]; then
-  out=$(run eval 'cat "$ROWS"; echo "$G_LEGIT"; cleanup teardown "$E2E_USERS"; echo "$G_KEPT"'); rc=$?; show "$out"
+  out=$(run eval 'cat "$ROWS"; echo "$G_RUN"; echo "$G_LEGIT"; cleanup teardown "$E2E_USERS"; echo "$G_KEPT"'); rc=$?; show "$out"
   [ $rc = 0 ] && echo "$out" | grep -q "G1 ok" || fail "case G1 (rc=$rc)"
-  out=$(run eval 'cat "$ROWS"; cleanup teardown "$E2E_USERS"; echo "$G_GONE"'); rc=$?; show "$out"
+  out=$(run eval 'cat "$ROWS"; echo "$G_RUN"; cleanup teardown "$E2E_USERS"; echo "$G_GONE"'); rc=$?; show "$out"
   [ $rc = 0 ] && echo "$out" | grep -q "G2 ok" || fail "case G2 (rc=$rc)"
   echo "G ok: an affected staff digest batch keeps its legitimate item; one left empty is removed"
 else
