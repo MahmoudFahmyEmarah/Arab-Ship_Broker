@@ -3,7 +3,7 @@
  *
  * The Supabase API that seeds rows and the database that removes them must be the SAME project. resolveTarget()
  * decides that once, from the environment, before any write:
- * - local  = the API host is exactly 127.0.0.1 or localhost; no hosted database URL may be set;
+ * - local  = the API origin is exactly http://127.0.0.1:54321 or http://localhost:54321; no hosted database URL may be set;
  * - hosted = the API host is exactly <ref>.supabase.co, E2E_ALLOW_REMOTE names that same ref, E2E_DB_URL is set and
  *            its user/host carry that same ref (pooler user postgres.<ref>, or db.<ref>.supabase.co), and a JWT service
  *            key, when given, was issued for that ref as service_role.
@@ -24,6 +24,12 @@ export interface E2ETarget {
   dbUrl: string | null;
 }
 
+export interface LocalE2ETarget extends E2ETarget {
+  kind: "local";
+  ref: null;
+  dbUrl: null;
+}
+
 export class E2ETargetError extends Error {
   constructor(msg: string) { super(`E2E_TARGET: ${msg}`); this.name = "E2ETargetError"; }
 }
@@ -42,12 +48,17 @@ export function resolveTarget(env: E2EEnv = process.env): E2ETarget {
   }
   let api: URL;
   try { api = new URL(apiUrl); } catch { throw new E2ETargetError("E2E_SUPABASE_URL is not a URL"); }
-  if (api.hostname === "127.0.0.1" || api.hostname === "localhost") {
+  const originOnly = !api.username && !api.password && api.pathname === "/" && !api.search && !api.hash;
+  const localHost = api.hostname === "127.0.0.1" || api.hostname === "localhost";
+  if (localHost) {
+    if (api.protocol !== "http:" || api.port !== "54321" || !originOnly) {
+      throw new E2ETargetError("a local API must be the exact default Supabase loopback origin on http port 54321, without credentials, path, query or fragment");
+    }
     if (env.E2E_DB_URL) throw new E2ETargetError("a local API with a hosted database URL (E2E_DB_URL) — seeds and teardown would hit different databases");
-    return { kind: "local", apiUrl, ref: null, dbUrl: null };
+    return { kind: "local", apiUrl: api.origin, ref: null, dbUrl: null };
   }
   const m = api.hostname.match(/^([a-z0-9]{20})\.supabase\.co$/);
-  if (!m || api.protocol !== "https:") throw new E2ETargetError(`only https://<ref>.supabase.co or the local stack may be seeded, not ${api.hostname}`);
+  if (!m || api.protocol !== "https:" || !originOnly) throw new E2ETargetError(`only an exact https://<ref>.supabase.co origin or the local stack may be seeded, not ${api.hostname}`);
   const ref = m[1];
   if (env.E2E_ALLOW_REMOTE !== ref) throw new E2ETargetError("E2E_ALLOW_REMOTE must name exactly the API's project ref");
   const dbUrl = env.E2E_DB_URL;
@@ -65,7 +76,31 @@ export function resolveTarget(env: E2EEnv = process.env): E2ETarget {
     if (p && (p.ref !== ref || p.role !== "service_role")) throw new E2ETargetError("the service key was not issued for this project as service_role");
   }
   if (!REF_RE.test(ref)) throw new E2ETargetError("malformed project ref");
-  return { kind: "hosted", apiUrl, ref, dbUrl };
+  return { kind: "hosted", apiUrl: api.origin, ref, dbUrl };
+}
+
+/** A destructive harness that is never allowed to use the hosted staging exception. */
+export function resolveLocalTarget(env: E2EEnv = process.env): LocalE2ETarget {
+  const target = resolveTarget(env);
+  if (target.kind !== "local") {
+    throw new E2ETargetError("this harness may seed only the exact local loopback stack");
+  }
+  return target as LocalE2ETarget;
+}
+
+/** The legacy global browser suite is local-only and must never submit its fixed credentials to a remote app. */
+export function resolveLocalAppOrigin(rawUrl: string): string {
+  let app: URL;
+  try { app = new URL(rawUrl); } catch { throw new E2ETargetError("E2E_BASE_URL is not a URL"); }
+  const originOnly = !app.username && !app.password && app.pathname === "/" && !app.search && !app.hash;
+  if (
+    app.protocol !== "http:"
+    || (app.hostname !== "127.0.0.1" && app.hostname !== "localhost")
+    || !originOnly
+  ) {
+    throw new E2ETargetError("the legacy browser suite requires an exact local http app origin");
+  }
+  return app.origin;
 }
 
 /** Supabase service paths a browser may call: Auth, REST, Storage, Edge Functions, GraphQL and Realtime. */

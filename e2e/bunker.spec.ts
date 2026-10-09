@@ -15,6 +15,7 @@ import { execSync } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createBoundTestUser } from "./e2e-auth";
 import { PASSWORD, apiClientAs, signInAs } from "./fixture-room.helpers";
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -44,7 +45,7 @@ function localKeys() {
   }
   if (!service) throw new Error("No local service key");
   assertTarget(url);
-  return { url, service };
+  return { url, service, target: { apiUrl: new URL(url).origin } };
 }
 
 // Target guard (O2B-010 P0). Local by default; hosted staging only when
@@ -73,7 +74,7 @@ function assertTarget(url: string) {
 }
 
 async function seed(): Promise<Seed> {
-  const { url, service } = localKeys();
+  const { url, service, target } = localKeys();
   const db: SupabaseClient = createClient(url, service, { auth: { persistSession: false } });
   const stamp = Date.now().toString(36);
   const createdUsers: string[] = [];
@@ -81,7 +82,7 @@ async function seed(): Promise<Seed> {
   try {
   const mk = async (prefix: string, admin: boolean) => {
     const email = `e2e-bk-${prefix}-${stamp}@arabshipbroker.test`;
-    const { data, error } = await db.auth.admin.createUser({
+    const { data, error } = await createBoundTestUser(db, target, {
       email, password: PASSWORD, email_confirm: true, app_metadata: { role: admin ? "admin" : "member" },
     });
     if (error || !data.user) throw new Error(`auth ${prefix}: ${error?.message}`);

@@ -1,7 +1,8 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import { isExactLoopbackUrl } from "../lib/pda/local-test-url";
+import { createBoundTestUser } from "./e2e-auth";
+import { resolveLocalTarget, type LocalE2ETarget } from "./e2e-db";
 
 const PASSWORD = "e2e-PDA-Passw0rd!";
 
@@ -20,16 +21,15 @@ interface PdaSeed {
   dischargePortName: string;
 }
 
-function localAdmin(): SupabaseClient {
-  const url = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
+function localAdmin(): { admin: SupabaseClient; target: LocalE2ETarget } {
+  const target = resolveLocalTarget();
   const key = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
-  if (!isExactLoopbackUrl(url)) throw new Error(`PDA browser test refuses to seed ${url}`);
   if (!key) throw new Error("E2E_SUPABASE_SERVICE_ROLE_KEY is required");
-  return createClient(url, key, { auth: { persistSession: false } });
+  return { admin: createClient(target.apiUrl, key, { auth: { persistSession: false } }), target };
 }
 
 async function seedPda(): Promise<PdaSeed> {
-  const admin = localAdmin();
+  const { admin, target } = localAdmin();
   const stamp = Date.now().toString(36);
   const email = `e2e-pda-${stamp}@arabshipbroker.test`;
   const vesselName = `E2E PDA VESSEL ${stamp.toUpperCase()}`;
@@ -40,7 +40,7 @@ async function seedPda(): Promise<PdaSeed> {
   const loadPortName = `E2E PDA PORT LOAD ${stamp.toUpperCase()}`;
   const dischargePortName = `E2E PDA PORT DISCHARGE ${stamp.toUpperCase()}`;
   const imo = String(1_000_000 + (Number.parseInt(stamp, 36) % 9_000_000));
-  const { data: auth, error: authError } = await admin.auth.admin.createUser({
+  const { data: auth, error: authError } = await createBoundTestUser(admin, target, {
     email,
     password: PASSWORD,
     email_confirm: true,
@@ -166,7 +166,7 @@ async function seedPda(): Promise<PdaSeed> {
 
 async function cleanupPda(seed: PdaSeed | null) {
   if (!seed) return;
-  const admin = localAdmin();
+  const { admin } = localAdmin();
   await admin.from("listing_ownership").delete().in("listing_id", [seed.cargoId, seed.availabilityId]);
   await admin.from("matches").delete().or(`cargo_id.eq.${seed.cargoId},vessel_avail_id.eq.${seed.availabilityId}`);
   await admin.from("vessel_availability").delete().eq("id", seed.availabilityId);
@@ -181,7 +181,7 @@ async function cleanupPda(seed: PdaSeed | null) {
 }
 
 async function cleanupDanglingPdaFixtures() {
-  const admin = localAdmin();
+  const { admin } = localAdmin();
   const { data: cargos } = await admin.from("cargo_listings").select("id").like("ref", "E2EPDA-%");
   const { data: vessels } = await admin.from("vessels").select("id").like("vessel_name", "E2E PDA VESSEL %");
   const cargoIds = (cargos ?? []).map((row) => row.id as string);

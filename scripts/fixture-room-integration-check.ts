@@ -22,6 +22,8 @@ import { execSync } from "node:child_process";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as sdk from "@/sdk/app/fixtures";
 import { buildTermCatalogue } from "@/lib/fixture-room/terms";
+import { createBoundTestUser } from "../e2e/e2e-auth";
+import { resolveLocalTarget } from "../e2e/e2e-db";
 
 let pass = 0, fail = 0;
 const ok = (c: boolean, label: string) => { if (c) { pass++; console.log(`  ok   ${label}`); } else { fail++; console.error(` FAIL  ${label}`); } };
@@ -34,8 +36,12 @@ function localEnv() {
     url = url ?? get("API_URL"); anon = anon ?? get("ANON_KEY"); service = service ?? get("SERVICE_ROLE_KEY");
   }
   if (!url || !anon || !service) throw new Error("no local Supabase keys (set E2E_SUPABASE_* or run the local stack)");
-  if (!/127\.0\.0\.1|localhost/.test(url)) throw new Error(`refusing to seed against ${url}: local stack only`);
-  return { url, anon, service };
+  const target = resolveLocalTarget({
+    ...process.env,
+    E2E_SUPABASE_URL: url,
+    E2E_SUPABASE_SERVICE_ROLE_KEY: service,
+  });
+  return { url: target.apiUrl, anon, service, target };
 }
 
 const stamp = Date.now().toString(36);
@@ -43,10 +49,11 @@ const stamp = Date.now().toString(36);
 const testImo = String(8_000_000 + (Number.parseInt(stamp, 36) % 999_999));
 const PASSWORD = "fx-Integration-Passw0rd!";
 const ids = { orgCh: "", orgOw: "", uCh: "", uOw: "", uOut: "", cargo: "", vessel: "", avail: "" };
+const sqlUuid = (value: string) => value ? `'${value}'::uuid` : "null::uuid";
 
-async function seed(admin: SupabaseClient) {
+async function seed(admin: SupabaseClient, target: ReturnType<typeof resolveLocalTarget>) {
   const mk = async (email: string, role: string, company: string) => {
-    const { data, error } = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
+    const { data, error } = await createBoundTestUser(admin, target, { email, password: PASSWORD, email_confirm: true });
     if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message}`);
     const { error: e2 } = await admin.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, full_name: `Integration ${role}`, company, role, subscription_tier: "T3", is_active: true });
     if (e2) throw new Error(`users insert: ${e2.message}`);
@@ -95,27 +102,45 @@ async function seed(admin: SupabaseClient) {
 }
 
 function cleanupSql() {
+  const users = [ids.uCh, ids.uOw, ids.uOut].map(sqlUuid).join(",");
+  const orgs = [ids.orgCh, ids.orgOw].map(sqlUuid).join(",");
+  const cargo = sqlUuid(ids.cargo);
+  const vessel = sqlUuid(ids.vessel);
+  const availability = sqlUuid(ids.avail);
   return `
 set session_replication_role = replica;
-delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}') or user_id in ('${ids.uCh}','${ids.uOw}','${ids.uOut}');
-delete from public.fixture_events where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}');
-delete from public.fixture_recap_versions where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}');
-delete from public.fixture_messages where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}');
-delete from public.fixture_subjects where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}');
-update public.fixture_terms set cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, agreed_proposal_id = null, status = 'open' where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}');
-delete from public.fixture_proposals where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}');
-delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}');
-delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where cargo_listing_id = '${ids.cargo}');
-delete from public.fixture_rooms where cargo_listing_id = '${ids.cargo}';
-delete from public.listing_ownership where listing_id in ('${ids.cargo}', '${ids.avail}');
-delete from public.matches where cargo_id = '${ids.cargo}' or vessel_avail_id = '${ids.avail}';
-delete from public.vessel_availability where id = '${ids.avail}';
-delete from public.vessels where id = '${ids.vessel}';
-delete from public.cargo_listings where id = '${ids.cargo}';
-delete from public.organization_members where user_id in ('${ids.uCh}','${ids.uOw}','${ids.uOut}');
-delete from public.users where id in ('${ids.uCh}','${ids.uOw}','${ids.uOut}');
-delete from auth.users where id in ('${ids.uCh}','${ids.uOw}','${ids.uOut}');
-delete from public.organizations where id in ('${ids.orgCh}','${ids.orgOw}');
+delete from public.fixture_access_log where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo}) or user_id in (${users});
+delete from public.fixture_events where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo});
+delete from public.fixture_recap_versions where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo});
+delete from public.fixture_messages where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo});
+delete from public.fixture_subjects where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo});
+update public.fixture_terms set cargo_proposal_id = null, vessel_proposal_id = null, last_proposal_id = null, agreed_proposal_id = null, status = 'open' where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo});
+delete from public.fixture_proposals where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo});
+delete from public.fixture_terms where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo});
+delete from public.fixture_parties where room_id in (select id from public.fixture_rooms where cargo_listing_id = ${cargo});
+delete from public.fixture_rooms where cargo_listing_id = ${cargo};
+delete from public.listing_ownership where listing_id in (${cargo}, ${availability});
+delete from public.matches where cargo_id = ${cargo} or vessel_avail_id = ${availability};
+delete from public.vessel_availability where id = ${availability};
+delete from public.vessels where id = ${vessel};
+delete from public.cargo_listings where id = ${cargo};
+delete from public.organization_members where user_id in (${users});
+delete from public.users where id in (${users});
+delete from auth.users where id in (${users});
+delete from public.organizations where id in (${orgs});
+do $cleanup$
+begin
+  if exists (select 1 from auth.users where id in (${users}))
+     or exists (select 1 from public.users where id in (${users}))
+     or exists (select 1 from public.organizations where id in (${orgs}))
+     or exists (select 1 from public.cargo_listings where id = ${cargo})
+     or exists (select 1 from public.vessels where id = ${vessel})
+     or exists (select 1 from public.vessel_availability where id = ${availability})
+     or exists (select 1 from public.fixture_rooms where cargo_listing_id = ${cargo}) then
+    raise exception 'Fixture integration cleanup left governed seed rows';
+  end if;
+end
+$cleanup$;
 `;
 }
 
@@ -127,10 +152,10 @@ async function signIn(url: string, anon: string, email: string): Promise<Supabas
 }
 
 async function main() {
-  const { url, anon, service } = localEnv();
+  const { url, anon, service, target } = localEnv();
   const admin = createClient(url, service, { auth: { persistSession: false } });
   try {
-    await seed(admin);
+    await seed(admin, target);
     const ch = await signIn(url, anon, `fx-ch-${stamp}@fixture.test`);
     const ow = await signIn(url, anon, `fx-ow-${stamp}@fixture.test`);
     const out = await signIn(url, anon, `fx-out-${stamp}@fixture.test`);
@@ -206,12 +231,8 @@ async function main() {
     const ver = await sdk.getFixtureRoomVersion(ch, roomId);
     ok(ver === (ack.ok ? ack.version : -1), "the version poll matches the last command");
   } finally {
-    try {
-      execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0", { input: cleanupSql(), stdio: ["pipe", "ignore", "ignore"] });
-      console.log("  cleanup done");
-    } catch (e) {
-      console.error("  cleanup failed:", e instanceof Error ? e.message : e);
-    }
+    execSync("docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -X -q -1 -v ON_ERROR_STOP=1", { input: cleanupSql(), stdio: ["pipe", "ignore", "pipe"] });
+    console.log("  cleanup done");
   }
   console.log(`\nFIXTURE ROOM INTEGRATION: ${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);

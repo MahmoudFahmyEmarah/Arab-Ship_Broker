@@ -13,7 +13,8 @@ import { expect, type Browser, type BrowserContext, type Page } from "@playwrigh
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { dbExec, dbQuery, dbTx, isForeignSupabaseRequest, isHostedTarget, resolveTarget } from "./e2e-db";
+import { createBoundTestUser } from "./e2e-auth";
+import { dbExec, dbQuery, dbTx, isForeignSupabaseRequest, isHostedTarget, resolveTarget, type E2ETarget } from "./e2e-db";
 import { cleanupSql, noneCreated, teardownAll, teardownRows, undoPartialSeed, type Created, type RecoveryClient } from "./e2e-cleanup";
 
 export { dbExec, dbQuery, dbTx, cleanupSql, teardownAll };
@@ -44,7 +45,7 @@ export interface FixtureSeed {
   portCodes: string[];
 }
 
-function keys(): { url: string; service: string; anon: string | null } {
+function keys(): { target: E2ETarget; url: string; service: string; anon: string | null } {
   const t = resolveTarget();
   let service = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY ?? null;
   let anon = process.env.E2E_SUPABASE_ANON_KEY ?? null;
@@ -54,40 +55,43 @@ function keys(): { url: string; service: string; anon: string | null } {
     anon ??= out.match(/^ANON_KEY="?([^"\n]+)"?/m)?.[1] ?? null;
   }
   if (!service) throw new Error(t.kind === "local" ? "no local service role key (E2E_SUPABASE_SERVICE_ROLE_KEY or `supabase status`)" : "a hosted run needs E2E_SUPABASE_SERVICE_ROLE_KEY");
-  return { url: t.apiUrl, service, anon };
+  return { target: t, url: t.apiUrl, service, anon };
 }
-const adminClient = () => { const k = keys(); return createClient(k.url, k.service, { auth: { persistSession: false } }); };
+const adminClient = () => {
+  const k = keys();
+  return { admin: createClient(k.url, k.service, { auth: { persistSession: false } }), target: k.target };
+};
 const must = (what: string, r: { error: { message: string } | null }) => { if (r.error) throw new Error(`${what}: ${r.error.message}`); };
 
 /** creates an Auth account with a pre-generated id, recorded (id and email) before the call */
-async function createAccount(admin: SupabaseClient, created: Created, email: string, attrs: Record<string, unknown> = {}): Promise<string> {
+async function createAccount(admin: SupabaseClient, target: E2ETarget, created: Created, email: string, attrs: Record<string, unknown> = {}): Promise<string> {
   const id = randomUUID();
   created.emails.push(email);
   created.userIds.push(id);
-  const { data, error } = await admin.auth.admin.createUser({ id, email, password: PASSWORD, email_confirm: true, ...attrs });
+  const { data, error } = await createBoundTestUser(admin, target, { id, email, password: PASSWORD, email_confirm: true, ...attrs });
   if (error || !data.user) throw new Error(`createUser ${email}: ${error?.message ?? "no user returned"}`);
   if (data.user.id !== id) { created.userIds.push(data.user.id); throw new Error(`createUser ${email}: the server ignored the pre-generated id`); }
   return id;
 }
 
 /** runs a seed; if it fails part-way, what it created is removed (or neutralised) and the failure re-raised */
-async function seeded<T>(work: (admin: SupabaseClient, created: Created) => Promise<T>): Promise<T> {
-  const admin = adminClient();
+async function seeded<T>(work: (admin: SupabaseClient, target: E2ETarget, created: Created) => Promise<T>): Promise<T> {
+  const { admin, target } = adminClient();
   const created = noneCreated();
   try {
-    return await work(admin, created);
+    return await work(admin, target, created);
   } catch (e) {
     return undoPartialSeed(admin as unknown as RecoveryClient, created, e);
   }
 }
 
 export async function seedFixture(): Promise<FixtureSeed> {
-  return seeded(async (admin, created) => {
+  return seeded(async (admin, target, created) => {
     const stamp = `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
     created.portStamp = stamp;
     const testImo = String(1_000_000 + (Number.parseInt(stamp.slice(-9), 36) % 9_000_000));
     const mk = async (email: string, role: string, company: string) => {
-      const userId = await createAccount(admin, created, email);
+      const userId = await createAccount(admin, target, created, email);
       must("users", await admin.from("users").insert({ id: userId, supabase_user_id: userId, email, full_name: `E2E ${role}`, company, role, subscription_tier: "T3", is_active: true }));
       const orgId = randomUUID();
       created.orgIds.push(orgId);
@@ -149,9 +153,9 @@ export async function seedFixture(): Promise<FixtureSeed> {
  * represents it through the organisation, so the match builder must offer it. Removed by cleanupSeat.
  */
 export async function seedOrgSeat(seed: FixtureSeed): Promise<{ email: string; userId: string }> {
-  return seeded(async (admin, created) => {
+  return seeded(async (admin, target, created) => {
     const email = `e2e-fx-seat-${seed.stamp}@arabshipbroker.test`;
-    const userId = await createAccount(admin, created, email);
+    const userId = await createAccount(admin, target, created, email);
     must("users (seat)", await admin.from("users").insert({ id: userId, supabase_user_id: userId, email, full_name: "E2E second seat", company: `E2E Charterers ${seed.stamp}`, role: "cargo_owner", subscription_tier: "T3", is_active: true }));
     must("seat membership", await admin.from("organization_members").insert({ org_id: seed.charterer.orgId, user_id: userId, member_role: "broker", is_current: true, status: "active" }));
     must("seat profile", await admin.from("profiles").insert({ account_id: userId, profile_type: "cargo", display_name: "E2E second seat", is_active: true }));
@@ -188,9 +192,9 @@ export interface AdminSeed { email: string; userId: string }
  * through the Auth admin API — the shared global setup seeds sub-admins without it. Removed by cleanupAdmin.
  */
 export async function seedAdmin(stamp: string): Promise<AdminSeed> {
-  return seeded(async (admin, created) => {
+  return seeded(async (admin, target, created) => {
     const email = `e2e-fx-adm-${stamp}@arabshipbroker.test`;
-    const userId = await createAccount(admin, created, email, { app_metadata: { role: "admin" } });
+    const userId = await createAccount(admin, target, created, email, { app_metadata: { role: "admin" } });
     must("users (admin)", await admin.from("users").insert({ id: userId, supabase_user_id: userId, email, full_name: "E2E Fixture Admin", company: "Arab ShipBroker", role: "admin", admin_tier: "super", subscription_tier: "T4", is_active: true }));
     return { email, userId };
   });
