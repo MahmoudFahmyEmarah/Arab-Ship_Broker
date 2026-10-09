@@ -158,6 +158,22 @@ export function notificationFor(type: FixtureEventType, ctx: NotifyContext): Not
       return { audience: "all", importance: "urgent", title: `${room}: ${subjectRef(p)} is overdue`,
         body: `${subjectRef(p)[0].toUpperCase()}${subjectRef(p).slice(1)} passed its deadline without being lifted. Nothing fails automatically: lift it, agree an extension or fail it.`,
         href: base, deadlineAt: null };
+    // O2ALL-006: deadlines change by agreement — proposed by one side, accepted or declined by the other
+    case "subject.extension_proposed": {
+      const at = str(p.deadlineAt) || null;
+      return { audience: "other_side", importance: "urgent", title: `${room}: new deadline proposed for ${subjectRef(p)}`,
+        body: `${who} proposes to keep ${subjectRef(p)} open ${at ? deadlineLabel(at) : "for a limited time"}. Accept or decline it in the room; until then the current deadline stands.`,
+        href: base, deadlineAt: null };
+    }
+    case "subject.extended": {
+      const at = str(p.deadlineAt) || null;
+      return { audience: "both_sides", importance: "normal", title: `${room}: ${subjectRef(p)} extended`,
+        body: `${subjectRef(p)[0].toUpperCase()}${subjectRef(p).slice(1)} is now open ${at ? deadlineLabel(at) : "for a limited time"}, agreed by both sides.`,
+        href: base, deadlineAt: null };
+    }
+    case "subject.extension_declined":
+      return { audience: "other_side", importance: "normal", title: `${room}: new deadline declined for ${subjectRef(p)}`,
+        body: `${who} declined the proposed new deadline for ${subjectRef(p)}. The current deadline stands.`, href: base, deadlineAt: null };
     case "room.fixed":
       return { audience: "all", importance: "urgent", title: `${room}: clean fixed`, body: `All subjects lifted. The fixture is clean.`, href: `${base}/recap`, deadlineAt: null };
     case "recap.published":

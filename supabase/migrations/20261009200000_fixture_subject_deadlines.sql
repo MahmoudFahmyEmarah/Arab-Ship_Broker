@@ -7,6 +7,10 @@
 --   * subject.overdue — once, when the deadline has passed and the subject is still open: both sides AND the broker
 --     desk (audience all), urgent.
 -- NOTHING FAILS AUTOMATICALLY: the subject stays open; the parties lift it, extend it by agreement, or fail it.
+-- Extensions are by agreement (owner decision O2ALL-006): one side PROPOSES a strictly later, future deadline
+-- (subject.extension_proposed); the OTHER side accepts (subject.extended) or declines (subject.extension_declined);
+-- the broker desk may answer for a relayed side. Until accepted the old deadline stands. The unilateral
+-- extend_fixture_subject is refused. A partial index keeps the five-minute sweep on open, dated subjects only.
 -- Both observations are bound to the deadline they saw (payload deadlineAt, idempotency key), so an extension
 -- re-arms them for the new deadline and a re-run never repeats them. A notification carries only the subject's
 -- number and the deadline, never its free-text title.
@@ -29,7 +33,7 @@ begin
     'term.agreed','term.reopened','term.held','term.resumed','term.referred','term.referral_cleared',
     'term.bridge_suggested',
     'subject.added','subject.lifted','subject.failed','subject.extended','subject.reinstated',
-    'subject.deadline_near','subject.overdue',
+    'subject.deadline_near','subject.overdue','subject.extension_proposed','subject.extension_declined',
     'room.fix_confirmed','room.fixed_on_subjects','room.fixed','room.returned_to_negotiation','room.window_extended',
     'recap.published','recap.acknowledged','recap.invalidated',
     'message.posted','message.redacted',
@@ -94,6 +98,127 @@ grant execute on function public.run_fixture_room_clock() to service_role;
 comment on function public.run_fixture_room_clock() is
   'Fixture Room clock (PR-08, O2ALL-005): observes lapsed proposals once, expires invited / negotiating rooms whose negotiation window closed, and records subject.deadline_near / subject.overdue once per subject deadline (never fails a subject). Service only; scheduled every five minutes on pg_cron as fixture-room-clock. SKIP LOCKED per room, idempotent through the ledger.';
 
+-- ── 2b · the sweep reads only open, dated subjects and their clock events (C2O-101 P2) ─────────────────────
+create index if not exists fixture_subjects_open_deadline_idx
+  on public.fixture_subjects (deadline_at, id) where status = 'open' and deadline_at is not null;
+create index if not exists fixture_events_subject_clock_idx
+  on public.fixture_events (room_id, type, ((payload->>'subjectId')))
+  where type in ('subject.deadline_near', 'subject.overdue', 'subject.extension_proposed', 'subject.extended', 'subject.extension_declined');
+
+-- ── 2c · extensions by agreement (O2ALL-006) ────────────────────────────────────────────────────────────────
+-- the open proposal of a subject: its latest subject.extension_proposed that no later event answered
+create or replace function public.fn_fixture_subject_pending_extension(p_room_id uuid, p_subject_id uuid)
+ returns public.fixture_events language sql stable security definer set search_path to 'public'
+as $$
+  select e.* from public.fixture_events e
+   where e.room_id = p_room_id and e.type = 'subject.extension_proposed' and e.payload->>'subjectId' = p_subject_id::text
+     and not exists (select 1 from public.fixture_events x
+                      where x.room_id = p_room_id and x.seq > e.seq and x.payload->>'subjectId' = p_subject_id::text
+                        and x.type in ('subject.extension_proposed', 'subject.extended', 'subject.extension_declined',
+                                       'subject.lifted', 'subject.failed'))
+   order by e.seq desc limit 1;
+$$;
+revoke all on function public.fn_fixture_subject_pending_extension(uuid, uuid) from public, anon, authenticated;
+
+create or replace function public.propose_fixture_subject_extension(
+  p_room_id uuid, p_subject_id uuid, p_deadline_at timestamptz, p_expected_version integer, p_idempotency_key text,
+  p_as_party_id uuid default null, p_on_behalf_of_party_id uuid default null)
+ returns jsonb language plpgsql volatile security definer set search_path to 'public'
+as $$
+declare v_actor uuid; r public.fixture_rooms; v_hash text; v_replay jsonb; acting public.fixture_parties; rep public.fixture_parties;
+        s public.fixture_subjects;
+begin
+  v_actor := public.fn_fixture_actor();
+  r := public.fn_fixture_lock(p_room_id);
+  v_hash := md5(jsonb_build_object('cmd', 'propose_fixture_subject_extension', 'subject', p_subject_id, 'deadline', p_deadline_at,
+                                   'as', p_as_party_id, 'behalf', p_on_behalf_of_party_id)::text);
+  v_replay := public.fn_fixture_replay(r.id, p_idempotency_key, v_hash);
+  if v_replay is not null then return v_replay; end if;
+  perform public.fn_fixture_check_version(r, p_expected_version);
+  if r.status <> 'on_subjects' then
+    raise exception 'FX_STATE: subject deadlines can change only while the room is on subjects' using errcode = '55000';
+  end if;
+  acting := public.fn_fixture_acting_party(r.id, p_as_party_id);
+  rep := public.fn_fixture_rep(acting, p_on_behalf_of_party_id, false);
+  if rep.capacity = 'viewer' or rep.side not in ('cargo', 'vessel') then
+    raise exception 'FX_AUTH: a principal side (or the desk for a relayed side) proposes a new deadline' using errcode = '42501';
+  end if;
+  select * into s from public.fixture_subjects x where x.id = p_subject_id and x.room_id = r.id for update;
+  if s.id is null then raise exception 'FX_NOT_FOUND: subject not found in this room' using errcode = 'P0002'; end if;
+  if s.status <> 'open' then raise exception 'FX_STATE: subject "%" is already %', s.title, s.status using errcode = '55000'; end if;
+  if p_deadline_at is null or p_deadline_at <= greatest(coalesce(s.deadline_at, now()), now()) then
+    raise exception 'FX_VALIDATION: a new deadline must be later than the current one and in the future' using errcode = '22023';
+  end if;
+  return public.fn_fixture_event(r.id, 'subject.extension_proposed', v_actor, acting.id, case when rep.id <> acting.id then rep.id end, rep.id <> acting.id,
+    'propose_fixture_subject_extension', p_idempotency_key, v_hash,
+    jsonb_build_object('subjectId', s.id, 'seq', s.seq, 'deadlineAt', p_deadline_at, 'previousDeadlineAt', s.deadline_at, 'proposedBySide', rep.side),
+    jsonb_build_object('subjectId', s.id, 'deadlineAt', p_deadline_at, 'pending', true));
+end $$;
+revoke all on function public.propose_fixture_subject_extension(uuid, uuid, timestamptz, integer, text, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.propose_fixture_subject_extension(uuid, uuid, timestamptz, integer, text, uuid, uuid) to authenticated, service_role;
+
+create or replace function public.respond_fixture_subject_extension(
+  p_room_id uuid, p_subject_id uuid, p_accept boolean, p_expected_version integer, p_idempotency_key text,
+  p_as_party_id uuid default null, p_on_behalf_of_party_id uuid default null)
+ returns jsonb language plpgsql volatile security definer set search_path to 'public'
+as $$
+declare v_actor uuid; r public.fixture_rooms; v_hash text; v_replay jsonb; acting public.fixture_parties; rep public.fixture_parties;
+        s public.fixture_subjects; pe public.fixture_events; v_new timestamptz;
+begin
+  v_actor := public.fn_fixture_actor();
+  r := public.fn_fixture_lock(p_room_id);
+  v_hash := md5(jsonb_build_object('cmd', 'respond_fixture_subject_extension', 'subject', p_subject_id, 'accept', p_accept,
+                                   'as', p_as_party_id, 'behalf', p_on_behalf_of_party_id)::text);
+  v_replay := public.fn_fixture_replay(r.id, p_idempotency_key, v_hash);
+  if v_replay is not null then return v_replay; end if;
+  perform public.fn_fixture_check_version(r, p_expected_version);
+  if p_accept is null then raise exception 'FX_VALIDATION: accept or decline' using errcode = '22023'; end if;
+  if r.status <> 'on_subjects' then
+    raise exception 'FX_STATE: subject deadlines can change only while the room is on subjects' using errcode = '55000';
+  end if;
+  acting := public.fn_fixture_acting_party(r.id, p_as_party_id);
+  rep := public.fn_fixture_rep(acting, p_on_behalf_of_party_id, false);
+  select * into s from public.fixture_subjects x where x.id = p_subject_id and x.room_id = r.id for update;
+  if s.id is null then raise exception 'FX_NOT_FOUND: subject not found in this room' using errcode = 'P0002'; end if;
+  if s.status <> 'open' then raise exception 'FX_STATE: subject "%" is already %', s.title, s.status using errcode = '55000'; end if;
+  pe := public.fn_fixture_subject_pending_extension(r.id, s.id);
+  if pe.id is null then raise exception 'FX_STATE: no new deadline is waiting for an answer on this subject' using errcode = '55000'; end if;
+  -- only the OTHER principal side answers (the desk may answer for a relayed side); never the proposer's own side
+  if rep.capacity = 'viewer' or rep.side not in ('cargo', 'vessel') or rep.side = pe.payload->>'proposedBySide' then
+    raise exception 'FX_AUTH: the other side answers a proposed deadline' using errcode = '42501';
+  end if;
+  v_new := (pe.payload->>'deadlineAt')::timestamptz;
+  if not p_accept then
+    return public.fn_fixture_event(r.id, 'subject.extension_declined', v_actor, acting.id, case when rep.id <> acting.id then rep.id end, rep.id <> acting.id,
+      'respond_fixture_subject_extension', p_idempotency_key, v_hash,
+      jsonb_build_object('subjectId', s.id, 'seq', s.seq, 'proposalEventId', pe.id, 'deadlineAt', v_new, 'declinedBySide', rep.side),
+      jsonb_build_object('subjectId', s.id, 'accepted', false, 'deadlineAt', s.deadline_at));
+  end if;
+  if v_new <= greatest(coalesce(s.deadline_at, now()), now()) then
+    raise exception 'FX_STATE: the proposed deadline is no longer in the future; propose a new one' using errcode = '55000';
+  end if;
+  update public.fixture_subjects set deadline_at = v_new, extended_count = extended_count + 1 where id = s.id;
+  return public.fn_fixture_event(r.id, 'subject.extended', v_actor, acting.id, case when rep.id <> acting.id then rep.id end, rep.id <> acting.id,
+    'respond_fixture_subject_extension', p_idempotency_key, v_hash,
+    jsonb_build_object('subjectId', s.id, 'seq', s.seq, 'title', s.title, 'previousDeadlineAt', s.deadline_at, 'deadlineAt', v_new,
+                       'extendedCount', s.extended_count + 1, 'proposalEventId', pe.id, 'proposedBySide', pe.payload->>'proposedBySide', 'acceptedBySide', rep.side),
+    jsonb_build_object('subjectId', s.id, 'accepted', true, 'deadlineAt', v_new));
+end $$;
+revoke all on function public.respond_fixture_subject_extension(uuid, uuid, boolean, integer, text, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.respond_fixture_subject_extension(uuid, uuid, boolean, integer, text, uuid, uuid) to authenticated, service_role;
+
+-- the unilateral path is closed: a deadline changes only by agreement (C2O-101 P1, O2ALL-006)
+create or replace function public.extend_fixture_subject(
+  p_room_id uuid, p_subject_id uuid, p_deadline_at timestamptz, p_expected_version integer, p_idempotency_key text, p_as_party_id uuid default null)
+ returns jsonb language plpgsql volatile security definer set search_path to 'public'
+as $$
+begin
+  perform public.fn_fixture_actor();
+  raise exception 'FX_STATE: a subject deadline changes only by agreement: propose the new deadline; the other side accepts it' using errcode = '55000';
+end $$;
+revoke all on function public.extend_fixture_subject(uuid, uuid, timestamptz, integer, text, uuid) from public, anon, authenticated;
+grant execute on function public.extend_fixture_subject(uuid, uuid, timestamptz, integer, text, uuid) to authenticated, service_role;
+
 -- ── 3 · notification wording: the projector's rule with the two clock events ──
 -- Mirrors lib/fixture-room/notify-model.ts#notificationFor; scripts/fixture-notify-parity.ts compares them.
 create or replace function public.fn_fixture_notify_rule(p_type text, p_payload jsonb, p_actor_label text, p_room_ref text, p_room_id uuid)
@@ -153,6 +278,20 @@ begin
     when 'subject.overdue' then jsonb_build_object('audience', 'all', 'importance', 'urgent',
       'title', room || ': ' || subj || ' is overdue',
       'body', upper(left(subj, 1)) || substr(subj, 2) || ' passed its deadline without being lifted. Nothing fails automatically: lift it, agree an extension or fail it.',
+      'href', base)
+    when 'subject.extension_proposed' then jsonb_build_object('audience', 'other_side', 'importance', 'urgent',
+      'title', room || ': new deadline proposed for ' || subj,
+      'body', who || ' proposes to keep ' || subj || ' open ' || public.fn_fixture_notify_deadline_label(nullif(p->>'deadlineAt', ''))
+              || '. Accept or decline it in the room; until then the current deadline stands.',
+      'href', base)
+    when 'subject.extended' then jsonb_build_object('audience', 'both_sides', 'importance', 'normal',
+      'title', room || ': ' || subj || ' extended',
+      'body', upper(left(subj, 1)) || substr(subj, 2) || ' is now open ' || public.fn_fixture_notify_deadline_label(nullif(p->>'deadlineAt', ''))
+              || ', agreed by both sides.',
+      'href', base)
+    when 'subject.extension_declined' then jsonb_build_object('audience', 'other_side', 'importance', 'normal',
+      'title', room || ': new deadline declined for ' || subj,
+      'body', who || ' declined the proposed new deadline for ' || subj || '. The current deadline stands.',
       'href', base)
     when 'room.fixed' then jsonb_build_object('audience', 'all', 'importance', 'urgent',
       'title', room || ': clean fixed', 'body', 'All subjects lifted. The fixture is clean.', 'href', base || '/recap')

@@ -299,6 +299,7 @@
 .nr-subj__flag {display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 3px; font-size: 9px; font-weight: 700; letter-spacing: .04em; vertical-align: 1px;}
 .nr-subj__flag.is-overdue {color: var(--asb-red); background: var(--asb-red-bg);}
 .nr-subj__flag.is-due {color: var(--asb-amber); background: var(--asb-amber-bg);}
+.nr-subj__pending {display: inline; font-size: 10px; color: var(--asb-gray-700, var(--asb-gray-500));}
 .nr-subj__hint {font-size: 10.5px; color: var(--asb-gray-500); margin: -2px 0 10px 2px;}
 .nr-foot {position: absolute; left: 0; right: 0; bottom: 0;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;

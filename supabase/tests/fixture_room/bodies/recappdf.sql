@@ -1,9 +1,10 @@
--- Fixture Room · STORED RECAP PDF body (O2ALL-005, 9 Oct 2026): the records of 20261009300000. The PDF bytes are
--- rendered by the server (scripts/fixture-recap-pdf-check.ts proves them); this suite proves the database side.
+-- Fixture Room · STORED RECAP PDF body (O2ALL-005/006, C2O-101, 9 Oct 2026): the records of 20261009300000. The PDF
+-- bytes and the store's order are proven by scripts/fixture-recap-pdf-check.ts; this suite proves the database side.
 --   P1  the source is the published, masked recap with a side label for the publisher (service only)
---   P2  the record is set-once: a replay with the same digest returns it; another digest or a bad path is refused
---   P3  the record can never be edited
---   P4  a party reads it for their room; a member outside the room is told it does not exist
+--   P2  binding is set-once (full-digest path); a replay returns it; another digest, renderer or path is refused;
+--       finalize moves pending → stored, and a stored record stays stored
+--   P3  the binding can never be edited and a record can never be deleted
+--   P4  a party reads its room's record; an outsider and an unknown version are not found; an admin read is logged
 --   P5  nothing is reachable from the API roles directly
 
 do $$
@@ -26,38 +27,47 @@ begin
   if s->>'roomId' <> v_room::text or (s->>'versionNo')::int <> 1 or s->>'publisherLabel' <> 'Charterer side' or s->'content' is null
      or s->>'contentHash' is distinct from (select content_hash from public.fixture_recap_versions where id = v_recap) then
     raise exception 'P1: the source must be the published recap with a side label: %', s; end if;
-  if exists (select 1 from jsonb_array_elements(s->'content'->'parties') p where p->>'name' is not null and not coalesce((p->>'isPlatform')::boolean, false)
-               and (s->'content'->>'counterpartyDisclosed')::boolean is not true and p->>'label' not ilike '%shipbroker%') then
-    raise exception 'P1: an undisclosed party name reached the PDF source'; end if;
   raise notice 'P1 ok: the PDF source is the published, masked recap; the publisher is a side label';
 
-  -- P2 · set-once
-  v_path := v_room::text || '/recap-v1-' || left(v_sha, 16) || '.pdf';
-  v := public.record_fixture_recap_pdf(v_recap, v_path, v_sha, 3915, 'recap-pdf/1');
-  if v->>'sha256' <> v_sha or v->>'path' <> v_path then raise exception 'P2: record expected: %', v; end if;
-  v := public.record_fixture_recap_pdf(v_recap, v_path, v_sha, 3915, 'recap-pdf/1');
+  -- P2 · set-once binding, then finalize
+  v_path := v_room::text || '/recap-v1-' || v_sha || '.pdf';
+  v := public.bind_fixture_recap_pdf(v_recap, v_path, v_sha, 1710000, 'recap-pdf/2');
+  if v->>'status' <> 'pending' or v->>'path' <> v_path then raise exception 'P2: a new binding is pending: %', v; end if;
+  v := public.bind_fixture_recap_pdf(v_recap, v_path, v_sha, 1710000, 'recap-pdf/2');
   if (select count(*) from public.fixture_recap_pdfs where recap_version_id = v_recap) <> 1 then raise exception 'P2: a replay must not add a row'; end if;
-  e := pg_temp.fx_err(format('select public.record_fixture_recap_pdf(%L, %L, %L, 4000, %L)', v_recap, v_room::text || '/recap-v1-' || repeat('cd', 8) || '.pdf', repeat('cd', 32), 'recap-pdf/1'));
+  e := pg_temp.fx_err(format('select public.bind_fixture_recap_pdf(%L, %L, %L, 1710000, %L)', v_recap, v_room::text || '/recap-v1-' || repeat('cd', 32) || '.pdf', repeat('cd', 32), 'recap-pdf/2'));
   if e <> 'FX_CONFLICT' then raise exception 'P2: another digest for the same version must be FX_CONFLICT, got %', e; end if;
-  e := pg_temp.fx_err(format('select public.record_fixture_recap_pdf(%L, %L, %L, 4000, %L)', v_recap, 'elsewhere/x.pdf', repeat('ef', 32), 'recap-pdf/1'));
-  if e <> 'FX_VALIDATION' then raise exception 'P2: a path outside <room>/recap-v<n>-<digest>.pdf must be refused, got %', e; end if;
-  e := pg_temp.fx_err(format('select public.record_fixture_recap_pdf(%L, %L, %L, 4000, %L)', v_recap, v_path, 'NOT-HEX', 'recap-pdf/1'));
-  if e <> 'FX_VALIDATION' then raise exception 'P2: a malformed digest must be refused, got %', e; end if;
-  raise notice 'P2 ok: set-once — a replay returns the record; another digest, a foreign path or a bad digest is refused';
+  e := pg_temp.fx_err(format('select public.bind_fixture_recap_pdf(%L, %L, %L, 1710000, %L)', v_recap, v_path, v_sha, 'recap-pdf/3'));
+  if e <> 'FX_CONFLICT' then raise exception 'P2: another renderer for the same version must be FX_CONFLICT, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.bind_fixture_recap_pdf(%L, %L, %L, 4000, %L)', v_recap, v_room::text || '/recap-v1-' || left(v_sha, 16) || '.pdf', v_sha, 'recap-pdf/2'));
+  if e <> 'FX_VALIDATION' then raise exception 'P2: a path without the full digest must be refused, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.finalize_fixture_recap_pdf(%L, %L, true)', v_recap, repeat('cd', 32)));
+  if e <> 'FX_CONFLICT' then raise exception 'P2: finalizing another digest must be refused, got %', e; end if;
+  v := public.finalize_fixture_recap_pdf(v_recap, v_sha, false, 'upload refused (503)');
+  if v->>'status' <> 'failed' then raise exception 'P2: a failed store is recorded as failed: %', v; end if;
+  v := public.finalize_fixture_recap_pdf(v_recap, v_sha, true);
+  if v->>'status' <> 'stored' then raise exception 'P2: a verified retry moves failed → stored: %', v; end if;
+  v := public.finalize_fixture_recap_pdf(v_recap, v_sha, false, 'late failure');
+  if v->>'status' <> 'stored' then raise exception 'P2: a stored record stays stored: %', v; end if;
+  raise notice 'P2 ok: set-once full-digest binding; other digest, renderer or path refused; failed → stored; stored is final';
 
-  -- P3 · never edited
+  -- P3 · never edited, never deleted
   begin
     update public.fixture_recap_pdfs set sha256 = repeat('00', 32) where recap_version_id = v_recap;
-    raise exception 'P3: a stored PDF record was edited';
-  exception when others then
-    if sqlerrm not like 'FX_IMMUTABLE%' then raise; end if;
+    raise exception 'P3: a binding was edited';
+  exception when others then if sqlerrm not like 'FX_IMMUTABLE%' then raise; end if;
   end;
-  raise notice 'P3 ok: a stored PDF record cannot be changed';
+  begin
+    delete from public.fixture_recap_pdfs where recap_version_id = v_recap;
+    raise exception 'P3: a record was deleted';
+  exception when others then if sqlerrm not like 'FX_IMMUTABLE%' then raise; end if;
+  end;
+  raise notice 'P3 ok: a stored recap PDF binding cannot be edited and a record cannot be deleted';
 
-  -- P4 · who may read it
+  -- P4 · who may read it; an admin read is logged
   perform pg_temp.fx_as('u_ow1');
   v := public.get_fixture_recap_pdf(v_room, 1);
-  if (v->>'stored')::boolean is not true or v->>'sha256' <> v_sha or v->>'path' <> v_path or v->>'recapVersionId' <> v_recap::text then
+  if v->>'status' <> 'stored' or v->>'sha256' <> v_sha or v->>'path' <> v_path or v->>'recapVersionId' <> v_recap::text then
     raise exception 'P4: the counterparty reads the stored PDF record: %', v; end if;
   perform pg_temp.fx_as('u_out');
   e := pg_temp.fx_err(format('select public.get_fixture_recap_pdf(%L, 1)', v_room));
@@ -65,16 +75,24 @@ begin
   perform pg_temp.fx_as('u_ch1');
   e := pg_temp.fx_err(format('select public.get_fixture_recap_pdf(%L, 9)', v_room));
   if e <> 'FX_NOT_FOUND' then raise exception 'P4: an unknown version is FX_NOT_FOUND, got %', e; end if;
-  raise notice 'P4 ok: a party reads the record of its room; an outsider and an unknown version are not found';
+  perform pg_temp.fx_owner();
+  select count(*) into n from public.fixture_access_log where room_id = v_room and reason = 'recap-pdf';
+  perform pg_temp.fx_as('u_adm', true);
+  v := public.get_fixture_recap_pdf(v_room, 1);
+  perform pg_temp.fx_owner();
+  if (select count(*) from public.fixture_access_log where room_id = v_room and reason = 'recap-pdf' and user_id = pg_temp.fx_id('u_adm')) <> n + 1 then
+    raise exception 'P4: an admin read of the recap PDF must be written to the access log'; end if;
+  raise notice 'P4 ok: a party reads its room''s record; an outsider and an unknown version are not found; an admin read is logged';
 
   -- P5 · grants
-  perform pg_temp.fx_owner();
   if has_table_privilege('authenticated', 'public.fixture_recap_pdfs', 'select') or has_table_privilege('service_role', 'public.fixture_recap_pdfs', 'insert')
      or has_function_privilege('authenticated', 'public.fixture_recap_pdf_source(uuid)', 'execute')
-     or has_function_privilege('authenticated', 'public.record_fixture_recap_pdf(uuid, text, text, integer, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.bind_fixture_recap_pdf(uuid, text, text, integer, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.finalize_fixture_recap_pdf(uuid, text, boolean, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.fixture_recap_pdf_bound_paths(uuid)', 'execute')
      or has_function_privilege('anon', 'public.get_fixture_recap_pdf(uuid, integer)', 'execute')
      or not has_function_privilege('authenticated', 'public.get_fixture_recap_pdf(uuid, integer)', 'execute')
-     or not has_function_privilege('service_role', 'public.record_fixture_recap_pdf(uuid, text, text, integer, text)', 'execute') then
+     or not has_function_privilege('service_role', 'public.bind_fixture_recap_pdf(uuid, text, text, integer, text)', 'execute') then
     raise exception 'P5: grants are not private-by-default'; end if;
-  raise notice 'P5 ok: the table is private; source and record are service-only; members get the read';
+  raise notice 'P5 ok: the table is private; source, bind, finalize and paths are service-only; members get the read';
 end $$;

@@ -602,7 +602,7 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
        "race_lib: allowlisted + confirmed disposable target, hosted refused, one run per database, EXIT/INT/TERM teardown, zero-residue proof");
   }
   // the races wait for real lock state: every competitor waits in the database for its holder's sleep (no fixed delays)
-  for (const f of ["fixture_race_two_sessions.sh", "fixture_recreate_race.sh"]) {
+  for (const f of ["fixture_race_two_sessions.sh", "fixture_recreate_race.sh", "fixture_deadline_race.sh"]) {
     const t = read(`supabase/tests/fixture_room/${f}`);
     // C2O-095: no default target, the shared safety harness, fatal cleanup, run-scoped logs, a proven end
     ok(!/-d postgres\}"/.test(t) && /\. "\$\(dirname "\$0"\)\/race_lib\.sh"\nrace_init "\$\{1:-\}"/.test(t) && /\{ cleanup && race_cleanup_notifications; \} \|\| exit 1/.test(t)
@@ -747,6 +747,17 @@ ok(/kind: "ack", visibility: "room", termId: term\.id/.test(fxTerm) && (fxTerm.m
   ok(/case "subject\.overdue":[\s\S]{0,120}audience: "all"/.test(model) && /case "subject\.deadline_near":[\s\S]{0,160}audience: "both_sides"/.test(model) && /Nothing fails automatically/.test(model), "overdue reaches both sides and the broker desk; the reminder both sides; the copy says nothing fails");
   const rails = read("components/fixture-room/RoomRails.tsx");
   ok(/subject-overdue-\$\{s\.id\}/.test(rails) && /subject-due-\$\{s\.id\}/.test(rails) && /"subject\.overdue": \(p\) => `subject \$\{p\.seq\}/.test(rails), "the room shows OVERDUE / DUE SOON on an open subject and names clock events by number");
+  // O2ALL-006: a deadline changes only by agreement
+  const prop = dm.split("create or replace function public.propose_fixture_subject_extension(")[1]!.split("end $$;")[0]!;
+  const resp = dm.split("create or replace function public.respond_fixture_subject_extension(")[1]!.split("end $$;")[0]!;
+  const ext = dm.split("create or replace function public.extend_fixture_subject(")[1]!.split("end $$;")[0]!;
+  ok(/p_deadline_at <= greatest\(coalesce\(s\.deadline_at, now\(\)\), now\(\)\)/.test(prop) && !/update public\.fixture_subjects/.test(prop), "a proposal must be later and in the future, and never moves the deadline itself");
+  ok(/rep\.side = pe\.payload->>'proposedBySide'/.test(resp) && /FX_AUTH: the other side answers/.test(resp) && /update public\.fixture_subjects set deadline_at = v_new/.test(resp), "only the other side (or the desk for a relayed side) answers; acceptance moves the deadline");
+  ok(/FX_STATE: a subject deadline changes only by agreement/.test(ext) && !/update public\.fixture_subjects/.test(ext), "the unilateral extend is refused");
+  ok(/create index if not exists fixture_subjects_open_deadline_idx/.test(dm) && /where status = 'open' and deadline_at is not null/.test(dm), "the sweep reads a partial index of open, dated subjects");
+  const rp = read("supabase/migrations/20261009300000_fixture_recap_pdf.sql");
+  ok(/coalesce\(c->'brokerageTerms'->>'text', \(c->'brokerageTerms'\)::text\)/.test(rp) && /coalesce\(c->'brokerageTerms'->>'text', c->'brokerageTerms'::text\)/.test(read("supabase/rollback/20261009300000_fixture_recap_pdf_down.sql")),
+    "the released recap-text brokerage defect is fixed (and the DOWN restores the released text function verbatim)");
   const h = read("scripts/fixture-room-harness.sh");
   ok(/20261009200000_fixture_subject_deadlines\.sql/.test(h) && /DOWNS=\((?:"supabase\/rollback\/20261009300000_fixture_recap_pdf_down\.sql" )?"supabase\/rollback\/20261009200000_fixture_subject_deadlines_down\.sql" /.test(h) && /\[deadlines\]="FIXTURE SUBJECT DEADLINES SMOKE"/.test(h), "the harness applies the deadline clock, runs its suite and reverses it first");
 }

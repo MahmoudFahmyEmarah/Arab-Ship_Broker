@@ -4,7 +4,8 @@
 // page today (browser "Save as PDF"), the server PDF once the shared PDF
 // renderer lands (O2C-009). Built only from the masked read model the
 // requester already holds, so a document can never show more than the room.
-import type { FixtureRecapView, FixtureRoomView } from "./types";
+import type { FixtureRecapContent, FixtureRecapView, FixtureRoomView } from "./types";
+import { recapModel } from "./recap-model";
 
 export interface DocTable { columns: string[]; rows: string[][]; widths?: number[] }
 export interface DocSection { title: string; table?: DocTable; lines?: string[] }
@@ -29,44 +30,62 @@ export function docStamp(iso: string | null | undefined): string {
 const statusText = (s: string) => s.replace(/_/g, " ").toUpperCase();
 const dash = (v: unknown) => (v == null || v === "" ? "—" : String(v));
 
-/** The Fixture Recap: a published recap version exactly as the server stored it. */
-export function recapDocument(view: FixtureRoomView, recap: FixtureRecapView): FixtureDocument {
-  const c = recap.content;
+/** What identifies a published recap version (the stored PDF and the page share it). */
+export interface RecapMeta {
+  versionNo: number; roomVersion: number; publishedAt: string; publishedByLabel: string | null; contentHash: string;
+}
+
+/**
+ * The publish-time Fixture Recap (C2O-101 P1-3): built only from the canonical recap model (recap-model.ts, which
+ * mirrors the stored recap text), so a withdrawn term, an open term's positions, the brokerage line and the subjects
+ * read exactly as the database recorded them. Identical for every party: no acknowledgements, no viewer labels.
+ * The stored PDF renders this document; the page adds the acknowledgements below.
+ */
+export function recapCoreDocument(content: FixtureRecapContent, meta: RecapMeta): FixtureDocument {
+  const m = recapModel(content);
   return {
     kind: "recap",
     title: "Fixture Recap",
-    subtitle: `${dash(c.cargo.commodity)} / ${dash(c.vessel.name)}`,
+    subtitle: `${dash(m.commodity)} / ${dash(m.vesselName)}`,
     meta: [
-      ["Reference", `${c.ref} · recap v${recap.versionNo}`],
-      ["Status", statusText(String(c.status))],
-      ["Published", `${docStamp(recap.publishedAt)} by ${dash(recap.publishedByLabel)}`],
-      ["Acknowledged", recap.acknowledgedByAllPrincipals ? "by both principals" : `${recap.acknowledgements.length} of 2 principals`],
+      ["Reference", `${m.ref} · recap v${meta.versionNo}`],
+      ["Status", m.status],
+      ["Published", `${docStamp(meta.publishedAt)} by ${dash(meta.publishedByLabel)}`],
     ],
     sections: [
       { title: "The fixture", table: { columns: ["Item", "Detail"], widths: [28, 72], rows: [
-        ["Cargo", `${dash(c.cargo.commodity)} · ${dash(c.cargo.qtyMin)}–${dash(c.cargo.qtyMax)} MT`],
-        ["Route", `${dash(c.cargo.loadPort)} → ${dash(c.cargo.dischPort)}`],
-        ["Vessel", `${dash(c.vessel.name)} · ${dash(c.vessel.type)}${c.vessel.dwt != null ? ` · ${Number(c.vessel.dwt).toLocaleString("en-US")} DWT` : ""}`],
+        ["Cargo", `${dash(m.commodity)} · ${dash(m.qtyMin)}–${dash(m.qtyMax)} MT`],
+        ["Route", `${dash(m.loadPort)} → ${dash(m.dischPort)}`],
+        ["Vessel", `${dash(m.vesselName)} · ${dash(m.vesselType)}${m.vesselDwt ? ` · ${dash(m.vesselDwt)} DWT` : ""}`],
       ] } },
-      { title: "Parties", table: { columns: ["Side", "Party"], widths: [28, 72], rows: c.parties.map((p) => [p.label, p.name ?? "withheld · via Arab ShipBroker"]) } },
-      { title: "Main terms", table: { columns: ["#", "Term", "Agreed", "Status"], widths: [6, 30, 46, 18], rows: [...c.terms].sort((a, b) => a.sortOrder - b.sortOrder).map((t) => [
-        String(t.sortOrder), t.label,
-        t.status === "agreed" ? dash(t.agreedValue) : `cargo ${dash(t.cargoPosition)} · vessel ${dash(t.vesselPosition)}`,
-        statusText(t.status),
+      { title: "Parties", table: { columns: ["Side", "Party"], widths: [28, 72], rows: m.parties.map((p) => [p.label, p.name ?? "withheld · via Arab ShipBroker"]) } },
+      { title: "Main terms", table: { columns: ["#", "Term", "Agreed / positions", "Status"], widths: [6, 30, 46, 18], rows: m.terms.map((t) => [
+        t.sortOrder, t.label, t.state === "withdrawn" ? "—" : dash(t.value), t.statusLabel,
       ]) } },
-      { title: "Subjects", table: c.subjects.length
-        ? { columns: ["Subject", "Responsible", "Deadline", "Status"], widths: [44, 18, 22, 16], rows: c.subjects.map((s) => [s.title, s.responsibleSide ? `${s.responsibleSide} side` : "either side", docStamp(s.deadlineAt), statusText(s.status)]) }
-        : undefined, lines: c.subjects.length ? undefined : ["None recorded · the fixture is clean on agreement."] },
-      { title: "Acknowledgements", lines: recap.acknowledgements.length
-        ? recap.acknowledgements.map((a) => `${a.label} · ${docStamp(a.at)}${a.relayed ? " · recorded by Arab ShipBroker on their behalf" : ""}`)
-        : ["Awaiting acknowledgement."] },
+      { title: "Subjects", table: m.subjects.length
+        ? { columns: ["Subject", "Responsible", "Deadline", "Status"], widths: [44, 18, 22, 16], rows: m.subjects.map((s) => [s.title, s.responsibleSide ? `${s.responsibleSide} side` : "either side", dash(s.deadline), s.status]) }
+        : undefined, lines: m.subjects.length ? undefined : ["None recorded · the fixture is clean on agreement."] },
     ],
     footer: [
-      `Counterparty identity: ${c.counterpartyDisclosed ? "disclosed by both principals" : "withheld · via Arab ShipBroker"}.`,
-      "Sub all terms / details of C/P otherwise as per owners' proforma.",
-      `Recap v${recap.versionNo} of ${c.ref} · room version ${recap.roomVersion} · content hash ${recap.contentHash}${recap.invalidatedAt ? ` · superseded ${docStamp(recap.invalidatedAt)}` : ""}.`,
+      `Counterparty identity: ${m.counterpartyDisclosed ? "disclosed by both principals" : "withheld · via Arab ShipBroker"}.`,
+      ...(m.brokerage !== null ? [`Brokerage: ${m.brokerage}`] : []),
+      m.standardClause,
+      `Recap v${meta.versionNo} of ${m.ref} · room version ${meta.roomVersion} · content hash ${meta.contentHash}.`,
     ],
-    fileName: `Fixture-${c.ref}-recap-v${recap.versionNo}.pdf`,
+    fileName: `Fixture-${m.ref}-recap-v${meta.versionNo}.pdf`,
+  };
+}
+
+/** The Fixture Recap page: the publish-time document plus where the acknowledgements stand now. */
+export function recapDocument(_view: FixtureRoomView, recap: FixtureRecapView): FixtureDocument {
+  const core = recapCoreDocument(recap.content, recap);
+  return {
+    ...core,
+    meta: [...core.meta, ["Acknowledged", recap.acknowledgedByAllPrincipals ? "by both principals" : `${recap.acknowledgements.length} of 2 principals`]],
+    sections: [...core.sections, { title: "Acknowledgements", lines: recap.acknowledgements.length
+      ? recap.acknowledgements.map((a) => `${a.label} · ${docStamp(a.at)}${a.relayed ? " · recorded by Arab ShipBroker on their behalf" : ""}`)
+      : ["Awaiting acknowledgement."] }],
+    footer: recap.invalidatedAt ? [...core.footer, `Superseded ${docStamp(recap.invalidatedAt)}.`] : core.footer,
   };
 }
 

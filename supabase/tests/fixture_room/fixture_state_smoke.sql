@@ -504,8 +504,12 @@ begin
   -- the wrong side cannot lift a side-responsible subject
   e := pg_temp.fx_err(format('select public.lift_fixture_subject(%L, %L, %s, %L)', v_room, v_sub, pg_temp.fx_ver(v_room), 'state-a4-lift-wrong'));
   if e <> 'FX_AUTH' then raise exception 'S5: owner lifting the charterer''s subject must be FX_AUTH, got %', e; end if;
-  -- a deadline can be extended; reopening a term drops the room back to negotiating
-  v := public.extend_fixture_subject(v_room, v_sub2, now() + interval '3 days', pg_temp.fx_ver(v_room), 'state-a4-extend');
+  -- a deadline can be extended BY AGREEMENT (O2ALL-006: one side proposes, the other accepts); reopening a term
+  -- drops the room back to negotiating
+  v := public.propose_fixture_subject_extension(v_room, v_sub2, now() + interval '3 days', pg_temp.fx_ver(v_room), 'state-a4-extend');
+  perform pg_temp.fx_as('u_ch1');
+  v := public.respond_fixture_subject_extension(v_room, v_sub2, true, pg_temp.fx_ver(v_room), 'state-a4-extend-ok');
+  perform pg_temp.fx_as('u_solo');
   v_tid := pg_temp.fx_term(v_room, 'freight');
   v := public.reopen_fixture_term(v_room, v_tid, 'owners want to revisit freight', pg_temp.fx_ver(v_room), 'state-a4-reopen');
   if v->'data'->>'roomStatus' <> 'negotiating' then raise exception 'S5: reopen on subjects must return to negotiating: %', v; end if;

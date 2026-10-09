@@ -9,7 +9,7 @@ import Link from "next/link";
 import type { FixtureEventView, FixtureRoomView } from "@/lib/fixture-room/types";
 import { relativeTime, shortDateTime } from "@/lib/fixture-room/format";
 import { roleLabel } from "@/lib/fixture-room/permissions";
-import { missingStandardSubjects } from "@/lib/fixture-room/subjects";
+import { missingStandardSubjects, pendingExtension } from "@/lib/fixture-room/subjects";
 import type { RunCommand } from "./FixtureRoomClient";
 import { Gloss } from "./Gloss";
 import { IcLock } from "./icons";
@@ -203,12 +203,34 @@ export function SubjectsRail({ view, run, busy, actForPartyId, now }: { view: Fi
             </button>
             {s.status === "open" && onSubs && (caps.canExtendSubject || caps.canFailSubject) && (
               <div className="fx-acts2" style={{ margin: "2px 0 6px 28px" }}>
+                {/* O2ALL-006: a new deadline is proposed by one side and takes effect only when the other side accepts */}
+                {(() => {
+                  const pend = pendingExtension(view.events, s.id);
+                  if (!pend) return null;
+                  const answerSide = actForPartyId ? view.parties.find((p) => p.id === actForPartyId)?.side ?? null : view.viewer.side;
+                  const canAnswer = caps.canExtendSubject && (answerSide === "cargo" || answerSide === "vessel") && answerSide !== pend.proposedBySide;
+                  return (
+                    <span className="nr-subj__pending" data-testid={`subject-extension-pending-${s.id}`}>
+                      New deadline proposed by the {pend.proposedBySide === "cargo" ? "charterer" : "owner"} side: {shortDateTime(pend.deadlineAt)}
+                      {canAnswer ? (
+                        <>
+                          {" · "}<button type="button" className="fx-link" disabled={busy} data-testid={`subject-extension-accept-${s.id}`}
+                            onClick={() => { void run("respondExtension", (b) => ({ ...b, subjectId: s.id, accept: true, onBehalfOfPartyId: actForPartyId })); }}>Accept</button>
+                          {" · "}<button type="button" className="fx-link" disabled={busy} data-testid={`subject-extension-decline-${s.id}`}
+                            onClick={() => { void run("respondExtension", (b) => ({ ...b, subjectId: s.id, accept: false, onBehalfOfPartyId: actForPartyId })); }}>Decline</button>
+                        </>
+                      ) : " · awaiting the other side"}
+                    </span>
+                  );
+                })()}
                 {caps.canExtendSubject && <button type="button" className="fx-link" disabled={busy} data-testid={`subject-extend-${s.id}`} onClick={() => setPrompt({
-                  title: "Extend the subject deadline", testId: "extend-subject", description: s.title,
-                  fields: [{ name: "date", label: "New deadline (17:00 UTC)", kind: "date", required: true, min: new Date().toISOString().slice(0, 10) }],
-                  confirmLabel: "Extend",
-                  onSubmit: (v) => { void run("extendSubject", (b) => ({ ...b, subjectId: s.id, deadlineAt: `${v.date}T17:00:00Z` })); },
-                })}>Extend</button>}
+                  title: "Propose a new subject deadline", testId: "extend-subject",
+                  description: `${s.title} · the other side must accept it; until then the current deadline stands.`,
+                  fields: [{ name: "date", label: "New deadline (17:00 UTC)", kind: "date", required: true,
+                    min: (s.deadlineAt && Date.parse(s.deadlineAt) > Date.now() ? new Date(Date.parse(s.deadlineAt) + 86_400_000) : new Date()).toISOString().slice(0, 10) }],
+                  confirmLabel: "Propose",
+                  onSubmit: (v) => { void run("extendSubject", (b) => ({ ...b, subjectId: s.id, deadlineAt: `${v.date}T17:00:00Z`, onBehalfOfPartyId: actForPartyId })); },
+                })}>Propose new deadline</button>}
                 {caps.canFailSubject && <button type="button" className="fx-link" disabled={busy} data-testid={`subject-fail-${s.id}`} onClick={() => setPrompt({
                   title: "Mark the subject failed", testId: "fail-subject", danger: true, description: `${s.title} · failing a subject fails the whole fixture.`,
                   fields: [{ name: "reason", label: "Why did it fail?", kind: "textarea", required: true, maxLength: 500 }],
@@ -311,6 +333,8 @@ export const EVENT_TEXT: Record<string, (p: Record<string, unknown>) => string> 
   "subject.extended": (p) => `extended “${p.title}”`,
   "subject.reinstated": (p) => `“${p.title}” is open again · a term was reopened`,
   "subject.deadline_near": (p) => `subject ${p.seq} is due within two hours`,
+  "subject.extension_proposed": (p) => `proposed a new deadline for subject ${p.seq}`,
+  "subject.extension_declined": (p) => `declined the new deadline proposed for subject ${p.seq}`,
   "subject.overdue": (p) => `subject ${p.seq} passed its deadline · nothing fails automatically`,
   "room.fix_confirmed": (p) => p.awaitingSide ? `confirmed the fixture · awaiting the ${p.awaitingSide === "cargo" ? "charterer" : "owner"} side` : "confirmed the fixture · both sides agree",
   "room.window_extended": () => "extended the negotiation window",

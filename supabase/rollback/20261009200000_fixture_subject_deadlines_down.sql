@@ -3,7 +3,7 @@
 -- 20261006100000 / 20261008100000 / 20261007500000.
 do $$
 begin
-  if exists (select 1 from public.fixture_events where type in ('subject.deadline_near', 'subject.overdue')) then
+  if exists (select 1 from public.fixture_events where type in ('subject.deadline_near', 'subject.overdue', 'subject.extension_proposed', 'subject.extension_declined')) then
     raise exception 'FX_DOWN_REFUSED: subject deadline events exist in the ledger; a DOWN cannot remove them' using errcode = '55000';
   end if;
 end $$;
@@ -19,6 +19,48 @@ grant execute on function public.run_fixture_room_clock() to service_role;
 comment on function public.run_fixture_room_clock() is
   'Fixture Room clock (PR-08): observes lapsed proposals once and expires invited / negotiating rooms whose negotiation window closed. Service only; scheduled every five minutes on pg_cron as fixture-room-clock. SKIP LOCKED per room, idempotent through the ledger.';
 drop function if exists public.sweep_fixture_subject_deadlines(integer);
+drop function if exists public.respond_fixture_subject_extension(uuid, uuid, boolean, integer, text, uuid, uuid);
+drop function if exists public.propose_fixture_subject_extension(uuid, uuid, timestamptz, integer, text, uuid, uuid);
+drop function if exists public.fn_fixture_subject_pending_extension(uuid, uuid);
+drop index if exists public.fixture_events_subject_clock_idx;
+drop index if exists public.fixture_subjects_open_deadline_idx;
+-- the released (unilateral) extend of 20260923203000, verbatim
+create or replace function public.extend_fixture_subject(
+  p_room_id uuid, p_subject_id uuid, p_deadline_at timestamptz, p_expected_version integer, p_idempotency_key text, p_as_party_id uuid default null)
+ returns jsonb language plpgsql volatile security definer set search_path to 'public'
+as $$
+declare v_actor uuid; r public.fixture_rooms; v_hash text; v_replay jsonb; acting public.fixture_parties; s public.fixture_subjects;
+begin
+  v_actor := public.fn_fixture_actor();
+  r := public.fn_fixture_lock(p_room_id);
+  v_hash := md5(jsonb_build_object('cmd', 'extend_fixture_subject', 'subject', p_subject_id, 'deadline', p_deadline_at, 'as', p_as_party_id)::text);
+  v_replay := public.fn_fixture_replay(r.id, p_idempotency_key, v_hash);
+  if v_replay is not null then return v_replay; end if;
+  perform public.fn_fixture_check_version(r, p_expected_version);
+  if r.status <> 'on_subjects' then
+    raise exception 'FX_STATE: subject deadlines can change only while the room is on subjects' using errcode = '55000';
+  end if;
+  acting := public.fn_fixture_acting_party(r.id, p_as_party_id);
+  if acting.capacity = 'viewer' then
+    raise exception 'FX_AUTH: viewers cannot extend subjects' using errcode = '42501';
+  end if;
+  if p_deadline_at is null then
+    raise exception 'FX_VALIDATION: a new deadline is required' using errcode = '22023';
+  end if;
+  select * into s from public.fixture_subjects x where x.id = p_subject_id and x.room_id = r.id for update;
+  if s.id is null then
+    raise exception 'FX_NOT_FOUND: subject not found in this room' using errcode = 'P0002';
+  end if;
+  if s.status <> 'open' then
+    raise exception 'FX_STATE: subject "%" is already %', s.title, s.status using errcode = '55000';
+  end if;
+  update public.fixture_subjects set deadline_at = p_deadline_at, extended_count = extended_count + 1 where id = s.id;
+  return public.fn_fixture_event(r.id, 'subject.extended', v_actor, acting.id, null, false, 'extend_fixture_subject', p_idempotency_key, v_hash,
+    jsonb_build_object('subjectId', s.id, 'seq', s.seq, 'title', s.title, 'previousDeadlineAt', s.deadline_at, 'deadlineAt', p_deadline_at, 'extendedCount', s.extended_count + 1),
+    jsonb_build_object('subjectId', s.id, 'deadlineAt', p_deadline_at));
+end $$;
+revoke all on function public.extend_fixture_subject(uuid, uuid, timestamptz, integer, text, uuid) from public, anon, authenticated;
+grant execute on function public.extend_fixture_subject(uuid, uuid, timestamptz, integer, text, uuid) to authenticated, service_role;
 
 create or replace function public.fn_fixture_notify_rule(p_type text, p_payload jsonb, p_actor_label text, p_room_ref text, p_room_id uuid)
  returns jsonb language plpgsql immutable set search_path to ''

@@ -46,6 +46,12 @@ const cases: [FixtureEventType, Record<string, unknown>][] = [
   ["subject.deadline_near", { subjectId: "s", seq: 2, deadlineAt: "2026-10-09T10:00:00+00:00", title: hostile, responsibleSide: "vessel", source: "clock" }],
   ["subject.deadline_near", { seq: 1, deadlineAt: null }], ["subject.deadline_near", { seq: "x", deadlineAt: "tomorrow" }],
   ["subject.overdue", { subjectId: "s", seq: 3, deadlineAt: "2026-10-09T10:00:00+00:00", title: hostile, source: "clock" }], ["subject.overdue", { seq: 0 }],
+  // O2ALL-006: deadlines change by agreement
+  ["subject.extension_proposed", { subjectId: "s", seq: 2, deadlineAt: "2026-10-12T17:00:00+00:00", previousDeadlineAt: null, proposedBySide: "cargo", title: hostile }],
+  ["subject.extension_proposed", { seq: "x", deadlineAt: "soon" }],
+  ["subject.extended", { subjectId: "s", seq: 2, title: hostile, deadlineAt: "2026-10-12T17:00:00+00:00", proposedBySide: "cargo", acceptedBySide: "vessel" }],
+  ["subject.extended", { seq: 1, deadlineAt: null }],
+  ["subject.extension_declined", { subjectId: "s", seq: 4, deadlineAt: "2026-10-12T17:00:00+00:00", declinedBySide: "vessel" }],
   ["subject.lifted", { seq: 3, title: "Sub owners' approval" }], ["subject.lifted", {}], ["subject.failed", { seq: 1 }], ["subject.failed", { seq: 0 }],
   ["room.fixed", {}], ["recap.published", { versionNo: 2 }], ["room.counterparty_disclosed", {}],
   ["message.posted", { kind: "note", visibility: "room", body: "secret" }], ["message.posted", { kind: "nudge" }],

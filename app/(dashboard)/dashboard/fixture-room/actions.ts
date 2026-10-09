@@ -19,7 +19,7 @@ import type { FixtureError } from "@/lib/fixture-room/errors";
 import {
   addSubjectSchema, closeRoomSchema, extendWindowSchema, createFromCandidateSchema, recreateRoomSchema, extendSubjectSchema, failSubjectSchema, invitePartySchema, postMessageSchema,
   proposalRefSchema, reopenTermSchema, recapRefSchema, redactMessageSchema, respondInvitationSchema, submitProposalSchema, subjectRefSchema,
-  termFlagSchema, commandBaseSchema, listRoomsSchema, suggestBridgeSchema, recapPdfRefSchema,
+  termFlagSchema, commandBaseSchema, listRoomsSchema, suggestBridgeSchema, recapPdfRefSchema, respondExtensionSchema,
 } from "@/lib/fixture-room/schemas";
 import type { FixtureRoomListItem, FixtureRoomStatus, FixtureRoomView } from "@/lib/fixture-room/types";
 import type { ZodType } from "zod";
@@ -322,9 +322,16 @@ export async function failFixtureSubjectAction(input: unknown) {
 }
 
 export async function extendFixtureSubjectAction(input: unknown) {
+  // O2ALL-006: "extend" now PROPOSES the new deadline; the other side accepts it (respondFixtureSubjectExtensionAction)
   const p = parse(extendSubjectSchema, input);
   if (!p.ok) return p.error;
-  return sdk.extendFixtureSubject(await getSupabaseServerClient(), p.value);
+  return sdk.proposeFixtureSubjectExtension(await getSupabaseServerClient(), p.value);
+}
+
+export async function respondFixtureSubjectExtensionAction(input: unknown) {
+  const p = parse(respondExtensionSchema, input);
+  if (!p.ok) return p.error;
+  return sdk.respondFixtureSubjectExtension(await getSupabaseServerClient(), p.value);
 }
 
 export async function fixFixtureOnSubjectsAction(input: unknown) {
@@ -364,14 +371,15 @@ export async function getFixtureRecapPdfAction(input: unknown): Promise<{ ok: tr
   const supabase = await getSupabaseServerClient();
   const ref = await supabase.rpc("get_fixture_recap_pdf", { p_room_id: p.value.roomId, p_version_no: p.value.versionNo });
   if (ref.error || !ref.data) return { ok: false, code: "NOT_FOUND", message: "That recap is not available to you." };
-  const rec = ref.data as { recapVersionId: string; versionNo: number; ref: string; stored: boolean; path: string | null; sha256: string | null };
+  const rec = ref.data as { recapVersionId: string; versionNo: number; ref: string; status: string; path: string | null; sha256: string | null };
   try {
     const fileName = `Fixture-${rec.ref}-recap-v${rec.versionNo}.pdf`;
     const link = await issueRecapPdfLink(rec, fileName);
     return { ok: true, url: link.url, sha256: link.sha256, fileName };
   } catch (e) {
     console.error("fixture recap PDF unavailable", { recapVersionId: rec.recapVersionId, reason: (e as Error).message });
-    return { ok: false, code: "UNKNOWN", message: "The recap PDF is not available right now. Please try again." };
+    // truthful state (C2O-101 P1-1): the record says pending or failed; the stored file is never replaced by another
+    return { ok: false, code: "UNKNOWN", message: `The stored recap PDF is not available (${rec.status === "failed" ? "its last store failed" : "it is still being stored"}): ${(e as Error).message}. Please try again, or ask the Arab ShipBroker desk.` };
   }
 }
 
