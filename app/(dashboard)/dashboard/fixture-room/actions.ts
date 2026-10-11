@@ -3,11 +3,14 @@
 // Fixture Room · server actions (architecture 1.0, 23 Sep 2026).
 //
 // Every action runs with the member's COOKIE session (never the service role)
-// so auth.uid() inside the SECURITY DEFINER RPCs is the real person. Inputs
+// so auth.uid() inside the SECURITY DEFINER RPCs is the real person. One bounded exception (O2ALL-005): AFTER the
+// member's own session has published a recap or proven room access, lib/fixture-room/recap-pdf-store.ts (never this
+// file) uses the service role to store the recap PDF in the private bucket and to sign a 60-second download link. Inputs
 // are validated with the Zod schemas first; the database validates again.
 // Commands return the typed envelope or a typed FixtureError — never throw
 // for a refusal, so the room can show the reason and refetch on a conflict.
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { issueRecapPdfLink, storePublishedRecapPdf } from "@/lib/fixture-room/recap-pdf-store";
 import * as sdk from "@/sdk/app/fixtures";
 import { stripVesselNamePrefix } from "@/lib/schemas/vessel";
 import { buildTermCatalogue, type ListingFigures } from "@/lib/fixture-room/terms";
@@ -16,7 +19,7 @@ import type { FixtureError } from "@/lib/fixture-room/errors";
 import {
   addSubjectSchema, closeRoomSchema, extendWindowSchema, createFromCandidateSchema, recreateRoomSchema, extendSubjectSchema, failSubjectSchema, invitePartySchema, postMessageSchema,
   proposalRefSchema, reopenTermSchema, recapRefSchema, redactMessageSchema, respondInvitationSchema, submitProposalSchema, subjectRefSchema,
-  termFlagSchema, commandBaseSchema, listRoomsSchema, suggestBridgeSchema,
+  termFlagSchema, commandBaseSchema, listRoomsSchema, suggestBridgeSchema, recapPdfRefSchema, respondExtensionSchema,
 } from "@/lib/fixture-room/schemas";
 import type { FixtureRoomListItem, FixtureRoomStatus, FixtureRoomView } from "@/lib/fixture-room/types";
 import type { ZodType } from "zod";
@@ -319,9 +322,16 @@ export async function failFixtureSubjectAction(input: unknown) {
 }
 
 export async function extendFixtureSubjectAction(input: unknown) {
+  // O2ALL-006: "extend" now PROPOSES the new deadline; the other side accepts it (respondFixtureSubjectExtensionAction)
   const p = parse(extendSubjectSchema, input);
   if (!p.ok) return p.error;
-  return sdk.extendFixtureSubject(await getSupabaseServerClient(), p.value);
+  return sdk.proposeFixtureSubjectExtension(await getSupabaseServerClient(), p.value);
+}
+
+export async function respondFixtureSubjectExtensionAction(input: unknown) {
+  const p = parse(respondExtensionSchema, input);
+  if (!p.ok) return p.error;
+  return sdk.respondFixtureSubjectExtension(await getSupabaseServerClient(), p.value);
 }
 
 export async function fixFixtureOnSubjectsAction(input: unknown) {
@@ -346,7 +356,31 @@ export async function syncFixtureListingStatusAction(input: unknown) {
 export async function publishFixtureRecapAction(input: unknown) {
   const p = parse(commandBaseSchema, input);
   if (!p.ok) return p.error;
-  return sdk.publishFixtureRecap(await getSupabaseServerClient(), p.value);
+  const result = await sdk.publishFixtureRecap(await getSupabaseServerClient(), p.value);
+  // O2ALL-005: the member's own publish succeeded, so store that version's PDF now. A failure here never undoes the
+  // publish: the download path renders the same bytes later (deterministic) if the file is missing.
+  const versionId = (result as { ok?: boolean; data?: { recapVersionId?: string } }).ok ? (result as { data?: { recapVersionId?: string } }).data?.recapVersionId : undefined;
+  if (versionId) await storePublishedRecapPdf(versionId);
+  return result;
+}
+
+/** O2ALL-005: a 60-second link to the stored PDF of a recap version, after the member's session proves room access. */
+export async function getFixtureRecapPdfAction(input: unknown): Promise<{ ok: true; url: string; sha256: string; fileName: string } | FixtureError> {
+  const p = parse(recapPdfRefSchema, input);
+  if (!p.ok) return p.error;
+  const supabase = await getSupabaseServerClient();
+  const ref = await supabase.rpc("get_fixture_recap_pdf", { p_room_id: p.value.roomId, p_version_no: p.value.versionNo });
+  if (ref.error || !ref.data) return { ok: false, code: "NOT_FOUND", message: "That recap is not available to you." };
+  const rec = ref.data as { recapVersionId: string; versionNo: number; ref: string; status: string; path: string | null; sha256: string | null };
+  try {
+    const fileName = `Fixture-${rec.ref}-recap-v${rec.versionNo}.pdf`;
+    const link = await issueRecapPdfLink(rec, fileName);
+    return { ok: true, url: link.url, sha256: link.sha256, fileName };
+  } catch (e) {
+    console.error("fixture recap PDF unavailable", { recapVersionId: rec.recapVersionId, reason: (e as Error).message });
+    // truthful state (C2O-101 P1-1): the record says pending or failed; the stored file is never replaced by another
+    return { ok: false, code: "UNKNOWN", message: `The stored recap PDF is not available (${rec.status === "failed" ? "its last store failed" : "it is still being stored"}): ${(e as Error).message}. Please try again, or ask the Arab ShipBroker desk.` };
+  }
 }
 
 export async function acknowledgeFixtureRecapAction(input: unknown) {

@@ -46,10 +46,18 @@ const guardCount = (state: string) =>
 const NTF_GUARD = "public.notifications:notifications_snapshot_guard";
 const ntfGuardState = (state: string) =>
   `(select count(*) from pg_trigger t where t.tgrelid = to_regclass('public.notifications') and t.tgname = 'notifications_snapshot_guard' and t.tgenabled ${state})`;
+// the stored recap PDF record's append-only guard (O2ALL-005/006), when that module is installed: a run's room cascades
+// to its recap PDF records, which the guard otherwise refuses to delete
+const PDF_GUARD = "public.fixture_recap_pdfs:fixture_recap_pdfs_append_only";
+const pdfGuardState = (state: string) =>
+  `(select count(*) from pg_trigger t where t.tgrelid = to_regclass('public.fixture_recap_pdfs') and t.tgname = 'fixture_recap_pdfs_append_only' and t.tgenabled ${state})`;
 const guardAlter = (mode: "disable" | "enable") => `do $g$ declare g text; begin
   foreach g in array ${guardList} loop execute format('alter table %s ${mode} trigger %I', split_part(g, ':', 1), split_part(g, ':', 2)); end loop;
   if to_regclass('public.notifications') is not null then
     execute format('alter table %s ${mode} trigger %I', split_part('${NTF_GUARD}', ':', 1), split_part('${NTF_GUARD}', ':', 2));
+  end if;
+  if to_regclass('public.fixture_recap_pdfs') is not null then
+    execute format('alter table %s ${mode} trigger %I', split_part('${PDF_GUARD}', ':', 1), split_part('${PDF_GUARD}', ':', 2));
   end if;
 end $g$;`;
 
@@ -80,6 +88,9 @@ begin
   end if;
   if to_regclass('public.notifications') is not null and ${ntfGuardState("= 'O'")} <> 1 then
     raise exception 'E2E_GUARD: the notification snapshot guard must exist and be enabled before a teardown';
+  end if;
+  if to_regclass('public.fixture_recap_pdfs') is not null and ${pdfGuardState("= 'O'")} <> 1 then
+    raise exception 'E2E_GUARD: the recap PDF guard must exist and be enabled before a teardown';
   end if;
 end $target$;
 create temp table e2e_r (id uuid primary key) on commit drop;
@@ -182,6 +193,7 @@ do $residue$ declare v_empty boolean; begin
   end if;
   if ${guardCount("= 'O'")} <> ${FIXTURE_GUARDS.length} then raise exception 'E2E_GUARD: a Fixture guard is not enabled at the end of the teardown'; end if;
   if to_regclass('public.notifications') is not null and ${ntfGuardState("= 'O'")} <> 1 then raise exception 'E2E_GUARD: the notification guard is not enabled at the end of the teardown'; end if;
+  if to_regclass('public.fixture_recap_pdfs') is not null and ${pdfGuardState("= 'O'")} <> 1 then raise exception 'E2E_GUARD: the recap PDF guard is not enabled at the end of the teardown'; end if;
   -- nested: a statement naming public.notifications is planned only where the table exists (no core, no reference)
   if to_regclass('public.notifications') is not null then
     if exists (select 1 from public.notifications where recipient_user_id in (select id from e2e_u))

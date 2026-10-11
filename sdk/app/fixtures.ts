@@ -198,8 +198,16 @@ export function failFixtureSubject(supabase: SupabaseClient, input: CommandBase 
   return command<{ subjectId: string; subjectStatus: string; roomStatus: FixtureRoomStatus }>(supabase, "fail_fixture_subject", { ...behalf(input), p_subject_id: input.subjectId, p_reason: input.reason ?? null });
 }
 
-export function extendFixtureSubject(supabase: SupabaseClient, input: CommandBase & { subjectId: string; deadlineAt: string }) {
-  return command<{ subjectId: string; deadlineAt: string }>(supabase, "extend_fixture_subject", { ...base(input), p_subject_id: input.subjectId, p_deadline_at: input.deadlineAt });
+/** O2ALL-006: one side proposes a strictly later, future deadline; the old one stands until the other side accepts. */
+export function proposeFixtureSubjectExtension(supabase: SupabaseClient, input: CommandBase & { subjectId: string; deadlineAt: string }) {
+  return command<{ subjectId: string; deadlineAt: string; pending: true }>(supabase, "propose_fixture_subject_extension",
+    { ...behalf(input), p_subject_id: input.subjectId, p_deadline_at: input.deadlineAt });
+}
+
+/** O2ALL-006: the OTHER side (or the desk for a relayed side) accepts or declines the open proposal. */
+export function respondFixtureSubjectExtension(supabase: SupabaseClient, input: CommandBase & { subjectId: string; accept: boolean }) {
+  return command<{ subjectId: string; accepted: boolean; deadlineAt: string | null }>(supabase, "respond_fixture_subject_extension",
+    { ...behalf(input), p_subject_id: input.subjectId, p_accept: input.accept });
 }
 
 export function fixFixtureOnSubjects(supabase: SupabaseClient, input: CommandBase) {

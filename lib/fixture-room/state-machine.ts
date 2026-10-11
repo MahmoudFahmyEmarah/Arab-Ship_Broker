@@ -9,6 +9,7 @@ export type FixtureCommand =
   | "submit_fixture_proposal" | "withdraw_fixture_proposal" | "accept_fixture_proposal"
   | "reopen_fixture_term" | "set_fixture_term_flag" | "suggest_fixture_bridge"
   | "add_fixture_subject" | "lift_fixture_subject" | "fail_fixture_subject" | "extend_fixture_subject"
+  | "propose_fixture_subject_extension" | "respond_fixture_subject_extension"
   | "fix_fixture_on_subjects" | "publish_fixture_recap" | "acknowledge_fixture_recap"
   | "post_fixture_message" | "agree_fixture_disclosure" | "close_fixture_room" | "redact_fixture_message"
   | "extend_fixture_negotiation_window";
@@ -36,6 +37,8 @@ export const COMMAND_STATUSES: Record<FixtureCommand, readonly FixtureRoomStatus
   lift_fixture_subject: ["on_subjects"],
   fail_fixture_subject: ["on_subjects"],
   extend_fixture_subject: ["on_subjects"],
+  propose_fixture_subject_extension: ["on_subjects"],
+  respond_fixture_subject_extension: ["on_subjects"],
   fix_fixture_on_subjects: ["negotiating"],
   publish_fixture_recap: ["negotiating", "on_subjects", "fixed"],
   acknowledge_fixture_recap: ["negotiating", "on_subjects", "fixed"],

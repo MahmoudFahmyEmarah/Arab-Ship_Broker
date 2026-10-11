@@ -26,7 +26,7 @@ import { newSince, readLastSeen, termsTouched, writeLastSeen } from "@/lib/fixtu
 import { BunkerTicker } from "@/components/portal/BunkerTicker";
 import {
   acceptFixtureProposalAction, acknowledgeFixtureRecapAction, addFixtureSubjectAction, agreeFixtureDisclosureAction, closeFixtureRoomAction,
-  extendFixtureSubjectAction, failFixtureSubjectAction, fixFixtureOnSubjectsAction, inviteFixturePartyAction, liftAllFixtureSubjectsAction, liftFixtureSubjectAction, loadFixtureRoom,
+  extendFixtureSubjectAction, respondFixtureSubjectExtensionAction, failFixtureSubjectAction, fixFixtureOnSubjectsAction, inviteFixturePartyAction, liftAllFixtureSubjectsAction, liftFixtureSubjectAction, loadFixtureRoom,
   recreateFixtureRoomAction,
   pollFixtureRoomVersion, postFixtureMessageAction, publishFixtureRecapAction, reopenFixtureTermAction, respondFixtureInvitationAction,
   setFixtureTermFlagAction, submitFixtureProposalAction, withdrawFixtureProposalAction, suggestFixtureBridgeAction,
@@ -51,6 +51,7 @@ const ACTIONS = {
   liftAll: liftAllFixtureSubjectsAction,
   failSubject: failFixtureSubjectAction,
   extendSubject: extendFixtureSubjectAction,
+  respondExtension: respondFixtureSubjectExtensionAction,
   fix: fixFixtureOnSubjectsAction,
   publishRecap: publishFixtureRecapAction,
   ackRecap: acknowledgeFixtureRecapAction,
