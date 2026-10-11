@@ -107,8 +107,12 @@ export const addSubjectSchema = commandBaseSchema.extend({
 export const subjectRefSchema = commandBaseSchema.extend({ subjectId: uuid });
 export const failSubjectSchema = subjectRefSchema.extend({ reason: z.string().max(500).nullable().optional() });
 export const extendSubjectSchema = subjectRefSchema.extend({ deadlineAt: z.string().datetime({ offset: true }) });
+/** O2ALL-006: the answer to a proposed subject deadline */
+export const respondExtensionSchema = subjectRefSchema.extend({ accept: z.boolean() });
 
 export const recapRefSchema = commandBaseSchema.extend({ recapVersionId: uuid });
+/** O2ALL-005: a stored recap PDF is addressed by room and recap version number (a read, no version or key). */
+export const recapPdfRefSchema = z.object({ roomId: uuid, versionNo: z.number().int().min(1).max(100000) });
 
 export const postMessageSchema = commandBaseSchema.extend({
   body: z.string().min(1).max(4000),

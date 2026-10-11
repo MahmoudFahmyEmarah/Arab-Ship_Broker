@@ -7,7 +7,7 @@ import * as React from "react";
 import Link from "next/link";
 import type { FixtureDocument } from "@/lib/fixture-room/documents";
 
-export function FixtureDocumentView({ doc, backHref, otherHref, otherLabel }: { doc: FixtureDocument; backHref: string; otherHref?: string; otherLabel?: string }) {
+export function FixtureDocumentView({ doc, backHref, otherHref, otherLabel, pdfAction }: { doc: FixtureDocument; backHref: string; otherHref?: string; otherLabel?: string; pdfAction?: React.ReactNode }) {
   React.useEffect(() => {
     const previous = document.title;
     document.title = doc.fileName.replace(/\.pdf$/, "");   // the browser's "Save as PDF" names the file from the title
@@ -19,7 +19,9 @@ export function FixtureDocumentView({ doc, backHref, otherHref, otherLabel }: { 
         <div className="nr-print__acts">
           <Link href={backHref} className="asb-btn">← Back to the room</Link>
           {otherHref && <Link href={otherHref} className="asb-btn">{otherLabel}</Link>}
-          <button type="button" className="asb-btn primary" onClick={() => window.print()} data-testid="doc-save-pdf">Save as PDF</button>
+          {/* O2ALL-005: a recap offers the stored, fingerprinted PDF; printing the page stays available */}
+          {pdfAction}
+          <button type="button" className={`asb-btn${pdfAction ? "" : " primary"}`} onClick={() => window.print()} data-testid="doc-save-pdf">{pdfAction ? "Print" : "Save as PDF"}</button>
         </div>
         <article className="nr-doc" data-testid={doc.kind === "recap" ? "recap-print" : "summary-print"}>
           <header className="nr-doc__head">

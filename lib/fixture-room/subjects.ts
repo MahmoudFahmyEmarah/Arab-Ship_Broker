@@ -20,3 +20,18 @@ export function missingStandardSubjects(subjects: readonly Pick<FixtureSubjectVi
   const have = new Set(subjects.map((s) => norm(s.title)));
   return STANDARD_SUBJECTS.filter((s) => !have.has(norm(s.title)));
 }
+
+/**
+ * O2ALL-006: the open deadline proposal of a subject, from the room's ledger: its latest subject.extension_proposed
+ * that no later proposal, acceptance, refusal, lift or failure of the same subject answered. Mirrors
+ * public.fn_fixture_subject_pending_extension.
+ */
+export interface PendingExtension { eventId: number; deadlineAt: string; proposedBySide: "cargo" | "vessel" }
+export function pendingExtension(events: readonly { id: number; seq: number; type: string; payload: Record<string, unknown> }[], subjectId: string): PendingExtension | null {
+  const mine = events.filter((e) => String(e.payload?.subjectId ?? "") === subjectId).sort((a, b) => a.seq - b.seq);
+  const last = mine.filter((e) => ["subject.extension_proposed", "subject.extended", "subject.extension_declined", "subject.lifted", "subject.failed"].includes(e.type)).pop();
+  if (!last || last.type !== "subject.extension_proposed") return null;
+  const side = last.payload.proposedBySide;
+  if (side !== "cargo" && side !== "vessel") return null;
+  return { eventId: last.id, deadlineAt: String(last.payload.deadlineAt ?? ""), proposedBySide: side };
+}

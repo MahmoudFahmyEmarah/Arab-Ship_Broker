@@ -37,6 +37,7 @@ export type FixtureEventType =
   | "term.agreed" | "term.reopened" | "term.held" | "term.resumed" | "term.referred" | "term.referral_cleared"
   | "term.bridge_suggested"
   | "subject.added" | "subject.lifted" | "subject.failed" | "subject.extended" | "subject.reinstated"
+  | "subject.deadline_near" | "subject.overdue" | "subject.extension_proposed" | "subject.extension_declined"
   | "room.fix_confirmed" | "room.fixed_on_subjects" | "room.fixed" | "room.returned_to_negotiation" | "room.window_extended"
   | "recap.published" | "recap.acknowledged" | "recap.invalidated"
   | "message.posted" | "message.redacted"
