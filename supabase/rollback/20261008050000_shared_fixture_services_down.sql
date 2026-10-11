@@ -29,7 +29,17 @@ begin
     end if;
   end if;
   if to_regclass('storage.buckets') is not null then
-    delete from storage.buckets where id = 'fixture-recaps';
+    -- hosted Supabase refuses direct deletes from storage tables (storage.protect_delete, B2ALL 9 Oct 2026): there the
+    -- empty bucket must be removed through the Storage API (dashboard, or supabase-js storage.deleteBucket) after
+    -- this DOWN; a local stack without that guard drops it here
+    if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'storage' and p.proname = 'protect_delete') then
+      if exists (select 1 from storage.buckets where id = 'fixture-recaps') then
+        raise notice 'shared services DOWN: storage.protect_delete is active — remove the empty fixture-recaps bucket through the Storage API';
+      end if;
+    else
+      delete from storage.buckets where id = 'fixture-recaps';
+    end if;
   end if;
 end $$;
 
