@@ -200,5 +200,17 @@ begin
      or not exists (select 1 from public.fixture_events where room_id = v_room and type = 'subject.extended'
                      and payload->>'proposedBySide' = 'vessel' and payload->>'acceptedBySide' = 'cargo') then
     raise exception 'D7: an accepted proposal moves the deadline once and records both sides'; end if;
-  raise notice 'D7 ok: unilateral, earlier and past deadlines are refused; a proposal waits for the other side; decline keeps it; accept moves it once';
+  -- authority before replay (B2O-037): the real caller's replay returns the stored result without a second event;
+  -- a member outside the room re-sending the same key and arguments gets an error, never the envelope
+  n := (select count(*) from public.fixture_events where room_id = v_room);
+  perform pg_temp.fx_as('u_ch1');
+  v := public.respond_fixture_subject_extension(v_room, v_s, true, pg_temp.fx_ver(v_room), 'dlx-accept-2');
+  perform pg_temp.fx_owner();
+  if (select count(*) from public.fixture_events where room_id = v_room) <> n then raise exception 'D7: a replay must not add an event'; end if;
+  perform pg_temp.fx_as('u_out');
+  e := pg_temp.fx_err(format('select public.respond_fixture_subject_extension(%L, %L, true, %s, %L)', v_room, v_s, pg_temp.fx_ver(v_room), 'dlx-accept-2'));
+  if e is null or e not in ('FX_AUTH', 'FX_NOT_FOUND') then raise exception 'D7: a stranger replaying a respond key must be refused, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.propose_fixture_subject_extension(%L, %L, %L, %s, %L)', v_room, v_s, now() + interval '4 days', pg_temp.fx_ver(v_room), 'dlx-propose-2'));
+  if e is null or e not in ('FX_AUTH', 'FX_NOT_FOUND') then raise exception 'D7: a stranger replaying a propose key must be refused, got %', e; end if;
+  raise notice 'D7 ok: unilateral, earlier and past deadlines are refused; a proposal waits for the other side; decline keeps it; accept moves it once; a stranger never gets a replay';
 end $$;
