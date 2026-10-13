@@ -18,6 +18,7 @@ import {
 } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomBytes } from "node:crypto";
+import { createBoundTestUser } from "./e2e-auth";
 
 const expect = baseExpect.configure({ timeout: 90_000 });
 const PASSWORD = "e2e-Rules-Passw0rd!";
@@ -410,9 +411,9 @@ async function seedRulesData(): Promise<RulesSeed> {
   };
 
   try {
-    const createUser = async (kind: "admin" | "member") => {
+    const createSeedUser = async (kind: "admin" | "member") => {
       const email = `e2e-rules-${kind}-${stamp}@arabshipbroker.test`;
-      const { data, error } = await admin.auth.admin.createUser({
+      const { data, error } = await createBoundTestUser(admin, { apiUrl: localEnvironment().url }, {
         email,
         password: PASSWORD,
         email_confirm: true,
@@ -422,7 +423,7 @@ async function seedRulesData(): Promise<RulesSeed> {
       return { email, userId: data.user.id };
     };
 
-    const adminUser = await createUser("admin");
+    const adminUser = await createSeedUser("admin");
     partial.admin = adminUser;
     await assertMutation(admin.from("users").insert({
       id: adminUser.userId,
@@ -436,7 +437,7 @@ async function seedRulesData(): Promise<RulesSeed> {
       is_active: true,
     }), "insert admin app user");
 
-    const memberUser = await createUser("member");
+    const memberUser = await createSeedUser("member");
     partial.member = memberUser;
     await assertMutation(admin.from("users").insert({
       id: memberUser.userId,

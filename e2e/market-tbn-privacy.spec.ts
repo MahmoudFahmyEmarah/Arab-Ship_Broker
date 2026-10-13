@@ -17,6 +17,8 @@ import {
   dismissOverlays,
   signInAs,
 } from "./fixture-room.helpers";
+import { createBoundTestUser } from "./e2e-auth";
+import { resolveLocalTarget } from "./e2e-db";
 
 const expect = baseExpect.configure({ timeout: 120_000 });
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -46,10 +48,12 @@ function localKeys() {
     url = out.match(/^API_URL="?([^"\n]+)"?/m)?.[1] ?? url;
   }
   if (!service) throw new Error("No local service key");
-  if (!/127\.0\.0\.1|localhost/.test(url)) {
-    throw new Error(`Refusing to seed market privacy data against ${url}`);
-  }
-  return { url, service };
+  const target = resolveLocalTarget({
+    ...process.env,
+    E2E_SUPABASE_URL: url,
+    E2E_SUPABASE_SERVICE_ROLE_KEY: service,
+  });
+  return { url: target.apiUrl, service, target };
 }
 
 async function required<T>(
@@ -62,7 +66,7 @@ async function required<T>(
 }
 
 async function seedPrivacy(): Promise<PrivacySeed> {
-  const { url, service } = localKeys();
+  const { url, service, target } = localKeys();
   const adminClient: SupabaseClient = createClient(url, service, {
     auth: { persistSession: false },
   });
@@ -77,7 +81,7 @@ async function seedPrivacy(): Promise<PrivacySeed> {
     appMetadata: Record<string, unknown> = { role: "member" },
   ) => {
     const email = `e2e-mp-${prefix}-${stamp}@arabshipbroker.test`;
-    const { data: auth, error: authError } = await adminClient.auth.admin.createUser({
+    const { data: auth, error: authError } = await createBoundTestUser(adminClient, target, {
       email,
       password: PASSWORD,
       email_confirm: true,
@@ -286,15 +290,23 @@ delete from public.organization_members where user_id in ('${ids.join("','")}');
 delete from public.users where id in ('${ids.join("','")}');
 delete from auth.users where id in ('${ids.join("','")}');
 delete from public.organizations where id in ('${seed.owner.orgId}','${seed.outsider.orgId}','${seed.publicOwner.orgId}');
+do $cleanup$
+begin
+  if exists (select 1 from auth.users where id in ('${ids.join("','")}'))
+     or exists (select 1 from public.users where id in ('${ids.join("','")}'))
+     or exists (select 1 from public.organizations where id in ('${seed.owner.orgId}','${seed.outsider.orgId}','${seed.publicOwner.orgId}'))
+     or exists (select 1 from public.cargo_listings where id = '${seed.cargoId}')
+     or exists (select 1 from public.vessels where id in ('${seed.tbn.vesselId}','${seed.named.vesselId}'))
+     or exists (select 1 from public.vessel_availability where id in ('${seed.tbn.availabilityId}','${seed.named.availabilityId}')) then
+    raise exception 'market privacy cleanup left governed seed rows';
+  end if;
+end
+$cleanup$;
 `;
-  try {
-    execSync(
-      "docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -v ON_ERROR_STOP=0",
-      { input: sql, stdio: ["pipe", "ignore", "ignore"] },
-    );
-  } catch {
-    // Local test database only; a failed cleanup is reported by the next seed.
-  }
+  execSync(
+    "docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -X -q -1 -v ON_ERROR_STOP=1",
+    { input: sql, stdio: ["pipe", "ignore", "pipe"] },
+  );
 }
 
 function forbidden(seed: PrivacySeed) {

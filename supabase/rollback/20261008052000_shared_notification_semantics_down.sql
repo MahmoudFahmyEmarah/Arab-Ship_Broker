@@ -3,10 +3,16 @@
 -- digest batches and the deliveries' digest link, and is refused while any exists (C2O-092 #8); notifications,
 -- deliveries and preferences themselves are kept (the base DOWN guards those).
 
--- Only where 20261008052000 was applied (its digest table exists); in a chain that never received it, this DOWN is a
--- no-op (psql \if), so a DOWN chain may meet either state.
-select to_regclass('public.notification_digest_batches') is not null as ntf_semantics_applied \gset
-\if :ntf_semantics_applied
+-- Plain SQL only (B2ALL, 9 Oct 2026): the linked release tool sends statements without psql, so this DOWN carries no
+-- psql meta-commands. It runs only where 20261008052000 is applied (its digest table exists) and refuses otherwise —
+-- skip it explicitly in a chain that never received 052000.
+do $$
+begin
+  if to_regclass('public.notification_digest_batches') is null then
+    raise exception 'NTF_DOWN_REFUSED: 20261008052000 is not applied here (no notification_digest_batches); skip this DOWN'
+      using errcode = '55000';
+  end if;
+end $$;
 set local lock_timeout = '5s';
 set local statement_timeout = '10min';
 
@@ -220,6 +226,3 @@ grant execute on function public.list_my_notifications(integer, timestamptz) to 
 grant select on table public.notifications to service_role;
 grant execute on function public.fn_notification_delivery_claim(integer, integer, integer) to service_role;
 grant execute on function public.fn_notification_delivery_settle(uuid, uuid, boolean, text, integer) to service_role;
-\else
-\echo 'shared notification semantics DOWN: 20261008052000 is not applied here; nothing to undo'
-\endif

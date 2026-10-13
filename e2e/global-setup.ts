@@ -14,12 +14,14 @@
  * cookie: a hand-built session proves the test harness can build a session, not
  * that the application accepts one.
  */
-import { chromium, type FullConfig } from "@playwright/test";
+import { chromium, type BrowserContext, type FullConfig } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import fs from "node:fs";
 import path from "node:path";
 
-const LOCAL_API = "http://127.0.0.1:54321";
+import { createBoundTestUser } from "./e2e-auth";
+import { isForeignSupabaseRequest, resolveLocalAppOrigin, resolveLocalTarget } from "./e2e-db";
+
 const PASSWORD = "e2e-Test-Passw0rd!";
 
 export const SEATS = [
@@ -28,18 +30,40 @@ export const SEATS = [
   { key: "edit", email: "e2e-edit@arabshipbroker.test", access: "edit" as const },
 ];
 
+async function bindBrowserToTarget(context: BrowserContext, apiUrl: string) {
+  const violations: string[] = [];
+  await context.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (isForeignSupabaseRequest(url, apiUrl)) {
+      violations.push(url);
+      await route.abort("blockedbyclient");
+      return;
+    }
+    await route.fallback();
+  });
+  await context.routeWebSocket(/.*/, (socket) => {
+    if (isForeignSupabaseRequest(socket.url(), apiUrl)) {
+      violations.push(socket.url());
+      socket.close();
+      return;
+    }
+    socket.connectToServer();
+  });
+  return {
+    assertClean() {
+      if (violations.length > 0) {
+        throw new Error("the local application attempted to contact Supabase outside the selected local E2E target");
+      }
+    },
+  };
+}
+
 export default async function globalSetup(config: FullConfig) {
-  const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-  const apiUrl = process.env.E2E_SUPABASE_URL ?? LOCAL_API;
+  const baseURL = resolveLocalAppOrigin(process.env.E2E_BASE_URL ?? "http://localhost:3000");
+  const apiTarget = resolveLocalTarget();
+  const apiUrl = apiTarget.apiUrl;
   const serviceKey = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
 
-  // ── the guard ────────────────────────────────────────────────────────────
-  if (!/127\.0\.0\.1|localhost/.test(apiUrl)) {
-    throw new Error(
-      `global-setup refuses to seed admin users against ${apiUrl}. ` +
-        "This creates three administrator accounts; it runs against the local Supabase stack only.",
-    );
-  }
   if (!serviceKey) {
     throw new Error("E2E_SUPABASE_SERVICE_ROLE_KEY is not set — see e2e/README.md");
   }
@@ -48,7 +72,7 @@ export default async function globalSetup(config: FullConfig) {
 
   for (const seat of SEATS) {
     // create, or reuse if a previous run left it behind
-    const { data: created, error } = await sb.auth.admin.createUser({
+    const { data: created, error } = await createBoundTestUser(sb, apiTarget, {
       email: seat.email,
       password: PASSWORD,
       email_confirm: true,
@@ -96,15 +120,26 @@ export default async function globalSetup(config: FullConfig) {
   try {
     for (const seat of SEATS) {
       const ctx = await browser.newContext({ baseURL });
-      const page = await ctx.newPage();
-      await page.goto("/auth/login");
-      await page.locator('input[name="email"]').fill(seat.email);
-      await page.locator('input[name="password"]').fill(PASSWORD);
-      await page.getByRole("button", { name: /sign in|log in/i }).first().click();
-      // the admin console is the proof the session is real
-      await page.waitForURL(/\/admin|\/dashboard/, { timeout: 30_000 });
-      await ctx.storageState({ path: `e2e/.auth/${seat.key}.json` });
-      await ctx.close();
+      try {
+        const guard = await bindBrowserToTarget(ctx, apiUrl);
+        const page = await ctx.newPage();
+        await page.goto("/auth/login");
+        guard.assertClean();
+        await page.locator('input[name="email"]').fill(seat.email);
+        await page.locator('input[name="password"]').fill(PASSWORD);
+        await page.getByRole("button", { name: /sign in|log in/i }).first().click();
+        // the admin console is the proof the session is real
+        try {
+          await page.waitForURL(/\/admin|\/dashboard/, { timeout: 30_000 });
+        } catch (error) {
+          guard.assertClean();
+          throw error;
+        }
+        guard.assertClean();
+        await ctx.storageState({ path: `e2e/.auth/${seat.key}.json` });
+      } finally {
+        await ctx.close();
+      }
     }
   } finally {
     await browser.close();

@@ -5,15 +5,17 @@ import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { createBoundTestUser } from "../../e2e/e2e-auth";
 import { dbQuery, dbTx, resolveTarget } from "../../e2e/e2e-db";
 import { noneCreated, teardownRows, undoPartialSeed, type RecoveryClient } from "../../e2e/e2e-cleanup";
 import { PASSWORD, cleanupAdmin, seedAdmin, seedOrgSeat, type FixtureSeed } from "../../e2e/fixture-room.helpers";
 
 let n = 0;
 const ok = (c: boolean, m: string) => { assert.ok(c, m); n++; console.log(`  ok   ${m}`); };
-if (resolveTarget().kind !== "local") throw new Error("real-auth-check runs on the local stack only");
+const target = resolveTarget();
+if (target.kind !== "local") throw new Error("real-auth-check runs on the local stack only");
 const env = execSync("npx supabase status -o env", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-const url = env.match(/^API_URL="?([^"\n]+)"?/m)![1];
+const url = target.apiUrl;
 const anonKey = env.match(/^ANON_KEY="?([^"\n]+)"?/m)![1];
 const serviceKey = env.match(/^SERVICE_ROLE_KEY="?([^"\n]+)"?/m)![1];
 const anon = () => createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -48,7 +50,7 @@ const accountsBy = (email: string) => dbQuery(`select id from auth.users where e
   // 3 · the fallback on real Auth: the undo transaction fails, so the account is banned and its sessions revoked
   const email = `e2e-fx-fb-${stamp}@arabshipbroker.test`;
   const id = randomUUID();
-  const made = await admin.auth.admin.createUser({ id, email, password: PASSWORD, email_confirm: true });
+  const made = await createBoundTestUser(admin, target, { id, email, password: PASSWORD, email_confirm: true });
   ok(!made.error, "a real account for the fallback case");
   const fs = await anon().auth.signInWithPassword({ email, password: PASSWORD });
   const fbToken = fs.data.session!.refresh_token;
