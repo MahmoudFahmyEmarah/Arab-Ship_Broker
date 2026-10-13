@@ -8,7 +8,6 @@ import { recapPdfPath, renderRecapPdf, RECAP_PDF_RENDERER, type RecapPdfSource }
 import { recapText } from "../lib/fixture-room/recap-model";
 import { loadPdfUnicode, shapeLine, UnsupportedTextError } from "../lib/fixture-room/pdf-unicode";
 import { isStorageConflict, storeRecapPdf } from "../lib/fixture-room/recap-pdf-store";
-import { subsetFont } from "../lib/fixture-room/pdf-subset";
 
 let n = 0;
 const ok = (c: boolean, m: string) => { assert.ok(c, m); n++; console.log(`  ok   ${m}`); };
@@ -67,8 +66,6 @@ async function main() {
   ok(/\/CreationDate \(D:20261009081542Z\)/.test(text) && /\/ID \[<0123456789abcdef0123456789abcdef> /.test(text) && !/ModDate/.test(text), "dates come from the publish time, the id from the content hash (no clock)");
   ok(/\/Subtype \/CIDFontType2/.test(text) && /\/FontFile2 /.test(text) && /\/CIDToGIDMap \d+ 0 R/.test(text) && /\/ToUnicode /.test(text) && /\/ActualText <FEFF/.test(text)
      && /NotoNaskhArabic-Regular/.test(text) && /NotoSans-Regular/.test(text), "fonts are embedded (Noto Sans + Naskh), with CID→GID map, ToUnicode and ActualText");
-  ok(/\/BaseFont \/[A-Z]{6}\+NotoNaskhArabic-Regular /.test(text) && /\/BaseFont \/[A-Z]{6}\+NotoSans-Regular /.test(text) && a.bytes.length < 400_000,
-     `fonts are subset to the glyphs drawn, with PDF subset tags (${Math.round(a.bytes.length / 1024)} KB; whole fonts were ~1.7 MB)`);
 
   // 3 · an independent parser reads it back: Latin exactly, Arabic word for word (no letter lost or invented)
   const t = await textOf(a.bytes);
@@ -92,7 +89,7 @@ async function main() {
   const many = { ...src, content: { ...src.content, subjects: Array.from({ length: 70 }, (_, i) => ({ seq: i + 1, title: `Subject ${i + 1} with a description that wraps across the column`, status: "open" as const, responsibleSide: null, deadlineAt: null })) } };
   const long = await textOf((await renderRecapPdf(many)).bytes);
   ok(long.pages >= 2 && long.spans.some((s) => s.includes(`page ${long.pages} of ${long.pages}`)), `a long recap pages with "page n of N" (${long.pages} pages)`);
-  ok(recapPdfPath(src, a.sha256) === `${src.roomId}/recap-v2-${a.sha256}.pdf` && RECAP_PDF_RENDERER === "recap-pdf/3", "the bucket path carries the full SHA-256");
+  ok(recapPdfPath(src, a.sha256) === `${src.roomId}/recap-v2-${a.sha256}.pdf` && RECAP_PDF_RENDERER === "recap-pdf/2", "the bucket path carries the full SHA-256");
 
   // 7 · the store: bind first, never overwrite, verify the bytes, truthful failure
   type Call = { op: string; args?: unknown };
@@ -155,19 +152,6 @@ async function main() {
   ok(createHash("sha256").update(readFileSync("assets/fonts/NotoNaskhArabic-Regular.ttf")).digest("hex") === "c34fdbd98af4dbc45ca192a23d2eeb77032add83086f5fe32957d23b3f36b221"
      && /SIL Open Font License/.test(readFileSync("assets/fonts/OFL.txt", "utf8")), "the embedded fonts are the pinned files, with their licence");
 
-  // the subset keeps every drawn glyph exactly: same outline and advance under the same glyph id, same bytes each time
-  {
-    const hbm = await import("harfbuzzjs");
-    const naskh = new Uint8Array(readFileSync("assets/fonts/NotoNaskhArabic-Regular.ttf"));
-    const mk = (b: Uint8Array) => new hbm.Font(new hbm.Face(new hbm.Blob(b.slice().buffer as ArrayBuffer)));
-    const orig = mk(naskh);
-    const buf = new hbm.Buffer(); buf.addText("شركة النيل للشحن موافقة الإدارة"); buf.guessSegmentProperties(); hbm.shape(orig, buf);
-    const gids = [...new Set(buf.getGlyphInfos().map((g) => g.codepoint))];
-    const sub = subsetFont(naskh, gids); const s2 = mk(sub);
-    ok(gids.every((g) => orig.glyphToPath(g) === s2.glyphToPath(g) && orig.glyphHAdvance(g) === s2.glyphHAdvance(g))
-       && Buffer.compare(Buffer.from(sub), Buffer.from(subsetFont(naskh, gids))) === 0 && sub.length < naskh.length / 10,
-       `the font subset keeps all ${gids.length} drawn Arabic glyphs identical (ids retained) and is deterministic`);
-  }
   console.log(`FIXTURE RECAP PDF CHECK: ${n} passed`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

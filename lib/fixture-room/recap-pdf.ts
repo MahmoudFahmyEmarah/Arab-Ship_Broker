@@ -10,7 +10,7 @@ import { recapCoreDocument, type FixtureDocument } from "./documents";
 import type { FixtureRecapContent } from "./types";
 import { assemblePdf, loadPdfUnicode, PAGE_H, PAGE_W, shapeLine, wrapText, type DrawOp, type PdfPage } from "./pdf-unicode";
 
-export const RECAP_PDF_RENDERER = "recap-pdf/3";
+export const RECAP_PDF_RENDERER = "recap-pdf/2";
 
 /** What the server reads for a published recap version (service-only RPC fixture_recap_pdf_source). */
 export interface RecapPdfSource {
