@@ -560,6 +560,7 @@ export function calculatePda(rawRequest: PdaRequest, rawVersion: PdaTariffVersio
   return {
     coverage: !lines.length ? "manual_required" : incomplete ? "partial" : anyManual ? "partial" : "published",
     tariffVersionId: version.id,
+    tariffName: version.name ?? null,
     nativeCurrency: version.currency,
     ...(request.convertedCurrency && request.fxRate ? { convertedCurrency: request.convertedCurrency } : {}),
     lines,

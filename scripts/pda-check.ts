@@ -438,6 +438,14 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(atThreshold.lines.length, 1, "a declared 12 m call draft meets the threshold");
 }
 
+// Member-facing polish (13 Oct): the result names the tariff edition, never only an internal version id.
+{
+  const named = calculatePda(request, { ...version, name: "Decree 488/2015 + 800/2016 base rates (not escalated)" });
+  assert.equal(named.tariffName, "Decree 488/2015 + 800/2016 base rates (not escalated)");
+  assert.equal(calculatePda(request, { ...version, name: null }).tariffName, null);
+  assert.equal(calculatePda(request, null).tariffName ?? null, null, "no published tariff → no edition name");
+}
+
 const asyncChecks: Promise<void>[] = [];
 
 // ECB feed (owner request 7 Oct; hardened per Codex C2O-089): one dated set, rates read only inside it, every

@@ -93,6 +93,8 @@ export const pdaRequestSchema = z.object({
 export const pdaTariffVersionSchema = z.object({
   id: z.string().uuid(),
   tariffSetId: z.string().uuid(),
+  /** The published tariff set's name (the edition members see), e.g. "… base rates (not escalated)". */
+  name: z.string().trim().max(200).nullable().optional(),
   portLocode: z.string().regex(/^[A-Z]{2}[A-Z0-9]{3}$/),
   terminalId: z.string().uuid().nullable().optional(),
   versionNo: z.number().int().positive(),

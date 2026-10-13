@@ -146,6 +146,8 @@ export interface PdaTariffRule {
 export interface PdaTariffVersion {
   id: string;
   tariffSetId: string;
+  /** The published tariff set's name, shown to members as the edition that priced the port. */
+  name?: string | null;
   portLocode: string;
   terminalId?: string | null;
   versionNo: number;
@@ -203,6 +205,8 @@ export interface PdaWarning {
 export interface PdaCalculationResult {
   coverage: PdaCoverage;
   tariffVersionId: string | null;
+  /** The edition that priced the port (tariff set name); null when no published tariff applied. */
+  tariffName?: string | null;
   nativeCurrency: string;
   convertedCurrency?: string;
   lines: PdaExplainedLine[];

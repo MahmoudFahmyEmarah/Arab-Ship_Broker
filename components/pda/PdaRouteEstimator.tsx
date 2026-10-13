@@ -1161,7 +1161,7 @@ function PortEstimateCard({
         onUpdate={onUpdateManualLine}
         onRemove={onRemoveManualLine}
       />
-      <details className="pda-port-card__handling"><summary><ChevronRight size={14} /> Cargo handling & agency <span>{componentNotSourced.length ? "NOT SOURCED" : result ? "governed evidence found" : "awaiting preview"}</span></summary><p>Handling and agency figures appear only when backed by an applicable published line or an attributed quotation.</p>{componentNotSourced.map((item) => <aside key={item.code}><strong>NOT SOURCED · {item.label}</strong><span>{item.message}</span><small>{item.provenance.tariffVersionId ? `Tariff version ${item.provenance.tariffVersionId}` : "No published tariff provenance"}</small></aside>)}</details>
+      <details className="pda-port-card__handling"><summary><ChevronRight size={14} /> Cargo handling & agency <span>{componentNotSourced.length ? "NOT SOURCED" : result ? "governed evidence found" : "awaiting preview"}</span></summary><p>Handling and agency figures appear only when backed by an applicable published line or an attributed quotation.</p>{componentNotSourced.map((item) => <aside key={item.code}><strong>NOT SOURCED · {item.label}</strong><span>{item.message}</span><small>{item.provenance.tariffVersionId ? `Published tariff${result?.tariffName ? `: ${result.tariffName}` : ""}` : "No published tariff provenance"}</small></aside>)}</details>
       <details className="pda-port-card__breakdown">
         <summary><ChevronRight size={14} /> Breakdown · {result?.lines.length ?? 0} charges <span>{!result ? "awaiting explicit inputs" : manual ? `${manual} agent quote${manual === 1 ? "" : "s"} required` : warnings ? `${warnings} note${warnings === 1 ? "" : "s"}` : "governed tariff"}</span></summary>
         <div>
@@ -1177,11 +1177,11 @@ function PortEstimateCard({
               ) : null}
             </article>
           )) : <p><span>No priced tariff lines</span><strong>NOT SOURCED</strong></p>}
-          {notSourced.filter((item) => !componentNotSourced.includes(item)).map((item) => <aside className="pda-not-sourced-line" key={item.code}><strong>NOT SOURCED · {item.label}</strong><span>{item.message}</span><small>{item.provenance.tariffVersionId ? `Tariff version ${item.provenance.tariffVersionId}` : "No published tariff provenance"}{item.provenance.warningCode ? ` · ${item.provenance.warningCode}` : ""}{item.provenance.ruleCode ? ` · rule ${item.provenance.ruleCode}` : ""}</small></aside>)}
+          {notSourced.filter((item) => !componentNotSourced.includes(item)).map((item) => <aside className="pda-not-sourced-line" key={item.code}><strong>NOT SOURCED · {item.label}</strong><span>{item.message}</span><small>{item.provenance.tariffVersionId ? `Published tariff${result?.tariffName ? `: ${result.tariffName}` : ""}` : "No published tariff provenance"}{item.provenance.warningCode ? ` · ${item.provenance.warningCode}` : ""}{item.provenance.ruleCode ? ` · rule ${item.provenance.ruleCode}` : ""}</small></aside>)}
           {result?.warnings.map((warning, index) => <aside key={`${warning.code}-${index}`}>{warning.message}</aside>)}
         </div>
       </details>
-      <footer><a href="/admin/port-tariffs">Port record</a><a href="/admin/port-tariffs">Port settings</a><span>{!result ? "Waiting for explicit inputs" : <>{result.tariffVersionId ? `Tariff ${result.tariffVersionId} · ` : "No tariff version · "}{warnings || notSourced.length ? `${warnings + notSourced.length} item${warnings + notSourced.length === 1 ? "" : "s"} need attention` : "All sourced lines shown"}</>}</span></footer>
+      <footer><a href="/admin/port-tariffs">Port record</a><a href="/admin/port-tariffs">Port settings</a><span>{!result ? "Waiting for explicit inputs" : <>{result.tariffVersionId ? `Tariff: ${result.tariffName ?? "published tariff"} · ` : "No published tariff · "}{warnings || notSourced.length ? `${warnings + notSourced.length} item${warnings + notSourced.length === 1 ? "" : "s"} need attention` : "All sourced lines shown"}</>}</span></footer>
     </article>
   );
 }
