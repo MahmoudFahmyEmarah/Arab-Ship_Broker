@@ -10,7 +10,14 @@ import { recapCoreDocument, type FixtureDocument } from "./documents";
 import type { FixtureRecapContent } from "./types";
 import { assemblePdf, loadPdfUnicode, PAGE_H, PAGE_W, shapeLine, wrapText, type DrawOp, type PdfPage } from "./pdf-unicode";
 
-export const RECAP_PDF_RENDERER = "recap-pdf/2";
+/** The renderer for new bindings. A binding records its renderer; a retry re-renders with THAT one (C2O-113). */
+export const RECAP_PDF_RENDERER = "recap-pdf/3";
+/** Every renderer this build can reproduce byte for byte: /2 whole fonts (the first release), /3 subset fonts. */
+export const RECAP_PDF_RENDERERS = ["recap-pdf/2", "recap-pdf/3"] as const;
+export type RecapPdfRenderer = (typeof RECAP_PDF_RENDERERS)[number];
+export function isRecapPdfRenderer(r: unknown): r is RecapPdfRenderer {
+  return typeof r === "string" && (RECAP_PDF_RENDERERS as readonly string[]).includes(r);
+}
 
 /** What the server reads for a published recap version (service-only RPC fixture_recap_pdf_source). */
 export interface RecapPdfSource {
@@ -87,14 +94,16 @@ export function layoutDocument(doc: FixtureDocument, footerLabel: string): PdfPa
 }
 
 /** Render the stored recap. Same source → same bytes → same SHA-256. Throws if any text cannot be set exactly. */
-export async function renderRecapPdf(src: RecapPdfSource): Promise<{ bytes: Uint8Array; sha256: string; fileName: string }> {
+export async function renderRecapPdf(src: RecapPdfSource, renderer: RecapPdfRenderer = RECAP_PDF_RENDERER): Promise<{ bytes: Uint8Array; sha256: string; fileName: string }> {
+  // an unknown renderer fails closed: never fall back to another one (its bytes would not match the binding)
+  if (!isRecapPdfRenderer(renderer)) throw new Error(`recap PDF renderer ${String(renderer)} is not available in this build`);
   await loadPdfUnicode();
   const doc = recapCoreDocument(src.content, {
     versionNo: src.versionNo, roomVersion: src.roomVersion, publishedAt: src.publishedAt,
     publishedByLabel: src.publisherLabel, contentHash: src.contentHash,
   });
   const pages = layoutDocument(doc, `${src.content.ref} recap v${src.versionNo}`);
-  const bytes = assemblePdf(pages, { title: `${src.content.ref} recap v${src.versionNo}`, createdAt: src.publishedAt, idHex: src.contentHash });
+  const bytes = assemblePdf(pages, { title: `${src.content.ref} recap v${src.versionNo}`, createdAt: src.publishedAt, idHex: src.contentHash, subsetFonts: renderer === "recap-pdf/3" });
   return { bytes, sha256: createHash("sha256").update(bytes).digest("hex"), fileName: doc.fileName };
 }
 

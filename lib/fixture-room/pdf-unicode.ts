@@ -8,9 +8,13 @@
 //
 // Determinism (the stored file's SHA-256 is a record): no clock (CreationDate is the caller's time), no random ids
 // (/ID from the caller's digest), fixed object order, every glyph placed with an explicit text matrix at two
-// decimals, fonts embedded whole (no subsetting step to vary). The same document gives the same bytes.
+// decimals. Fonts are embedded per the renderer version recorded on a binding: whole (recap-pdf/2, the first release —
+// kept byte-identical so a pending/failed /2 binding can be retried) or subset to the glyphs drawn (recap-pdf/3; HarfBuzz,
+// glyph ids retained, deterministic — lib/fixture-room/pdf-subset.ts). The same document and renderer give the same bytes.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { subsetFont } from "./pdf-subset";
 import type * as HB from "harfbuzzjs";
 import bidiFactory from "bidi-js";
 
@@ -189,7 +193,7 @@ function pdfDate(iso: string): string {
   return `D:${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
 }
 
-export function assemblePdf(pages: PdfPage[], opts: { title: string; createdAt: string; idHex: string }): Uint8Array {
+export function assemblePdf(pages: PdfPage[], opts: { title: string; createdAt: string; idHex: string; subsetFonts: boolean }): Uint8Array {
   const F = faces();
   // Character ids: one CID per (glyph, text) pair, allocated in document order. Naskh draws ف/ق (and س/ش, …) with one
   // shared base glyph plus dots, so a glyph-indexed ToUnicode would name the wrong letter; a CID per pair maps each
@@ -213,12 +217,22 @@ export function assemblePdf(pages: PdfPage[], opts: { title: string; createdAt: 
   faceOrder.forEach((key, i) => {
     const f = F[key]; const c = cids.get(key)!; const ids = c.gid.map((_, id) => id).slice(1);
     const k = 1000 / f.upem;
-    const file = stream(`/Length1 ${f.bytes.length}`, f.bytes);
-    const desc = add(enc(`<< /Type /FontDescriptor /FontName /${FONT_FILES[key].name} /Flags 4 /FontBBox [-1000 -1000 3000 2000] /ItalicAngle 0 /Ascent 1069 /Descent -293 /CapHeight 714 /StemV 80 /FontFile2 ${file} 0 R >>`));
+    // /3: only the glyphs this document draws (ids retained, so CIDToGIDMap below is unchanged), named with the
+    // six-letter tag PDF requires, derived from the glyph set so it is deterministic. /2: the whole font, as released.
+    let fontBytes = f.bytes;
+    let baseName = FONT_FILES[key].name;
+    if (opts.subsetFonts) {
+      fontBytes = subsetFont(f.bytes, c.gid);
+      const subTag = [...createHash("sha256").update(`${key}:${[...new Set(c.gid)].sort((a, b) => a - b).join(",")}`).digest()]
+        .slice(0, 6).map((b) => String.fromCharCode(65 + (b % 26))).join("");
+      baseName = `${subTag}+${baseName}`;
+    }
+    const file = stream(`/Length1 ${fontBytes.length}`, fontBytes);
+    const desc = add(enc(`<< /Type /FontDescriptor /FontName /${baseName} /Flags 4 /FontBBox [-1000 -1000 3000 2000] /ItalicAngle 0 /Ascent 1069 /Descent -293 /CapHeight 714 /StemV 80 /FontFile2 ${file} 0 R >>`));
     const widths = ids.map((id) => `${id} [${Math.round(f.font.glyphHAdvance(c.gid[id]!) * k)}]`).join(" ");
     const map: number[] = []; for (const g of c.gid) map.push((g >> 8) & 0xff, g & 0xff);
     const cidToGid = stream("", map);
-    const cid = add(enc(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /${FONT_FILES[key].name} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${desc} 0 R /CIDToGIDMap ${cidToGid} 0 R /DW 1000 /W [${widths}] >>`));
+    const cid = add(enc(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /${baseName} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${desc} 0 R /CIDToGIDMap ${cidToGid} 0 R /DW 1000 /W [${widths}] >>`));
     const cmap = ["/CIDInit /ProcSet findresource begin", "12 dict begin", "begincmap", "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def",
       `/CMapName /ASB-${FONT_FILES[key].name}-UCS def`, "/CMapType 2 def", "1 begincodespacerange", "<0000> <FFFF>", "endcodespacerange"];
     // a glyph that carries no text of its own (a dot or mark drawn separately) maps to ZERO WIDTH SPACE, so an
@@ -227,7 +241,7 @@ export function assemblePdf(pages: PdfPage[], opts: { title: string; createdAt: 
     for (let s = 0; s < pairs.length; s += 100) { const chunk = pairs.slice(s, s + 100); cmap.push(`${chunk.length} beginbfchar`, ...chunk, "endbfchar"); }
     cmap.push("endcmap", "CMapName currentdict /CMap defineresource pop", "end", "end");
     const toUni = stream("", enc(cmap.join("\n")));
-    fontRef.set(key, add(enc(`<< /Type /Font /Subtype /Type0 /BaseFont /${FONT_FILES[key].name} /Encoding /Identity-H /DescendantFonts [${cid} 0 R] /ToUnicode ${toUni} 0 R >>`)));
+    fontRef.set(key, add(enc(`<< /Type /Font /Subtype /Type0 /BaseFont /${baseName} /Encoding /Identity-H /DescendantFonts [${cid} 0 R] /ToUnicode ${toUni} 0 R >>`)));
     void i;
   });
   const fontRes = faceOrder.map((key, i) => `/F${i + 1} ${fontRef.get(key)} 0 R`).join(" ");
@@ -269,7 +283,7 @@ export function assemblePdf(pages: PdfPage[], opts: { title: string; createdAt: 
   }
   objects[catalog - 1] = enc(`<< /Type /Catalog /Pages ${pagesObj} 0 R /Lang (en) >>`);
   objects[pagesObj - 1] = enc(`<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(" ")}] /Count ${kids.length} >>`);
-  const info = add([...enc("<< /Title "), ...pdfLiteral(opts.title), ...enc(` /Producer (Arab ShipBroker recap renderer 2) /CreationDate (${pdfDate(opts.createdAt)}) >>`)]);
+  const info = add([...enc("<< /Title "), ...pdfLiteral(opts.title), ...enc(` /Producer (Arab ShipBroker recap renderer ${opts.subsetFonts ? 3 : 2}) /CreationDate (${pdfDate(opts.createdAt)}) >>`)]);
   const out: number[] = enc("%PDF-1.7\n"); out.push(0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a);
   const offsets: number[] = [];
   objects.forEach((b, i) => { offsets.push(out.length); for (const x of enc(`${i + 1} 0 obj\n`)) out.push(x); for (let j = 0; j < b.length; j++) out.push(b[j]!); for (const x of enc("\nendobj\n")) out.push(x); });
