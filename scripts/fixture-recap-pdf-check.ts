@@ -8,6 +8,7 @@ import { recapPdfPath, renderRecapPdf, RECAP_PDF_RENDERER, type RecapPdfSource }
 import { recapText } from "../lib/fixture-room/recap-model";
 import { loadPdfUnicode, shapeLine, UnsupportedTextError } from "../lib/fixture-room/pdf-unicode";
 import { isStorageConflict, storeRecapPdf } from "../lib/fixture-room/recap-pdf-store";
+import { subsetFont } from "../lib/fixture-room/pdf-subset";
 
 let n = 0;
 const ok = (c: boolean, m: string) => { assert.ok(c, m); n++; console.log(`  ok   ${m}`); };
@@ -66,6 +67,8 @@ async function main() {
   ok(/\/CreationDate \(D:20261009081542Z\)/.test(text) && /\/ID \[<0123456789abcdef0123456789abcdef> /.test(text) && !/ModDate/.test(text), "dates come from the publish time, the id from the content hash (no clock)");
   ok(/\/Subtype \/CIDFontType2/.test(text) && /\/FontFile2 /.test(text) && /\/CIDToGIDMap \d+ 0 R/.test(text) && /\/ToUnicode /.test(text) && /\/ActualText <FEFF/.test(text)
      && /NotoNaskhArabic-Regular/.test(text) && /NotoSans-Regular/.test(text), "fonts are embedded (Noto Sans + Naskh), with CID→GID map, ToUnicode and ActualText");
+  ok(/\/BaseFont \/[A-Z]{6}\+NotoNaskhArabic-Regular /.test(text) && /\/BaseFont \/[A-Z]{6}\+NotoSans-Regular /.test(text) && a.bytes.length < 400_000,
+     `fonts are subset to the glyphs drawn, with PDF subset tags (${Math.round(a.bytes.length / 1024)} KB; whole fonts were ~1.7 MB)`);
 
   // 3 · an independent parser reads it back: Latin exactly, Arabic word for word (no letter lost or invented)
   const t = await textOf(a.bytes);
@@ -89,15 +92,16 @@ async function main() {
   const many = { ...src, content: { ...src.content, subjects: Array.from({ length: 70 }, (_, i) => ({ seq: i + 1, title: `Subject ${i + 1} with a description that wraps across the column`, status: "open" as const, responsibleSide: null, deadlineAt: null })) } };
   const long = await textOf((await renderRecapPdf(many)).bytes);
   ok(long.pages >= 2 && long.spans.some((s) => s.includes(`page ${long.pages} of ${long.pages}`)), `a long recap pages with "page n of N" (${long.pages} pages)`);
-  ok(recapPdfPath(src, a.sha256) === `${src.roomId}/recap-v2-${a.sha256}.pdf` && RECAP_PDF_RENDERER === "recap-pdf/2", "the bucket path carries the full SHA-256");
+  ok(recapPdfPath(src, a.sha256) === `${src.roomId}/recap-v2-${a.sha256}.pdf` && RECAP_PDF_RENDERER === "recap-pdf/3", "the bucket path carries the full SHA-256");
 
   // 7 · the store: bind first, never overwrite, verify the bytes, truthful failure
   type Call = { op: string; args?: unknown };
-  const fake = (o: { upload?: { error: unknown }; download?: Buffer | null; finalizeError?: boolean; bindStatus?: string }) => {
+  const fake = (o: { upload?: { error: unknown }; download?: Buffer | null; finalizeError?: boolean; bindStatus?: string; binding?: Record<string, unknown> | null }) => {
     const calls: Call[] = [];
     const admin = {
       rpc: async (fn: string, args: Record<string, unknown>) => {
         calls.push({ op: fn, args });
+        if (fn === "fixture_recap_pdf_binding") return { data: o.binding ?? null, error: null };
         if (fn === "fixture_recap_pdf_source") return { data: src, error: null };
         if (fn === "bind_fixture_recap_pdf") return { data: { status: o.bindStatus ?? "pending" }, error: null };
         if (fn === "finalize_fixture_recap_pdf") return o.finalizeError && args.p_stored ? { data: null, error: { message: "boom" } } : { data: { status: args.p_stored ? "stored" : "failed" }, error: null };
@@ -118,7 +122,8 @@ async function main() {
   const finalOf = (f: ReturnType<typeof fake>) => f.calls.filter((c) => c.op === "finalize_fixture_recap_pdf").map((c) => (c.args as { p_stored: boolean }).p_stored);
   let f = fake({});
   let r = await run(f);
-  ok(typeof r === "object" && order(f) === "fixture_recap_pdf_source>bind_fixture_recap_pdf>upload>download>finalize_fixture_recap_pdf" && finalOf(f).join() === "true", "bind → upload → read back → stored, in that order");
+  ok(typeof r === "object" && order(f) === "fixture_recap_pdf_binding>fixture_recap_pdf_source>bind_fixture_recap_pdf>upload>download>finalize_fixture_recap_pdf" && finalOf(f).join() === "true", "no binding yet: read the record → bind → upload → read back → stored, in that order");
+  ok((f.calls.find((c) => c.op === "bind_fixture_recap_pdf")!.args as { p_renderer: string }).p_renderer === "recap-pdf/3", "a new binding records the current renderer recap-pdf/3");
   ok(f.calls.some((c) => c.op === "remove" && (c.args as string[]).join() === `${src.roomId}/recap-v2-stray.pdf`), "an unbound object in the room's folder is reconciled away; the bound file is kept");
   f = fake({ upload: { error: { statusCode: "409", message: "The resource already exists" } } });
   r = await run(f);
@@ -139,6 +144,33 @@ async function main() {
   r = await run(f);
   ok(typeof r === "object" && !f.calls.some((c) => c.op === "upload"), "an already stored version is never uploaded again");
 
+  // 7b · renderer versions (C2O-111 P1, C2O-113): a binding is retried with ITS renderer, byte for byte
+  const v2 = await renderRecapPdf(src, "recap-pdf/2");
+  ok(v2.sha256 === "253ad37543f27a052604fa10728ba4c85cad3ed675a708ba114f636c1ed0a386" && v2.bytes.length === 1705575
+     && /\/BaseFont \/NotoSans-Regular /.test(latin1(v2.bytes)) && /renderer 2\)/.test(latin1(v2.bytes)),
+     "recap-pdf/2 reproduces the released renderer byte for byte (whole fonts, original names and producer; SHA pinned from 6995ffc)");
+  const b2 = (status: string, over: Record<string, unknown> = {}) => ({ path: recapPdfPath(src, v2.sha256), sha256: v2.sha256, bytes: v2.bytes.length, renderer: "recap-pdf/2", status, ...over });
+  for (const st of ["pending", "failed"]) {
+    f = fake({ binding: b2(st), download: Buffer.from(v2.bytes) });
+    r = await run(f);
+    ok(typeof r === "object" && r.sha256 === v2.sha256 && r.bytes === v2.bytes.length && r.path === recapPdfPath(src, v2.sha256)
+       && !f.calls.some((c) => c.op === "bind_fixture_recap_pdf") && finalOf(f).join() === "true"
+       && (f.calls.find((c) => c.op === "finalize_fixture_recap_pdf")!.args as { p_sha256: string }).p_sha256 === v2.sha256,
+       `a ${st} /2 binding is retried with /2: same SHA, length and path, never re-bound, then finalized stored`);
+  }
+  f = fake({ binding: b2("pending", { sha256: "0".repeat(64) }) });
+  r = await run(f);
+  ok(typeof r === "string" && /does not match its binding/.test(r) && !f.calls.some((c) => ["bind_fixture_recap_pdf", "upload", "finalize_fixture_recap_pdf"].includes(c.op)),
+     "regenerated bytes that differ from the binding are refused: nothing is re-bound, uploaded or finalized");
+  f = fake({ binding: b2("pending", { renderer: "recap-pdf/9" }) });
+  r = await run(f);
+  ok(typeof r === "string" && /cannot reproduce/.test(r) && f.calls.map((c) => c.op).join() === "fixture_recap_pdf_binding",
+     "an unknown renderer fails closed before rendering: no source read, no bind, no upload");
+  f = fake({ binding: b2("stored") });
+  r = await run(f);
+  ok(typeof r === "object" && r.sha256 === v2.sha256 && f.calls.map((c) => c.op).join() === "fixture_recap_pdf_binding",
+     "a stored binding is returned for signing without rendering anything");
+
   // 8 · wiring and boundaries
   const actions = readFileSync("app/(dashboard)/dashboard/fixture-room/actions.ts", "utf8");
   const store = readFileSync("lib/fixture-room/recap-pdf-store.ts", "utf8");
@@ -152,6 +184,19 @@ async function main() {
   ok(createHash("sha256").update(readFileSync("assets/fonts/NotoNaskhArabic-Regular.ttf")).digest("hex") === "c34fdbd98af4dbc45ca192a23d2eeb77032add83086f5fe32957d23b3f36b221"
      && /SIL Open Font License/.test(readFileSync("assets/fonts/OFL.txt", "utf8")), "the embedded fonts are the pinned files, with their licence");
 
+  // the subset keeps every drawn glyph exactly: same outline and advance under the same glyph id, same bytes each time
+  {
+    const hbm = await import("harfbuzzjs");
+    const naskh = new Uint8Array(readFileSync("assets/fonts/NotoNaskhArabic-Regular.ttf"));
+    const mk = (b: Uint8Array) => new hbm.Font(new hbm.Face(new hbm.Blob(b.slice().buffer as ArrayBuffer)));
+    const orig = mk(naskh);
+    const buf = new hbm.Buffer(); buf.addText("شركة النيل للشحن موافقة الإدارة"); buf.guessSegmentProperties(); hbm.shape(orig, buf);
+    const gids = [...new Set(buf.getGlyphInfos().map((g) => g.codepoint))];
+    const sub = subsetFont(naskh, gids); const s2 = mk(sub);
+    ok(gids.every((g) => orig.glyphToPath(g) === s2.glyphToPath(g) && orig.glyphHAdvance(g) === s2.glyphHAdvance(g))
+       && Buffer.compare(Buffer.from(sub), Buffer.from(subsetFont(naskh, gids))) === 0 && sub.length < naskh.length / 10,
+       `the font subset keeps all ${gids.length} drawn Arabic glyphs identical (ids retained) and is deterministic`);
+  }
   console.log(`FIXTURE RECAP PDF CHECK: ${n} passed`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
