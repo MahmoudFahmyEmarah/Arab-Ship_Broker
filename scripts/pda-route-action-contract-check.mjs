@@ -82,10 +82,16 @@ assert.doesNotMatch(routeUi, /filtered\[activeIndex\]\?\.id/);
 assert.match(routeUi, /line\.explanation/);
 assert.match(routeUi, /line\.enteredBy/);
 assert.match(routeUi, /line\.manualReason/);
-assert.match(routeUi, /line\.evidence\.sourceId/);
+assert.match(routeUi, /line\.evidence\.title/); // evidence is shown by title/page/sheet, never by source UUID (C2O-120)
 assert.match(routeUi, /try\s*\{[\s\S]*await previewPdaRoute\(input\)/);
 assert.match(routeUi, /catch \(cause\)[\s\S]*requestSequence\.current === sequence/);
 assert.match(routeUi, /finally\s*\{[\s\S]*requestSequence\.current === sequence[\s\S]*setBusy\(false\)/);
+// C2O-120: members see the version's edition label, never a raw tariff-version or source UUID; the unused coverage
+// list is not fetched or serialised to the browser.
+assert.match(routeUi, /result\.tariffEdition/);
+assert.doesNotMatch(routeUi, /evidence\.sourceId/);
+assert.doesNotMatch(routeUi, /\$\{(?:result|item\.provenance)\.tariffVersionId\}/);
+assert.doesNotMatch(bootstrap, /listPdaCoverage/);
 assert.match(routeSchema, /Duplicate manual quotation rule code/);
 assert.match(routeSchema, /seen\.has\(line\.ruleCode\)/);
 

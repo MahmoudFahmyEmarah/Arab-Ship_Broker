@@ -1,4 +1,6 @@
--- DOWN for 20261013300000_pda_context_tariff_name: restores get_pda_calculation_context exactly as 20261006300000 defined it.
+-- DOWN for 20261013300000_pda_context_tariff_name: restores get_pda_calculation_context exactly as 20261006300000 defined it, then
+-- removes the edition-label trigger, function, constraint and column (the label is derived data: set name, version
+-- number and effective date remain on the versions and sets).
 set local lock_timeout = '5s';
 
 create or replace function public.get_pda_calculation_context(
@@ -117,3 +119,10 @@ end;
 $$;
 revoke all on function public.get_pda_calculation_context(text, uuid, date) from public, anon;
 grant execute on function public.get_pda_calculation_context(text, uuid, date) to authenticated, service_role;
+
+drop trigger if exists trg_pda_version_edition_label on public.port_tariff_versions;
+drop function if exists public.fn_pda_version_edition_label();
+alter table public.port_tariff_versions disable trigger trg_pda_version_immutable;
+alter table public.port_tariff_versions drop constraint if exists port_tariff_versions_edition_label_ck;
+alter table public.port_tariff_versions drop column if exists edition_label;
+alter table public.port_tariff_versions enable trigger trg_pda_version_immutable;

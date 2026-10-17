@@ -438,12 +438,15 @@ assert.equal(pctReq.warnings.some((w) => w.code === "MISSING_INPUT"), false);
   assert.equal(atThreshold.lines.length, 1, "a declared 12 m call draft meets the threshold");
 }
 
-// Member-facing polish (13 Oct): the result names the tariff edition, never only an internal version id.
+// Member-facing polish (C2O-120): the result names the version's frozen edition label (≤ 400 characters).
 {
-  const named = calculatePda(request, { ...version, name: "Decree 488/2015 + 800/2016 base rates (not escalated)" });
-  assert.equal(named.tariffName, "Decree 488/2015 + 800/2016 base rates (not escalated)");
-  assert.equal(calculatePda(request, { ...version, name: null }).tariffName, null);
-  assert.equal(calculatePda(request, null).tariffName ?? null, null, "no published tariff → no edition name");
+  const label = "Decree 488/2015 + 800/2016 base rates (not escalated) · v1 (from 2015-09-08)";
+  assert.equal(calculatePda(request, { ...version, editionLabel: label }).tariffEdition, label);
+  assert.equal(calculatePda(request, { ...version, editionLabel: null }).tariffEdition, null);
+  assert.equal(calculatePda(request, null).tariffEdition ?? null, null, "no published tariff → no edition");
+  const long = "N".repeat(300) + " · v12 (from 2026-10-13)";
+  assert.equal(calculatePda(request, { ...version, editionLabel: long }).tariffEdition, long, "a 300-character set name fits");
+  assert.throws(() => calculatePda(request, { ...version, editionLabel: "x".repeat(401) }));
 }
 
 const asyncChecks: Promise<void>[] = [];
