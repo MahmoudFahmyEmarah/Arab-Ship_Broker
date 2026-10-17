@@ -166,6 +166,27 @@ Storage bucket when documents still exist. Forward refuses to adopt a
 pre-existing bucket. Clean harnesses therefore restore their exact baseline; a
 production rollback cannot silently destroy PDFs or unrelated bucket settings.
 
+### Hosted rollback runbook (production or staging)
+
+Hosted Supabase refuses direct deletes from storage tables (`storage.protect_delete`),
+so on a hosted project the `fixture-recaps` bucket is removed through the Storage API,
+not by the DOWN. Every step is required; a rollback is not complete until step 4 passes.
+
+1. Run the DOWNs with **psql** (each `-1 -v ON_ERROR_STOP=1`), newest first:
+   `20261008052000_shared_notification_semantics_down.sql`, then
+   `20261008050000_shared_fixture_services_down.sql`. Both are plain SQL. Where
+   notification history exists, the base DOWN refuses until the export is confirmed
+   with `set local asb.notifications_down = 'history-exported:<ref>'`.
+2. The base DOWN refuses while `fixture-recaps` holds any object. On a hosted project it
+   then leaves the empty bucket and raises the notice
+   `storage.protect_delete is active — remove the empty fixture-recaps bucket through the Storage API`.
+3. **Remove the empty bucket through the Storage API**, with the service role: either the
+   dashboard (Storage → `fixture-recaps` → Delete bucket) or supabase-js
+   `admin.storage.deleteBucket('fixture-recaps')`.
+4. **Verify** (read-only): `select count(*) from storage.buckets where id = 'fixture-recaps';`
+   must return `0`. Re-applying `20261008051000` refuses a leftover bucket by design,
+   so do not re-apply until this returns 0.
+
 The executable release harness is
 `scripts/shared-fixture-services-harness.sh`. It creates only a disposable
 `asb_shared_fixture_services_test_<pid>` database, applies a minimal Supabase
