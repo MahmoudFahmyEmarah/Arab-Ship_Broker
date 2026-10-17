@@ -35,7 +35,7 @@ begin
     if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                 where n.nspname = 'storage' and p.proname = 'protect_delete') then
       if exists (select 1 from storage.buckets where id = 'fixture-recaps') then
-        raise notice 'shared services DOWN: storage.protect_delete is active — remove the empty fixture-recaps bucket through the Storage API';
+        raise warning 'shared services DOWN: storage.protect_delete is active — remove the empty fixture-recaps bucket through the Storage API. REQUIRED: the rollback is incomplete until select count(*) from storage.buckets where id = ''fixture-recaps'' returns 0 (docs/shared-fixture-services-architecture.md, Hosted rollback runbook)';
       end if;
     else
       delete from storage.buckets where id = 'fixture-recaps';

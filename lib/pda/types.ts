@@ -146,6 +146,8 @@ export interface PdaTariffRule {
 export interface PdaTariffVersion {
   id: string;
   tariffSetId: string;
+  /** The version's frozen edition label, shown to members as the edition that priced the port. */
+  editionLabel?: string | null;
   portLocode: string;
   terminalId?: string | null;
   versionNo: number;
@@ -203,6 +205,8 @@ export interface PdaWarning {
 export interface PdaCalculationResult {
   coverage: PdaCoverage;
   tariffVersionId: string | null;
+  /** The edition that priced the port (the version's frozen label); null when no published tariff applied. */
+  tariffEdition?: string | null;
   nativeCurrency: string;
   convertedCurrency?: string;
   lines: PdaExplainedLine[];

@@ -7,25 +7,24 @@ import {
   type PdaEstimatorSearchParams,
 } from "@/lib/pda/estimator-contract";
 import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
-import type { PdaCoverageItem, PdaTerminalItem } from "@/sdk/app/pda";
-import { listPdaCoverage, listPdaTerminals } from "@/sdk/app/pda";
+import type { PdaTerminalItem } from "@/sdk/app/pda";
+import { listPdaTerminals } from "@/sdk/app/pda";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface PdaEstimatorPageData {
   bootstrap: PdaEstimatorBootstrap;
-  coverage: PdaCoverageItem[];
   terminals: PdaTerminalItem[];
 }
 
 export async function loadPdaEstimatorPageData(
   supabase: SupabaseClient,
   params: PdaEstimatorSearchParams,
-  callDate: string,
+  _callDate: string,
 ): Promise<PdaEstimatorPageData> {
-  const [vessels, cargos, coverage, terminals, portsResult] = await Promise.all([
+  // (C2O-120) the unused tariff-coverage list is no longer fetched or serialised to the member's browser
+  const [vessels, cargos, terminals, portsResult] = await Promise.all([
     loadVesselViews({ mine: true }),
     loadCargoViews({ mine: true }),
-    listPdaCoverage(supabase, callDate),
     listPdaTerminals(supabase),
     supabase
       .from("ports")
@@ -53,5 +52,5 @@ export async function loadPdaEstimatorPageData(
     ? resolved
     : markPdaEstimatorCatalogUnavailable(resolved);
 
-  return { bootstrap, coverage, terminals };
+  return { bootstrap, terminals };
 }
