@@ -76,13 +76,16 @@ begin
   exception when others then if sqlerrm like 'PDA_IMMUTABLE:%' then denied := true; else raise; end if; end;
   if not denied then raise exception 'E5: a published edition label was changed'; end if;
 
-  -- E6 · a blank label is filled at creation; more than 400 characters is refused
+  -- E6 · a blank label is filled at creation; exactly 400 characters is accepted; 401 is refused (C2O-126 P2)
   if (select count(*) from public.port_tariff_versions where btrim(edition_label) = '') <> 0 then raise exception 'E6: blank label stored'; end if;
+  perform public.pda_create_tariff_draft(maker, jsonb_build_object('tariffSetId', v_set, 'portLocode', v_port, 'publisherId', v_pub,
+    'name', v_name, 'scope', 'port_call', 'versionNo', 3, 'currency', 'USD', 'effectiveFrom', '2026-09-01', 'roundingMode', 'half_up',
+    'decimalPlaces', 2, 'primarySourceId', v_src, 'supersedesId', v2));
+  update public.port_tariff_versions set edition_label = repeat('x', 400) where tariff_set_id = v_set and version_no = 3;
+  if (select char_length(edition_label) from public.port_tariff_versions where tariff_set_id = v_set and version_no = 3) <> 400 then
+    raise exception 'E6: an exactly-400-character label was not stored'; end if;
   denied := false;
-  begin perform public.pda_create_tariff_draft(maker, jsonb_build_object('tariffSetId', v_set, 'portLocode', v_port, 'publisherId', v_pub,
-      'name', v_name, 'scope', 'port_call', 'versionNo', 3, 'currency', 'USD', 'effectiveFrom', '2026-09-01', 'roundingMode', 'half_up',
-      'decimalPlaces', 2, 'primarySourceId', v_src, 'supersedesId', v2));
-    update public.port_tariff_versions set edition_label = repeat('x', 401) where tariff_set_id = v_set and version_no = 3;
+  begin update public.port_tariff_versions set edition_label = repeat('x', 401) where tariff_set_id = v_set and version_no = 3;
   exception when check_violation then denied := true; end;
   if not denied then raise exception 'E6: a 401-character label was accepted'; end if;
 
