@@ -414,6 +414,7 @@ end $$;
 -- D7 · O2ALL-006: a deadline changes only by agreement — proposed by one side, answered by the other
 do $$
 declare v jsonb; v_room uuid; v_tid uuid; v_pid uuid; v_code text; v_s uuid; e text; v_before timestamptz; n int;
+        v_dl timestamptz; v_ver int; v_ver2 int; v_acc jsonb; r jsonb;
 begin
   perform pg_temp.fx_as('u_ch1');
   v := pg_temp.fx_create(pg_temp.fx_id('c1'), pg_temp.fx_id('a3'), pg_temp.fx_terms(), 'dlx-create', '{}'::jsonb);   -- a3: u_ow1's third position (v2 is the sanctioned vessel)
@@ -465,28 +466,42 @@ begin
   if e <> 'FX_STATE' then raise exception 'D7: answering with nothing pending must be FX_STATE, got %', e; end if;
 
   -- the owner side proposes, the charterer side accepts: the deadline moves, once
-  v := public.propose_fixture_subject_extension(v_room, v_s, now() + interval '4 days', pg_temp.fx_ver(v_room), 'dlx-propose-2');
+  v_dl := now() + interval '4 days';
+  v_ver := pg_temp.fx_ver(v_room);
+  v := public.propose_fixture_subject_extension(v_room, v_s, v_dl, v_ver, 'dlx-propose-2');
   perform pg_temp.fx_as('u_ch1');
-  v := public.respond_fixture_subject_extension(v_room, v_s, true, pg_temp.fx_ver(v_room), 'dlx-accept-2');
+  v_ver2 := pg_temp.fx_ver(v_room);
+  v_acc := public.respond_fixture_subject_extension(v_room, v_s, true, v_ver2, 'dlx-accept-2');
   perform pg_temp.fx_owner();
-  if (select deadline_at from public.fixture_subjects where id = v_s) <> now() + interval '4 days'
+  if (select deadline_at from public.fixture_subjects where id = v_s) <> v_dl
      or (select extended_count from public.fixture_subjects where id = v_s) <> 1
      or not exists (select 1 from public.fixture_events where room_id = v_room and type = 'subject.extended'
                      and payload->>'proposedBySide' = 'vessel' and payload->>'acceptedBySide' = 'cargo') then
     raise exception 'D7: an accepted proposal moves the deadline once and records both sides'; end if;
-  -- authority before replay (B2O-037): the real caller's replay returns the stored result without a second event;
-  -- a member outside the room re-sending the same key and arguments gets an error, never the envelope
+
+  -- replay is bound to the caller (B2O-037, C2O-111 P2): every replay below re-sends the EXACT original arguments,
+  -- version and key. The rightful callers get their stored envelopes back; a same-side colleague (the actor is in the
+  -- request hash) gets FX_IDEMPOTENCY_MISMATCH; a member outside the room is refused before any replay. No event.
   n := (select count(*) from public.fixture_events where room_id = v_room);
+  perform pg_temp.fx_as('u_ow1');
+  r := public.propose_fixture_subject_extension(v_room, v_s, v_dl, v_ver, 'dlx-propose-2');
+  if r->>'replayed' is distinct from 'true' or r->>'eventId' is distinct from v->>'eventId' or r->'data' is distinct from v->'data' then
+    raise exception 'D7: the proposer''s replay must return its stored result: % vs %', r, v; end if;
   perform pg_temp.fx_as('u_ch1');
-  v := public.respond_fixture_subject_extension(v_room, v_s, true, pg_temp.fx_ver(v_room), 'dlx-accept-2');
-  perform pg_temp.fx_owner();
-  if (select count(*) from public.fixture_events where room_id = v_room) <> n then raise exception 'D7: a replay must not add an event'; end if;
+  r := public.respond_fixture_subject_extension(v_room, v_s, true, v_ver2, 'dlx-accept-2');
+  if r->>'replayed' is distinct from 'true' or r->>'eventId' is distinct from v_acc->>'eventId' or r->'data' is distinct from v_acc->'data' then
+    raise exception 'D7: the accepter''s replay must return its stored result: % vs %', r, v_acc; end if;
+  perform pg_temp.fx_as('u_ch2');
+  e := pg_temp.fx_err(format('select public.respond_fixture_subject_extension(%L, %L, true, %s, %L)', v_room, v_s, v_ver2, 'dlx-accept-2'));
+  if e is distinct from 'FX_IDEMPOTENCY_MISMATCH' then raise exception 'D7: a colleague re-sending the accept key must get FX_IDEMPOTENCY_MISMATCH, got %', e; end if;
   perform pg_temp.fx_as('u_out');
-  e := pg_temp.fx_err(format('select public.respond_fixture_subject_extension(%L, %L, true, %s, %L)', v_room, v_s, pg_temp.fx_ver(v_room), 'dlx-accept-2'));
-  if e is null or e not in ('FX_AUTH', 'FX_NOT_FOUND') then raise exception 'D7: a stranger replaying a respond key must be refused, got %', e; end if;
-  e := pg_temp.fx_err(format('select public.propose_fixture_subject_extension(%L, %L, %L, %s, %L)', v_room, v_s, now() + interval '4 days', pg_temp.fx_ver(v_room), 'dlx-propose-2'));
-  if e is null or e not in ('FX_AUTH', 'FX_NOT_FOUND') then raise exception 'D7: a stranger replaying a propose key must be refused, got %', e; end if;
-  raise notice 'D7 ok: unilateral, earlier and past deadlines are refused; a proposal waits for the other side; decline keeps it; accept moves it once; a stranger never gets a replay';
+  e := pg_temp.fx_err(format('select public.respond_fixture_subject_extension(%L, %L, true, %s, %L)', v_room, v_s, v_ver2, 'dlx-accept-2'));
+  if e is null or e not in ('FX_AUTH', 'FX_NOT_FOUND') then raise exception 'D7: a stranger re-sending the accept key must be refused, got %', e; end if;
+  e := pg_temp.fx_err(format('select public.propose_fixture_subject_extension(%L, %L, %L, %s, %L)', v_room, v_s, v_dl, v_ver, 'dlx-propose-2'));
+  if e is null or e not in ('FX_AUTH', 'FX_NOT_FOUND') then raise exception 'D7: a stranger re-sending the propose key must be refused, got %', e; end if;
+  perform pg_temp.fx_owner();
+  if (select count(*) from public.fixture_events where room_id = v_room) <> n then raise exception 'D7: a replay must never add an event'; end if;
+  raise notice 'D7 ok: unilateral, earlier and past deadlines are refused; a proposal waits for the other side; decline keeps it; accept moves it once; replays are bound to the caller';
 end $$;
 
 do $$ begin raise notice 'FIXTURE SUBJECT DEADLINES SMOKE: ALL ASSERTIONS PASSED'; end $$;
