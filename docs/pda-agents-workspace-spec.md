@@ -1,6 +1,12 @@
 # PDA · Agents workspace — specification for owner decision
 
-Status: **draft for the owner** (O2ALL-008: "Agents: spec first"; nothing is built until approved). Author: Opus, 18 Oct 2026.
+Status: **owner decisions recorded 18 Oct 2026** (asked with options; O2ALL-009). Author: Opus.
+
+**Owner decisions:** A1 = **(c) agencies log in too** (directory + quote requests + agencies answer in the portal);
+A2 = **ASB-invited agencies only**; A4 = **an accepted quote becomes a new version** of the saved estimate with
+attributed lines; A5 = **masked by default** (the member may reveal). A3 follows from A1 (agents answer in the portal;
+the desk may still record an emailed quote for an agency not yet onboarded). A6 (agent tariff data through the
+maker/checker pipeline) and A7 (commercial terms) remain open and are not needed for the first release.
 Inputs: the approved reference design (`Fixture Room + Ports Cost Estimator - Standalone (2).html`, modules
 `agent-portal-root`, `agent-portal-agency`, `agent-portal-request`, `agent-portal-review`, `verify-panel`), the design
 contract (`docs/pda-estimator-design-contract.md`: the prototype's simulated agent workflow and browser stores are
