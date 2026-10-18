@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { LogOut, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { hardNavigate } from "@/lib/auth/hard-navigate";
 import { logout } from "@/sdk/auth";
 
 interface LogoutButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -18,7 +18,6 @@ export function LogoutButton({
   onComplete,
   ...props
 }: LogoutButtonProps) {
-  const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -27,7 +26,7 @@ export function LogoutButton({
       const supabase = getSupabaseBrowserClient();
       await logout(supabase);
       toast.success("Signed out.");
-      router.push("/auth/login");
+      hardNavigate("/auth/login");
       if (onComplete) onComplete();
     } catch (error) {
       console.error("Logout error:", error);

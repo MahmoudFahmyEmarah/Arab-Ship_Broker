@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { hardNavigate } from "@/lib/auth/hard-navigate";
 import { functionalStore, openCookieSettings } from "@/lib/consent";
 import { getMyProfiles, updateProfile } from "@/sdk/app/profiles";
 import type { Profile } from "@/lib/schemas/account";
@@ -338,7 +339,7 @@ export function SettingsBoard({ role, memberSince }: { role?: string | null; mem
       if (!res.success) throw new Error(res.error);
       try { await getSupabaseBrowserClient().auth.signOut({ scope: "local" }); } catch {}
       toast.success("Your account has been deleted.");
-      router.push("/");
+      hardNavigate("/");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not delete account");
       setDeleting(false);
