@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["harfbuzzjs"],
   outputFileTracingIncludes: {
     "/dashboard/fixture-room/**": ["./assets/fonts/**", "./node_modules/harfbuzzjs/dist/*.wasm"],
+    // the PDA saved-estimate export (O2ALL-008 A) renders with the same Unicode PDF engine
+    "/dashboard/ports-da/**": ["./assets/fonts/**", "./node_modules/harfbuzzjs/dist/*.wasm"],
   },
 };
 

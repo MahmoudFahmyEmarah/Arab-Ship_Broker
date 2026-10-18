@@ -17,7 +17,8 @@ import type { CargoView, VesselView } from "@/lib/portal/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveDeclaredFlag, resolveFlagName, type FlagStateRow } from "@/lib/pda/flag";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getPdaCalculationContext, listPdaPortsWorkspace, savePdaEstimate, setMyPdaPreferences } from "@/sdk/app/pda";
+import { getPdaCalculationContext, getPdaEstimateSet, listMyPdaEstimateSets, listPdaPortsWorkspace, savePdaEstimate, savePdaEstimateSet, setMyPdaPreferences } from "@/sdk/app/pda";
+import { pdaRouteSnapshot, type PdaEstimateSetDetail, type PdaEstimateSetSummary, type PdaSaveSetResult } from "@/lib/pda/estimate-sets";
 import type { PdaPreferences, PdaStartTab } from "@/lib/pda/preferences";
 import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
 import type { PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
@@ -323,14 +324,14 @@ async function prepareRoutePreview(raw: PdaRoutePreviewInput) {
     throw new UserFacingActionError(validationErrorMessage(parsed.error.issues, "Invalid route PDA request"));
   }
   const input = parsed.data as PdaRoutePreviewInput;
-  const { supabase, manualActorLabel } = await viewer();
+  const { supabase, manualActorLabel, appUser, ownerOrgId } = await viewer();
   const [{ vessel, cargo }] = await Promise.all([
     requireRouteSelections(input.selection),
     requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
   ]);
   const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
   const flagState = resolveFlagName(await flagRegistry(supabase), vessel.flag);
-  return { input, supabase, manualActorLabel, vessel, cargo, timeline, flagState };
+  return { input, supabase, manualActorLabel, appUserId: appUser.id, ownerOrgId, vessel, cargo, timeline, flagState };
 }
 
 type PreparedRoute = Awaited<ReturnType<typeof prepareRoutePreview>>;
@@ -518,5 +519,88 @@ export async function savePdaPreferences(density: PdaEstimatorDensity, startTab:
     return { ok: true, data: await setMyPdaPreferences(supabase, density, startTab) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Your preferences could not be saved") };
+  }
+}
+
+const SET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Save the route (increment A). Everything is RECOMPUTED here from the member's own selection — the page sends the
+ * inputs only, never figures — and the immutable set (both legs + route snapshot) is written in one database
+ * transaction by the service-only pda_save_estimate_set, which re-checks tier, seat, tariff version, sums and evidence
+ * and computes the content hash itself.
+ */
+export async function savePdaRouteEstimate(raw: PdaRoutePreviewInput, supersedesId?: string | null): Promise<ActionResult<PdaSaveSetResult>> {
+  try {
+    if (supersedesId != null && !SET_ID.test(supersedesId)) throw new UserFacingActionError("Unknown saved estimate");
+    const route = await prepareRoutePreview(raw);
+    const [load, discharge, frame] = await Promise.all([
+      computeRouteLeg(route, "load"),
+      computeRouteLeg(route, "discharge"),
+      computeRouteFrame(route),
+    ]);
+    const result = composePdaRoutePreview({ displayCurrency: route.input.displayCurrency, allocation: route.input.allocation, frame, load, discharge });
+    const saved = await savePdaEstimateSet(getSupabaseAdminClient(), {
+      actorId: route.appUserId,
+      ownerOrgId: route.ownerOrgId,
+      loadRequest: load.request,
+      loadResult: load.result,
+      dischargeRequest: discharge.request,
+      dischargeResult: discharge.result,
+      route: pdaRouteSnapshot(route.input, result, route.vessel.name ?? null),
+      supersedesId: supersedesId ?? null,
+    });
+    return { ok: true, data: saved };
+  } catch (error) {
+    if (error instanceof Error && /^PDA_CONFLICT: /.test(error.message)) {
+      // the database's conflict messages are written for members (already superseded / not the same vessel and cargo)
+      const text = error.message.replace(/^PDA_CONFLICT: /, "");
+      return { ok: false, error: `${text.charAt(0).toUpperCase()}${text.slice(1)}.` };
+    }
+    if (error instanceof Error && /^PDA_AUTH: only the owner/.test(error.message)) {
+      return { ok: false, error: "Only the member who saved an estimate can save a new version of it." };
+    }
+    return { ok: false, error: actionErrorMessage(error, "The estimate could not be saved") };
+  }
+}
+
+/** The member's saved estimates (and their organisation's), newest first; `before` pages back. */
+export async function listPdaEstimateSets(before?: string | null): Promise<ActionResult<PdaEstimateSetSummary[]>> {
+  try {
+    const { supabase } = await viewer();
+    const cursor = before && !Number.isNaN(Date.parse(before)) ? before : null;
+    return { ok: true, data: await listMyPdaEstimateSets(supabase, cursor) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Saved estimates could not be loaded") };
+  }
+}
+
+/** One saved estimate, read through the member's own session (the database decides who may read it). */
+export async function loadPdaEstimateSet(setId: string): Promise<ActionResult<PdaEstimateSetDetail>> {
+  try {
+    if (!SET_ID.test(setId)) throw new UserFacingActionError("Unknown saved estimate");
+    const { supabase } = await viewer();
+    return { ok: true, data: await getPdaEstimateSet(supabase, setId) };
+  } catch (error) {
+    if (error instanceof Error && /^PDA_AUTH/.test(error.message)) return { ok: false, error: "This saved estimate is not available to you." };
+    return { ok: false, error: actionErrorMessage(error, "The saved estimate could not be loaded") };
+  }
+}
+
+/**
+ * Export a SAVED set as a PDF (increment A): read through the member's own session (the database decides who may read
+ * it), rendered on the server by the deterministic Unicode engine. Returned as base64 for a browser download.
+ */
+export async function exportPdaEstimateSetPdf(setId: string): Promise<ActionResult<{ fileName: string; sha256: string; base64: string }>> {
+  try {
+    if (!SET_ID.test(setId)) throw new UserFacingActionError("Unknown saved estimate");
+    const { supabase } = await viewer();
+    const set = await getPdaEstimateSet(supabase, setId);
+    const { renderPdaEstimateSetPdf } = await import("@/lib/pda/estimate-set-pdf");
+    const pdf = await renderPdaEstimateSetPdf(set);
+    return { ok: true, data: { fileName: pdf.fileName, sha256: pdf.sha256, base64: Buffer.from(pdf.bytes).toString("base64") } };
+  } catch (error) {
+    if (error instanceof Error && /^PDA_AUTH/.test(error.message)) return { ok: false, error: "This saved estimate is not available to you." };
+    return { ok: false, error: actionErrorMessage(error, "The PDF could not be produced") };
   }
 }

@@ -37,6 +37,7 @@ import type { PdaTerminalItem } from "@/sdk/app/pda";
 import "@/components/design-system/asb-ds.css";
 import { PdaPortsWorkspace } from "./PdaPortsWorkspace";
 import { PdaSetupWorkspace } from "./PdaSetupWorkspace";
+import { PdaSaveBar, PdaSavedEstimates } from "./PdaSavedEstimates";
 import { initialPdaTab, type PdaPreferences } from "@/lib/pda/preferences";
 import "./pda-route-estimator.css";
 
@@ -187,6 +188,15 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
   const [dischargePart, setDischargePart] = React.useState<PdaPartState<PdaRouteLegPreview>>(PDA_PART_IDLE);
   const [framePart, setFramePart] = React.useState<PdaPartState<PdaRouteFramePreview>>(PDA_PART_IDLE);
   const lastInput = React.useRef<PdaRoutePreviewInput | null>(null);
+  // increment A: the input whose parts are on screen (state, so the save bar sees changes) and this session's last save
+  const [previewInput, setPreviewInput] = React.useState<PdaRoutePreviewInput | null>(null);
+  // a new save supersedes this session's last save only for the SAME vessel, cargo and ports (a different route is a
+  // new estimate, not a new version)
+  const [lastSaved, setLastSaved] = React.useState<{ id: string; route: string } | null>(null);
+  const routeKey = (input: PdaRoutePreviewInput | null) => input
+    ? `${input.selection.vesselAvailabilityId}|${input.selection.cargoId}|${input.load.portLocode}|${input.discharge.portLocode}`
+    : null;
+  const [historyKey, setHistoryKey] = React.useState(0);
   const partTokens = React.useRef({ load: 0, discharge: 0, frame: 0 });
   const requestSequence = React.useRef(0);
   const manualLineSequence = React.useRef(0);
@@ -305,6 +315,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
   React.useEffect(() => {
     const sequence = ++requestSequence.current;
     lastInput.current = null;
+    setPreviewInput(null);
     setLoadPart(PDA_PART_IDLE);
     setDischargePart(PDA_PART_IDLE);
     setFramePart(PDA_PART_IDLE);
@@ -382,6 +393,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
     const timer = window.setTimeout(() => {
       if (requestSequence.current !== sequence) return;
       lastInput.current = input;
+      setPreviewInput(input);
       runPart("load", input, sequence);
       runPart("discharge", input, sequence);
       runPart("frame", input, sequence);
@@ -687,6 +699,17 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                 dischargeName={dischargePortRecord?.name ?? "Open"}
               />
 
+              <PdaSaveBar
+                input={previewInput}
+                ready={result != null && !busy}
+                supersedesId={lastSaved && lastSaved.route === routeKey(previewInput) ? lastSaved.id : null}
+                onSaved={(saved) => {
+                  const route = routeKey(previewInput);
+                  if (route) setLastSaved({ id: saved.id, route });
+                  setHistoryKey((key) => key + 1);
+                }}
+              />
+
               <TimelinePanel
                 result={result}
                 etaLoad={etaLoad}
@@ -761,6 +784,8 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
               </section>
             </div>
           )}
+
+          <PdaSavedEstimates refreshKey={historyKey} />
         </>
       )}
       </section>

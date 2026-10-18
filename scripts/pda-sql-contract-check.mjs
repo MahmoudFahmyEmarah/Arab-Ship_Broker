@@ -70,7 +70,7 @@ assert.doesNotMatch(ingestion, /insert into public\.port_tariff_versions/i);
 assert.doesNotMatch(ingestion, /update public\.port_tariff_versions/i);
 assert.match(actions, /is_market_partner[\s\S]+appUser\.is_market_partner === true/i);
 // O2ALL-008 increment B: an input change (manual lines included) resets EVERY part of the paired result, not one leg
-assert.match(estimator, /React\.useEffect\(\(\) => \{\s*const sequence = \+\+requestSequence\.current;\s*lastInput\.current = null;\s*setLoadPart\(PDA_PART_IDLE\);\s*setDischargePart\(PDA_PART_IDLE\);\s*setFramePart\(PDA_PART_IDLE\);[\s\S]+(loadManualLines[\s\S]+dischargeManualLines|dischargeManualLines[\s\S]+loadManualLines)/i);
+assert.match(estimator, /React\.useEffect\(\(\) => \{\s*const sequence = \+\+requestSequence\.current;\s*lastInput\.current = null;\s*setPreviewInput\(null\);\s*setLoadPart\(PDA_PART_IDLE\);\s*setDischargePart\(PDA_PART_IDLE\);\s*setFramePart\(PDA_PART_IDLE\);[\s\S]+(loadManualLines[\s\S]+dischargeManualLines|dischargeManualLines[\s\S]+loadManualLines)/i);
 
 // C2B-013: "New" clears both settlement modes with the other call facts.
 const resetStart = estimator.indexOf("function reset()");

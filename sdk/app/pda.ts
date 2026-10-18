@@ -3,6 +3,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PdaCalculationResult, PdaRequest, PdaTariffVersion } from "@/lib/pda/types";
 import { parsePdaPortsWorkspace, type PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
 import { parsePdaPreferences, type PdaPreferences, type PdaStartTab } from "@/lib/pda/preferences";
+import {
+  parsePdaSaveSetResult,
+  parsePdaSetDetail,
+  parsePdaSetSummaries,
+  type PdaEstimateSetDetail,
+  type PdaEstimateSetSummary,
+  type PdaRouteSnapshot,
+  type PdaSaveSetResult,
+} from "@/lib/pda/estimate-sets";
 import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
 
 export interface PdaCoverageItem {
@@ -99,4 +108,46 @@ export async function getPdaEstimate(supabase: SupabaseClient, estimateId: strin
   const { data, error } = await supabase.rpc("get_pda_estimate", { p_estimate_id: estimateId });
   if (error) throw new Error(error.message);
   return data as Record<string, unknown> | null;
+}
+
+/** Saves one route as an immutable set (20261018120000). SERVICE ROLE client only: the RPC has no member grant. */
+export async function savePdaEstimateSet(
+  admin: SupabaseClient,
+  input: {
+    actorId: string;
+    ownerOrgId: string | null;
+    loadRequest: PdaRequest;
+    loadResult: PdaCalculationResult;
+    dischargeRequest: PdaRequest;
+    dischargeResult: PdaCalculationResult;
+    route: PdaRouteSnapshot;
+    supersedesId: string | null;
+  },
+): Promise<PdaSaveSetResult> {
+  const { data, error } = await admin.rpc("pda_save_estimate_set", {
+    p_actor: input.actorId,
+    p_owner_org_id: input.ownerOrgId,
+    p_load_request: input.loadRequest,
+    p_load_result: input.loadResult,
+    p_discharge_request: input.dischargeRequest,
+    p_discharge_result: input.dischargeResult,
+    p_route: input.route,
+    p_supersedes_id: input.supersedesId,
+  });
+  if (error) throw new Error(error.message);
+  return parsePdaSaveSetResult(data);
+}
+
+/** The caller's own saved sets and their organisation's, newest first. */
+export async function listMyPdaEstimateSets(supabase: SupabaseClient, before?: string | null, limit = 20): Promise<PdaEstimateSetSummary[]> {
+  const { data, error } = await supabase.rpc("list_my_pda_estimate_sets", { p_limit: limit, p_before: before ?? null });
+  if (error) throw new Error(error.message);
+  return parsePdaSetSummaries(data);
+}
+
+/** One saved set with both legs (owner, active organisation seat or admin). */
+export async function getPdaEstimateSet(supabase: SupabaseClient, setId: string): Promise<PdaEstimateSetDetail> {
+  const { data, error } = await supabase.rpc("get_pda_estimate_set", { p_set_id: setId });
+  if (error) throw new Error(error.message);
+  return parsePdaSetDetail(data);
 }
