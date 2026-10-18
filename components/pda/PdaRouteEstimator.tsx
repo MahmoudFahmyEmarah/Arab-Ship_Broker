@@ -38,11 +38,15 @@ import {
 import type { PdaTerminalItem } from "@/sdk/app/pda";
 
 import "@/components/design-system/asb-ds.css";
+import { PdaPortsWorkspace } from "./PdaPortsWorkspace";
+import { PdaSetupWorkspace } from "./PdaSetupWorkspace";
+import { initialPdaTab, type PdaPreferences } from "@/lib/pda/preferences";
 import "./pda-route-estimator.css";
 
 interface Props {
   bootstrap: PdaEstimatorBootstrap;
   terminals: PdaTerminalItem[];
+  preferences: PdaPreferences;
 }
 
 const TABS: Array<{ id: PdaEstimatorTab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
@@ -139,9 +143,14 @@ function routeLeg(input: {
   };
 }
 
-export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
+export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPreferences }: Props) {
   const initialCargo = bootstrap.catalog.cargos.find((item) => item.id === bootstrap.initial.cargoId) ?? null;
-  const [activeTab, setActiveTab] = React.useState<PdaEstimatorTab>("estimate");
+  const hasHandoff = Boolean(bootstrap.initial.from || bootstrap.initial.vesselId || bootstrap.initial.cargoId
+    || bootstrap.initial.loadPortLocode || bootstrap.initial.dischargePortLocode);
+  const [preferences, setPreferences] = React.useState<PdaPreferences>(initialPreferences);
+  const [activeTab, setActiveTab] = React.useState<PdaEstimatorTab>(() => initialPdaTab(initialPreferences, hasHandoff));
+  // the member's saved row height wins over the bootstrap default; it never changes a figure
+  const density = preferences.saved ? preferences.density : bootstrap.initial.density;
   const [vesselId, setVesselId] = React.useState(bootstrap.initial.vesselId ?? "");
   const [cargoId, setCargoId] = React.useState(bootstrap.initial.cargoId ?? "");
   const [loadPort, setLoadPort] = React.useState(bootstrap.initial.loadPortLocode ?? "");
@@ -475,7 +484,7 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
     : "A vessel and a cargo, and both port costs";
 
   return (
-    <main className={`asb-ds pda-route pda-route--${bootstrap.initial.density}`}>
+    <main className={`asb-ds pda-route pda-route--${density}`}>
       <header className="pda-route__header">
         <h1>Ports Cost Estimator</h1>
         <p>{subtitle}</p>
@@ -521,7 +530,11 @@ export function PdaRouteEstimator({ bootstrap, terminals }: Props) {
         role="tabpanel"
         aria-labelledby={`pda-tab-${activeTab}`}
       >
-      {activeTab !== "estimate" ? (
+      {activeTab === "ports" ? (
+        <PdaPortsWorkspace />
+      ) : activeTab === "setup" ? (
+        <PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} />
+      ) : activeTab !== "estimate" ? (
         <section className="pda-route__deferred asb-card" aria-labelledby="pda-deferred-title">
           <span className="pda-route__deferred-icon"><Settings2 size={22} /></span>
           <div>

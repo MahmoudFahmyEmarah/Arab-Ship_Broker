@@ -16,7 +16,10 @@ import type { CargoView, VesselView } from "@/lib/portal/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveDeclaredFlag, resolveFlagName, type FlagStateRow } from "@/lib/pda/flag";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getPdaCalculationContext, savePdaEstimate } from "@/sdk/app/pda";
+import { getPdaCalculationContext, listPdaPortsWorkspace, savePdaEstimate, setMyPdaPreferences } from "@/sdk/app/pda";
+import type { PdaPreferences, PdaStartTab } from "@/lib/pda/preferences";
+import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
+import type { PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
 import { getPortRoute } from "@/sdk/app/routes";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -471,5 +474,28 @@ export async function measuredPdaPassage(pol: string, pod: string): Promise<Acti
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Unable to look up the measured passage") };
+  }
+}
+
+/** The Ports tab (increment C): read-only, through the member's own session and the governed RPC. */
+export async function loadPdaPortsWorkspace(callDate?: string): Promise<ActionResult<PdaPortsWorkspace>> {
+  try {
+    const { supabase } = await viewer();
+    const day = callDate && /^\d{4}-\d{2}-\d{2}$/.test(callDate) ? callDate : new Date().toISOString().slice(0, 10);
+    return { ok: true, data: await listPdaPortsWorkspace(supabase, day) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The ports could not be loaded") };
+  }
+}
+
+/** The Setup tab (increment D): saves the caller's own preferences through the governed RPC. */
+export async function savePdaPreferences(density: PdaEstimatorDensity, startTab: PdaStartTab): Promise<ActionResult<PdaPreferences>> {
+  try {
+    if (density !== "compact" && density !== "comfortable") throw new UserFacingActionError("Choose a row height");
+    if (startTab !== "estimate" && startTab !== "ports") throw new UserFacingActionError("Choose a start tab");
+    const { supabase } = await viewer();
+    return { ok: true, data: await setMyPdaPreferences(supabase, density, startTab) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Your preferences could not be saved") };
   }
 }
