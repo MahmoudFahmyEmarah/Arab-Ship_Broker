@@ -6,7 +6,7 @@
     "dev": "next dev",
     "test:route-alerts": "node --import tsx scripts/route-alert-check.ts",
     "test:zones": "node --import tsx scripts/zone-filter-check.ts",
-    "test:llm-providers": "node --import tsx scripts/llm-provider-check.ts",
+    "test:llm-providers": "node --import tsx scripts/llm-provider-check.ts && node --import tsx scripts/sync-classifier-schema-check.ts",
     "test:account-erasure": "node --import tsx scripts/account-erasure-check.ts",
     "test:user-privileges": "node scripts/user-privilege-boundary-check.mjs",
     "test:port-tariff-inventory": "node scripts/port-tariff-inventory-check.mjs",
