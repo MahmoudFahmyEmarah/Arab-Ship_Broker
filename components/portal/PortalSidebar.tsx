@@ -5,9 +5,10 @@
 // sidebar drive the /portal preview now and the real /dashboard later.
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { hardNavigate } from "@/lib/auth/hard-navigate";
 import { ASB_LOGO_MASK } from "@/components/admin/shell/logo-mask";
 import { logout } from "@/sdk/auth";
 import { useViewerTier, isCalculatorLocked } from "@/lib/portal/tier";
@@ -108,7 +109,6 @@ export function PortalSidebar({
   fixtureEligible?: boolean;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
 
@@ -117,8 +117,7 @@ export function PortalSidebar({
     setSigningOut(true);
     try {
       await logout(getSupabaseBrowserClient());
-      router.push("/auth/login");
-      router.refresh();
+      hardNavigate("/auth/login");
     } catch {
       toast.error("Couldn't sign out — please try again.");
       setSigningOut(false);
