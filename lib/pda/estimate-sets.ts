@@ -5,6 +5,13 @@
 // sends figures to be saved — and its content hash is computed by the database.
 import type { PdaRoutePreviewInput, PdaRoutePreviewResult } from "./route-types";
 
+/**
+ * What a SAVED manual line records as "entered by" (B2O-044 P1-4): a marker, never a name, so no personal data is
+ * frozen in an immutable record. get_pda_estimate_set resolves it at read time to the owner's current name, or
+ * "Deleted account" after erasure. A live preview, which is never stored, still shows the member's name.
+ */
+export const PDA_OWNER_MARKER = "@owner";
+
 /** The route snapshot the database stores with a set (p_route of pda_save_estimate_set). */
 export interface PdaRouteSnapshot {
   title: string;
@@ -39,7 +46,8 @@ export interface PdaSavedLine {
   lineNo: number;
   ruleCode: string | null;
   label: string;
-  amount: number;
+  /** null only if the record is damaged: an unknown amount is never shown as zero (B2O-044 P1-2) */
+  amount: number | null;
   convertedAmount: number | null;
   explanation: string;
   manual: boolean;
@@ -52,8 +60,11 @@ export interface PdaSavedLeg {
   portLocode: string;
   terminalName: string | null;
   coverage: string;
+  /** the published edition that priced the leg, by its frozen label (never its id) */
+  editionLabel: string | null;
+  callDate: string | null;
   nativeCurrency: string;
-  nativeTotal: number;
+  nativeTotal: number | null;
   convertedCurrency: string | null;
   convertedTotal: number | null;
   lines: PdaSavedLine[];
@@ -69,7 +80,8 @@ export interface PdaEstimateSetDetail {
   allocation: string;
   displayCurrency: string;
   quantityMt: number;
-  routeInput: PdaRoutePreviewInput;
+  /** the member projection of the route (B2O-044 P1-1): ports and call dates, no ids */
+  route: { loadPort: string; dischargePort: string; loadCallDate: string | null; dischargeCallDate: string | null };
   timeline: PdaRoutePreviewResult["timeline"];
   transits: PdaRoutePreviewResult["transits"];
   totals: PdaRoutePreviewResult["totals"];
@@ -146,8 +158,10 @@ function parseLeg(raw: unknown): PdaSavedLeg {
     portLocode: String(r.portLocode ?? ""),
     terminalName: str(r.terminalName),
     coverage: String(r.coverage ?? ""),
+    editionLabel: str(r.editionLabel),
+    callDate: str(r.callDate),
     nativeCurrency: String(r.nativeCurrency ?? ""),
-    nativeTotal: num(r.nativeTotal) ?? 0,
+    nativeTotal: num(r.nativeTotal),
     convertedCurrency: str(r.convertedCurrency),
     convertedTotal: num(r.convertedTotal),
     lines: lines.map((item) => {
@@ -157,7 +171,7 @@ function parseLeg(raw: unknown): PdaSavedLeg {
         lineNo: num(l.lineNo) ?? 0,
         ruleCode: str(l.ruleCode),
         label: String(l.label ?? ""),
-        amount: num(l.amount) ?? 0,
+        amount: num(l.amount),
         convertedAmount: num(l.convertedAmount),
         explanation: String(l.explanation ?? ""),
         manual: l.manual === true,
@@ -187,7 +201,10 @@ export function parsePdaSetDetail(raw: unknown): PdaEstimateSetDetail {
     allocation: String(r.allocation ?? ""),
     displayCurrency: String(r.displayCurrency ?? "USD"),
     quantityMt: num(r.quantityMt) ?? 0,
-    routeInput: r.routeInput as PdaRoutePreviewInput,
+    route: (() => {
+      const route = (r.route ?? {}) as Record<string, unknown>;
+      return { loadPort: String(route.loadPort ?? ""), dischargePort: String(route.dischargePort ?? ""), loadCallDate: str(route.loadCallDate), dischargeCallDate: str(route.dischargeCallDate) };
+    })(),
     timeline: r.timeline as PdaRoutePreviewResult["timeline"],
     transits: (Array.isArray(r.transits) ? r.transits : []) as PdaRoutePreviewResult["transits"],
     totals: (r.totals ?? {}) as PdaRoutePreviewResult["totals"],

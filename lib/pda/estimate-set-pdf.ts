@@ -21,7 +21,14 @@ function days(value: number | null | undefined): string {
   return value == null || !Number.isFinite(value) ? "—" : `${new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 }).format(value)} d`;
 }
 
-function legSection(title: string, leg: PdaSavedLeg, displayCurrency: string): FixtureDocument["sections"][number] {
+/** A leg's total as the route recorded it: complete, known but incomplete, or NOT SOURCED — never an unknown as zero. */
+function legTotal(complete: number | null | undefined, known: number | null | undefined, currency: string): string {
+  if (complete != null) return money(complete, currency);
+  if (known != null) return `${money(known, currency)} (known, incomplete)`;
+  return "NOT SOURCED";
+}
+
+function legSection(title: string, leg: PdaSavedLeg, displayCurrency: string, complete: number | null | undefined, known: number | null | undefined): FixtureDocument["sections"][number] {
   const converted = leg.convertedCurrency && leg.convertedCurrency !== leg.nativeCurrency;
   const rows = leg.lines.map((line) => {
     const evidence = [line.evidence.title, line.evidence.page ? `p. ${line.evidence.page}` : null, line.evidence.sheet ? `sheet ${line.evidence.sheet}` : null]
@@ -44,7 +51,11 @@ function legSection(title: string, leg: PdaSavedLeg, displayCurrency: string): F
       widths: [3, 7, 2.2, 2.2],
     },
     lines: [
-      `Coverage: ${leg.coverage.replace(/_/g, " ")} · native total ${money(leg.nativeTotal, leg.nativeCurrency)}${converted ? ` · ${money(leg.convertedTotal, leg.convertedCurrency!)}` : ""}`,
+      leg.editionLabel ? `Published tariff: ${leg.editionLabel}` : "No published tariff in force: every figure here is an attributed quote or NOT SOURCED",
+      `Coverage: ${leg.coverage.replace(/_/g, " ")}`,
+      leg.lines.length === 0
+        ? "Port total: NOT SOURCED (no governed line or attributed quote)"
+        : `Port total: ${legTotal(complete, known, displayCurrency)}${leg.nativeTotal != null && leg.nativeCurrency !== displayCurrency ? ` · native ${complete != null ? "" : "known "}${money(leg.nativeTotal, leg.nativeCurrency)}` : ""}`,
     ],
   };
 }
@@ -74,10 +85,10 @@ export function pdaEstimateSetDocument(set: PdaEstimateSetDetail): FixtureDocume
         table: {
           columns: ["Item", "Amount"],
           rows: [
-            ["Load port", money(t.loadPort ?? t.loadPortKnown, c) + (t.loadPort == null && t.loadPortKnown != null ? " (known, incomplete)" : "")],
-            ["Discharge port", money(t.dischargePort ?? t.dischargePortKnown, c) + (t.dischargePort == null && t.dischargePortKnown != null ? " (known, incomplete)" : "")],
+            ["Load port", legTotal(t.loadPort, t.loadPortKnown, c)],
+            ["Discharge port", legTotal(t.dischargePort, t.dischargePortKnown, c)],
             ["Canal and strait transits", money(t.transit, c)],
-            ["All in, known", money(t.allInKnown, c)],
+            ["All in, known", t.allInKnown != null && t.allInComplete == null ? `${money(t.allInKnown, c)} (incomplete)` : money(t.allInKnown, c)],
             ["All in, complete", money(t.allInComplete, c)],
             ["Voyage OPEX", money(t.voyageOpex, c)],
           ],
@@ -99,8 +110,8 @@ export function pdaEstimateSetDocument(set: PdaEstimateSetDetail): FixtureDocume
           widths: [6, 4],
         },
       },
-      legSection("Load port", set.load, c),
-      legSection("Discharge port", set.discharge, c),
+      legSection("Load port", set.load, c, t.loadPort, t.loadPortKnown),
+      legSection("Discharge port", set.discharge, c, t.dischargePort, t.dischargePortKnown),
       { title: "Transits", lines: transitLines },
       {
         title: "Not sourced",
@@ -110,10 +121,10 @@ export function pdaEstimateSetDocument(set: PdaEstimateSetDetail): FixtureDocume
       },
     ],
     footer: [
-      "Every figure comes from the published tariff edition shown with it or from an attributed quote. Items marked NOT SOURCED have no governed figure and are excluded from complete totals; nothing is estimated in their place.",
+      "Every figure comes from the published tariff edition named with its port or from an attributed quote. Items marked NOT SOURCED have no governed figure and are excluded from complete totals; nothing is estimated in their place.",
       "This is an estimate, not an invoice. Final disbursements are settled with the appointed agent.",
     ],
-    fileName: `PDA ${set.routeInput?.load?.portLocode ?? ""}-${set.routeInput?.discharge?.portLocode ?? ""} ${set.createdAt.slice(0, 10)}.pdf`.replace(/\s+/g, " "),
+    fileName: `PDA ${set.route.loadPort}-${set.route.dischargePort} ${set.createdAt.slice(0, 10)}.pdf`.replace(/\s+/g, " "),
   };
 }
 

@@ -67,6 +67,9 @@ revoke all on function public.fn_pda_estimate_set_immutable() from public, anon,
 drop trigger if exists pda_estimate_sets_immutable on public.pda_estimate_sets;
 create trigger pda_estimate_sets_immutable before update or delete on public.pda_estimate_sets
   for each row execute function public.fn_pda_estimate_set_immutable();
+drop trigger if exists pda_estimate_sets_no_truncate on public.pda_estimate_sets;
+create trigger pda_estimate_sets_no_truncate before truncate on public.pda_estimate_sets
+  for each statement execute function public.fn_pda_estimate_set_immutable();
 
 create or replace function public.pda_save_estimate_set(
   p_actor uuid,
@@ -112,12 +115,20 @@ begin
 
   perform pg_advisory_xact_lock(hashtext('pda_estimate_set_owner:' || p_actor::text));
 
+  -- the actor is re-checked before ANY answer, the replay included (B2O-044 P2-5): active, T3+/partner/admin
+  if not exists (select 1 from public.users u where u.id = p_actor and u.is_active
+                 and (lower(coalesce(u.role, '')) = 'admin' or u.subscription_tier::text in ('T3','T4')
+                      or coalesce((to_jsonb(u)->>'is_market_partner')::boolean, false))) then
+    raise exception 'PDA_TIER: actor requires an active Subscriber (T3+) account' using errcode = '42501';
+  end if;
+
   -- idempotent: the same content again, while it is still the owner's latest version of it, returns that set
   select s.* into v_existing from public.pda_estimate_sets s
    where s.owner_user_id = p_actor and s.content_hash = v_hash
      and not exists (select 1 from public.pda_estimate_sets n where n.supersedes_id = s.id)
    order by s.created_at desc limit 1;
-  if v_existing.id is not null and (p_supersedes_id is null or p_supersedes_id = v_existing.id or p_supersedes_id = v_existing.supersedes_id) then
+  if v_existing.id is not null and v_existing.owner_org_id is not distinct from p_owner_org_id
+     and (p_supersedes_id is null or p_supersedes_id = v_existing.id or p_supersedes_id = v_existing.supersedes_id) then
     return jsonb_build_object('id', v_existing.id, 'contentHash', v_existing.content_hash, 'createdAt', v_existing.created_at,
                               'loadEstimateId', v_existing.load_estimate_id, 'dischargeEstimateId', v_existing.discharge_estimate_id,
                               'replayed', true);
@@ -201,10 +212,50 @@ $$;
 revoke all on function public.list_my_pda_estimate_sets(integer, timestamptz) from public, anon;
 grant execute on function public.list_my_pda_estimate_sets(integer, timestamptz) to authenticated, service_role;
 
+-- One leg as a MEMBER sees it (B2O-044 P1-1, C2O-120/126): no tariff-version, rule, source or terminal id and no raw
+-- request; the published edition by its frozen label; evidence by title/page/sheet/excerpt only. A manual line saved
+-- with the owner marker '@owner' (B2O-044 P1-4) is attributed at READ time: the owner's current name, or
+-- "Deleted account" once the account is erased - no name is frozen in the immutable record.
+create or replace function public.fn_pda_member_leg(p_estimate_id uuid, p_owner uuid)
+returns jsonb
+language sql stable security definer set search_path to ''
+as $fn$
+  select jsonb_build_object(
+    'portLocode', e.port_locode,
+    'terminalName', e.terminal_name,
+    'coverage', e.coverage,
+    'editionLabel', v.edition_label,
+    'callDate', e.call_date,
+    'nativeCurrency', e.native_currency,
+    'nativeTotal', e.native_total,
+    'convertedCurrency', e.converted_currency,
+    'convertedTotal', e.converted_total,
+    'lines', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'lineNo', l.line_no, 'ruleCode', l.rule_code, 'label', l.label, 'basis', l.basis,
+        'quantity', l.quantity, 'rate', l.rate, 'amount', l.amount, 'convertedAmount', l.converted_amount,
+        'explanation', l.explanation,
+        'evidence', jsonb_strip_nulls(jsonb_build_object('title', l.evidence->>'title', 'page', l.evidence->>'page',
+                                                         'sheet', l.evidence->>'sheet', 'excerpt', l.evidence->>'excerpt')),
+        'manual', l.is_manual, 'manualReason', l.manual_reason,
+        'enteredBy', case
+          when l.entered_by_label = '@owner' then
+            (select case when u.erased_at is not null then 'Deleted account' else coalesce(nullif(btrim(u.full_name), ''), 'Member') end
+               from public.users u where u.id = p_owner)
+          else l.entered_by_label end
+      ) order by l.line_no)
+      from public.pda_estimate_lines l where l.estimate_id = e.id), '[]'::jsonb)
+  )
+  from public.pda_estimates e
+  left join public.port_tariff_versions v on v.id = e.tariff_version_id
+  where e.id = p_estimate_id;
+$fn$;
+revoke all on function public.fn_pda_member_leg(uuid, uuid) from public, anon, authenticated;
+
 create or replace function public.get_pda_estimate_set(p_set_id uuid)
 returns jsonb
 language plpgsql stable security definer set search_path to ''
-as $$
+as $fn$
 declare s public.pda_estimate_sets;
 begin
   if public.fn_app_user_id() is null then
@@ -219,17 +270,24 @@ begin
   if s.id is null or not public.fn_can_read_pda_estimate(s.load_estimate_id) then
     raise exception 'PDA_AUTH: estimate set is not accessible' using errcode = '42501';
   end if;
+  -- an explicit member projection: the stored snapshot keeps its ids, the member never receives them
   return jsonb_build_object(
     'id', s.id, 'title', s.title, 'createdAt', s.created_at, 'contentHash', s.content_hash,
     'supersedesId', s.supersedes_id,
     'isLatest', not exists (select 1 from public.pda_estimate_sets n where n.supersedes_id = s.id),
     'allocation', s.allocation, 'displayCurrency', s.display_currency, 'quantityMt', s.quantity_mt,
-    'routeInput', s.route_input, 'timeline', s.timeline, 'transits', s.transits, 'totals', s.totals,
-    'notSourced', s.not_sourced,
-    'load', public.get_pda_estimate(s.load_estimate_id),
-    'discharge', public.get_pda_estimate(s.discharge_estimate_id)
+    'route', jsonb_build_object(
+      'loadPort', s.route_input#>>'{load,portLocode}', 'dischargePort', s.route_input#>>'{discharge,portLocode}',
+      'loadCallDate', s.route_input#>>'{load,callDate}', 'dischargeCallDate', s.route_input#>>'{discharge,callDate}'),
+    'timeline', s.timeline,
+    'transits', coalesce((select jsonb_agg(t - 'tariffVersionId') from jsonb_array_elements(s.transits) t), '[]'::jsonb),
+    'totals', s.totals,
+    'notSourced', coalesce((select jsonb_agg(i #- '{provenance,tariffVersionId}' #- '{provenance,ruleId}' #- '{provenance,sourceId}')
+                            from jsonb_array_elements(s.not_sourced) i), '[]'::jsonb),
+    'load', public.fn_pda_member_leg(s.load_estimate_id, s.owner_user_id),
+    'discharge', public.fn_pda_member_leg(s.discharge_estimate_id, s.owner_user_id)
   );
 end;
-$$;
+$fn$;
 revoke all on function public.get_pda_estimate_set(uuid) from public, anon;
 grant execute on function public.get_pda_estimate_set(uuid) to authenticated, service_role;

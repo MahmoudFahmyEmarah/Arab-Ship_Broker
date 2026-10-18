@@ -13,7 +13,7 @@ import {
   savePdaRouteEstimate,
 } from "@/app/(dashboard)/dashboard/ports-da/actions";
 import type { PdaEstimateSetSummary, PdaSaveSetResult } from "@/lib/pda/estimate-sets";
-import type { PdaRoutePreviewInput } from "@/lib/pda/route-types";
+import type { PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
 
 function stamp(iso: string): string {
   const d = new Date(iso);
@@ -51,12 +51,15 @@ type SaveState =
 
 export function PdaSaveBar({
   input,
+  totals,
   ready,
   supersedesId,
   onSaved,
 }: {
   /** the exact input whose parts are on screen; null until a complete preview exists */
   input: PdaRoutePreviewInput | null;
+  /** the totals on screen: the server refuses a save whose recomputation differs */
+  totals: PdaRoutePreviewResult["totals"] | null;
   ready: boolean;
   /** the set this session saved last; a new save supersedes it */
   supersedesId: string | null;
@@ -65,17 +68,25 @@ export function PdaSaveBar({
   const [state, setState] = React.useState<SaveState>({ status: "idle" });
   const [exportError, setExportError] = React.useState("");
   const [exporting, setExporting] = React.useState(false);
+  const generation = React.useRef(0);
 
-  // a changed input invalidates the saved state (design contract: an input change invalidates any save)
+  // a changed input invalidates the saved state (design contract: an input change invalidates any save), and an
+  // answer to a save started for the previous input is dropped (B2O-044 P2-1)
   React.useEffect(() => {
+    generation.current += 1;
     setState({ status: "idle" });
     setExportError("");
   }, [input]);
 
   async function save() {
     if (!input || !ready) return;
+    const run = generation.current;
     setState({ status: "saving" });
-    const response = await savePdaRouteEstimate(input, supersedesId);
+    const expected = totals
+      ? { loadPortKnown: totals.loadPortKnown, dischargePortKnown: totals.dischargePortKnown, allInKnown: totals.allInKnown, allInComplete: totals.allInComplete }
+      : null;
+    const response = await savePdaRouteEstimate(input, supersedesId, expected);
+    if (run !== generation.current) return;
     if (response.ok) {
       setState({ status: "saved", saved: response.data });
       onSaved(response.data);
@@ -150,10 +161,15 @@ export function PdaSavedEstimates({ refreshKey }: { refreshKey: number }) {
 
   async function loadMore() {
     if (state.status !== "ready" || !state.items.length) return;
+    const run = sequence.current;
     const before = state.items[state.items.length - 1]!.createdAt;
     const response = await listPdaEstimateSets(before);
+    // a refresh started meanwhile wins; an older page is dropped (B2O-044 P2-1)
+    if (run !== sequence.current) return;
     if (!response.ok) { setExportError(response.error); return; }
-    setState({ status: "ready", items: [...state.items, ...response.data], more: response.data.length >= 20 });
+    setState((current) => current.status === "ready"
+      ? { status: "ready", items: [...current.items, ...response.data.filter((item) => !current.items.some((x) => x.id === item.id))], more: response.data.length >= 20 }
+      : current);
   }
 
   async function exportPdf(setId: string) {

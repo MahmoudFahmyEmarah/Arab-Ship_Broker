@@ -50,7 +50,7 @@ begin
                                  'totals', jsonb_build_object('native', 1200),
                                  'generatedAt', '2026-10-18T10:00:00Z',
                                  'lines', jsonb_build_array(jsonb_build_object('label','Agency fee','basis','manual','amount',1200,
-                                   'explanation','Authorized manual quotation: Agent quote A-1','manual',true,'manualReason','Agent quote A-1','enteredBy','Set Owner')));
+                                   'explanation','Authorized manual quotation: Agent quote A-1','manual',true,'manualReason','Agent quote A-1','enteredBy','@owner')));
   dis_res := jsonb_set(jsonb_set(load_res, '{totals,native}', '1500'), '{lines,0,amount}', '1500');
   route := jsonb_build_object(
     'title', pol || ' → ' || pod || ' · MV SET TEST · 26,000 MT',
@@ -125,6 +125,10 @@ begin
   one := public.get_pda_estimate_set((r3->>'id')::uuid);
   if one->'load'->>'portLocode' <> pol or one->'discharge'->>'portLocode' <> pod or jsonb_array_length(one->'discharge'->'lines') <> 1 then
     raise exception 'E6: the owner opens the set with both legs: %', one; end if;
+  -- B2O-044 P1-1/P1-4: the member view carries no id key at all, and the '@owner' line reads as the owner's name
+  if one::text ~ '"(ruleId|sourceId|tariffVersionId|terminalId|input)"\s*:' or one ? 'routeInput'
+     or one->'discharge'->'lines'->0->>'enteredBy' is distinct from 'Set Owner' then
+    raise exception 'E6: the member projection must hold no internal id and resolve the owner marker: %', one; end if;
   perform set_config('request.jwt.claim.sub', colleague::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub',colleague,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
   lst := public.list_my_pda_estimate_sets(20, null);
@@ -162,7 +166,19 @@ begin
      or (select erased_at from public.users where id = owner) is null
      or not exists (select 1 from public.pda_estimates where id = (r3->>'loadEstimateId')::uuid) then
     raise exception 'E8: erasure must keep the saved sets and their legs'; end if;
-  raise notice 'E8 ok: account erasure anonymises the owner and keeps every saved set and leg (H1)';
+  -- no name was frozen: the colleague now reads "Deleted account" on the owner's manual line (B2O-044 P1-4)
+  if exists (select 1 from public.pda_estimate_lines l join public.pda_estimates x on x.id = l.estimate_id
+              where x.id in ((r3->>'loadEstimateId')::uuid, (r3->>'dischargeEstimateId')::uuid) and l.entered_by_label <> '@owner') then
+    raise exception 'E8: a saved line must hold the owner marker, not a name'; end if;
+  perform set_config('request.jwt.claim.sub', colleague::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',colleague,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  one := public.get_pda_estimate_set((r3->>'id')::uuid);
+  if one->'discharge'->'lines'->0->>'enteredBy' is distinct from 'Deleted account' then
+    raise exception 'E8: after erasure the line must read "Deleted account", got %', one->'discharge'->'lines'->0->>'enteredBy'; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  begin truncate public.pda_estimate_sets cascade; e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_IMMUTABLE' then raise exception 'E8: TRUNCATE must be refused, got %', e; end if;
+  raise notice 'E8 ok: erasure keeps every set and leg, no name was frozen (reads "Deleted account"), TRUNCATE refused (H1, B2O-044)';
 end $$;
 
 do $m$ begin raise notice 'PDA ESTIMATE SETS: ALL ASSERTIONS PASSED'; end $m$;

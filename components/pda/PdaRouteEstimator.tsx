@@ -708,6 +708,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
 
               <PdaSaveBar
                 input={previewInput}
+                totals={result?.totals ?? null}
                 ready={result != null && !busy}
                 supersedesId={lastSaved && lastSaved.route === routeKey(previewInput) ? lastSaved.id : null}
                 onSaved={(saved) => {

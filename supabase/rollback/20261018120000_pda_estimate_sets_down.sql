@@ -18,8 +18,10 @@ begin
 end $$;
 
 drop function if exists public.get_pda_estimate_set(uuid);
+drop function if exists public.fn_pda_member_leg(uuid, uuid);
 drop function if exists public.list_my_pda_estimate_sets(integer, timestamptz);
 drop function if exists public.pda_save_estimate_set(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid);
 drop trigger if exists pda_estimate_sets_immutable on public.pda_estimate_sets;
+drop trigger if exists pda_estimate_sets_no_truncate on public.pda_estimate_sets;
 drop table if exists public.pda_estimate_sets;
 drop function if exists public.fn_pda_estimate_set_immutable();

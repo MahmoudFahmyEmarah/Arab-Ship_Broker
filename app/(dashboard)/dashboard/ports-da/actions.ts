@@ -18,7 +18,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveDeclaredFlag, resolveFlagName, type FlagStateRow } from "@/lib/pda/flag";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaCalculationContext, getPdaEstimateSet, listMyPdaEstimateSets, listPdaPortsWorkspace, savePdaEstimate, savePdaEstimateSet, setMyPdaPreferences } from "@/sdk/app/pda";
-import { pdaRouteSnapshot, type PdaEstimateSetDetail, type PdaEstimateSetSummary, type PdaSaveSetResult } from "@/lib/pda/estimate-sets";
+import { PDA_OWNER_MARKER, pdaRouteSnapshot, type PdaEstimateSetDetail, type PdaEstimateSetSummary, type PdaSaveSetResult } from "@/lib/pda/estimate-sets";
 import type { PdaPreferences, PdaStartTab } from "@/lib/pda/preferences";
 import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
 import type { PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
@@ -530,16 +530,33 @@ const SET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
  * transaction by the service-only pda_save_estimate_set, which re-checks tier, seat, tariff version, sums and evidence
  * and computes the content hash itself.
  */
-export async function savePdaRouteEstimate(raw: PdaRoutePreviewInput, supersedesId?: string | null): Promise<ActionResult<PdaSaveSetResult>> {
+/** The figures the member saw; the save refuses if the server's recomputation differs (B2O-044 P2-2). */
+export interface PdaSaveExpectation {
+  loadPortKnown: number | null;
+  dischargePortKnown: number | null;
+  allInKnown: number | null;
+  allInComplete: number | null;
+}
+
+const sameFigure = (a: number | null | undefined, b: number | null | undefined) =>
+  (a == null && b == null) || (a != null && b != null && Math.abs(a - b) < 0.005);
+
+export async function savePdaRouteEstimate(raw: PdaRoutePreviewInput, supersedesId?: string | null, expected?: PdaSaveExpectation | null): Promise<ActionResult<PdaSaveSetResult>> {
   try {
     if (supersedesId != null && !SET_ID.test(supersedesId)) throw new UserFacingActionError("Unknown saved estimate");
-    const route = await prepareRoutePreview(raw);
+    // a saved manual line records the owner MARKER, never the member's name (B2O-044 P1-4): the read resolves it, and
+    // erasure then shows "Deleted account" instead of a name frozen in an immutable record
+    const route = { ...(await prepareRoutePreview(raw)), manualActorLabel: PDA_OWNER_MARKER };
     const [load, discharge, frame] = await Promise.all([
       computeRouteLeg(route, "load"),
       computeRouteLeg(route, "discharge"),
       computeRouteFrame(route),
     ]);
     const result = composePdaRoutePreview({ displayCurrency: route.input.displayCurrency, allocation: route.input.allocation, frame, load, discharge });
+    if (expected && !(sameFigure(expected.loadPortKnown, result.totals.loadPortKnown) && sameFigure(expected.dischargePortKnown, result.totals.dischargePortKnown)
+        && sameFigure(expected.allInKnown, result.totals.allInKnown) && sameFigure(expected.allInComplete, result.totals.allInComplete))) {
+      throw new UserFacingActionError("The figures changed since your preview (a tariff or exchange rate may just have been updated). Nothing was saved; review the estimate and save again.");
+    }
     const saved = await savePdaEstimateSet(getSupabaseAdminClient(), {
       actorId: route.appUserId,
       ownerOrgId: route.ownerOrgId,
