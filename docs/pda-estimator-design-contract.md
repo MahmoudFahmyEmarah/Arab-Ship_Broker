@@ -155,15 +155,15 @@ on only one leg stays on that leg and that an empty picker never emits an
 loopback-only and requires explicit coordination with the local test database;
 test discovery alone is not represented as a browser execution.
 
-The Ports, Agents, and Setup tabs are present as explicitly deferred governed
-workspaces; they contain no mock records or simulated workflows.
-
-This increment does **not** claim the immutable paired save/export history,
-any save/export action, per-leg retry state, governed Agents workflow, Ports
-workspace, or Setup preferences. The `Saved` delivery state above is a frozen
-future acceptance state, not current functionality. These remain later phases
-and are release blockers for any claim that the complete four-tab reference
-has shipped.
+**Update 18 Oct 2026 (owner ruling O2ALL-008/009; Opus builds, Codex audits):** the four tabs are now governed
+workspaces — **Ports** (`list_pda_ports_workspace`: verified ports, terminals, published editions in force and the
+services each prices), **Agents** phase 1 (`list_pda_port_agents`: ASB-invited agencies at verified ports; quote requests
+answered by the agencies themselves are phase 2, see `docs/pda-agents-workspace-spec.md`), **Setup**
+(`get_/set_my_pda_preferences`: row height and start tab, presentation only). The Estimate tab now reports each leg
+independently with its own retry (`previewPdaRouteLeg` / `previewPdaRouteFrame`), and the **Saved** state is real: one
+immutable estimate set referencing both immutable leg estimates, content-hashed by the database, versioned by
+supersede (`pda_save_estimate_set`), listed in "Saved estimates" and exported as a deterministic PDF of the saved set only.
+Still not claimed: agency accounts and quote requests (Agents phase 2) and Fixture linkage of a saved set.
 
 ## File ownership
 

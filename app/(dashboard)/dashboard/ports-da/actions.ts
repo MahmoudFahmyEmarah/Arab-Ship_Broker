@@ -17,7 +17,8 @@ import type { CargoView, VesselView } from "@/lib/portal/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveDeclaredFlag, resolveFlagName, type FlagStateRow } from "@/lib/pda/flag";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getPdaCalculationContext, getPdaEstimateSet, listMyPdaEstimateSets, listPdaPortsWorkspace, savePdaEstimate, savePdaEstimateSet, setMyPdaPreferences } from "@/sdk/app/pda";
+import { getPdaCalculationContext, getPdaEstimateSet, listMyPdaEstimateSets, listPdaPortAgents, listPdaPortsWorkspace, savePdaEstimate, savePdaEstimateSet, setMyPdaPreferences } from "@/sdk/app/pda";
+import type { PdaAgency } from "@/lib/pda/agents";
 import { PDA_OWNER_MARKER, pdaRouteSnapshot, type PdaEstimateSetDetail, type PdaEstimateSetSummary, type PdaSaveSetResult } from "@/lib/pda/estimate-sets";
 import type { PdaPreferences, PdaStartTab } from "@/lib/pda/preferences";
 import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
@@ -619,5 +620,15 @@ export async function exportPdaEstimateSetPdf(setId: string): Promise<ActionResu
   } catch (error) {
     if (error instanceof Error && /^PDA_AUTH/.test(error.message)) return { ok: false, error: "This saved estimate is not available to you." };
     return { ok: false, error: actionErrorMessage(error, "The PDF could not be produced") };
+  }
+}
+
+/** The Agents tab (phase 1): the ASB-invited agencies listed at verified ports, read through the member's own session. */
+export async function loadPdaAgents(): Promise<ActionResult<PdaAgency[]>> {
+  try {
+    const { supabase } = await viewer();
+    return { ok: true, data: await listPdaPortAgents(supabase) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The port agents could not be loaded") };
   }
 }

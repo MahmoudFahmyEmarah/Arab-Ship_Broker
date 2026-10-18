@@ -37,6 +37,7 @@ import type { PdaTerminalItem } from "@/sdk/app/pda";
 import "@/components/design-system/asb-ds.css";
 import { PdaPortsWorkspace } from "./PdaPortsWorkspace";
 import { PdaSetupWorkspace } from "./PdaSetupWorkspace";
+import { PdaAgentsWorkspace } from "./PdaAgentsWorkspace";
 import { PdaSaveBar, PdaSavedEstimates } from "./PdaSavedEstimates";
 import { initialPdaTab, type PdaPreferences } from "@/lib/pda/preferences";
 import "./pda-route-estimator.css";
@@ -199,6 +200,13 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
   const [historyKey, setHistoryKey] = React.useState(0);
   // the port a card asked to open in the Ports tab
   const [portsFocus, setPortsFocus] = React.useState<string | null>(null);
+  // the port a card asked to see agents for, in the Agents tab
+  const [agentsFocus, setAgentsFocus] = React.useState<string | null>(null);
+  const openPortAgents = (locode: string) => {
+    if (!locode) return;
+    setAgentsFocus(locode);
+    setActiveTab("agents");
+  };
   const openPortRecord = (locode: string) => {
     if (!locode) return;
     setPortsFocus(locode);
@@ -582,16 +590,10 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       >
       {activeTab === "ports" ? (
         <PdaPortsWorkspace initialSelected={portsFocus} />
+      ) : activeTab === "agents" ? (
+        <PdaAgentsWorkspace initialPort={agentsFocus} />
       ) : activeTab === "setup" ? (
         <PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} />
-      ) : activeTab !== "estimate" ? (
-        <section className="pda-route__deferred asb-card" aria-labelledby="pda-deferred-title">
-          <span className="pda-route__deferred-icon"><Settings2 size={22} /></span>
-          <div>
-            <h2 id="pda-deferred-title">{TABS.find((tab) => tab.id === activeTab)?.label} workspace</h2>
-            <p>This tab is preserved from the approved design. Its governed data workflow will be connected in the next module increment.</p>
-          </div>
-        </section>
       ) : (
         <>
           <section className={`pda-selection asb-card ${selected ? "is-selected" : ""}`} aria-label="Estimate records">
@@ -767,6 +769,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                   awaitingRoute={loadPart.status === "ok" && !result}
                   onRetry={() => retryPart("load")}
                   onOpenPort={() => openPortRecord(loadPort)}
+                  onOpenAgents={() => openPortAgents(loadPort)}
                 />
                 <PortEstimateCard
                   side="discharge"
@@ -791,6 +794,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                   awaitingRoute={dischargePart.status === "ok" && !result}
                   onRetry={() => retryPart("discharge")}
                   onOpenPort={() => openPortRecord(dischargePort)}
+                  onOpenAgents={() => openPortAgents(dischargePort)}
                 />
               </section>
             </div>
@@ -1200,6 +1204,7 @@ function PortEstimateCard({
   awaitingRoute,
   onRetry,
   onOpenPort,
+  onOpenAgents,
 }: {
   side: "load" | "discharge";
   port: PdaEstimatorBootstrap["catalog"]["ports"][number] | null;
@@ -1226,6 +1231,8 @@ function PortEstimateCard({
   onRetry: () => void;
   /** opens the Ports tab on this port (members never reach the admin tariff console) */
   onOpenPort: () => void;
+  /** opens the Agents tab filtered to this port */
+  onOpenAgents: () => void;
 }) {
   const warnings = result?.warnings.length ?? 0;
   const manual = result?.warnings.filter((warning) => warning.code === "MANUAL_QUOTE_REQUIRED").length ?? 0;
@@ -1293,7 +1300,7 @@ function PortEstimateCard({
           {result?.warnings.map((warning, index) => <aside key={`${warning.code}-${index}`}>{warning.message}</aside>)}
         </div>
       </details>
-      <footer><button type="button" className="pda-port-card__link" onClick={onOpenPort} disabled={!locode}>Port record in Ports</button><span>{!result ? "Waiting for explicit inputs" : <>{result.tariffVersionId ? `Tariff: ${result.tariffEdition ?? "published tariff"} · ` : "No published tariff · "}{warnings || notSourced.length ? `${warnings + notSourced.length} item${warnings + notSourced.length === 1 ? "" : "s"} need attention` : "All sourced lines shown"}</>}</span></footer>
+      <footer><button type="button" className="pda-port-card__link" onClick={onOpenPort} disabled={!locode}>Port record in Ports</button><button type="button" className="pda-port-card__link" onClick={onOpenAgents} disabled={!locode}>Agents at this port</button><span>{!result ? "Waiting for explicit inputs" : <>{result.tariffVersionId ? `Tariff: ${result.tariffEdition ?? "published tariff"} · ` : "No published tariff · "}{warnings || notSourced.length ? `${warnings + notSourced.length} item${warnings + notSourced.length === 1 ? "" : "s"} need attention` : "All sourced lines shown"}</>}</span></footer>
     </article>
   );
 }

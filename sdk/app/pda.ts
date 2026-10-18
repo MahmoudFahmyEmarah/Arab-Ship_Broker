@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PdaCalculationResult, PdaRequest, PdaTariffVersion } from "@/lib/pda/types";
 import { parsePdaPortsWorkspace, type PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
 import { parsePdaPreferences, type PdaPreferences, type PdaStartTab } from "@/lib/pda/preferences";
+import { parsePdaAdminAgencies, parsePdaAgencies, type PdaAdminAgency, type PdaAgency } from "@/lib/pda/agents";
 import {
   parsePdaSaveSetResult,
   parsePdaSetDetail,
@@ -150,4 +151,18 @@ export async function getPdaEstimateSet(supabase: SupabaseClient, setId: string)
   const { data, error } = await supabase.rpc("get_pda_estimate_set", { p_set_id: setId });
   if (error) throw new Error(error.message);
   return parsePdaSetDetail(data);
+}
+
+/** Active, ASB-invited agencies at active verified ports (Agents phase 1, 20261018130000); one port when given. */
+export async function listPdaPortAgents(supabase: SupabaseClient, portLocode?: string | null): Promise<PdaAgency[]> {
+  const { data, error } = await supabase.rpc("list_pda_port_agents", { p_port_locode: portLocode ?? null });
+  if (error) throw new Error(error.message);
+  return parsePdaAgencies(data);
+}
+
+/** The owner's console read of the whole registry. SERVICE ROLE client only, with an owner-tier admin actor. */
+export async function pdaAdminListAgencies(admin: SupabaseClient, actorId: string): Promise<PdaAdminAgency[]> {
+  const { data, error } = await admin.rpc("pda_admin_list_agencies", { p_actor: actorId });
+  if (error) throw new Error(error.message);
+  return parsePdaAdminAgencies(data);
 }

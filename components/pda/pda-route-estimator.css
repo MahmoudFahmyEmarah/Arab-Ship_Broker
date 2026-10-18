@@ -1320,3 +1320,83 @@
   outline: 2px solid var(--ds-blue);
   outline-offset: 2px;
 }
+
+/* ── Agents workspace, phase 1 (O2ALL-009): the directory of ASB-invited port agencies ───────────────────────── */
+.pda-agents {
+  display: grid;
+  gap: 12px;
+}
+
+.pda-agents__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pda-agents__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pda-agents__item {
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  padding: 10px 12px;
+}
+
+.pda-agents__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--ds-navy);
+  font-size: 13px;
+}
+
+.pda-agents__icon {
+  display: inline-flex;
+  color: var(--ds-blue);
+}
+
+.pda-agents__site {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ds-blue);
+  font-size: 12px;
+}
+
+.pda-agents__ports {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pda-agents__ports li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  border-top: 1px solid var(--ds-line);
+  padding-top: 4px;
+  font-size: 12px;
+}
+
+.pda-agents__port {
+  color: var(--ds-navy);
+  font-weight: 600;
+}
+
+.pda-agents__port em,
+.pda-agents__services {
+  color: var(--ds-muted);
+  font-style: normal;
+  font-weight: 400;
+}
