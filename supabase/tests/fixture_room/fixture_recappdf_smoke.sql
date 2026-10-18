@@ -280,6 +280,7 @@ select public.fn_refresh_matches();
 --   P3  the binding can never be edited and a record can never be deleted
 --   P4  a party reads its room's record; an outsider and an unknown version are not found; an admin read is logged
 --   P5  nothing is reachable from the API roles directly
+--   P6  (20261017100000) the binding read precedes rendering; a seeded /2 row retries to stored with its own digest
 
 do $$
 declare v jsonb; s jsonb; v_room uuid; v_recap uuid; v_sha text := repeat('ab', 32); v_path text; e text; n int;
@@ -369,6 +370,35 @@ begin
      or not has_function_privilege('service_role', 'public.bind_fixture_recap_pdf(uuid, text, text, integer, text)', 'execute') then
     raise exception 'P5: grants are not private-by-default'; end if;
   raise notice 'P5 ok: the table is private; source, bind, finalize and paths are service-only; members get the read';
+
+  -- P6 · (20261017100000) the store reads a binding BEFORE rendering, and a /2 pending or failed row keeps its
+  -- renderer, digest, size and path through a retry: finalize with the SAME digest stores it; nothing re-binds.
+  -- Unconditional (C2O-118 P2): a missing binding read is a failure, never a skipped check.
+  if to_regprocedure('public.fixture_recap_pdf_binding(uuid)') is null then
+    raise exception 'P6: public.fixture_recap_pdf_binding(uuid) must exist (20261017100000)'; end if;
+    perform pg_temp.fx_as('u_ch1');
+    v := public.publish_fixture_recap(v_room, pg_temp.fx_ver(v_room), 'pdf-recap-2');
+    v_recap := (v->'data'->>'recapVersionId')::uuid;
+    perform pg_temp.fx_owner();
+    if public.fixture_recap_pdf_binding(v_recap) is not null then raise exception 'P6: an unbound version has no binding'; end if;
+    v_path := v_room::text || '/recap-v2-' || repeat('2f', 32) || '.pdf';
+    v := public.bind_fixture_recap_pdf(v_recap, v_path, repeat('2f', 32), 1705575, 'recap-pdf/2');
+    s := public.fixture_recap_pdf_binding(v_recap);
+    if s->>'renderer' <> 'recap-pdf/2' or s->>'status' <> 'pending' or s->>'path' <> v_path or s->>'sha256' <> repeat('2f', 32) or (s->>'bytes')::int <> 1705575 then
+      raise exception 'P6: the binding read returns the bound /2 artifact: %', s; end if;
+    v := public.finalize_fixture_recap_pdf(v_recap, repeat('2f', 32), false, 'upload refused (503)');
+    if public.fixture_recap_pdf_binding(v_recap)->>'status' <> 'failed' then raise exception 'P6: a failed /2 store reads back failed'; end if;
+    e := pg_temp.fx_err(format('select public.bind_fixture_recap_pdf(%L, %L, %L, 72000, %L)', v_recap, v_room::text || '/recap-v2-' || repeat('3e', 32) || '.pdf', repeat('3e', 32), 'recap-pdf/3'));
+    if e <> 'FX_CONFLICT' then raise exception 'P6: a /3 render must never re-bind a /2 version, got %', e; end if;
+    v := public.finalize_fixture_recap_pdf(v_recap, repeat('2f', 32), true);
+    s := public.fixture_recap_pdf_binding(v_recap);
+    if s->>'status' <> 'stored' or s->>'renderer' <> 'recap-pdf/2' or s->>'sha256' <> repeat('2f', 32) then
+      raise exception 'P6: the retried /2 artifact is stored unchanged: %', s; end if;
+    if has_function_privilege('authenticated', 'public.fixture_recap_pdf_binding(uuid)', 'execute')
+       or has_function_privilege('anon', 'public.fixture_recap_pdf_binding(uuid)', 'execute')
+       or not has_function_privilege('service_role', 'public.fixture_recap_pdf_binding(uuid)', 'execute') then
+      raise exception 'P6: the binding read is service-only'; end if;
+    raise notice 'P6 ok: the binding is read before rendering; a /2 failed row retries to stored with its own digest; /3 never re-binds it; service-only';
 end $$;
 
 do $$ begin raise notice 'FIXTURE RECAP PDF SMOKE: ALL ASSERTIONS PASSED'; end $$;

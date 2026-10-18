@@ -60,8 +60,10 @@ CHAIN=(
   "$M/20261008100000_fixture_room_notifications.sql"
   "$M/20261009200000_fixture_subject_deadlines.sql"
   "$M/20261009300000_fixture_recap_pdf.sql"
+  "$M/20261012100000_fixture_extension_authority_first.sql"
+  "$M/20261017100000_fixture_recap_pdf_binding_read.sql"
 )
-DOWNS=("supabase/rollback/20261009300000_fixture_recap_pdf_down.sql" "supabase/rollback/20261009200000_fixture_subject_deadlines_down.sql" "supabase/rollback/20261008100000_fixture_room_notifications_down.sql" "supabase/rollback/20261008052000_shared_notification_semantics_down.sql" "supabase/rollback/20261008050000_shared_fixture_services_down.sql" "supabase/rollback/20261007_fixture_room_lineage_down.sql" "supabase/rollback/20261007_fixture_bridge_suggestion_down.sql" "supabase/rollback/20261007_fixture_match_label_down.sql" "supabase/rollback/20261006_fixture_room_enforcement_down.sql" "supabase/rollback/20260923_fixture_room_down.sql")
+DOWNS=("supabase/rollback/20261017100000_fixture_recap_pdf_binding_read_down.sql" "supabase/rollback/20261012100000_fixture_extension_authority_first_down.sql" "supabase/rollback/20261009300000_fixture_recap_pdf_down.sql" "supabase/rollback/20261009200000_fixture_subject_deadlines_down.sql" "supabase/rollback/20261008100000_fixture_room_notifications_down.sql" "supabase/rollback/20261008052000_shared_notification_semantics_down.sql" "supabase/rollback/20261008050000_shared_fixture_services_down.sql" "supabase/rollback/20261007_fixture_room_lineage_down.sql" "supabase/rollback/20261007_fixture_bridge_suggestion_down.sql" "supabase/rollback/20261007_fixture_match_label_down.sql" "supabase/rollback/20261006_fixture_room_enforcement_down.sql" "supabase/rollback/20260923_fixture_room_down.sql")
 
 # ── 0 · starting state (FR-L2) ──────────────────────────────────────────────
 if [ "$TARGET" = local ]; then
