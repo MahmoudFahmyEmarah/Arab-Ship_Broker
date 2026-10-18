@@ -81,6 +81,7 @@ begin
 
   -- a version 2 of the port-wide set, still a draft (W4: never shown)
   future_version := public.pda_create_tariff_draft(maker, jsonb_build_object(
+    'tariffSetId',(select tariff_set_id from public.port_tariff_versions where id = version),
     'portLocode',port_code,'publisherId',publisher,'name','WS Port Call','scope','port_call','versionNo',2,'currency','USD',
     'effectiveFrom','2026-03-01','roundingMode','half_up','decimalPlaces',2,'primarySourceId',source));
 
