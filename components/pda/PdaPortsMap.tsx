@@ -25,7 +25,9 @@ export default function PdaPortsMap({
   const layerRef = React.useRef<L.LayerGroup | null>(null);
   const fittedRef = React.useRef<readonly PdaWorkspacePort[] | null>(null);
   const onSelectRef = React.useRef(onSelect);
-  onSelectRef.current = onSelect;
+  React.useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
   React.useEffect(() => {
     if (!hostRef.current || mapRef.current) return;

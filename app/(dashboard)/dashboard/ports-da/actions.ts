@@ -2,8 +2,9 @@
 
 import { getAppUserRow } from "@/lib/app-user";
 import { calculatePda } from "@/lib/pda/calculate";
-import { aggregatePdaRoutePreview, derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
+import { derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
 import { pdaRoutePreviewSchema } from "@/lib/pda/route-schema";
+import { composePdaRoutePreview, type PdaRouteFramePreview, type PdaRouteLegPreview, type PdaRouteSide } from "@/lib/pda/route-legs";
 import type { PdaMeasuredPassage, PdaRouteFxRate, PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult, PdaRouteTimelineResult, PdaRouteTransit, PdaRouteTransitsInput } from "@/lib/pda/route-types";
 import { estimateSuezTransit } from "@/lib/suez/engine";
 import type { SuezInput } from "@/lib/suez/types";
@@ -311,76 +312,96 @@ export async function persistPda(raw: PdaRequest): Promise<ActionResult<{ estima
   }
 }
 
+/**
+ * Shared preparation for every part of a route preview: the request is validated, the member's own vessel and cargo
+ * and both verified ports are confirmed, and the timeline is derived. Every part re-runs this, so a part can never be
+ * computed for a selection the member does not own.
+ */
+async function prepareRoutePreview(raw: PdaRoutePreviewInput) {
+  const parsed = pdaRoutePreviewSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new UserFacingActionError(validationErrorMessage(parsed.error.issues, "Invalid route PDA request"));
+  }
+  const input = parsed.data as PdaRoutePreviewInput;
+  const { supabase, manualActorLabel } = await viewer();
+  const [{ vessel, cargo }] = await Promise.all([
+    requireRouteSelections(input.selection),
+    requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
+  ]);
+  const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
+  const flagState = resolveFlagName(await flagRegistry(supabase), vessel.flag);
+  return { input, supabase, manualActorLabel, vessel, cargo, timeline, flagState };
+}
+
+type PreparedRoute = Awaited<ReturnType<typeof prepareRoutePreview>>;
+
+/** One leg: canonical request → governed tariff context → FX → calculation. */
+async function computeRouteLeg(route: PreparedRoute, side: PdaRouteSide): Promise<PdaRouteLegPreview> {
+  const leg = side === "load" ? route.input.load : route.input.discharge;
+  const canonical = canonicalRouteLeg({
+    leg,
+    vessel: route.vessel,
+    cargo: route.cargo,
+    quantityMt: route.input.selection.quantityMt,
+    days: side === "load" ? route.timeline.loadPortDays : route.timeline.dischargePortDays,
+    manualActorLabel: route.manualActorLabel,
+    flagState: route.flagState,
+  });
+  const context = await getPdaCalculationContext(route.supabase, canonical);
+  const fx = await forDisplayCurrency(route.supabase, canonical, context.tariffVersion?.currency ?? null, route.input.displayCurrency);
+  return { side, request: fx.request, result: calculatePda(fx.request, context.tariffVersion ?? null), fx: fx.fx };
+}
+
+/** The frame: canonical selection, timeline and the transits on the measured passage. */
+async function computeRouteFrame(route: PreparedRoute): Promise<PdaRouteFramePreview> {
+  return {
+    canonical: {
+      vesselAvailabilityId: route.vessel.ownedListingId!,
+      vesselId: route.vessel.vesselId && UUID.test(route.vessel.vesselId) ? route.vessel.vesselId : null,
+      cargoId: route.cargo.ownedListingId!,
+      quantityMt: route.input.selection.quantityMt,
+    },
+    timeline: route.timeline,
+    transitFacts: await routeTransits(route.supabase, route.input.load.portLocode, route.input.discharge.portLocode, route.timeline, route.vessel),
+  };
+}
+
+/** The whole route in one call (kept for callers that want it): the same parts, composed the same way as the page. */
 export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<ActionResult<PdaRoutePreviewResult>> {
   try {
-    const parsed = pdaRoutePreviewSchema.safeParse(raw);
-    if (!parsed.success) {
-      return { ok: false, error: validationErrorMessage(parsed.error.issues, "Invalid route PDA request") };
-    }
-    const input = parsed.data as PdaRoutePreviewInput;
-    const { supabase, manualActorLabel } = await viewer();
-    const [{ vessel, cargo }] = await Promise.all([
-      requireRouteSelections(input.selection),
-      requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
+    const route = await prepareRoutePreview(raw);
+    const [load, discharge, frame] = await Promise.all([
+      computeRouteLeg(route, "load"),
+      computeRouteLeg(route, "discharge"),
+      computeRouteFrame(route),
     ]);
-    const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
-    const flagState = resolveFlagName(await flagRegistry(supabase), vessel.flag);
-    let loadRequest = canonicalRouteLeg({
-      leg: input.load,
-      vessel,
-      cargo,
-      quantityMt: input.selection.quantityMt,
-      days: timeline.loadPortDays,
-      manualActorLabel,
-      flagState,
-    });
-    let dischargeRequest = canonicalRouteLeg({
-      leg: input.discharge,
-      vessel,
-      cargo,
-      quantityMt: input.selection.quantityMt,
-      days: timeline.dischargePortDays,
-      manualActorLabel,
-      flagState,
-    });
-    const [loadContext, dischargeContext] = await Promise.all([
-      getPdaCalculationContext(supabase, loadRequest),
-      getPdaCalculationContext(supabase, dischargeRequest),
-    ]);
-    const [loadFx, dischargeFx] = await Promise.all([
-      forDisplayCurrency(supabase, loadRequest, loadContext.tariffVersion?.currency ?? null, input.displayCurrency),
-      forDisplayCurrency(supabase, dischargeRequest, dischargeContext.tariffVersion?.currency ?? null, input.displayCurrency),
-    ]);
-    loadRequest = loadFx.request;
-    dischargeRequest = dischargeFx.request;
-    const load = calculatePda(loadRequest, loadContext.tariffVersion ?? null);
-    const discharge = calculatePda(dischargeRequest, dischargeContext.tariffVersion ?? null);
-
     return {
       ok: true,
-      data: aggregatePdaRoutePreview({
-        displayCurrency: input.displayCurrency,
-        allocation: input.allocation,
-        canonical: {
-          vesselAvailabilityId: vessel.ownedListingId!,
-          vesselId: vessel.vesselId && UUID.test(vessel.vesselId) ? vessel.vesselId : null,
-          cargoId: cargo.ownedListingId!,
-          quantityMt: input.selection.quantityMt,
-          loadRequest,
-          dischargeRequest,
-        },
-        load,
-        discharge,
-        timeline,
-        transitFacts: await routeTransits(supabase, input.load.portLocode, input.discharge.portLocode, timeline, vessel),
-        fxRates: [
-          ...(loadFx.fx ? [{ ...loadFx.fx, leg: "load" as const }] : []),
-          ...(dischargeFx.fx ? [{ ...dischargeFx.fx, leg: "discharge" as const }] : []),
-        ],
-      }),
+      data: composePdaRoutePreview({ displayCurrency: route.input.displayCurrency, allocation: route.input.allocation, frame, load, discharge }),
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Unable to calculate route PDA") };
+  }
+}
+
+/** One leg on its own (increment B): it loads, fails and is retried independently of the other leg. */
+export async function previewPdaRouteLeg(raw: PdaRoutePreviewInput, side: PdaRouteSide): Promise<ActionResult<PdaRouteLegPreview>> {
+  try {
+    if (side !== "load" && side !== "discharge") throw new UserFacingActionError("Unknown route leg");
+    const route = await prepareRoutePreview(raw);
+    return { ok: true, data: await computeRouteLeg(route, side) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, side === "load" ? "The load port could not be calculated" : "The discharge port could not be calculated") };
+  }
+}
+
+/** The frame on its own (increment B): timeline, canonical selection and transits. */
+export async function previewPdaRouteFrame(raw: PdaRoutePreviewInput): Promise<ActionResult<PdaRouteFramePreview>> {
+  try {
+    const route = await prepareRoutePreview(raw);
+    return { ok: true, data: await computeRouteFrame(route) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The voyage timeline and transits could not be calculated") };
   }
 }
 

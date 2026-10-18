@@ -65,7 +65,7 @@ export function PdaPortsWorkspace() {
     void load();
   }, [load]);
 
-  const ports = state.status === "ready" ? state.data.ports : [];
+  const ports = React.useMemo(() => (state.status === "ready" ? state.data.ports : []), [state]);
   const shown = React.useMemo(() => filterPdaPorts(ports, query, scope), [ports, query, scope]);
   const summary = React.useMemo(() => summarisePdaPorts(ports), [ports]);
   const selectedPort = ports.find((port) => port.locode === selected) ?? null;

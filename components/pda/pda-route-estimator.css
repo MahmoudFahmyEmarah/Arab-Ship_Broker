@@ -1094,3 +1094,57 @@
   color: var(--ds-muted);
   font-size: 12px;
 }
+
+/* ── Per-leg states (increment B, O2ALL-008): each leg loads, fails and retries on its own ───────────────────── */
+.pda-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  border: 1px solid var(--ds-line-strong);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-surface);
+  color: var(--ds-navy);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.pda-retry:hover {
+  border-color: var(--ds-blue);
+  color: var(--ds-blue);
+}
+
+.pda-retry:focus-visible {
+  outline: 2px solid var(--ds-blue);
+  outline-offset: 2px;
+}
+
+.pda-port-card__failure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--ds-red);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-red-soft);
+  color: var(--ds-red);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.pda-port-card__failure .pda-retry {
+  margin-left: 0;
+}
+
+.pda-port-card__waiting {
+  margin: 0;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-blue-soft);
+  color: var(--ds-navy);
+  font-size: 12px;
+  padding: 8px 10px;
+}

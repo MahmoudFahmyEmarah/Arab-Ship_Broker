@@ -1,21 +1,18 @@
 "use client";
 
 import * as React from "react";
-import {
-  Anchor,
-  CalendarDays,
-  ChevronRight,
-  Loader2,
-  Map,
-  Package,
-  Plus,
-  Settings2,
-  Ship,
-  UserRound,
-  X,
-} from "lucide-react";
+import { Anchor, CalendarDays, ChevronRight, Loader2, Map, Package, Plus, Settings2, Ship, UserRound, X, RefreshCw } from "lucide-react";
 
-import { measuredPdaPassage, previewPdaRoute } from "@/app/(dashboard)/dashboard/ports-da/actions";
+import { measuredPdaPassage, previewPdaRouteFrame, previewPdaRouteLeg } from "@/app/(dashboard)/dashboard/ports-da/actions";
+import {
+  composeWhenReady,
+  partFailureSummary,
+  PDA_PART_IDLE,
+  PDA_PART_LOADING,
+  type PdaPartState,
+  type PdaRouteFramePreview,
+  type PdaRouteLegPreview,
+} from "@/lib/pda/route-legs";
 import type {
   PdaEstimatorBootstrap,
   PdaEstimatorCargoOption,
@@ -185,9 +182,12 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
   const [dischargeManualLines, setDischargeManualLines] = React.useState<ManualQuoteDraft[]>([]);
   const [loadTerminal, setLoadTerminal] = React.useState("");
   const [dischargeTerminal, setDischargeTerminal] = React.useState("");
-  const [result, setResult] = React.useState<PdaRoutePreviewResult | null>(null);
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState("");
+  // increment B: three independent parts — each leg and the frame load, fail and retry on their own
+  const [loadPart, setLoadPart] = React.useState<PdaPartState<PdaRouteLegPreview>>(PDA_PART_IDLE);
+  const [dischargePart, setDischargePart] = React.useState<PdaPartState<PdaRouteLegPreview>>(PDA_PART_IDLE);
+  const [framePart, setFramePart] = React.useState<PdaPartState<PdaRouteFramePreview>>(PDA_PART_IDLE);
+  const lastInput = React.useRef<PdaRoutePreviewInput | null>(null);
+  const partTokens = React.useRef({ load: 0, discharge: 0, frame: 0 });
   const requestSequence = React.useRef(0);
   const manualLineSequence = React.useRef(0);
 
@@ -267,10 +267,47 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
     setDischargeTerminal("");
   }, [dischargePort]);
 
+  const result = React.useMemo(
+    () => composeWhenReady({ displayCurrency: "USD", allocation, frame: framePart, load: loadPart, discharge: dischargePart }),
+    [allocation, framePart, loadPart, dischargePart],
+  );
+  const busy = loadPart.status === "loading" || dischargePart.status === "loading" || framePart.status === "loading";
+  const error = partFailureSummary({ frame: framePart, load: loadPart, discharge: dischargePart });
+
+  /**
+   * Runs one part for the current input generation. A newer input (sequence) or a newer run of the same part (token)
+   * makes an older answer irrelevant, so it is dropped instead of overwriting fresher state.
+   */
+  function runPart(part: "load" | "discharge" | "frame", input: PdaRoutePreviewInput, sequence: number) {
+    const token = ++partTokens.current[part];
+    const set = part === "load" ? setLoadPart : part === "discharge" ? setDischargePart : setFramePart;
+    set(PDA_PART_LOADING);
+    const fallback = part === "frame" ? "The voyage timeline and transits could not be calculated" : `The ${part} port could not be calculated`;
+    void (async () => {
+      try {
+        const response = part === "frame" ? await previewPdaRouteFrame(input) : await previewPdaRouteLeg(input, part);
+        if (requestSequence.current !== sequence || partTokens.current[part] !== token) return;
+        (set as (value: PdaPartState<unknown>) => void)(response.ok ? { status: "ok", data: response.data } : { status: "failed", error: response.error });
+      } catch (cause) {
+        if (requestSequence.current !== sequence || partTokens.current[part] !== token) return;
+        set({ status: "failed", error: cause instanceof Error && cause.message ? cause.message : fallback });
+      }
+    })();
+  }
+
+  /** Retry one failed part with the SAME input that produced the failure; the other parts are left as they are. */
+  function retryPart(part: "load" | "discharge" | "frame") {
+    const input = lastInput.current;
+    if (!input) return;
+    runPart(part, input, requestSequence.current);
+  }
+
   React.useEffect(() => {
     const sequence = ++requestSequence.current;
-    setResult(null);
-    setError("");
+    lastInput.current = null;
+    setLoadPart(PDA_PART_IDLE);
+    setDischargePart(PDA_PART_IDLE);
+    setFramePart(PDA_PART_IDLE);
     if (
       !ready
       || !vessel
@@ -292,7 +329,6 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       || parsedLoadManualLines == null
       || parsedDischargeManualLines == null
     ) {
-      setBusy(false);
       return;
     }
 
@@ -340,22 +376,15 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       },
     };
 
-    setBusy(true);
+    setLoadPart(PDA_PART_LOADING);
+    setDischargePart(PDA_PART_LOADING);
+    setFramePart(PDA_PART_LOADING);
     const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const response = await previewPdaRoute(input);
-          if (requestSequence.current !== sequence) return;
-          if (response.ok) setResult(response.data);
-          else setError(response.error);
-        } catch (cause) {
-          if (requestSequence.current === sequence) {
-            setError(cause instanceof Error ? cause.message : "Unable to calculate route PDA");
-          }
-        } finally {
-          if (requestSequence.current === sequence) setBusy(false);
-        }
-      })();
+      if (requestSequence.current !== sequence) return;
+      lastInput.current = input;
+      runPart("load", input, sequence);
+      runPart("discharge", input, sequence);
+      runPart("frame", input, sequence);
     }, 250);
     return () => {
       window.clearTimeout(timer);
@@ -434,9 +463,10 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
     setDischargeManualLines([]);
     setLoadTerminal("");
     setDischargeTerminal("");
-    setResult(null);
-    setError("");
-    setBusy(false);
+    lastInput.current = null;
+    setLoadPart(PDA_PART_IDLE);
+    setDischargePart(PDA_PART_IDLE);
+    setFramePart(PDA_PART_IDLE);
   }
 
   function chooseCargo(nextId: string) {
@@ -652,6 +682,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                 result={result}
                 busy={busy}
                 error={error}
+                onRetryFrame={framePart.status === "failed" ? () => retryPart("frame") : undefined}
                 loadName={loadPortRecord?.name ?? "Open"}
                 dischargeName={dischargePortRecord?.name ?? "Open"}
               />
@@ -689,17 +720,20 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                   terminalId={loadTerminal}
                   onTerminal={setLoadTerminal}
                   days={result?.timeline.loadPortDays ?? null}
-                  result={result?.legs.load ?? null}
+                  result={result?.legs.load ?? (loadPart.status === "ok" ? loadPart.data.result : null)}
                   displayTotal={result?.totals.loadPort ?? null}
                   knownSubtotal={result?.totals.loadPortKnown ?? null}
                   displayCurrency={result?.displayCurrency ?? "USD"}
                   notSourced={result?.notSourced.filter((item) => item.provenance.leg === "load") ?? []}
-                  fx={result?.fxRates?.find((rate) => rate.leg === "load") ?? null}
+                  fx={result?.fxRates?.find((rate) => rate.leg === "load") ?? (loadPart.status === "ok" ? loadPart.data.fx : null)}
                   manualLines={loadManualLines}
                   onAddManualLine={() => addManualLine("load")}
                   onUpdateManualLine={(id, field, value) => updateManualLine("load", id, field, value)}
                   onRemoveManualLine={(id) => removeManualLine("load", id)}
-                  busy={busy}
+                  busy={loadPart.status === "loading"}
+                  failure={loadPart.status === "failed" ? loadPart.error : null}
+                  awaitingRoute={loadPart.status === "ok" && !result}
+                  onRetry={() => retryPart("load")}
                 />
                 <PortEstimateCard
                   side="discharge"
@@ -709,17 +743,20 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                   terminalId={dischargeTerminal}
                   onTerminal={setDischargeTerminal}
                   days={result?.timeline.dischargePortDays ?? null}
-                  result={result?.legs.discharge ?? null}
+                  result={result?.legs.discharge ?? (dischargePart.status === "ok" ? dischargePart.data.result : null)}
                   displayTotal={result?.totals.dischargePort ?? null}
                   knownSubtotal={result?.totals.dischargePortKnown ?? null}
                   displayCurrency={result?.displayCurrency ?? "USD"}
                   notSourced={result?.notSourced.filter((item) => item.provenance.leg === "discharge") ?? []}
-                  fx={result?.fxRates?.find((rate) => rate.leg === "discharge") ?? null}
+                  fx={result?.fxRates?.find((rate) => rate.leg === "discharge") ?? (dischargePart.status === "ok" ? dischargePart.data.fx : null)}
                   manualLines={dischargeManualLines}
                   onAddManualLine={() => addManualLine("discharge")}
                   onUpdateManualLine={(id, field, value) => updateManualLine("discharge", id, field, value)}
                   onRemoveManualLine={(id) => removeManualLine("discharge", id)}
-                  busy={busy}
+                  busy={dischargePart.status === "loading"}
+                  failure={dischargePart.status === "failed" ? dischargePart.error : null}
+                  awaitingRoute={dischargePart.status === "ok" && !result}
+                  onRetry={() => retryPart("discharge")}
                 />
               </section>
             </div>
@@ -1001,6 +1038,7 @@ function SummaryPanel({
   result,
   busy,
   error,
+  onRetryFrame,
   loadName,
   dischargeName,
 }: {
@@ -1013,6 +1051,8 @@ function SummaryPanel({
   result: PdaRoutePreviewResult | null;
   busy: boolean;
   error: string;
+  /** set when the timeline/transit part failed: retries that part only */
+  onRetryFrame?: () => void;
   loadName: string;
   dischargeName: string;
 }) {
@@ -1039,7 +1079,12 @@ function SummaryPanel({
         <span>{vessel.name}</span><span>{cargo.cargo}</span>
         <label>Quantity <input value={quantity} inputMode="decimal" onChange={(event) => onQuantity(event.target.value)} /> MT</label>
       </div>
-      {error ? <div className="pda-summary__error" role="alert">{error}</div> : null}
+      {error ? (
+        <div className="pda-summary__error" role="alert">
+          {error}
+          {onRetryFrame ? <button type="button" className="pda-retry" onClick={onRetryFrame}><RefreshCw size={13} aria-hidden="true" /> Retry the timeline and transits</button> : null}
+        </div>
+      ) : null}
       <div className="pda-summary__tiles" aria-busy={busy}>
         <SummaryTile label="Known governed port subtotal" value={money(known, result?.displayCurrency ?? "USD")} note={result ? `POL ${money(result.totals.loadPortKnown, result.displayCurrency)} · POD ${money(result.totals.dischargePortKnown, result.displayCurrency)}` : "Requires explicit call facts"} />
         <SummaryTile label="Both ports · incl. handling & agency" value={money(result?.totals.handlingAndAgencyComplete ?? null, result?.displayCurrency ?? "USD")} note={result?.totals.handlingAndAgencyComplete != null ? "Every component has governed provenance" : "NOT SOURCED until both components are evidenced"} />
@@ -1115,6 +1160,9 @@ function PortEstimateCard({
   onUpdateManualLine,
   onRemoveManualLine,
   busy,
+  failure,
+  awaitingRoute,
+  onRetry,
 }: {
   side: "load" | "discharge";
   port: PdaEstimatorBootstrap["catalog"]["ports"][number] | null;
@@ -1134,6 +1182,11 @@ function PortEstimateCard({
   onUpdateManualLine: (id: string, field: Exclude<keyof ManualQuoteDraft, "id">, value: string) => void;
   onRemoveManualLine: (id: string) => void;
   busy: boolean;
+  /** this leg's own failure (increment B): shown on the card with a Retry for this leg only */
+  failure: string | null;
+  /** this leg is calculated but the route total waits for the other parts */
+  awaitingRoute: boolean;
+  onRetry: () => void;
 }) {
   const warnings = result?.warnings.length ?? 0;
   const manual = result?.warnings.filter((warning) => warning.code === "MANUAL_QUOTE_REQUIRED").length ?? 0;
@@ -1162,6 +1215,14 @@ function PortEstimateCard({
         <div><span className="pda-port-card__tag">{side === "load" ? "Load port" : "Discharge port"}</span><h2>{port?.name ?? "Port open"}</h2><p>{locode || "No exact port selected"} · {port?.country ?? ""}</p></div>
         <div className="pda-port-card__total">{busy ? <Loader2 className="is-spinning" size={18} /> : <strong>{money(displayTotal, displayCurrency)}</strong>}{legStatus ? <em className={`pda-status pda-status--${legStatus}`}>{displayStatusLabel(legStatus)}</em> : null}<span>{totalProvenance}{displayTotal == null && knownSubtotal != null ? ` · ${money(knownSubtotal, displayCurrency)} display subtotal` : ""}</span>{fx && <small className="pda-port-card__fx">Converted at 1 {fx.base} = {fx.rate} {fx.quote} · {fx.sourceRef} ({fx.sourceKind.replace("_", " ")}), effective {fx.effectiveOn}{fx.inverse ? " · inverse of the recorded pair" : ""}</small>}</div>
       </header>
+      {failure ? (
+        <div className="pda-port-card__failure" role="alert">
+          <span>{failure}</span>
+          <button type="button" className="pda-retry" onClick={onRetry}><RefreshCw size={13} aria-hidden="true" /> Retry this port</button>
+        </div>
+      ) : awaitingRoute ? (
+        <p className="pda-port-card__waiting" role="status">This port is calculated. Its total and the route totals appear once the other parts are calculated.</p>
+      ) : null}
       <div className="pda-port-card__facts">
         <div><span>Days of stay</span><strong>{compactNumber(days, " d")}</strong></div>
         <label><span>Terminal / agent</span><select className="asb-control" value={terminalId} onChange={(event) => onTerminal(event.target.value)}><option value="">Port-wide / not specified</option>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.name}</option>)}</select></label>
