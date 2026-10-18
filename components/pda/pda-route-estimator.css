@@ -1297,3 +1297,26 @@
   color: var(--ds-navy);
   font-variant-numeric: tabular-nums;
 }
+
+.pda-port-card__link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--ds-blue);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pda-port-card__link:disabled {
+  color: var(--ds-muted);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.pda-port-card__link:focus-visible {
+  outline: 2px solid var(--ds-blue);
+  outline-offset: 2px;
+}

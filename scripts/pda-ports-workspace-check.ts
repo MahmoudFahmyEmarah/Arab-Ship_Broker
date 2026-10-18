@@ -87,7 +87,9 @@ ok(/export async function loadPdaPortsWorkspace/.test(actions) && /const \{ supa
 ok(/rpc\("list_pda_ports_workspace", \{ p_call_date: callDate \}\)/.test(sdk) && /parsePdaPortsWorkspace\(data\)/.test(sdk), "the SDK calls the governed RPC and parses the payload");
 ok(!/localStorage|sessionStorage|indexedDB/.test(workspace + map + model), "nothing is typed or kept in the browser (the prototype's stores are not authorised)");
 ok(!/getSupabaseAdminClient/.test(workspace + map) && !/service_role/.test(workspace + map), "the Ports tab never touches the service role");
-ok(/activeTab === "ports" \? \(\s*<PdaPortsWorkspace \/>/.test(estimator), "the Ports tab renders the workspace; Agents and Setup keep their deferred card");
+ok(/activeTab === "ports" \? \(\s*<PdaPortsWorkspace initialSelected=\{portsFocus\} \/>/.test(estimator), "the Ports tab renders the workspace (opened on a port when a card asks)");
+ok(!/href="\/admin\/port-tariffs"/.test(estimator) && /onOpenPort=\{\(\) => openPortRecord\(loadPort\)\}/.test(estimator),
+  "a port card's record link opens the Ports tab on that port, never the admin-only tariff console");
 ok(/dynamic\(\(\) => import\("\.\/PdaPortsMap"\), \{\s*ssr: false/.test(workspace), "the Leaflet map loads client-only");
 ok(/fittedRef\.current === ports/.test(map), "the map re-fits only when the shown ports change, never on a selection");
 ok(/role="radiogroup"/.test(workspace) && /aria-checked=/.test(workspace) && /<caption className="asb-sr-only">/.test(workspace) && /aria-pressed=/.test(workspace),

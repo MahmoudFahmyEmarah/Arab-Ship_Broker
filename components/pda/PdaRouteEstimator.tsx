@@ -197,6 +197,13 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
     ? `${input.selection.vesselAvailabilityId}|${input.selection.cargoId}|${input.load.portLocode}|${input.discharge.portLocode}`
     : null;
   const [historyKey, setHistoryKey] = React.useState(0);
+  // the port a card asked to open in the Ports tab
+  const [portsFocus, setPortsFocus] = React.useState<string | null>(null);
+  const openPortRecord = (locode: string) => {
+    if (!locode) return;
+    setPortsFocus(locode);
+    setActiveTab("ports");
+  };
   const partTokens = React.useRef({ load: 0, discharge: 0, frame: 0 });
   const requestSequence = React.useRef(0);
   const manualLineSequence = React.useRef(0);
@@ -573,7 +580,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
         aria-labelledby={`pda-tab-${activeTab}`}
       >
       {activeTab === "ports" ? (
-        <PdaPortsWorkspace />
+        <PdaPortsWorkspace initialSelected={portsFocus} />
       ) : activeTab === "setup" ? (
         <PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} />
       ) : activeTab !== "estimate" ? (
@@ -757,6 +764,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                   failure={loadPart.status === "failed" ? loadPart.error : null}
                   awaitingRoute={loadPart.status === "ok" && !result}
                   onRetry={() => retryPart("load")}
+                  onOpenPort={() => openPortRecord(loadPort)}
                 />
                 <PortEstimateCard
                   side="discharge"
@@ -780,6 +788,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                   failure={dischargePart.status === "failed" ? dischargePart.error : null}
                   awaitingRoute={dischargePart.status === "ok" && !result}
                   onRetry={() => retryPart("discharge")}
+                  onOpenPort={() => openPortRecord(dischargePort)}
                 />
               </section>
             </div>
@@ -1188,6 +1197,7 @@ function PortEstimateCard({
   failure,
   awaitingRoute,
   onRetry,
+  onOpenPort,
 }: {
   side: "load" | "discharge";
   port: PdaEstimatorBootstrap["catalog"]["ports"][number] | null;
@@ -1212,6 +1222,8 @@ function PortEstimateCard({
   /** this leg is calculated but the route total waits for the other parts */
   awaitingRoute: boolean;
   onRetry: () => void;
+  /** opens the Ports tab on this port (members never reach the admin tariff console) */
+  onOpenPort: () => void;
 }) {
   const warnings = result?.warnings.length ?? 0;
   const manual = result?.warnings.filter((warning) => warning.code === "MANUAL_QUOTE_REQUIRED").length ?? 0;
@@ -1279,7 +1291,7 @@ function PortEstimateCard({
           {result?.warnings.map((warning, index) => <aside key={`${warning.code}-${index}`}>{warning.message}</aside>)}
         </div>
       </details>
-      <footer><a href="/admin/port-tariffs">Port record</a><a href="/admin/port-tariffs">Port settings</a><span>{!result ? "Waiting for explicit inputs" : <>{result.tariffVersionId ? `Tariff: ${result.tariffEdition ?? "published tariff"} · ` : "No published tariff · "}{warnings || notSourced.length ? `${warnings + notSourced.length} item${warnings + notSourced.length === 1 ? "" : "s"} need attention` : "All sourced lines shown"}</>}</span></footer>
+      <footer><button type="button" className="pda-port-card__link" onClick={onOpenPort} disabled={!locode}>Port record in Ports</button><span>{!result ? "Waiting for explicit inputs" : <>{result.tariffVersionId ? `Tariff: ${result.tariffEdition ?? "published tariff"} · ` : "No published tariff · "}{warnings || notSourced.length ? `${warnings + notSourced.length} item${warnings + notSourced.length === 1 ? "" : "s"} need attention` : "All sourced lines shown"}</>}</span></footer>
     </article>
   );
 }

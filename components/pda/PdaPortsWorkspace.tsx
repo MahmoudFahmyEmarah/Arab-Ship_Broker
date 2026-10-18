@@ -46,11 +46,12 @@ function formatDate(value: string | null): string {
   return Number.isNaN(date.getTime()) ? day : date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
-export function PdaPortsWorkspace() {
+export function PdaPortsWorkspace({ initialSelected = null }: { initialSelected?: string | null }) {
   const [state, setState] = React.useState<LoadState>({ status: "loading" });
   const [query, setQuery] = React.useState("");
   const [scope, setScope] = React.useState<PdaPortsScope>("all");
-  const [selected, setSelected] = React.useState<string | null>(null);
+  // a port card's "Port record" opens this tab with that port already selected
+  const [selected, setSelected] = React.useState<string | null>(initialSelected);
   const sequence = React.useRef(0);
 
   const load = React.useCallback(async () => {
