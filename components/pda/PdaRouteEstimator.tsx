@@ -37,7 +37,7 @@ import type { PdaTerminalItem } from "@/sdk/app/pda";
 import "@/components/design-system/asb-ds.css";
 import { PdaPortsWorkspace } from "./PdaPortsWorkspace";
 import { PdaSetupWorkspace } from "./PdaSetupWorkspace";
-import { PdaAgentsWorkspace } from "./PdaAgentsWorkspace";
+import { PdaAgentPortal } from "./PdaAgentPortal";
 import { PdaSaveBar, PdaSavedEstimates } from "./PdaSavedEstimates";
 import { initialPdaTab, type PdaPreferences } from "@/lib/pda/preferences";
 import "./pda-route-estimator.css";
@@ -617,7 +617,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       {activeTab === "ports" ? (
         <PdaPortsWorkspace initialSelected={portsFocus} />
       ) : activeTab === "agents" ? (
-        <PdaAgentsWorkspace initialPort={agentsFocus} />
+        <PdaAgentPortal mode="member" initialPort={agentsFocus} />
       ) : activeTab === "setup" ? (
         <div className="pe-body"><PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} onOpenAgents={() => setActiveTab("agents")} /></div>
       ) : (

@@ -90,3 +90,31 @@ export function filterPdaAgencies(agencies: readonly PdaAgency[], query: string,
     })
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
+
+/** The signed-in staff member's own listed agency (get_my_pda_agency), or null when they staff none. */
+export interface PdaMyAgency {
+  agencyId: string;
+  displayName: string;
+  website: string | null;
+  memberRole: string | null;
+  ports: { portLocode: string; portName: string; services: PdaRouteServiceCode[] }[];
+}
+
+export function parsePdaMyAgency(raw: unknown): PdaMyAgency | null {
+  if (!raw || typeof raw !== "object" || !("agencyId" in raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const agencyId = text(r.agencyId);
+  const displayName = text(r.displayName);
+  if (!agencyId || !displayName) return null;
+  const website = text(r.website);
+  return {
+    agencyId,
+    displayName,
+    website: website && /^https:\/\//.test(website) ? website : null,
+    memberRole: text(r.memberRole),
+    ports: (Array.isArray(r.ports) ? r.ports : []).map((p) => {
+      const port = (p ?? {}) as Record<string, unknown>;
+      return { portLocode: String(port.portLocode ?? ""), portName: String(port.portName ?? port.portLocode ?? ""), services: services(port.services) };
+    }).filter((p) => p.portLocode),
+  };
+}

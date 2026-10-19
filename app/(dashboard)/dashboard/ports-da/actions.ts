@@ -18,7 +18,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveDeclaredFlag, resolveFlagName, type FlagStateRow } from "@/lib/pda/flag";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaCalculationContext, getPdaEstimateSet, listMyPdaEstimateSets, listPdaPortAgents, listPdaPortsWorkspace, savePdaEstimate, savePdaEstimateSet, setMyPdaPreferences } from "@/sdk/app/pda";
-import type { PdaAgency } from "@/lib/pda/agents";
+import { parsePdaMyAgency, type PdaAgency, type PdaMyAgency } from "@/lib/pda/agents";
 import type { PdaQuoteRequest } from "@/lib/pda/quote-requests";
 import { acceptPdaAgencyQuote, createPdaQuoteRequest, getPdaQuoteAcceptanceContext, listMyPdaQuoteRequests, withdrawPdaQuoteRequest } from "@/sdk/app/pda";
 import { pdaAgencyQuoteLegResult, type PdaAcceptableQuote } from "@/lib/pda/quote-acceptance";
@@ -637,6 +637,31 @@ export async function loadPdaAgents(): Promise<ActionResult<PdaAgency[]>> {
 }
 
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Who is looking at the Agent Portal (design B2ALL-061): admins see the ASB review view, staff of a listed agency see
+ * their agency workspace. Both come from the member's own session; the database decides staff (get_my_pda_agency).
+ */
+export async function loadAgentPortalViewer(): Promise<ActionResult<{ isAdmin: boolean; agency: PdaMyAgency | null }>> {
+  try {
+    const { supabase, appUser } = await viewer();
+    const { data, error } = await supabase.rpc("get_my_pda_agency");
+    if (error) throw new Error(error.message);
+    return { ok: true, data: { isAdmin: appUser.role?.toLowerCase() === "admin", agency: parsePdaMyAgency(data) } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The Agent Portal could not be loaded") };
+  }
+}
+
+/** Every quote request the member can read (theirs and their colleagues'), with every agency's answer. */
+export async function listAllPdaQuoteRequests(): Promise<ActionResult<PdaQuoteRequest[]>> {
+  try {
+    const { supabase } = await viewer();
+    return { ok: true, data: await listMyPdaQuoteRequests(supabase, null) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The quote requests could not be loaded") };
+  }
+}
 
 /** Agents phase 2: the agencies listed at one port (for choosing who to ask). */
 export async function loadPdaAgentsAtPort(portLocode: string): Promise<ActionResult<PdaAgency[]>> {

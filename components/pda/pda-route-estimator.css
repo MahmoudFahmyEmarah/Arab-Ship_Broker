@@ -1678,3 +1678,24 @@
 .pm-scope .pe-rec__t { margin: 0; }
 .pm-scope .pe-rec__s { margin: 2px 0 0; }
 .pm-scope .pda-ports__status--error { color: var(--asb-red); }
+
+/* Agent Portal (B2ALL-061 step 5): pieces the design's static mock does not have — read-only values, the real quote
+   form's line rows, error hints, the directory heading — in the design's own terms */
+.pm-scope .ap-ro { font-size: 14px; color: var(--asb-navy); padding: 8px 0; }
+.pm-scope .ap-ro a { color: var(--asb-blue); }
+.pm-scope .ap-none { color: var(--asb-gray-400); font-style: italic; font-size: 13px; }
+.pm-scope .ap-hint--error { color: var(--asb-red); }
+.pm-scope .ap-section-h { margin: 6px 0 0; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--asb-faint); font-weight: 700; }
+.pm-scope .ap-list__bar { display: flex; justify-content: flex-end; }
+.pm-scope .ap-req__port { margin: 0; font-size: 14px; font-weight: 700; color: var(--asb-navy); }
+.pm-scope .ap-req__port em { font-style: normal; font-weight: 500; color: var(--asb-gray-500); font-size: 12px; margin-left: 6px; }
+.pm-scope .ap-quote__t { margin: 6px 0 8px; font-size: 13px; font-weight: 700; color: var(--asb-navy); }
+.pm-scope .ap-quote__lines { display: grid; gap: 6px; }
+.pm-scope .ap-quote__line { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, .8fr) auto; gap: 6px; align-items: center; }
+.pm-scope .ap-quote__terms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.pm-scope .ap-field--wide { grid-column: 1 / -1; }
+.pm-scope .ap-quote__decline { flex: 1; }
+.pm-scope .ap-cmp__scroll { overflow-x: auto; }
+@media (max-width: 720px) {
+  .pm-scope .ap-quote__line, .pm-scope .ap-quote__terms { grid-template-columns: 1fr; }
+}

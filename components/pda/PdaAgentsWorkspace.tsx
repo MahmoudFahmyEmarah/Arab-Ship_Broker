@@ -13,7 +13,8 @@ import { PDA_SERVICE_LABELS } from "@/lib/pda/ports-workspace";
 
 type LoadState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; agencies: PdaAgency[] };
 
-export function PdaAgentsWorkspace({ initialPort = null }: { initialPort?: string | null }) {
+/** `embedded`: inside the Agent Portal (design B2ALL-061), without this tab's own header. */
+export function PdaAgentsWorkspace({ initialPort = null, embedded = false }: { initialPort?: string | null; embedded?: boolean }) {
   const [state, setState] = React.useState<LoadState>({ status: "loading" });
   const [query, setQuery] = React.useState("");
   // a port card's "Agents at this port" opens this tab filtered to that port
@@ -38,7 +39,8 @@ export function PdaAgentsWorkspace({ initialPort = null }: { initialPort?: strin
 
   return (
     <section className="pda-agents" aria-labelledby="pda-agents-title">
-      <header className="pda-agents__head asb-card">
+      {embedded ? <h2 id="pda-agents-title" className="ap-section-h">Agencies at the ports</h2> : null}
+      {embedded ? null : <header className="pda-agents__head asb-card">
         <div>
           <h2 id="pda-agents-title" className="pda-ports__title">Port agents</h2>
           <p className="pda-ports__lede">
@@ -53,7 +55,7 @@ export function PdaAgentsWorkspace({ initialPort = null }: { initialPort?: strin
             <div><dt>Ports covered</dt><dd>{portCount}</dd></div>
           </dl>
         ) : null}
-      </header>
+      </header>}
 
       {state.status === "loading" ? <p className="pda-ports__status asb-card" role="status" aria-busy="true">Loading the port agents…</p> : null}
       {state.status === "error" ? (
