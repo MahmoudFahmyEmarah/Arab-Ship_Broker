@@ -37,17 +37,17 @@ export function PdaAgencyInbox({ agency }: { agency: { displayName: string; port
 
   if (!agency) {
     return (
-      <main className="asb-ds pda-route pda-route--comfortable">
+      <div className="asb-ds pda-route pda-route--comfortable">
         <section className="pda-agency asb-card">
           <h1 className="pda-ports__title">Agency inbox</h1>
           <p className="pda-ports__lede">This inbox is for staff of port agencies invited by Arab ShipBroker. Your account is not a member of a listed agency. If your agency works with us, ask Arab ShipBroker to add you to it.</p>
         </section>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="asb-ds pda-route pda-route--comfortable">
+    <div className="asb-ds pda-route pda-route--comfortable">
       <section className="pda-agency" aria-labelledby="pda-agency-title">
         <header className="pda-agents__head asb-card">
           <div>
@@ -64,7 +64,7 @@ export function PdaAgencyInbox({ agency }: { agency: { displayName: string; port
         {state.status === "ready" && state.items.length === 0 ? <p className="pda-ports__status asb-card">No request yet. You will be notified when a member asks your agency for a quote.</p> : null}
         {state.status === "ready" ? state.items.map((item) => <RequestCard key={`${item.requestId}-${item.agencyId}`} item={item} onDone={() => void load()} />) : null}
       </section>
-    </main>
+    </div>
   );
 }
 
