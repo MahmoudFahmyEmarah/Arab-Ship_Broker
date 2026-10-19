@@ -533,7 +533,8 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
     : "A vessel and a cargo, and both port costs";
 
   return (
-    <main className={`asb-ds pda-route pda-route--${density}`}>
+    // a <div>: the dashboard shell already provides the page's <main> landmark (no nested main)
+    <div className={`asb-ds pda-route pda-route--${density}`}>
       <header className="pda-route__header">
         <h1>Ports Cost Estimator</h1>
         <p>{subtitle}</p>
@@ -799,7 +800,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
         </>
       )}
       </section>
-    </main>
+    </div>
   );
 }
 
