@@ -68,6 +68,9 @@ revoke all on function public.fn_pda_agency_events_append_only() from public, an
 drop trigger if exists pda_agency_events_append_only on public.pda_agency_events;
 create trigger pda_agency_events_append_only before update or delete on public.pda_agency_events
   for each row execute function public.fn_pda_agency_events_append_only();
+drop trigger if exists pda_agency_events_no_truncate on public.pda_agency_events;
+create trigger pda_agency_events_no_truncate before truncate on public.pda_agency_events
+  for each statement execute function public.fn_pda_agency_events_append_only();
 
 create or replace function public.pda_admin_upsert_agency(p_actor uuid, p_org_id uuid, p_payload jsonb)
 returns jsonb

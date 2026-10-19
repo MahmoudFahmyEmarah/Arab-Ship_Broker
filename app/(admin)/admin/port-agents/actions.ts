@@ -18,6 +18,13 @@ async function context() {
   return { actorId: actor.rowId, db: getSupabaseAdminClient() };
 }
 
+/** The database's PDA_* refusals are written for people; anything else (constraint names, internals) stays generic. */
+function dbMessage(error: { message: string }, fallback: string): string {
+  if (/^PDA_[A-Z]+: /.test(error.message)) return error.message.replace(/^PDA_[A-Z]+: /, "");
+  console.error(`[port-agents] ${fallback}`, error);
+  return fallback;
+}
+
 function finish(message: string, error = false): never {
   revalidatePath("/admin/port-agents");
   redirect(`/admin/port-agents?${error ? "error" : "message"}=${encodeURIComponent(message)}`);
@@ -33,7 +40,7 @@ export async function upsertAgency(form: FormData) {
     p_org_id: orgId,
     p_payload: { displayName: value(form, "displayName"), website: value(form, "website") || null, status: value(form, "status") || "active" },
   });
-  if (error) finish(error.message, true);
+  if (error) finish(dbMessage(error, "The agency could not be saved"), true);
   finish("Agency saved");
 }
 
@@ -50,6 +57,6 @@ export async function setPortAgent(form: FormData) {
     p_services: services,
     p_active: value(form, "active") !== "false",
   });
-  if (error) finish(error.message, true);
+  if (error) finish(dbMessage(error, "The port listing could not be saved"), true);
   finish(value(form, "active") === "false" ? "Agency withdrawn from the port" : "Port listing saved");
 }

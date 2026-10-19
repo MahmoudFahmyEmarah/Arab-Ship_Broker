@@ -104,7 +104,9 @@ begin
   if n < 6 then raise exception 'G5: every change must be logged (got %)', n; end if;
   begin update public.pda_agency_events set action = 'port_set' where org_id = agency_org; e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_IMMUTABLE' then raise exception 'G5: the log must be append-only, got %', e; end if;
-  raise notice 'G5 ok: % registry changes logged; the log is append-only', n;
+  begin truncate public.pda_agency_events cascade; e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_IMMUTABLE' then raise exception 'G5: TRUNCATE of the log must be refused, got %', e; end if;
+  raise notice 'G5 ok: % registry changes logged; the log is append-only (TRUNCATE refused)', n;
 
   -- G6 · grants
   if has_function_privilege('authenticated', 'public.pda_admin_upsert_agency(uuid, uuid, jsonb)', 'execute')
