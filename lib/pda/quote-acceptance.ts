@@ -88,7 +88,7 @@ export interface PdaQuoteAcceptanceContext {
   setId: string;
   leg: "load" | "discharge";
   routeInput: unknown;
-  requestStatus: "open" | "withdrawn";
+  requestStatus: "open" | "withdrawn" | "expired";
   setIsLatest: boolean;
   latestRevision: boolean;
   accepted: boolean;
@@ -128,7 +128,7 @@ export function parsePdaQuoteAcceptanceContext(raw: unknown): PdaQuoteAcceptance
     setId: String(r.setId ?? ""),
     leg: r.leg === "discharge" ? "discharge" : "load",
     routeInput: r.routeInput ?? null,
-    requestStatus: r.requestStatus === "withdrawn" ? "withdrawn" : "open",
+    requestStatus: r.requestStatus === "withdrawn" ? "withdrawn" : r.requestStatus === "expired" ? "expired" : "open",
     setIsLatest: r.setIsLatest === true,
     latestRevision: r.latestRevision === true,
     accepted: r.accepted === true,

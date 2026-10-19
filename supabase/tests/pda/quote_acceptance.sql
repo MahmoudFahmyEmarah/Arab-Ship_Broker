@@ -197,6 +197,50 @@ begin
     raise exception 'A8: the new version keeps the load quote and adds the discharge quote: %', mine; end if;
   raise notice 'A8 ok: a second port''s acceptance keeps the first; route input, governed FX figures and a suspended agency are checked';
 
+  -- A10 · a THIRD acceptance (a replacement discharge quote) keeps the load quote accepted two versions back (C2O-159 P1-4)
+  --        and A11 · a member with two seats cannot move the accepted version into the other organisation (P1-5)
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  req2 := public.create_pda_quote_request((mine->>'id')::uuid, 'discharge', array[agency_a], array['agency']);
+  perform set_config('request.jwt.claim.sub', staff_a::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_a,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  q1 := public.submit_pda_agency_quote((req2->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency fee","serviceCode":"agency","amount":"950"}]', current_date + 30);
+  perform set_config('request.jwt.claim.sub', '', true);
+  ctx := public.pda_quote_acceptance_context(member, (q1->>'quoteId')::uuid);
+  if ctx#>>'{carried,leg}' <> 'load' or (ctx#>>'{carried,total}')::numeric <> 1950.50 then
+    raise exception 'A10: the load quote accepted on an earlier version is still carried: %', ctx; end if;
+  begin perform public.pda_accept_agency_quote(member, member_org, (q1->>'quoteId')::uuid, load_req, leg_res, dis_req,
+          jsonb_set(jsonb_set(good, '{totals,native}', '950'), '{lines,0,amount}', '950'), route); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'A10: dropping the still-effective load quote must be refused, got %', e; end if;
+  insert into public.organizations (id, name) values ('00000000-0000-4000-8000-00000000a0b2', 'QA Second Org');
+  insert into public.organization_members (org_id, user_id, member_role, is_current, status) values ('00000000-0000-4000-8000-00000000a0b2', member, 'admin', true, 'active');
+  saved := public.pda_accept_agency_quote(member, '00000000-0000-4000-8000-00000000a0b2', (q1->>'quoteId')::uuid, load_req, quoted, dis_req,
+             jsonb_set(jsonb_set(good, '{totals,native}', '950'), '{lines,0,amount}', '950'), route);
+  if (select supersedes_id from public.pda_estimate_sets where id = (saved->>'id')::uuid) <> (mine->>'id')::uuid
+     or (select owner_org_id from public.pda_estimate_sets where id = (saved->>'id')::uuid) is distinct from member_org
+     or (select count(*) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.load_estimate_id = l.estimate_id
+          where s.id = (saved->>'id')::uuid and l.basis = 'agency_quote') <> 2
+     or (select sum(l.amount) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.discharge_estimate_id = l.estimate_id
+          where s.id = (saved->>'id')::uuid and l.basis = 'agency_quote') <> 950 then
+    raise exception 'A10/A11: the third version keeps the load quote, takes the replacement discharge quote and stays in org A: %', saved; end if;
+  raise notice 'A10 ok: a third acceptance keeps the opposite leg''s quote through the supersede lineage';
+  raise notice 'A11 ok: a two-seat member cannot move the accepted version into the other organisation';
+
+  -- A9 · an expired request takes no acceptance (C2O-159 P1-3): a request seeded already expired, with a valid quote
+  insert into public.pda_quote_requests (id, set_id, leg, port_locode, requester_user_id, requester_org_id, snapshot, services, expires_at)
+  values ('00000000-0000-4000-8000-0000000000e9', (saved->>'id')::uuid, 'load', pol, member, member_org, '{}'::jsonb, array['agency'], now() - interval '1 hour');
+  insert into public.pda_quote_request_recipients (request_id, agency_org_id) values ('00000000-0000-4000-8000-0000000000e9', agency_a);
+  insert into public.pda_agency_quotes (id, request_id, agency_org_id, revision, submitted_by, currency, lines, total, valid_until)
+  values ('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000000e9', agency_a, 1, staff_a, 'USD',
+          '[{"label":"Agency fee","serviceCode":"agency","amount":1}]', 1, current_date + 30);
+  if public.pda_quote_acceptance_context(member, '00000000-0000-4000-8000-0000000000f9')->>'requestStatus' <> 'expired' then
+    raise exception 'A9: the context reports the expired request'; end if;
+  begin perform public.pda_accept_agency_quote(member, member_org, '00000000-0000-4000-8000-0000000000f9', load_req, quoted, dis_req, good, route); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_STATE' then raise exception 'A9: an expired request must not take an acceptance, got %', e; end if;
+  raise notice 'A9 ok: an expired request takes no acceptance';
+
   -- A5 · notification + immutability
   if v_core and not exists (select 1 from public.notifications n where n.recipient_user_id = staff_a and n.kind = 'pda.quote_accepted') then
     raise exception 'A5: the agency staff are told their quote was accepted'; end if;

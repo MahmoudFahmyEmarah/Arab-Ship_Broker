@@ -16,6 +16,7 @@
 --   list_agency_pda_quote_requests  — requestStatus 'accepted' once a quote of the request is accepted
 --   a request with an accepted quote is CLOSED: no new quote, decline or withdraw (triggers)
 --   fn_pda_leg_matches_quote        — the one check that a priced leg IS a quote (native + governed FX figures)
+--   fn_pda_carried_quote            — the other port's still-effective accepted quote along the supersede lineage
 -- Plain SQL. DOWN: supabase/rollback/20261019110000_pda_quote_acceptance_down.sql (refuses while acceptances exist).
 -- ════════════════════════════════════════════════════════════════════════
 set local lock_timeout = '5s';
@@ -165,6 +166,34 @@ begin
 end $$;
 revoke all on function public.fn_pda_leg_matches_quote(jsonb, jsonb, uuid, text) from public, anon, authenticated;
 
+-- the quote the OTHER port of a set still carries (Codex C2O-159 P1-4): when that leg of the set holds agency_quote
+-- lines, the latest acceptance for that leg along the set's supersede lineage (the set itself, then what it
+-- superseded, …). A plain re-save that dropped the agency lines carries nothing.
+create or replace function public.fn_pda_carried_quote(p_set_id uuid, p_leg text, out quote_id uuid, out port_locode text)
+language plpgsql stable security definer set search_path to '' as $$
+declare v_leg_estimate uuid;
+begin
+  select case when p_leg = 'load' then s.load_estimate_id else s.discharge_estimate_id end into v_leg_estimate
+    from public.pda_estimate_sets s where s.id = p_set_id;
+  if v_leg_estimate is null
+     or not exists (select 1 from public.pda_estimate_lines l where l.estimate_id = v_leg_estimate and l.basis = 'agency_quote') then
+    return;
+  end if;
+  with recursive chain(id, depth) as (
+    select p_set_id, 0
+    union all
+    select s.supersedes_id, c.depth + 1 from chain c join public.pda_estimate_sets s on s.id = c.id
+     where s.supersedes_id is not null and c.depth < 1000
+  )
+  select pa.quote_id, pr.port_locode into quote_id, port_locode
+    from chain c
+    join public.pda_quote_acceptances pa on pa.set_id = c.id
+    join public.pda_quote_requests pr on pr.id = pa.request_id and pr.leg = p_leg
+   order by c.depth
+   limit 1;
+end $$;
+revoke all on function public.fn_pda_carried_quote(uuid, text) from public, anon, authenticated;
+
 create or replace function public.pda_quote_acceptance_context(p_actor uuid, p_quote_id uuid)
 returns jsonb language plpgsql stable security definer set search_path to '' as $$
 declare q public.pda_agency_quotes; r public.pda_quote_requests; s public.pda_estimate_sets;
@@ -179,21 +208,20 @@ begin
     'quoteId', q.id, 'requestId', r.id, 'setId', s.id, 'leg', r.leg, 'port', r.port_locode,
     'agencyName', (select a.display_name from public.pda_agencies a where a.org_id = q.agency_org_id),
     'currency', q.currency, 'total', q.total, 'revision', q.revision, 'reference', q.reference, 'validUntil', q.valid_until,
-    'lines', q.lines, 'routeInput', s.route_input, 'requestStatus', r.status,
+    'lines', q.lines, 'routeInput', s.route_input,
+    'requestStatus', case when r.status = 'open' and r.expires_at < now() then 'expired' else r.status end,
     'setIsLatest', not exists (select 1 from public.pda_estimate_sets n where n.supersedes_id = s.id),
     'latestRevision', not exists (select 1 from public.pda_agency_quotes x
                                    where x.request_id = q.request_id and x.agency_org_id = q.agency_org_id and x.revision > q.revision),
     'accepted', exists (select 1 from public.pda_quote_acceptances a where a.request_id = r.id),
     'agencyActive', exists (select 1 from public.pda_agencies a where a.org_id = q.agency_org_id and a.status = 'active'),
-    -- the other port of the request's set, when that set was itself made by accepting a quote: carried forward
-    'carried', (select jsonb_build_object('leg', pr.leg, 'quoteId', pq.id, 'port', pr.port_locode,
+    -- the other port's still-effective accepted quote, found through the supersede lineage (C2O-159 P1-4)
+    'carried', (select jsonb_build_object('leg', case when r.leg = 'load' then 'discharge' else 'load' end, 'quoteId', pq.id, 'port', c.port_locode,
                   'agencyName', (select a.display_name from public.pda_agencies a where a.org_id = pq.agency_org_id),
                   'currency', pq.currency, 'total', pq.total, 'revision', pq.revision, 'reference', pq.reference,
                   'validUntil', pq.valid_until, 'lines', pq.lines)
-                from public.pda_quote_acceptances pa
-                join public.pda_quote_requests pr on pr.id = pa.request_id
-                join public.pda_agency_quotes pq on pq.id = pa.quote_id
-                where pa.set_id = r.set_id and pr.leg <> r.leg));
+                from public.fn_pda_carried_quote(r.set_id, case when r.leg = 'load' then 'discharge' else 'load' end) c
+                join public.pda_agency_quotes pq on pq.id = c.quote_id));
 end $$;
 revoke all on function public.pda_quote_acceptance_context(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.pda_quote_acceptance_context(uuid, uuid) to service_role;
@@ -221,6 +249,7 @@ begin
     raise exception 'PDA_AUTH: only the member who requested this quote can accept it' using errcode = '42501';
   end if;
   if r.status <> 'open' then raise exception 'PDA_STATE: this quote request was withdrawn' using errcode = '55000'; end if;
+  if r.expires_at < now() then raise exception 'PDA_STATE: this quote request has expired; request quotes again' using errcode = '55000'; end if;
   if q.valid_until < current_date then raise exception 'PDA_STATE: this quote is no longer valid; ask the agency for a new one' using errcode = '55000'; end if;
   if exists (select 1 from public.pda_agency_quotes x where x.request_id = q.request_id and x.agency_org_id = q.agency_org_id and x.revision > q.revision) then
     raise exception 'PDA_STATE: the agency has sent a newer revision; accept that one' using errcode = '55000';
@@ -245,11 +274,10 @@ begin
   if not public.fn_pda_leg_matches_quote(v_req, v_res, q.id, r.port_locode) then
     raise exception 'PDA_VALIDATION: the accepted port must be priced exactly as the agency quoted' using errcode = '22023';
   end if;
-  -- the other port carries agency_quote lines only when the request's set was itself an acceptance for that port,
-  -- and then exactly that quote (pre-audit P1-2: a second acceptance never silently drops the first)
-  select pa.quote_id, pr.port_locode into v_carried, v_carried_port
-    from public.pda_quote_acceptances pa join public.pda_quote_requests pr on pr.id = pa.request_id
-   where pa.set_id = r.set_id and pr.leg <> r.leg;
+  -- the other port carries agency_quote lines only as its still-effective accepted quote along the set's lineage,
+  -- and then exactly that quote (pre-audit P1-2, C2O-159 P1-4: no acceptance is silently dropped)
+  select c.quote_id, c.port_locode into v_carried, v_carried_port
+    from public.fn_pda_carried_quote(r.set_id, case when r.leg = 'load' then 'discharge' else 'load' end) c;
   if exists (select 1 from jsonb_array_elements(coalesce(v_other->'lines', '[]'::jsonb)) l where l->>'basis' = 'agency_quote') then
     if v_carried is null or not public.fn_pda_leg_matches_quote(v_other_req, v_other, v_carried, v_carried_port) then
       raise exception 'PDA_VALIDATION: only the accepted port carries the agency quote' using errcode = '22023';
@@ -259,7 +287,9 @@ begin
   end if;
 
   -- the new version supersedes the set the request was made from (owner, same vessel + cargo, not yet superseded)
-  v_saved := public.pda_save_estimate_set(p_actor, p_owner_org_id, p_load_request, p_load_result,
+  -- C2O-159 P1-5: the organisation is the request set's, never the caller's (pda_save_estimate_set keeps it as well)
+  v_saved := public.pda_save_estimate_set(p_actor, (select s.owner_org_id from public.pda_estimate_sets s where s.id = r.set_id),
+                                          p_load_request, p_load_result,
                                           p_discharge_request, p_discharge_result, p_route, r.set_id);
   if coalesce((v_saved->>'replayed')::boolean, false) then
     raise exception 'PDA_CONFLICT: this estimate already holds that content; open the latest version' using errcode = '40001';

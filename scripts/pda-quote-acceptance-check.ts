@@ -109,8 +109,17 @@ ok(/a\.status = 'active'\) then\n    raise exception 'PDA_STATE: this agency is 
 ok(/before insert on public\.pda_agency_quotes/.test(migration) && /before update on public\.pda_quote_request_recipients/.test(migration)
   && /before update on public\.pda_quote_requests/.test(migration) && /then 'accepted'/.test(migration),
   "a request with an accepted quote is closed (no new revision, decline or withdraw); the inbox says accepted (P1-1)");
-ok(/pda_save_estimate_set\(p_actor, p_owner_org_id,[\s\S]*r\.set_id\)/.test(accept) && /'pda\.quote_accepted'/.test(accept),
-  "the new version supersedes the set the request came from, through the governed save; the agency is notified");
+ok(/pda_save_estimate_set\(p_actor, \(select s\.owner_org_id from public\.pda_estimate_sets s where s\.id = r\.set_id\),[\s\S]*r\.set_id\)/.test(accept) && /'pda\.quote_accepted'/.test(accept),
+  "the new version supersedes the set the request came from, through the governed save, in that set's organisation (C2O-159 P1-5); the agency is notified");
+ok(/create or replace function public\.fn_pda_carried_quote/.test(migration) && /with recursive chain/.test(migration) && /s\.supersedes_id is not null/.test(migration)
+  && /l\.basis = 'agency_quote'/.test(migration.slice(migration.indexOf("function public.fn_pda_carried_quote")))
+  && /from public\.fn_pda_carried_quote\(r\.set_id/.test(accept)
+  && /revoke all on function public\.fn_pda_carried_quote\(uuid, text\) from public, anon, authenticated;/.test(migration)
+  && /drop function if exists public\.fn_pda_carried_quote\(uuid, text\);/.test(down),
+  "C2O-159 P1-4: the carried quote is found through the supersede lineage, only while that leg still holds agency lines");
+ok(/if r\.expires_at < now\(\) then raise exception 'PDA_STATE: this quote request has expired/.test(accept)
+  && /when r\.status = 'open' and r\.expires_at < now\(\) then 'expired'/.test(migration),
+  "C2O-159 P1-3: an expired request takes no acceptance; the context reports it");
 const restored = down.slice(down.indexOf("create or replace function public.fn_pda_recipient_quotes"), down.indexOf("revoke all on function public.fn_pda_recipient_quotes"));
 const original = prior.slice(prior.indexOf("create or replace function public.fn_pda_recipient_quotes"), prior.indexOf("revoke all on function public.fn_pda_recipient_quotes"));
 ok(restored.length > 100 && restored === original, "the DOWN restores fn_pda_recipient_quotes byte for byte");

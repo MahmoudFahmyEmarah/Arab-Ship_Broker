@@ -716,7 +716,8 @@ async function buildQuoteAcceptance(quoteId: string) {
   if (!REQUEST_ID.test(quoteId)) throw new UserFacingActionError("Unknown quote");
   const { appUser } = await viewer();
   const context = await getPdaQuoteAcceptanceContext(getSupabaseAdminClient(), appUser.id, quoteId);
-  if (context.requestStatus !== "open") throw new UserFacingActionError("This quote request was withdrawn.");
+  if (context.requestStatus === "withdrawn") throw new UserFacingActionError("This quote request was withdrawn.");
+  if (context.requestStatus === "expired") throw new UserFacingActionError("This quote request has expired; request quotes again.");
   if (context.accepted) throw new UserFacingActionError("A quote from this request has already been accepted.");
   if (!context.agencyActive) throw new UserFacingActionError("This agency is suspended; its quotes cannot be accepted now.");
   if (!context.setIsLatest) throw new UserFacingActionError("This estimate has a newer version; open it and request quotes from there.");

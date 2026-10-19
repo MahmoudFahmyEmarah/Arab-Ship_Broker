@@ -54,6 +54,7 @@ revoke all on function public.list_agency_pda_quote_requests() from public, anon
 grant execute on function public.list_agency_pda_quote_requests() to authenticated, service_role;
 
 drop function if exists public.pda_quote_acceptance_context(uuid, uuid);
+drop function if exists public.fn_pda_carried_quote(uuid, text);
 
 create or replace function public.fn_pda_recipient_quotes(p_request_id uuid, p_agency uuid)
 returns jsonb language sql stable security definer set search_path to '' as $$
