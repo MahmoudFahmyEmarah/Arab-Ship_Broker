@@ -615,3 +615,708 @@
 .pda-status--partial, .pda-status--fallback { color: var(--ds-amber); background: var(--ds-amber-soft); }
 .pda-status--manual { color: var(--ds-blue); background: var(--ds-blue-soft); }
 .pda-status--unavailable { color: var(--ds-red); background: var(--ds-red-soft); }
+
+/* ── Ports workspace (increment C, O2ALL-008): map, port-by-port service coverage, details ───────────────────── */
+.pda-ports {
+  display: grid;
+  gap: 12px;
+}
+
+.pda-ports__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pda-ports__title {
+  margin: 0;
+  color: var(--ds-navy);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pda-ports__lede,
+.pda-ports__note,
+.pda-ports__muted {
+  margin: 4px 0 0;
+  max-width: 72ch;
+  color: var(--ds-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pda-ports__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.pda-ports__stats div {
+  min-width: 96px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-canvas);
+  padding: 6px 10px;
+}
+
+.pda-ports__stats dt {
+  color: var(--ds-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pda-ports__stats dd {
+  margin: 2px 0 0;
+  color: var(--ds-navy);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pda-ports__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: 12px;
+}
+
+.pda-ports__main {
+  min-width: 0;
+}
+
+.pda-ports__map {
+  height: 300px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-canvas);
+}
+
+.pda-ports-pin {
+  display: block;
+  border: 2px solid var(--ds-blue);
+  border-radius: 50%;
+  background: var(--ds-surface);
+}
+
+.pda-ports-pin.is-held {
+  background: var(--ds-blue);
+}
+
+.pda-ports-pin.is-selected {
+  border-color: var(--ds-navy);
+  box-shadow: 0 0 0 3px var(--ds-blue-soft);
+}
+
+.pda-ports__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+
+.pda-ports__search {
+  position: relative;
+  flex: 1 1 260px;
+  display: flex;
+  align-items: center;
+}
+
+.pda-ports__search svg {
+  position: absolute;
+  left: 9px;
+  color: var(--ds-muted);
+}
+
+.pda-ports__search input {
+  width: 100%;
+  padding-left: 28px;
+}
+
+.pda-ports__scope {
+  display: inline-flex;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  overflow: hidden;
+}
+
+.pda-ports__scope button {
+  border: 0;
+  border-right: 1px solid var(--ds-line);
+  background: var(--ds-surface);
+  color: var(--ds-navy);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.pda-ports__scope button:last-child {
+  border-right: 0;
+}
+
+.pda-ports__scope button.is-on {
+  background: var(--ds-blue-soft);
+  color: var(--ds-blue);
+}
+
+.pda-ports__scope button:focus-visible,
+.pda-ports__port:focus-visible {
+  outline: 2px solid var(--ds-blue);
+  outline-offset: -2px;
+}
+
+.pda-ports__count {
+  color: var(--ds-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pda-ports__scroll {
+  overflow-x: auto;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+}
+
+.pda-ports__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.pda-ports__table th,
+.pda-ports__table td {
+  border-bottom: 1px solid var(--ds-line);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.pda-ports__table thead th {
+  background: var(--ds-canvas);
+  color: var(--ds-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pda-ports__table tbody tr:last-child th,
+.pda-ports__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.pda-ports__table tbody tr.is-selected {
+  background: var(--ds-blue-soft);
+}
+
+.pda-ports__svc-head span {
+  display: inline-block;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pda-ports__svc {
+  text-align: center;
+}
+
+.pda-ports__dot {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ds-canvas);
+  color: var(--ds-muted);
+}
+
+.pda-ports__dot.is-priced {
+  background: var(--ds-green-soft);
+  color: var(--ds-green);
+}
+
+.pda-ports__port {
+  display: grid;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--ds-navy);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pda-ports__port-name {
+  font-weight: 700;
+}
+
+.pda-ports__port-code {
+  color: var(--ds-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pda-ports__edition em,
+.pda-ports__none {
+  color: var(--ds-muted);
+  font-style: normal;
+}
+
+.pda-ports__detail {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.pda-ports__detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pda-ports__detail h3 {
+  margin: 0;
+  color: var(--ds-navy);
+  font-size: 15px;
+}
+
+.pda-ports__detail-head p {
+  margin: 2px 0 0;
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.pda-ports__detail h4 {
+  margin: 8px 0 0;
+  color: var(--ds-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pda-ports__list,
+.pda-ports__editions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.pda-ports__editions li {
+  display: grid;
+  gap: 2px;
+  border-bottom: 1px solid var(--ds-line);
+  padding: 6px 0;
+}
+
+.pda-ports__editions li:last-child {
+  border-bottom: 0;
+}
+
+.pda-ports__editions span {
+  color: var(--ds-muted);
+}
+
+.pda-ports__status {
+  margin: 8px 0;
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.pda-ports__status--error {
+  color: var(--ds-red);
+}
+
+.pda-ports__retry,
+.pda-ports__close {
+  display: inline-flex;
+  width: auto;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+@container (max-width: 1100px) {
+  .pda-ports__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pda-ports__detail {
+    position: static;
+  }
+}
+
+@container (max-width: 760px) {
+  .pda-ports__map {
+    height: 220px;
+  }
+
+  .pda-ports__stats div {
+    min-width: 0;
+    flex: 1 1 40%;
+  }
+}
+
+/* ── Setup workspace (increment D, O2ALL-008): member preferences and the way into port data ─────────────────── */
+.pda-setup {
+  display: grid;
+  max-width: 880px;
+  gap: 12px;
+}
+
+.pda-setup__card {
+  display: grid;
+  gap: 10px;
+}
+
+.pda-setup__head h2 {
+  margin: 0;
+  color: var(--ds-navy);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pda-setup__head p,
+.pda-setup__status {
+  margin: 4px 0 0;
+  color: var(--ds-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pda-setup__pref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--ds-line);
+  padding-top: 10px;
+}
+
+.pda-setup__pref-text {
+  display: grid;
+  gap: 2px;
+  min-width: 220px;
+  flex: 1 1 260px;
+}
+
+.pda-setup__pref-text b {
+  color: var(--ds-navy);
+  font-size: 13px;
+}
+
+.pda-setup__pref-text span {
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.pda-setup__seg {
+  display: inline-flex;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  overflow: hidden;
+}
+
+.pda-setup__seg button {
+  border: 0;
+  border-right: 1px solid var(--ds-line);
+  background: var(--ds-surface);
+  color: var(--ds-navy);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.pda-setup__seg button:last-child {
+  border-right: 0;
+}
+
+.pda-setup__seg button.is-on {
+  background: var(--ds-blue-soft);
+  color: var(--ds-blue);
+}
+
+.pda-setup__seg button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.pda-setup__seg button:focus-visible,
+.pda-setup__row:focus-visible {
+  outline: 2px solid var(--ds-blue);
+  outline-offset: -2px;
+}
+
+.pda-setup__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-surface);
+  padding: 10px 12px;
+  color: var(--ds-navy);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pda-setup__row:hover {
+  border-color: var(--ds-line-strong);
+}
+
+.pda-setup__row-icon {
+  display: inline-flex;
+  color: var(--ds-blue);
+}
+
+.pda-setup__row-text {
+  display: grid;
+  gap: 2px;
+}
+
+.pda-setup__row-text b {
+  font-size: 13px;
+}
+
+.pda-setup__row-text span {
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+/* ── Per-leg states (increment B, O2ALL-008): each leg loads, fails and retries on its own ───────────────────── */
+.pda-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  border: 1px solid var(--ds-line-strong);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-surface);
+  color: var(--ds-navy);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.pda-retry:hover {
+  border-color: var(--ds-blue);
+  color: var(--ds-blue);
+}
+
+.pda-retry:focus-visible {
+  outline: 2px solid var(--ds-blue);
+  outline-offset: 2px;
+}
+
+.pda-port-card__failure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--ds-red);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-red-soft);
+  color: var(--ds-red);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.pda-port-card__failure .pda-retry {
+  margin-left: 0;
+}
+
+.pda-port-card__waiting {
+  margin: 0;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-blue-soft);
+  color: var(--ds-navy);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+/* ── Save and saved estimates (increment A, O2ALL-008) ───────────────────────────────────────────────────────── */
+.pda-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pda-save__text {
+  display: grid;
+  gap: 2px;
+  min-width: 240px;
+  flex: 1 1 320px;
+}
+
+.pda-save__text b {
+  color: var(--ds-navy);
+  font-size: 13px;
+}
+
+.pda-save__text span,
+.pda-history__status {
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.pda-save__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pda-save__done {
+  color: var(--ds-green);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pda-save__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--ds-line-strong);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-surface);
+  color: var(--ds-navy);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.pda-save__button--primary {
+  border-color: var(--ds-blue);
+  background: var(--ds-blue);
+  color: var(--ds-surface);
+}
+
+.pda-save__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pda-save__button:focus-visible {
+  outline: 2px solid var(--ds-blue);
+  outline-offset: 2px;
+}
+
+.pda-save__error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ds-red);
+  font-size: 12px;
+}
+
+.pda-history {
+  display: grid;
+  gap: 8px;
+}
+
+.pda-history__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pda-history__head h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--ds-navy);
+  font-size: 14px;
+}
+
+.pda-history__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pda-history__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--ds-line);
+  padding: 8px 0;
+}
+
+.pda-history__list li.is-superseded {
+  opacity: 0.7;
+}
+
+.pda-history__main {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.pda-history__main b {
+  overflow: hidden;
+  color: var(--ds-navy);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pda-history__main span,
+.pda-history__figures span {
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.pda-history__figures {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.pda-history__figures b {
+  color: var(--ds-navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.pda-port-card__link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--ds-blue);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pda-port-card__link:disabled {
+  color: var(--ds-muted);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.pda-port-card__link:focus-visible {
+  outline: 2px solid var(--ds-blue);
+  outline-offset: 2px;
+}
