@@ -7,8 +7,9 @@ import { getPortsRegistry, savePortException } from "@/app/(admin)/admin/data-qu
 import type { DqDriftRow, DqPortException } from "@/lib/dq/types";
 import { Badge, Loading, downloadText, fmtDateTime, fmtInt } from "./ui";
 import { useConsole } from "./DataQualityConsole";
+import { PortSearchField } from "@/components/ports/PortSearchField";
 
-type Data = { settings: { registry_release: string | null; registry_imported_at: string | null }; drift: DqDriftRow[]; exceptions: DqPortException[]; stats: { ports: number; adopted: number; requested: number; absent: number; registry: number; registryCountries: number } };
+type Data = { settings: { registry_release: string | null; registry_imported_at: string | null }; drift: DqDriftRow[]; exceptions: DqPortException[]; stats: { ports: number; adopted: number; requested: number; absent: number; registry: number; registryCountries: number }; portChoices: { locode: string; name: string; country: string | null }[] };
 
 export function PortsView() {
   const { canEdit, toast, confirm, refreshBoot } = useConsole();
@@ -79,7 +80,7 @@ export function PortsView() {
         <div className="dq-confirm" onMouseDown={(e) => { if (e.target === e.currentTarget) setExc(null); }}>
           <div className="adm-card" role="dialog" aria-modal="true" style={{ width: "min(440px,100%)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--asb-navy)" }}>Request a seaport exception</div>
-            <div className="adm-field"><label className="adm-field__label">LOCODE</label><input className="adm-input" value={exc.locode} onChange={(e) => setExc({ ...exc, locode: e.target.value.toUpperCase() })} placeholder="SARAR" /></div>
+            <div className="adm-field"><span className="adm-field__label">Port</span><PortSearchField options={d.portChoices ?? []} value={exc.locode || null} onChange={(p) => setExc((cur) => cur ? { ...cur, locode: p?.locode ?? "" } : cur)} inputClassName="adm-input" ariaLabel="Port for the exception" /></div>
             <div className="adm-field"><label className="adm-field__label">Reason</label><textarea className="adm-textarea" rows={3} value={exc.reason} onChange={(e) => setExc({ ...exc, reason: e.target.value })} placeholder="Industrial seaport operated by …; registry function not yet updated." /></div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}><button type="button" className="adm-btn" onClick={() => setExc(null)}>Cancel</button><button type="button" className="adm-btn primary" disabled={!exc.locode || !exc.reason.trim()} onClick={async () => { const r = await savePortException(exc.locode, exc.reason, "request"); setExc(null); if (!r.success) { toast(r.error); return; } await load(); toast(`Exception for ${exc.locode} requested — pending approval.`); }}>Request</button></div>
           </div>

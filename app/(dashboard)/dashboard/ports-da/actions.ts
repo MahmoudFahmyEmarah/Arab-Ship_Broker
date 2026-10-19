@@ -2,8 +2,9 @@
 
 import { getAppUserRow } from "@/lib/app-user";
 import { calculatePda } from "@/lib/pda/calculate";
-import { aggregatePdaRoutePreview, derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
+import { derivePdaRouteTimeline } from "@/lib/pda/route-calculate";
 import { pdaRoutePreviewSchema } from "@/lib/pda/route-schema";
+import { composePdaRoutePreview, type PdaRouteFramePreview, type PdaRouteLegPreview, type PdaRouteSide } from "@/lib/pda/route-legs";
 import type { PdaMeasuredPassage, PdaRouteFxRate, PdaRouteLegInput, PdaRoutePreviewInput, PdaRoutePreviewResult, PdaRouteTimelineResult, PdaRouteTransit, PdaRouteTransitsInput } from "@/lib/pda/route-types";
 import { estimateSuezTransit } from "@/lib/suez/engine";
 import type { SuezInput } from "@/lib/suez/types";
@@ -16,7 +17,11 @@ import type { CargoView, VesselView } from "@/lib/portal/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveDeclaredFlag, resolveFlagName, type FlagStateRow } from "@/lib/pda/flag";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getPdaCalculationContext, savePdaEstimate } from "@/sdk/app/pda";
+import { getPdaCalculationContext, getPdaEstimateSet, listMyPdaEstimateSets, listPdaPortsWorkspace, savePdaEstimate, savePdaEstimateSet, setMyPdaPreferences } from "@/sdk/app/pda";
+import { PDA_OWNER_MARKER, pdaRouteSnapshot, type PdaEstimateSetDetail, type PdaEstimateSetSummary, type PdaSaveSetResult } from "@/lib/pda/estimate-sets";
+import type { PdaPreferences, PdaStartTab } from "@/lib/pda/preferences";
+import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
+import type { PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
 import { getPortRoute } from "@/sdk/app/routes";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -308,76 +313,96 @@ export async function persistPda(raw: PdaRequest): Promise<ActionResult<{ estima
   }
 }
 
+/**
+ * Shared preparation for every part of a route preview: the request is validated, the member's own vessel and cargo
+ * and both verified ports are confirmed, and the timeline is derived. Every part re-runs this, so a part can never be
+ * computed for a selection the member does not own.
+ */
+async function prepareRoutePreview(raw: PdaRoutePreviewInput) {
+  const parsed = pdaRoutePreviewSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new UserFacingActionError(validationErrorMessage(parsed.error.issues, "Invalid route PDA request"));
+  }
+  const input = parsed.data as PdaRoutePreviewInput;
+  const { supabase, manualActorLabel, appUser, ownerOrgId } = await viewer();
+  const [{ vessel, cargo }] = await Promise.all([
+    requireRouteSelections(input.selection),
+    requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
+  ]);
+  const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
+  const flagState = resolveFlagName(await flagRegistry(supabase), vessel.flag);
+  return { input, supabase, manualActorLabel, appUserId: appUser.id, ownerOrgId, vessel, cargo, timeline, flagState };
+}
+
+type PreparedRoute = Awaited<ReturnType<typeof prepareRoutePreview>>;
+
+/** One leg: canonical request → governed tariff context → FX → calculation. */
+async function computeRouteLeg(route: PreparedRoute, side: PdaRouteSide): Promise<PdaRouteLegPreview> {
+  const leg = side === "load" ? route.input.load : route.input.discharge;
+  const canonical = canonicalRouteLeg({
+    leg,
+    vessel: route.vessel,
+    cargo: route.cargo,
+    quantityMt: route.input.selection.quantityMt,
+    days: side === "load" ? route.timeline.loadPortDays : route.timeline.dischargePortDays,
+    manualActorLabel: route.manualActorLabel,
+    flagState: route.flagState,
+  });
+  const context = await getPdaCalculationContext(route.supabase, canonical);
+  const fx = await forDisplayCurrency(route.supabase, canonical, context.tariffVersion?.currency ?? null, route.input.displayCurrency);
+  return { side, request: fx.request, result: calculatePda(fx.request, context.tariffVersion ?? null), fx: fx.fx };
+}
+
+/** The frame: canonical selection, timeline and the transits on the measured passage. */
+async function computeRouteFrame(route: PreparedRoute): Promise<PdaRouteFramePreview> {
+  return {
+    canonical: {
+      vesselAvailabilityId: route.vessel.ownedListingId!,
+      vesselId: route.vessel.vesselId && UUID.test(route.vessel.vesselId) ? route.vessel.vesselId : null,
+      cargoId: route.cargo.ownedListingId!,
+      quantityMt: route.input.selection.quantityMt,
+    },
+    timeline: route.timeline,
+    transitFacts: await routeTransits(route.supabase, route.input.load.portLocode, route.input.discharge.portLocode, route.timeline, route.vessel),
+  };
+}
+
+/** The whole route in one call (kept for callers that want it): the same parts, composed the same way as the page. */
 export async function previewPdaRoute(raw: PdaRoutePreviewInput): Promise<ActionResult<PdaRoutePreviewResult>> {
   try {
-    const parsed = pdaRoutePreviewSchema.safeParse(raw);
-    if (!parsed.success) {
-      return { ok: false, error: validationErrorMessage(parsed.error.issues, "Invalid route PDA request") };
-    }
-    const input = parsed.data as PdaRoutePreviewInput;
-    const { supabase, manualActorLabel } = await viewer();
-    const [{ vessel, cargo }] = await Promise.all([
-      requireRouteSelections(input.selection),
-      requireVerifiedPorts(supabase, [input.load.portLocode, input.discharge.portLocode]),
+    const route = await prepareRoutePreview(raw);
+    const [load, discharge, frame] = await Promise.all([
+      computeRouteLeg(route, "load"),
+      computeRouteLeg(route, "discharge"),
+      computeRouteFrame(route),
     ]);
-    const timeline = derivePdaRouteTimeline(input.selection.quantityMt, input.timeline);
-    const flagState = resolveFlagName(await flagRegistry(supabase), vessel.flag);
-    let loadRequest = canonicalRouteLeg({
-      leg: input.load,
-      vessel,
-      cargo,
-      quantityMt: input.selection.quantityMt,
-      days: timeline.loadPortDays,
-      manualActorLabel,
-      flagState,
-    });
-    let dischargeRequest = canonicalRouteLeg({
-      leg: input.discharge,
-      vessel,
-      cargo,
-      quantityMt: input.selection.quantityMt,
-      days: timeline.dischargePortDays,
-      manualActorLabel,
-      flagState,
-    });
-    const [loadContext, dischargeContext] = await Promise.all([
-      getPdaCalculationContext(supabase, loadRequest),
-      getPdaCalculationContext(supabase, dischargeRequest),
-    ]);
-    const [loadFx, dischargeFx] = await Promise.all([
-      forDisplayCurrency(supabase, loadRequest, loadContext.tariffVersion?.currency ?? null, input.displayCurrency),
-      forDisplayCurrency(supabase, dischargeRequest, dischargeContext.tariffVersion?.currency ?? null, input.displayCurrency),
-    ]);
-    loadRequest = loadFx.request;
-    dischargeRequest = dischargeFx.request;
-    const load = calculatePda(loadRequest, loadContext.tariffVersion ?? null);
-    const discharge = calculatePda(dischargeRequest, dischargeContext.tariffVersion ?? null);
-
     return {
       ok: true,
-      data: aggregatePdaRoutePreview({
-        displayCurrency: input.displayCurrency,
-        allocation: input.allocation,
-        canonical: {
-          vesselAvailabilityId: vessel.ownedListingId!,
-          vesselId: vessel.vesselId && UUID.test(vessel.vesselId) ? vessel.vesselId : null,
-          cargoId: cargo.ownedListingId!,
-          quantityMt: input.selection.quantityMt,
-          loadRequest,
-          dischargeRequest,
-        },
-        load,
-        discharge,
-        timeline,
-        transitFacts: await routeTransits(supabase, input.load.portLocode, input.discharge.portLocode, timeline, vessel),
-        fxRates: [
-          ...(loadFx.fx ? [{ ...loadFx.fx, leg: "load" as const }] : []),
-          ...(dischargeFx.fx ? [{ ...dischargeFx.fx, leg: "discharge" as const }] : []),
-        ],
-      }),
+      data: composePdaRoutePreview({ displayCurrency: route.input.displayCurrency, allocation: route.input.allocation, frame, load, discharge }),
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Unable to calculate route PDA") };
+  }
+}
+
+/** One leg on its own (increment B): it loads, fails and is retried independently of the other leg. */
+export async function previewPdaRouteLeg(raw: PdaRoutePreviewInput, side: PdaRouteSide): Promise<ActionResult<PdaRouteLegPreview>> {
+  try {
+    if (side !== "load" && side !== "discharge") throw new UserFacingActionError("Unknown route leg");
+    const route = await prepareRoutePreview(raw);
+    return { ok: true, data: await computeRouteLeg(route, side) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, side === "load" ? "The load port could not be calculated" : "The discharge port could not be calculated") };
+  }
+}
+
+/** The frame on its own (increment B): timeline, canonical selection and transits. */
+export async function previewPdaRouteFrame(raw: PdaRoutePreviewInput): Promise<ActionResult<PdaRouteFramePreview>> {
+  try {
+    const route = await prepareRoutePreview(raw);
+    return { ok: true, data: await computeRouteFrame(route) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The voyage timeline and transits could not be calculated") };
   }
 }
 
@@ -471,5 +496,128 @@ export async function measuredPdaPassage(pol: string, pod: string): Promise<Acti
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Unable to look up the measured passage") };
+  }
+}
+
+/** The Ports tab (increment C): read-only, through the member's own session and the governed RPC. */
+export async function loadPdaPortsWorkspace(callDate?: string): Promise<ActionResult<PdaPortsWorkspace>> {
+  try {
+    const { supabase } = await viewer();
+    const day = callDate && /^\d{4}-\d{2}-\d{2}$/.test(callDate) ? callDate : new Date().toISOString().slice(0, 10);
+    return { ok: true, data: await listPdaPortsWorkspace(supabase, day) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The ports could not be loaded") };
+  }
+}
+
+/** The Setup tab (increment D): saves the caller's own preferences through the governed RPC. */
+export async function savePdaPreferences(density: PdaEstimatorDensity, startTab: PdaStartTab): Promise<ActionResult<PdaPreferences>> {
+  try {
+    if (density !== "compact" && density !== "comfortable") throw new UserFacingActionError("Choose a row height");
+    if (startTab !== "estimate" && startTab !== "ports") throw new UserFacingActionError("Choose a start tab");
+    const { supabase } = await viewer();
+    return { ok: true, data: await setMyPdaPreferences(supabase, density, startTab) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Your preferences could not be saved") };
+  }
+}
+
+const SET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Save the route (increment A). Everything is RECOMPUTED here from the member's own selection — the page sends the
+ * inputs only, never figures — and the immutable set (both legs + route snapshot) is written in one database
+ * transaction by the service-only pda_save_estimate_set, which re-checks tier, seat, tariff version, sums and evidence
+ * and computes the content hash itself.
+ */
+/** The figures the member saw; the save refuses if the server's recomputation differs (B2O-044 P2-2). */
+export interface PdaSaveExpectation {
+  loadPortKnown: number | null;
+  dischargePortKnown: number | null;
+  allInKnown: number | null;
+  allInComplete: number | null;
+}
+
+const sameFigure = (a: number | null | undefined, b: number | null | undefined) =>
+  (a == null && b == null) || (a != null && b != null && Math.abs(a - b) < 0.005);
+
+export async function savePdaRouteEstimate(raw: PdaRoutePreviewInput, supersedesId?: string | null, expected?: PdaSaveExpectation | null): Promise<ActionResult<PdaSaveSetResult>> {
+  try {
+    if (supersedesId != null && !SET_ID.test(supersedesId)) throw new UserFacingActionError("Unknown saved estimate");
+    // a saved manual line records the owner MARKER, never the member's name (B2O-044 P1-4): the read resolves it, and
+    // erasure then shows "Deleted account" instead of a name frozen in an immutable record
+    const route = { ...(await prepareRoutePreview(raw)), manualActorLabel: PDA_OWNER_MARKER };
+    const [load, discharge, frame] = await Promise.all([
+      computeRouteLeg(route, "load"),
+      computeRouteLeg(route, "discharge"),
+      computeRouteFrame(route),
+    ]);
+    const result = composePdaRoutePreview({ displayCurrency: route.input.displayCurrency, allocation: route.input.allocation, frame, load, discharge });
+    if (expected && !(sameFigure(expected.loadPortKnown, result.totals.loadPortKnown) && sameFigure(expected.dischargePortKnown, result.totals.dischargePortKnown)
+        && sameFigure(expected.allInKnown, result.totals.allInKnown) && sameFigure(expected.allInComplete, result.totals.allInComplete))) {
+      throw new UserFacingActionError("The figures changed since your preview (a tariff or exchange rate may just have been updated). Nothing was saved; review the estimate and save again.");
+    }
+    const saved = await savePdaEstimateSet(getSupabaseAdminClient(), {
+      actorId: route.appUserId,
+      ownerOrgId: route.ownerOrgId,
+      loadRequest: load.request,
+      loadResult: load.result,
+      dischargeRequest: discharge.request,
+      dischargeResult: discharge.result,
+      route: pdaRouteSnapshot(route.input, result, route.vessel.name ?? null),
+      supersedesId: supersedesId ?? null,
+    });
+    return { ok: true, data: saved };
+  } catch (error) {
+    if (error instanceof Error && /^PDA_CONFLICT: /.test(error.message)) {
+      // the database's conflict messages are written for members (already superseded / not the same vessel and cargo)
+      const text = error.message.replace(/^PDA_CONFLICT: /, "");
+      return { ok: false, error: `${text.charAt(0).toUpperCase()}${text.slice(1)}.` };
+    }
+    if (error instanceof Error && /^PDA_AUTH: only the owner/.test(error.message)) {
+      return { ok: false, error: "Only the member who saved an estimate can save a new version of it." };
+    }
+    return { ok: false, error: actionErrorMessage(error, "The estimate could not be saved") };
+  }
+}
+
+/** The member's saved estimates (and their organisation's), newest first; `before` pages back. */
+export async function listPdaEstimateSets(before?: string | null): Promise<ActionResult<PdaEstimateSetSummary[]>> {
+  try {
+    const { supabase } = await viewer();
+    const cursor = before && !Number.isNaN(Date.parse(before)) ? before : null;
+    return { ok: true, data: await listMyPdaEstimateSets(supabase, cursor) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Saved estimates could not be loaded") };
+  }
+}
+
+/** One saved estimate, read through the member's own session (the database decides who may read it). */
+export async function loadPdaEstimateSet(setId: string): Promise<ActionResult<PdaEstimateSetDetail>> {
+  try {
+    if (!SET_ID.test(setId)) throw new UserFacingActionError("Unknown saved estimate");
+    const { supabase } = await viewer();
+    return { ok: true, data: await getPdaEstimateSet(supabase, setId) };
+  } catch (error) {
+    if (error instanceof Error && /^PDA_AUTH/.test(error.message)) return { ok: false, error: "This saved estimate is not available to you." };
+    return { ok: false, error: actionErrorMessage(error, "The saved estimate could not be loaded") };
+  }
+}
+
+/**
+ * Export a SAVED set as a PDF (increment A): read through the member's own session (the database decides who may read
+ * it), rendered on the server by the deterministic Unicode engine. Returned as base64 for a browser download.
+ */
+export async function exportPdaEstimateSetPdf(setId: string): Promise<ActionResult<{ fileName: string; sha256: string; base64: string }>> {
+  try {
+    if (!SET_ID.test(setId)) throw new UserFacingActionError("Unknown saved estimate");
+    const { supabase } = await viewer();
+    const set = await getPdaEstimateSet(supabase, setId);
+    const { renderPdaEstimateSetPdf } = await import("@/lib/pda/estimate-set-pdf");
+    const pdf = await renderPdaEstimateSetPdf(set);
+    return { ok: true, data: { fileName: pdf.fileName, sha256: pdf.sha256, base64: Buffer.from(pdf.bytes).toString("base64") } };
+  } catch (error) {
+    if (error instanceof Error && /^PDA_AUTH/.test(error.message)) return { ok: false, error: "This saved estimate is not available to you." };
+    return { ok: false, error: actionErrorMessage(error, "The PDF could not be produced") };
   }
 }

@@ -1,5 +1,6 @@
 import { decideQuote, overridePrice } from "@/app/(admin)/admin/bunker/actions";
 import type { AdminBunkerDashboard, AdminBunkerQuote } from "@/lib/bunker/admin";
+import { SupplierPortFields } from "./SupplierPortFields";
 
 const PRODUCTS = [
   { key: "HSFO380", label: "HSFO 380" },
@@ -133,14 +134,7 @@ export function PricesTab({ dash, canEdit }: { dash: AdminBunkerDashboard; canEd
             <span className="adm-card__sub">An override stands until the supplier republishes; under “Platform (manual)” it is staff input. Goes live immediately.</span>
           </div>
           <form action={overridePrice} className="adm-settings-grid">
-            <label className="adm-field"><span className="adm-field__label">Supplier</span>
-              <select className="adm-select" name="supplierId" required>
-                {dash.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.status === "disabled" ? " (disabled)" : ""}</option>)}
-              </select>
-            </label>
-            <label className="adm-field"><span className="adm-field__label">Port (LOCODE, registered for the supplier)</span>
-              <input className="adm-input" name="portLocode" required maxLength={5} placeholder="GRPIR" />
-            </label>
+            <SupplierPortFields suppliers={dash.suppliers.map((s) => ({ id: s.id, name: s.name, disabled: s.status === "disabled", ports: s.ports }))} />
             <label className="adm-field"><span className="adm-field__label">Product</span>
               <select className="adm-select" name="productKey" required>
                 {PRODUCTS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}

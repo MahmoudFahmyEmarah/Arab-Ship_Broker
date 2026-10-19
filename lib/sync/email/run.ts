@@ -348,7 +348,13 @@ export async function runEmailSync(
         // where it was so the next run fetches the same mail again, and say so.
         // (Records from the batches that did succeed are NOT staged either —
         // staging half a page and re-reading it would duplicate the rest.)
-        emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync checkpoint stays at ${since.toISOString().slice(0, 16).replace("T", " ")} UTC — fix the LLM key or budget in Settings and run again; nothing was skipped.` });
+        // A provider that refuses the request FORMAT (schema/response_format) is a code or model-choice problem;
+        // telling the owner to fix the key or budget sends them the wrong way (18 Oct 2026, Groq strict schema).
+        const formatRejected = /json[ _]schema|response_format|structured output|invalid schema/i.test(firstError ?? "");
+        const advice = formatRejected
+          ? "the AI provider rejected the request format (not the key or budget) — choose a model with structured-output support in Settings or report it"
+          : "fix the LLM key or budget in Settings and run again";
+        emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync checkpoint stays at ${since.toISOString().slice(0, 16).replace("T", " ")} UTC — ${advice}; nothing was skipped.` });
         return;
       }
       if (cargo.length || vessels.length) {

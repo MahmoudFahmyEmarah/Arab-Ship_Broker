@@ -33,7 +33,10 @@ assert.match(actions, /requireRouteSelections\(input\.selection\)/);
 assert.match(actions, /requireVerifiedPorts\(supabase/);
 assert.match(actions, /authoritativeVesselFacts/);
 assert.match(actions, /derivePdaRouteTimeline/);
-assert.match(actions, /aggregatePdaRoutePreview/);
+// O2ALL-008 increment B: the server composes the route through composePdaRoutePreview, which is exactly
+// aggregatePdaRoutePreview over the three parts (lib/pda/route-legs.ts; equality proven in pda-route-legs-check.ts)
+assert.match(actions, /composePdaRoutePreview\(/);
+assert.match(readFileSync(new URL("../lib/pda/route-legs.ts", import.meta.url), "utf8"), /return aggregatePdaRoutePreview\(\{/);
 assert.match(actions, /callDate:\s*input\.leg\.callDate/);
 assert.doesNotMatch(actions, /derivedDate|timeline\.(?:etaLoad|etaDischarge)\.slice/);
 // Wave 2 (B2C-035): vessel facts stay authoritative; the flag state is resolved on the server
@@ -83,9 +86,11 @@ assert.match(routeUi, /line\.explanation/);
 assert.match(routeUi, /line\.enteredBy/);
 assert.match(routeUi, /line\.manualReason/);
 assert.match(routeUi, /line\.evidence\.title/); // evidence is shown by title/page/sheet, never by source UUID (C2O-120)
-assert.match(routeUi, /try\s*\{[\s\S]*await previewPdaRoute\(input\)/);
-assert.match(routeUi, /catch \(cause\)[\s\S]*requestSequence\.current === sequence/);
-assert.match(routeUi, /finally\s*\{[\s\S]*requestSequence\.current === sequence[\s\S]*setBusy\(false\)/);
+// O2ALL-008 increment B: the preview runs as three parts (each leg, the frame). Each call is in try/catch, a stale
+// answer is dropped, and every part ends ok or failed — so loading always clears (busy is derived from the parts).
+assert.match(routeUi, /try\s*\{[\s\S]*await previewPdaRouteFrame\(input\) : await previewPdaRouteLeg\(input, part\)/);
+assert.match(routeUi, /catch \(cause\)\s*\{\s*if \(requestSequence\.current !== sequence \|\| partTokens\.current\[part\] !== token\) return;\s*set\(\{ status: "failed"/);
+assert.match(routeUi, /const busy = loadPart\.status === "loading" \|\| dischargePart\.status === "loading" \|\| framePart\.status === "loading";/);
 // C2O-120: members see the version's edition label, never a raw tariff-version or source UUID; the unused coverage
 // list is not fetched or serialised to the browser.
 assert.match(routeUi, /result\.tariffEdition/);
