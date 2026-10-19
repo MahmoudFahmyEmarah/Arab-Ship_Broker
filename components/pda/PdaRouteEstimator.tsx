@@ -619,7 +619,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       ) : activeTab === "agents" ? (
         <PdaAgentsWorkspace initialPort={agentsFocus} />
       ) : activeTab === "setup" ? (
-        <PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} />
+        <div className="pe-body"><PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} onOpenAgents={() => setActiveTab("agents")} /></div>
       ) : (
         <div className="pf">
           <section className={`pf-deal ${selected ? "is-selected" : ""}`} aria-label="Estimate records">

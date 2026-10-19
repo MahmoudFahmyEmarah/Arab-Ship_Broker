@@ -54,7 +54,7 @@ ok(/export async function savePdaPreferences/.test(actions) && /const \{ supabas
   "saving goes through the member's own session after the estimator's viewer() gate");
 ok(/initialPdaTab\(initialPreferences, hasHandoff\)/.test(estimator) && /pda-route--\$\{density\}/.test(estimator),
   "the estimator opens on the saved tab (unless handed off) and applies the saved row height");
-ok(/activeTab === "setup" \? \(\s*<PdaSetupWorkspace/.test(estimator), "the Setup tab renders the workspace; only Agents keeps the deferred card");
+ok(/activeTab === "setup" \? \(\s*<div className="pe-body"><PdaSetupWorkspace/.test(estimator), "the Setup tab renders the workspace inside the design's page body");
 ok(!/localStorage|sessionStorage|indexedDB/.test(setup + model), "nothing is kept in browser storage (the prototype's store is not authorised)");
 ok(/role="radiogroup"/.test(setup) && /aria-checked=/.test(setup) && /aria-labelledby=\{labelId\}/.test(setup) && /aria-live="polite"/.test(setup),
   "each preference is a labelled radiogroup; the save status is announced");
