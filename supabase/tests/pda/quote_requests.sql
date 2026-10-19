@@ -205,10 +205,11 @@ begin
   if v_core then
     if not exists (select 1 from public.notifications n where n.recipient_user_id = staff_a and n.kind = 'pda.quote_request')
        or not exists (select 1 from public.notifications n where n.recipient_user_id = member and n.kind = 'pda.quote_received')
-       or not exists (select 1 from public.notifications n where n.recipient_user_id = member and n.kind = 'pda.quote_declined')
+       -- the decline happened while the requester was inactive (Q5): no notification, and the decline still went through
+       or exists (select 1 from public.notifications n where n.recipient_user_id = member and n.kind = 'pda.quote_declined')
        or exists (select 1 from public.notifications n where n.kind like 'pda.quote%' and (n.title || n.body) ~* 'SECRET NAME|9999999') then
-      raise exception 'Q8: staff hear of a request, the requester of a quote and a decline; no vessel identity in any notification'; end if;
-    raise notice 'Q8 ok: staff notified of the request; the requester of the quote and the decline; no vessel identity';
+      raise exception 'Q8: staff hear of a request, the requester of a quote (not of a decline made while inactive); no vessel identity in any notification'; end if;
+    raise notice 'Q8 ok: staff notified of the request; the requester of the quote, not of a decline made while inactive; no vessel identity';
   else
     raise notice 'Q8 skipped: the shared notification core is not installed here';
   end if;
