@@ -185,6 +185,13 @@ begin
     raise exception 'PDA_VALIDATION: every agency must be listed at % (choose from the Agents tab)', e.port_locode using errcode = '22023';
   end if;
   if cardinality(v_agencies) > 10 then raise exception 'PDA_VALIDATION: at most 10 agencies per request' using errcode = '22023'; end if;
+  -- C2O-159 P1-2: the registry is enforced, not descriptive: every selected agency quotes every requested service here
+  if exists (select 1 from unnest(v_agencies) ag
+             where not v_services <@ coalesce((select pa.services from public.pda_port_agents pa
+                                               where pa.org_id = ag and pa.port_locode = e.port_locode and pa.status = 'active'), '{}')) then
+    raise exception 'PDA_VALIDATION: every selected agency must quote every requested service at %; choose services or agencies that match', e.port_locode
+      using errcode = '22023';
+  end if;
   -- owner ruling 19 Oct 2026 (agencies are not spammed): at most 20 requests a day per member, and one open request
   -- per port of an estimate (withdraw it, or wait for its answers, before asking again)
   if (select count(*) from public.pda_quote_requests x where x.requester_user_id = v_user and x.created_at > now() - interval '24 hours') >= 20 then
@@ -381,10 +388,11 @@ begin
   if public.fn_app_user_id() is null or not public.fn_pda_is_agency_staff(p_agency_org_id) then
     raise exception 'PDA_AUTH: only staff of the addressed agency can decline' using errcode = '42501';
   end if;
-  select * into r from public.pda_quote_requests x where x.id = p_request_id;
+  -- C2O-159 P1-3: the request is locked before its recipient (as in submit and withdraw), and must be open and unexpired
+  select * into r from public.pda_quote_requests x where x.id = p_request_id for update;
   select * into rc from public.pda_quote_request_recipients x where x.request_id = p_request_id and x.agency_org_id = p_agency_org_id for update;
   if r.id is null or rc.request_id is null then raise exception 'PDA_AUTH: this request is not addressed to your agency' using errcode = '42501'; end if;
-  if r.status <> 'open' then raise exception 'PDA_STATE: the request is no longer open' using errcode = '55000'; end if;
+  if r.status <> 'open' or r.expires_at < now() then raise exception 'PDA_STATE: the request is no longer open' using errcode = '55000'; end if;
   if rc.status <> 'sent' then raise exception 'PDA_STATE: your agency has already answered' using errcode = '55000'; end if;
   if p_reason is null or char_length(btrim(p_reason)) not between 3 and 500 then
     raise exception 'PDA_VALIDATION: give a short reason (3 to 500 characters)' using errcode = '22023';

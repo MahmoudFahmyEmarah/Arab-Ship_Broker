@@ -50,8 +50,9 @@ begin
   perform public.pda_admin_upsert_agency(owner_admin, agency_b, '{"displayName":"Agency B"}');
   perform public.pda_admin_upsert_agency(owner_admin, agency_c, '{"displayName":"Agency C"}');
   perform public.pda_admin_set_port_agent(owner_admin, agency_a, pol, array['agency','pilotage'], true);
-  perform public.pda_admin_set_port_agent(owner_admin, agency_b, pol, array['agency'], true);
-  perform public.pda_admin_set_port_agent(owner_admin, agency_c, pod, array['agency'], true);   -- only at the OTHER port
+  perform public.pda_admin_set_port_agent(owner_admin, agency_b, pol, array['agency','pilotage'], true);
+  perform public.pda_admin_set_port_agent(owner_admin, agency_c, pod, array['agency'], true);   -- at the OTHER port, and
+  perform public.pda_admin_set_port_agent(owner_admin, agency_c, pol, array['agency'], true);   -- at pol for agency only
 
   -- a saved set (two manual-quote legs) with identifying vessel facts that must never leave in a request
   load_req := jsonb_build_object('portLocode', pol, 'callDate', '2026-11-01',
@@ -74,12 +75,17 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
 
   -- Q2 · validation before anything is sent
-  begin perform public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_c], array['agency']); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  begin perform public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[gen_random_uuid()], array['agency']); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_VALIDATION' then raise exception 'Q2: an agency not listed at the port must be refused, got %', e; end if;
   begin perform public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_a], array['bunkers']); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_VALIDATION' then raise exception 'Q2: an unknown service must be refused, got %', e; end if;
 
   -- Q1 · masked request (identity hidden), then a revealed one
+  -- C2O-159 P1-2: every selected agency must quote every requested service (partial and mixed coverage refused)
+  begin perform public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_c], array['agency','pilotage']); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'Q2: an agency that does not quote pilotage must be refused, got %', e; end if;
+  begin perform public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_a, agency_c], array['agency','pilotage']); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'Q2: mixed coverage must be refused, got %', e; end if;
   req := public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_a, agency_b], array['agency','pilotage'], 'Please quote alongside.', false);
   if (req->>'agencies')::int <> 2 then raise exception 'Q1: two agencies addressed: %', req; end if;
   q := (select snapshot from public.pda_quote_requests where id = (req->>'requestId')::uuid);
@@ -158,6 +164,16 @@ begin
   update public.users set is_active = false where id = member;
   perform public.decline_pda_quote_request((req->>'requestId')::uuid, agency_b, 'No berth window that week');
   update public.users set is_active = true where id = member;
+  -- C2O-159 P1-3: an expired request takes no decline (a request seeded already expired, addressed to agency B)
+  perform set_config('request.jwt.claim.sub', '', true);
+  insert into public.pda_quote_requests (id, set_id, leg, port_locode, requester_user_id, requester_org_id, snapshot, services, expires_at)
+  values ('00000000-0000-4000-8000-0000000000e1', (set2->>'id')::uuid, 'discharge', pod, member, member_org, '{}'::jsonb, array['agency'], now() - interval '1 hour');
+  insert into public.pda_quote_request_recipients (request_id, agency_org_id) values ('00000000-0000-4000-8000-0000000000e1', agency_b);
+  perform set_config('request.jwt.claim.sub', staff_b::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_b,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  begin perform public.decline_pda_quote_request('00000000-0000-4000-8000-0000000000e1', agency_b, 'Too late for us'); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_STATE' then raise exception 'Q5: an expired request must not take a decline, got %', e; end if;
   perform set_config('request.jwt.claim.sub', member::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
   mine := (select x from jsonb_array_elements(public.list_my_pda_quote_requests((set1->>'id')::uuid)) x where x->>'requestId' = req->>'requestId');

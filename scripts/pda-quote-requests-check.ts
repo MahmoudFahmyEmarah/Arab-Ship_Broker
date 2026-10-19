@@ -69,6 +69,15 @@ ok(/'flagState', case when coalesce\(p_reveal_identity, false\) then/.test(snaps
   "owner ruling 19 Oct: exact size figures, the flag only with the member's identity; the cargo type is included");
 ok(/interval '24 hours'\) >= 20/.test(create) && /x\.set_id = s\.id and x\.leg = p_leg and x\.status = 'open'/.test(create),
   "owner ruling 19 Oct: at most 20 requests a day per member and one open request per port of an estimate");
+ok(/not v_services <@ coalesce\(\(select pa\.services from public\.pda_port_agents pa/.test(create),
+  "C2O-159 P1-2: every selected agency must quote every requested service at that port");
+const decline = body.slice(body.indexOf("create or replace function public.decline_pda_quote_request"));
+ok(/select \* into r from public\.pda_quote_requests x where x\.id = p_request_id for update;\s*select \* into rc from public\.pda_quote_request_recipients/.test(decline)
+  && /r\.status <> 'open' or r\.expires_at < now\(\)/.test(decline),
+  "C2O-159 P1-3: decline locks the request before its recipient and refuses an expired request");
+const race = read("scripts/db/pda-quote-race.sh");
+ok(/withdraw_pda_quote_request/.test(race) && /decline_pda_quote_request/.test(race) && /withdrawn\/sent/.test(race) && /REFUSED: \$DBNAME is not a scratch database/.test(race),
+  "a real two-session withdraw-versus-decline race script exists for the scratch DB proof (one terminal outcome)");
 ok(/not public\.fn_pda_member_entitled\(\)/.test(create) && /s\.owner_user_id <> v_user/.test(create) && /where n\.supersedes_id = s\.id/.test(create)
   && /pg_advisory_xact_lock\(hashtext\('pda_estimate_set_owner:'/.test(create) && /v_org := s\.owner_org_id;/.test(create),
   "a request needs the estimator gate, the set's OWNER (no colleague or admin) and its latest version under the owner's save lock; the set's own organisation");
