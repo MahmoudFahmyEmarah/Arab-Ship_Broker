@@ -65,6 +65,10 @@ const create = body.slice(body.indexOf("create or replace function public.create
 const snapshot = create.slice(create.indexOf("v_snapshot :="), create.indexOf("insert into public.pda_quote_requests"));
 ok(!/vesselName|vessel_name|imo|vesselId|vesselAvailabilityId|cargoId|full_name|email|user_id/i.test(snapshot) && /'requester', case when coalesce\(p_reveal_identity, false\)/.test(snapshot),
   "the masked snapshot never reads the vessel name, IMO, listing ids or the member; the company only on reveal");
+ok(/'flagState', case when coalesce\(p_reveal_identity, false\) then/.test(snapshot) && /'cargoType'/.test(snapshot),
+  "owner ruling 19 Oct: exact size figures, the flag only with the member's identity; the cargo type is included");
+ok(/interval '24 hours'\) >= 20/.test(create) && /x\.set_id = s\.id and x\.leg = p_leg and x\.status = 'open'/.test(create),
+  "owner ruling 19 Oct: at most 20 requests a day per member and one open request per port of an estimate");
 ok(/not public\.fn_pda_member_entitled\(\)/.test(create) && /s\.owner_user_id <> v_user/.test(create) && /where n\.supersedes_id = s\.id/.test(create)
   && /pg_advisory_xact_lock\(hashtext\('pda_estimate_set_owner:'/.test(create) && /v_org := s\.owner_org_id;/.test(create),
   "a request needs the estimator gate, the set's OWNER (no colleague or admin) and its latest version under the owner's save lock; the set's own organisation");

@@ -85,8 +85,8 @@ function RequestCard({ item, onDone }: { item: PdaAgencyInboxItem; onDone: () =>
         <div><dt>Days</dt><dd>{fmt(s.call?.days, " d")}</dd></div>
         <div><dt>Vessel</dt><dd>{s.vessel?.type ?? "—"} · DWT {fmt(s.vessel?.dwt)} · GT {fmt(s.vessel?.gt)}</dd></div>
         <div><dt>LOA / draft</dt><dd>{fmt(s.vessel?.loaM, " m")} / {fmt(s.vessel?.registeredMaxDraftM, " m")}</dd></div>
-        <div><dt>Flag</dt><dd>{s.vessel?.flagState ?? "—"}</dd></div>
-        <div><dt>Cargo</dt><dd>{fmt(s.call?.cargoQuantityMt, " MT")} {s.call?.cargoStatus ?? ""}</dd></div>
+        <div><dt>Flag</dt><dd>{s.vessel?.flagState ?? "shared with the member's identity"}</dd></div>
+        <div><dt>Cargo</dt><dd>{s.call?.cargoType ? `${s.call.cargoType} · ` : ""}{fmt(s.call?.cargoQuantityMt, " MT")} {s.call?.cargoStatus ?? ""}</dd></div>
         <div><dt>Location</dt><dd>{s.call?.location ?? "—"}{s.call?.voyageScope ? ` · ${s.call.voyageScope}` : ""}</dd></div>
         <div><dt>Requested by</dt><dd>{s.requester?.company ?? "Member (identity not shared)"}</dd></div>
       </dl>

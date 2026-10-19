@@ -185,6 +185,14 @@ begin
     raise exception 'PDA_VALIDATION: every agency must be listed at % (choose from the Agents tab)', e.port_locode using errcode = '22023';
   end if;
   if cardinality(v_agencies) > 10 then raise exception 'PDA_VALIDATION: at most 10 agencies per request' using errcode = '22023'; end if;
+  -- owner ruling 19 Oct 2026 (agencies are not spammed): at most 20 requests a day per member, and one open request
+  -- per port of an estimate (withdraw it, or wait for its answers, before asking again)
+  if (select count(*) from public.pda_quote_requests x where x.requester_user_id = v_user and x.created_at > now() - interval '24 hours') >= 20 then
+    raise exception 'PDA_VALIDATION: you can send at most 20 quote requests a day; try again tomorrow' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.pda_quote_requests x where x.set_id = s.id and x.leg = p_leg and x.status = 'open' and x.expires_at >= now()) then
+    raise exception 'PDA_CONFLICT: this port already has an open quote request; withdraw it or wait for its answers' using errcode = '40001';
+  end if;
 
   -- the set's own organisation: the company revealed and the colleagues who may read the answers (pre-audit P2-7)
   v_org := s.owner_org_id;
@@ -197,9 +205,11 @@ begin
     'vessel', jsonb_build_object(
       'type', e.input_snapshot#>>'{vessel,vesselType}', 'gt', e.input_snapshot#>'{vessel,gt}', 'scnrt', e.input_snapshot#>'{vessel,scnrt}',
       'dwt', e.input_snapshot#>'{vessel,dwt}', 'loaM', e.input_snapshot#>'{vessel,loaM}',
-      'registeredMaxDraftM', e.input_snapshot#>'{vessel,registeredMaxDraftM}', 'flagState', e.input_snapshot#>>'{vessel,flagState}'),
+      'registeredMaxDraftM', e.input_snapshot#>'{vessel,registeredMaxDraftM}',
+      -- owner ruling 19 Oct 2026: exact size figures (dues are priced on them), the flag only with the member's identity
+      'flagState', case when coalesce(p_reveal_identity, false) then e.input_snapshot#>>'{vessel,flagState}' end),
     'call', jsonb_build_object(
-      'days', e.input_snapshot#>'{call,days}', 'cargoQuantityMt', e.input_snapshot#>'{call,cargoQuantityMt}',
+      'days', e.input_snapshot#>'{call,days}', 'cargoType', e.input_snapshot#>>'{call,cargoType}', 'cargoQuantityMt', e.input_snapshot#>'{call,cargoQuantityMt}',
       'cargoStatus', e.input_snapshot#>>'{call,cargoStatus}', 'voyageScope', e.input_snapshot#>>'{call,voyageScope}',
       'location', e.input_snapshot#>>'{call,location}'),
     'requester', case when coalesce(p_reveal_identity, false)

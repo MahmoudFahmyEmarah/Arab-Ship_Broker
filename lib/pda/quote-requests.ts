@@ -47,7 +47,7 @@ export interface PdaQuoteSnapshot {
   port: { locode: string; name?: string; terminal?: string };
   callDate?: string;
   vessel: { type?: string; gt?: number; scnrt?: number; dwt?: number; loaM?: number; registeredMaxDraftM?: number; flagState?: string };
-  call: { days?: number; cargoQuantityMt?: number; cargoStatus?: string; voyageScope?: string; location?: string };
+  call: { days?: number; cargoType?: string; cargoQuantityMt?: number; cargoStatus?: string; voyageScope?: string; location?: string };
   requester?: { company: string };
 }
 

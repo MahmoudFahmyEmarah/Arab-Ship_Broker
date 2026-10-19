@@ -142,7 +142,7 @@ function NewRequest({ setId, loadPort, dischargePort, onSent }: { setId: string;
         ))}
       </fieldset>
       <label className="pda-quotes__note">Note to the agencies (optional)<textarea className="asb-control" maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-      <label className="pda-quotes__reveal"><input type="checkbox" checked={reveal} onChange={(e) => setReveal(e.target.checked)} /> Share my company name with these agencies (otherwise they see the vessel size, cargo and call facts only)</label>
+      <label className="pda-quotes__reveal"><input type="checkbox" checked={reveal} onChange={(e) => setReveal(e.target.checked)} /> Share my company name and the vessel's flag with these agencies (otherwise they see the vessel type and size, cargo and call facts only)</label>
       <div className="pda-save__actions">
         <button type="button" className="pda-save__button pda-save__button--primary" disabled={busy || !chosen.length || !services.length} onClick={() => void send()}>
           {busy ? <Loader2 className="is-spinning" size={14} aria-hidden="true" /> : <Send size={14} aria-hidden="true" />} Send request

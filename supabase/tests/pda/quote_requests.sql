@@ -83,14 +83,19 @@ begin
   req := public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_a, agency_b], array['agency','pilotage'], 'Please quote alongside.', false);
   if (req->>'agencies')::int <> 2 then raise exception 'Q1: two agencies addressed: %', req; end if;
   q := (select snapshot from public.pda_quote_requests where id = (req->>'requestId')::uuid);
-  if q::text ~* 'SECRET NAME|9999999|vesselId|vesselName|"imo"' or q ? 'requester'
+  if q::text ~* 'SECRET NAME|9999999|vesselId|vesselName|"imo"|Malta' or q ? 'requester' or q#>'{vessel}' ? 'flagState'
      or q#>>'{vessel,type}' <> 'Bulk carrier' or (q#>>'{vessel,dwt}')::numeric <> 28000 or (q#>>'{call,cargoQuantityMt}')::numeric <> 26000
      or q#>>'{port,locode}' <> pol or q->>'callDate' <> '2026-11-01' then
     raise exception 'Q1: the snapshot must be masked yet complete for pricing: %', q; end if;
-  req2 := public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_b], array['agency'], null, true);
-  if (select snapshot#>>'{requester,company}' from public.pda_quote_requests where id = (req2->>'requestId')::uuid) is distinct from 'Nile Charterers LLC' then
-    raise exception 'Q1: a revealed request carries the company name only'; end if;
-  raise notice 'Q1 ok: the snapshot carries vessel size, cargo and call facts, never the vessel name, IMO, ids or member; reveal adds the company';
+  -- owner ruling 19 Oct: one open request per port of an estimate
+  begin perform public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_b], array['agency'], null, true); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_CONFLICT' then raise exception 'Q1: a second open request for the same port must be PDA_CONFLICT, got %', e; end if;
+  req2 := public.create_pda_quote_request((set1->>'id')::uuid, 'discharge', array[agency_c], array['agency'], null, true);
+  if (select snapshot#>>'{requester,company}' from public.pda_quote_requests where id = (req2->>'requestId')::uuid) is distinct from 'Nile Charterers LLC'
+     or (select snapshot#>>'{vessel,flagState}' from public.pda_quote_requests where id = (req2->>'requestId')::uuid) is distinct from 'Malta' then
+    raise exception 'Q1: a revealed request carries the company name and the flag'; end if;
+  raise notice 'Q1 ok: masked = vessel type and exact size, cargo and call facts, no name, IMO, ids, member or flag; reveal adds company + flag; one open request per port';
 
   -- Q2 · outsider and superseded set
   perform set_config('request.jwt.claim.sub', outsider::text, true);
@@ -119,7 +124,7 @@ begin
     raise exception 'Q3: agency A staff see only the one request addressed to A, masked: %', inbox; end if;
   perform set_config('request.jwt.claim.sub', staff_b::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_b,'app_metadata',jsonb_build_object('role','broker'))::text, true);
-  if jsonb_array_length(public.list_agency_pda_quote_requests()) <> 2 then raise exception 'Q3: agency B staff see both requests addressed to B'; end if;
+  if jsonb_array_length(public.list_agency_pda_quote_requests()) <> 1 then raise exception 'Q3: agency B staff see the one request addressed to B'; end if;
   perform set_config('request.jwt.claim.sub', outsider::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub',outsider,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
   if jsonb_array_length(public.list_agency_pda_quote_requests()) <> 0 then raise exception 'Q3: a non-staff member sees no request'; end if;
@@ -173,7 +178,16 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_a,'app_metadata',jsonb_build_object('role','broker'))::text, true);
   begin perform public.submit_pda_agency_quote((req->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency","amount":"1"}]', current_date + 30); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_STATE' then raise exception 'Q6: a withdrawn request takes no quote, got %', e; end if;
-  raise notice 'Q6 ok: only the requester withdraws; a withdrawn request takes no quote';
+  -- owner ruling 19 Oct: at most 20 requests a day per member (18 more rows, withdrawn, make 20 with req and req2)
+  perform set_config('request.jwt.claim.sub', '', true);
+  insert into public.pda_quote_requests (set_id, leg, port_locode, requester_user_id, requester_org_id, snapshot, services, status, withdrawn_at)
+  select (set2->>'id')::uuid, 'load', pol, member, member_org, '{}'::jsonb, array['agency'], 'withdrawn', now() from generate_series(1, 18);
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  begin perform public.create_pda_quote_request((set2->>'id')::uuid, 'discharge', array[agency_c], array['agency']); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'Q6: the 21st request in a day must be refused, got %', e; end if;
+  raise notice 'Q6 ok: only the requester withdraws; a withdrawn request takes no quote; 20 requests a day at most';
 
   -- Q7 · immutability
   perform set_config('request.jwt.claim.sub', '', true);
