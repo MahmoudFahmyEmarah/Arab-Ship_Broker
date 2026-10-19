@@ -1,3 +1,9 @@
+/* Design fidelity (owner B2ALL-061): the PDA cards are plain white cards. The portal's listing-card status strip,
+   hover lift and pointer (lib/portal/portal.css .asb-card) do not apply inside the estimator. */
+.pda-route .asb-card::before { content: none; }
+.pda-route .asb-card { cursor: auto; }
+.pda-route .asb-card:hover { transform: none; box-shadow: var(--ds-shadow); }
+
 .pda-route {
   min-height: calc(100vh - 48px);
   container-type: inline-size;
@@ -63,6 +69,7 @@
 .pda-selection,
 .pda-workspace,
 .pda-empty-state,
+.pda-history,
 .pda-route__notice,
 .pda-route__deferred {
   margin-right: 20px;
@@ -1229,6 +1236,9 @@
 .pda-history {
   display: grid;
   gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
 }
 
 .pda-history__head {
