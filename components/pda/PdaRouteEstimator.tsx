@@ -37,6 +37,8 @@ import {
 } from "@/lib/pda/route-types";
 import type { PdaTerminalItem } from "@/sdk/app/pda";
 
+import { PortSearchField } from "@/components/ports/PortSearchField";
+import type { PortChoice } from "@/lib/ports/port-search";
 import "@/components/design-system/asb-ds.css";
 import "./pda-route-estimator.css";
 
@@ -850,14 +852,16 @@ function PortChoice({
   onLoadPort: (value: string) => void;
   onDischargePort: (value: string) => void;
 }) {
+  // searched, not scrolled: ~300 verified ports (owner, 19 Oct 2026)
+  const portChoices = React.useMemo<PortChoice[]>(() => ports.map((port) => ({ locode: port.locode, name: port.name, country: port.country })), [ports]);
   return (
     <section className="pda-port-choice asb-card" aria-labelledby="pda-port-choice-title">
       <div>
         <h2 id="pda-port-choice-title">Choose the exact ports</h2>
         <p>The selected cargo carries a range or area. Pricing starts only after both specific ports are confirmed.</p>
       </div>
-      <label>Load port<select className="asb-control" value={loadPort} onChange={(event) => onLoadPort(event.target.value)}><option value="">Choose load port</option>{ports.map((port) => <option key={`load-${port.locode}`} value={port.locode}>{port.name} · {port.locode}</option>)}</select></label>
-      <label>Discharge port<select className="asb-control" value={dischargePort} onChange={(event) => onDischargePort(event.target.value)}><option value="">Choose discharge port</option>{ports.map((port) => <option key={`discharge-${port.locode}`} value={port.locode}>{port.name} · {port.locode}</option>)}</select></label>
+      <label>Load port<PortSearchField options={portChoices} value={loadPort || null} onChange={(port) => onLoadPort(port?.locode ?? "")} inputClassName="asb-control" changeClassName="asb-button" placeholder="Search load port: name, LOCODE or country…" /></label>
+      <label>Discharge port<PortSearchField options={portChoices} value={dischargePort || null} onChange={(port) => onDischargePort(port?.locode ?? "")} inputClassName="asb-control" changeClassName="asb-button" placeholder="Search discharge port: name, LOCODE or country…" /></label>
     </section>
   );
 }

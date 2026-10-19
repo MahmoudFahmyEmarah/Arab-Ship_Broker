@@ -1,5 +1,7 @@
 import { saveSupplier, setSupplierMember } from "@/app/(admin)/admin/bunker/actions";
 import type { AdminBunkerDashboard, AdminBunkerSupplier } from "@/lib/bunker/admin";
+import { PortMultiField } from "@/components/ports/PortMultiField";
+import type { PortChoice } from "@/lib/ports/port-search";
 
 // Seeded pilot rows (migration 20261003108000) carry sample contacts until replaced.
 const isPlaceholder = (s: AdminBunkerSupplier) =>
@@ -11,8 +13,7 @@ const ago = (iso: string | null) => {
   return d <= 0 ? "today" : `${d} d ago`;
 };
 
-function SupplierForm({ s }: { s?: AdminBunkerSupplier }) {
-  const ports = s?.ports.map((p) => `${p.locode}${p.isPrimary ? "*" : ""}`).join(", ") ?? "";
+function SupplierForm({ s, portChoices }: { s?: AdminBunkerSupplier; portChoices: PortChoice[] }) {
   return (
     <form action={saveSupplier} className="adm-settings-grid">
       {s && <input type="hidden" name="id" value={s.id} />}
@@ -25,9 +26,9 @@ function SupplierForm({ s }: { s?: AdminBunkerSupplier }) {
       <label className="adm-field"><span className="adm-field__label">Country</span>
         <input className="adm-input" name="country" defaultValue={s?.country ?? ""} />
       </label>
-      <label className="adm-field"><span className="adm-field__label">Ports (LOCODEs, * = primary)</span>
-        <input className="adm-input" name="ports" placeholder="EGPSD*, EGSUZ" defaultValue={ports} />
-      </label>
+      <div className="adm-field"><span className="adm-field__label">Ports (★ = primary)</span>
+        <PortMultiField name="ports" options={portChoices} defaultValue={s?.ports ?? []} inputClassName="adm-input" ariaLabel="Add a supplier port" />
+      </div>
       <label className="adm-field"><span className="adm-field__label">Trust score 0–100</span>
         <input className="adm-input" name="trustScore" type="number" min={0} max={100} defaultValue={s?.trustScore ?? 50} />
       </label>
@@ -69,7 +70,7 @@ function MemberForm({ supplierId }: { supplierId: string }) {
   );
 }
 
-export function SuppliersTab({ dash, canEdit }: { dash: AdminBunkerDashboard; canEdit: boolean }) {
+export function SuppliersTab({ dash, canEdit, portChoices }: { dash: AdminBunkerDashboard; canEdit: boolean; portChoices: PortChoice[] }) {
   const alerts = dash.alerts.filter((a) => a.kind !== "pending_approval");
   const placeholders = dash.suppliers.filter(isPlaceholder);
   return (
@@ -83,7 +84,7 @@ export function SuppliersTab({ dash, canEdit }: { dash: AdminBunkerDashboard; ca
             </span>
           </div>
           <ol style={{ margin: 0, paddingLeft: 18, fontSize: "var(--fs-body-sm)", lineHeight: 1.7 }}>
-            <li>Open the supplier below and replace the contact name, email, phone, website and ports (LOCODEs, <code>*</code> marks the primary port); clear the notes; save.</li>
+            <li>Open the supplier below and replace the contact name, email, phone, website and ports (search to add, ★ marks the primary port); clear the notes; save.</li>
             <li>Ask the supplier&apos;s contact to sign up on the platform, then link that account under <em>Member email → Editor</em>.</li>
             <li>Tick <em>Verified</em> only for a first-hand physical supplier: its prices then go live without approval.</li>
             <li>Send the contact the link <code>/dashboard/bunker-supplier</code>. Nothing appears on the ticker until they publish a price.</li>
@@ -136,7 +137,7 @@ export function SuppliersTab({ dash, canEdit }: { dash: AdminBunkerDashboard; ca
                 </table>
               </div>
               {canEdit && <MemberForm supplierId={s.id} />}
-              {canEdit ? <SupplierForm s={s} /> : (
+              {canEdit ? <SupplierForm s={s} portChoices={portChoices} /> : (
                 <div className="adm-kv">
                   <span className="adm-kv__k">Contact</span>
                   <span className="adm-kv__v">{[s.contactName, s.contactEmail, s.contactPhone].filter(Boolean).join(" · ") || "—"}</span>
@@ -153,7 +154,7 @@ export function SuppliersTab({ dash, canEdit }: { dash: AdminBunkerDashboard; ca
             <span className="adm-card__title">Add a supplier</span>
             <span className="adm-card__sub">First-hand physical suppliers only. Access is by invitation: link a member account after saving.</span>
           </div>
-          <SupplierForm />
+          <SupplierForm portChoices={portChoices} />
         </section>
       )}
     </>

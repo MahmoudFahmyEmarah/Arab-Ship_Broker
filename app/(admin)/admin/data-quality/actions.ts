@@ -713,20 +713,22 @@ export async function validateDraft(table: string, row: Record<string, unknown>,
 }
 
 // ── ports registry ───────────────────────────────────────────────────────
-export async function getPortsRegistry(): Promise<Result<{ settings: Pick<DqSettings, "registry_release" | "registry_imported_at">; drift: DqDriftRow[]; exceptions: DqPortException[]; stats: { ports: number; adopted: number; requested: number; absent: number; registry: number; registryCountries: number } }>> {
+export async function getPortsRegistry(): Promise<Result<{ settings: Pick<DqSettings, "registry_release" | "registry_imported_at">; drift: DqDriftRow[]; exceptions: DqPortException[]; stats: { ports: number; adopted: number; requested: number; absent: number; registry: number; registryCountries: number }; portChoices: { locode: string; name: string; country: string | null }[] }>> {
   try {
     const { sb } = await gate("view");
     const [settings, drift, exc, ports, reg] = await Promise.all([
       getSettings(sb), sb.rpc("fn_dq_port_drift"), sb.from("dq_port_exceptions").select("*").order("requested_at", { ascending: false }),
-      sb.from("ports").select("locode, unlocode_status"), sb.from("unlocode_registry").select("country", { count: "exact" }).limit(20000),
+      sb.from("ports").select("locode, unlocode_status, trade_name, country, is_active"), sb.from("unlocode_registry").select("country", { count: "exact" }).limit(20000),
     ]);
     if (drift.error) throw new Error(drift.error.message);
-    const p = (ports.data ?? []) as { unlocode_status: string | null }[];
+    const p = (ports.data ?? []) as { locode: string; unlocode_status: string | null; trade_name: string | null; country: string | null; is_active: boolean | null }[];
     const countries = new Set(((reg.data ?? []) as { country: string }[]).map((x) => x.country));
     return { success: true, data: {
       settings: { registry_release: settings.registry_release, registry_imported_at: settings.registry_imported_at },
       drift: (drift.data ?? []) as DqDriftRow[], exceptions: (exc.data ?? []) as DqPortException[],
       stats: { ports: p.length, adopted: p.filter((x) => x.unlocode_status?.startsWith("A")).length, requested: p.filter((x) => x.unlocode_status && /^R/.test(x.unlocode_status)).length, absent: p.filter((x) => !x.unlocode_status).length, registry: reg.count ?? 0, registryCountries: countries.size },
+      // the exception form searches our active ports instead of a hand-typed LOCODE (owner, 19 Oct 2026)
+      portChoices: p.filter((x) => x.is_active !== false).map((x) => ({ locode: x.locode, name: x.trade_name ?? x.locode, country: x.country })).sort((a, b) => a.name.localeCompare(b.name)),
     } };
   } catch (e) { return fail(e, "Could not load the ports registry"); }
 }

@@ -8,6 +8,7 @@ import { PricesTab } from "@/components/admin/bunker/PricesTab";
 import { SuppliersTab } from "@/components/admin/bunker/SuppliersTab";
 import { HistoryTab } from "@/components/admin/bunker/HistoryTab";
 import type { AdminBunkerDashboard } from "@/lib/bunker/admin";
+import type { PortChoice } from "@/lib/ports/port-search";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,11 @@ export default async function AdminBunkerPage({
   // admin_bunker_dashboard is service-role only and re-checks the actor.
   const { data, error } = await getSupabaseAdminClient().rpc("admin_bunker_dashboard", { p_actor: admin.rowId });
   const dash = data as AdminBunkerDashboard | null;
+  // supplier ports are searched from the verified ports, never typed as LOCODEs (owner, 19 Oct 2026)
+  const portChoices: PortChoice[] = tab === "suppliers"
+    ? ((await getSupabaseAdminClient().from("ports").select("locode,trade_name,country").eq("is_active", true).eq("is_verified", true).order("trade_name").limit(2000)).data ?? [])
+        .map((p) => ({ locode: p.locode, name: p.trade_name, country: p.country }))
+    : [];
 
   if (error || !dash) {
     return (
@@ -76,7 +82,7 @@ export default async function AdminBunkerPage({
       </nav>
 
       {tab === "prices" && <PricesTab dash={dash} canEdit={canEdit} />}
-      {tab === "suppliers" && <SuppliersTab dash={dash} canEdit={canEdit} />}
+      {tab === "suppliers" && <SuppliersTab dash={dash} canEdit={canEdit} portChoices={portChoices} />}
       {tab === "history" && <HistoryTab dash={dash} />}
     </div>
   );
