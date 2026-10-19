@@ -89,7 +89,8 @@ ok(partFailureSummary({ frame: failed, load: failed, discharge: okPart(discharge
 ok(partFailureSummary({ frame: okPart(frame), load: PDA_PART_LOADING, discharge: okPart(discharge) }) === "", "no message while nothing has failed");
 
 // 3 · the server
-const actions = readFileSync("app/(dashboard)/dashboard/ports-da/actions.ts", "utf8");
+// a Windows (CRLF) checkout must read exactly as CI does, or the slices below run to the end of the file
+const actions = readFileSync("app/(dashboard)/dashboard/ports-da/actions.ts", "utf8").replace(/\r\n/g, "\n");
 const legBody = actions.slice(actions.indexOf("export async function previewPdaRouteLeg"), actions.indexOf("export async function previewPdaRouteFrame"));
 const frameBody = actions.slice(actions.indexOf("export async function previewPdaRouteFrame"), actions.indexOf("/**\n * Transits on the measured passage"));
 ok(/const route = await prepareRoutePreview\(raw\);/.test(legBody) && /const route = await prepareRoutePreview\(raw\);/.test(frameBody),
@@ -101,7 +102,7 @@ ok(/composePdaRoutePreview\(\{ displayCurrency: route\.input\.displayCurrency/.t
 ok(!/save|insert|persist/i.test(legBody + frameBody), "the part actions compute only; nothing is persisted");
 
 // 4 · the page
-const page = readFileSync("components/pda/PdaRouteEstimator.tsx", "utf8");
+const page = readFileSync("components/pda/PdaRouteEstimator.tsx", "utf8").replace(/\r\n/g, "\n");
 ok(!/previewPdaRoute\(/.test(page) && /previewPdaRouteLeg\(input, part\)/.test(page) && /previewPdaRouteFrame\(input\)/.test(page),
   "the page runs the three parts, not the single call");
 ok(/requestSequence\.current !== sequence \|\| partTokens\.current\[part\] !== token/.test(page),
