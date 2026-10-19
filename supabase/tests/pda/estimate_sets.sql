@@ -119,9 +119,12 @@ begin
   perform set_config('request.jwt.claim.sub', owner::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub',owner,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
   lst := public.list_my_pda_estimate_sets(20, null);
-  if jsonb_array_length(lst) <> 2 or lst->0->>'id' <> r3->>'id' or (lst->0->>'isLatest')::boolean is not true
-     or (lst->1->>'isLatest')::boolean is not false or (lst->0->>'mine')::boolean is not true then
-    raise exception 'E6: the owner lists two versions, newest first, latest flagged: %', lst; end if;
+  -- both sets were saved in this one transaction (same created_at), so their order is not asserted here
+  if jsonb_array_length(lst) <> 2
+     or (select (x->>'isLatest')::boolean from jsonb_array_elements(lst) x where x->>'id' = r3->>'id') is not true
+     or (select count(*) from jsonb_array_elements(lst) x where (x->>'isLatest')::boolean is false) <> 1
+     or exists (select 1 from jsonb_array_elements(lst) x where (x->>'mine')::boolean is not true) then
+    raise exception 'E6: the owner lists both versions, the latest flagged: %', lst; end if;
   one := public.get_pda_estimate_set((r3->>'id')::uuid);
   if one->'load'->>'portLocode' <> pol or one->'discharge'->>'portLocode' <> pod or jsonb_array_length(one->'discharge'->'lines') <> 1 then
     raise exception 'E6: the owner opens the set with both legs: %', one; end if;
