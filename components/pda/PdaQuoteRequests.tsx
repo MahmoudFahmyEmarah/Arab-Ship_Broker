@@ -15,7 +15,7 @@ import { PDA_ROUTE_SERVICE_CODES, type PdaRouteServiceCode } from "@/lib/pda/rou
 const money = (n: number, c: string) => `${c} ${new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}`;
 const day = (iso: string) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" }) : "—");
 
-export function PdaQuoteRequests({ setId, loadPort, dischargePort, isLatest }: { setId: string; loadPort: string; dischargePort: string; isLatest: boolean }) {
+export function PdaQuoteRequests({ setId, loadPort, dischargePort, isLatest, mine }: { setId: string; loadPort: string; dischargePort: string; isLatest: boolean; mine: boolean }) {
   const [requests, setRequests] = React.useState<PdaQuoteRequest[] | null>(null);
   const [error, setError] = React.useState("");
   const sequence = React.useRef(0);
@@ -34,7 +34,9 @@ export function PdaQuoteRequests({ setId, loadPort, dischargePort, isLatest }: {
       {error ? <p className="pda-save__error" role="alert">{error}</p> : null}
       {requests === null && !error ? <p className="pda-history__status" role="status">Loading quote requests…</p> : null}
       {requests?.map((request) => <RequestRow key={request.requestId} request={request} onChange={() => void load()} />)}
-      {isLatest ? <NewRequest setId={setId} loadPort={loadPort} dischargePort={dischargePort} onSent={() => void load()} /> : (
+      {!mine ? (
+        <p className="pda-history__status">Only the member who saved this estimate can request quotes for it.</p>
+      ) : isLatest ? <NewRequest setId={setId} loadPort={loadPort} dischargePort={dischargePort} onSent={() => void load()} /> : (
         <p className="pda-history__status">Quotes are requested from the latest version of an estimate.</p>
       )}
     </div>

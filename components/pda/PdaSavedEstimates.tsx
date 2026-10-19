@@ -216,7 +216,7 @@ export function PdaSavedEstimates({ refreshKey }: { refreshKey: number }) {
                 Quotes
               </button>
               {openQuotes === item.id ? (
-                <PdaQuoteRequests setId={item.id} loadPort={item.loadPort} dischargePort={item.dischargePort} isLatest={item.isLatest} />
+                <PdaQuoteRequests setId={item.id} loadPort={item.loadPort} dischargePort={item.dischargePort} isLatest={item.isLatest} mine={item.mine} />
               ) : null}
             </li>
           ))}

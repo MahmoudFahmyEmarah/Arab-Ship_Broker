@@ -155,7 +155,7 @@ export function validateQuoteLines(drafts: readonly PdaQuoteLineDraft[], allowed
     const label = line.label.trim();
     const amount = line.amount.trim();
     if (!label || label.length > 200) return { ok: false, error: "Every line needs a label (up to 200 characters)." };
-    if (!/^[0-9]+(\.[0-9]{1,2})?$/.test(amount)) return { ok: false, error: `“${label}”: the amount must be a number with up to 2 decimals.` };
+    if (!/^[0-9]{1,12}(\.[0-9]{1,2})?$/.test(amount)) return { ok: false, error: `“${label}”: the amount must be a number (up to 12 digits) with up to 2 decimals.` };
     if (line.serviceCode && !(allowed as readonly string[]).includes(line.serviceCode)) return { ok: false, error: `“${label}”: choose one of the requested services.` };
     total += Number(amount);
     out.push({ label, serviceCode: line.serviceCode || null, amount });

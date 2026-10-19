@@ -1,6 +1,6 @@
 -- PDA · quote requests answered by agencies (20261019100000, O2ALL-009 phase 2). BEGIN … ROLLBACK; run as the owner.
 --   Q1  a request from a saved set carries a MASKED snapshot (no vessel name, IMO, ids or member); reveal adds the company only
---   Q2  only agencies listed at that port, only the latest set, only a member who can read the set; services validated
+--   Q2  only agencies listed at that port, only the latest set, only the member who SAVED the set (not a colleague); services validated
 --   Q3  each agency's staff see only the requests addressed to their agency; a non-staff member sees none
 --   Q4  agency staff quote: total computed, revisions append, invalid lines refused, a non-addressed agency refused
 --   Q5  a decline needs a reason; the requester sees every agency's answer
@@ -15,6 +15,7 @@ declare
   owner_admin uuid := gen_random_uuid();
   member uuid := gen_random_uuid();
   outsider uuid := gen_random_uuid();
+  colleague uuid := gen_random_uuid();
   staff_a uuid := gen_random_uuid();
   staff_b uuid := gen_random_uuid();
   member_org uuid := gen_random_uuid();
@@ -31,17 +32,18 @@ begin
                           raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
   select '00000000-0000-0000-0000-000000000000'::uuid, f.id, 'authenticated', 'authenticated', f.email,
          crypt('PdaQuotes1!', gen_salt('bf')), now(), '{}'::jsonb, '{}'::jsonb, now(), now()
-  from (values (owner_admin, 'pda-q-admin@example.test'), (member, 'pda-q-member@example.test'), (outsider, 'pda-q-outsider@example.test'),
+  from (values (owner_admin, 'pda-q-admin@example.test'), (member, 'pda-q-member@example.test'), (outsider, 'pda-q-outsider@example.test'), (colleague, 'pda-q-colleague@example.test'),
                (staff_a, 'pda-q-staff-a@example.test'), (staff_b, 'pda-q-staff-b@example.test')) as f(id, email);
   insert into public.users (id, supabase_user_id, email, full_name, role, is_active, admin_tier, subscription_tier) values
     (owner_admin, owner_admin, 'pda-q-admin@example.test', 'Q Admin', 'admin', true, null, 'T4'),
     (member, member, 'pda-q-member@example.test', 'Q Member', 'cargo_owner', true, null, 'T3'),
     (outsider, outsider, 'pda-q-outsider@example.test', 'Q Outsider', 'cargo_owner', true, null, 'T3'),
+    (colleague, colleague, 'pda-q-colleague@example.test', 'Q Colleague', 'cargo_owner', true, null, 'T3'),
     (staff_a, staff_a, 'pda-q-staff-a@example.test', 'Staff A', 'broker', true, null, 'T1'),
     (staff_b, staff_b, 'pda-q-staff-b@example.test', 'Staff B', 'broker', true, null, 'T1');
   insert into public.organizations (id, name) values (member_org, 'Nile Charterers LLC'), (agency_a, 'Agency A SAE'), (agency_b, 'Agency B SAE'), (agency_c, 'Agency C SAE');
   insert into public.organization_members (org_id, user_id, member_role, is_current, status) values
-    (member_org, member, 'admin', true, 'active'), (agency_a, staff_a, 'admin', true, 'active'), (agency_b, staff_b, 'admin', true, 'active');
+    (member_org, member, 'admin', true, 'active'), (member_org, colleague, 'broker', true, 'active'), (agency_a, staff_a, 'admin', true, 'active'), (agency_b, staff_b, 'admin', true, 'active');
   select locode into pol from public.ports where is_active and is_verified order by locode limit 1;
   select locode into pod from public.ports where is_active and is_verified and locode <> pol order by locode limit 1;
   perform public.pda_admin_upsert_agency(owner_admin, agency_a, '{"displayName":"Agency A"}');
@@ -95,6 +97,10 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub',outsider,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
   begin perform public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_a], array['agency']); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_AUTH' then raise exception 'Q2: a member who cannot read the set must be refused, got %', e; end if;
+  perform set_config('request.jwt.claim.sub', colleague::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',colleague,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  begin perform public.create_pda_quote_request((set1->>'id')::uuid, 'load', array[agency_a], array['agency']); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_AUTH' then raise exception 'Q2: a colleague (who can read the set but not accept into it) must be refused, got %', e; end if;
   perform set_config('request.jwt.claim.sub', '', true);
   set2 := public.pda_save_estimate_set(member, member_org, load_req, leg_res, dis_req, jsonb_set(jsonb_set(leg_res, '{totals,native}', '1100'), '{lines,0,amount}', '1100'),
                                         jsonb_set(route, '{totals,allInKnown}', '2100'), (set1->>'id')::uuid);
@@ -126,6 +132,8 @@ begin
   if e is distinct from 'PDA_AUTH' then raise exception 'Q4: staff of another agency must be refused, got %', e; end if;
   begin perform public.submit_pda_agency_quote((req->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency","amount":"12.345"}]', current_date + 30); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_VALIDATION' then raise exception 'Q4: 3-decimal amount must be refused, got %', e; end if;
+  begin perform public.submit_pda_agency_quote((req->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency","amount":"1234567890123"}]', current_date + 30); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'Q4: a 13-digit amount must be refused, got %', e; end if;
   begin perform public.submit_pda_agency_quote((req->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Towage","serviceCode":"towage","amount":"10"}]', current_date + 30); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_VALIDATION' then raise exception 'Q4: a service not requested must be refused, got %', e; end if;
   q := public.submit_pda_agency_quote((req->>'requestId')::uuid, agency_a, 'usd',
@@ -141,7 +149,10 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_b,'app_metadata',jsonb_build_object('role','broker'))::text, true);
   begin perform public.decline_pda_quote_request((req->>'requestId')::uuid, agency_b, 'no'); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_VALIDATION' then raise exception 'Q5: a decline needs a reason, got %', e; end if;
+  -- an inactive requester's notification never blocks an agency's answer (pre-audit P2-6)
+  update public.users set is_active = false where id = member;
   perform public.decline_pda_quote_request((req->>'requestId')::uuid, agency_b, 'No berth window that week');
+  update public.users set is_active = true where id = member;
   perform set_config('request.jwt.claim.sub', member::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
   mine := (select x from jsonb_array_elements(public.list_my_pda_quote_requests((set1->>'id')::uuid)) x where x->>'requestId' = req->>'requestId');
@@ -172,7 +183,9 @@ begin
   if e is distinct from 'PDA_IMMUTABLE' then raise exception 'Q7: a request edit must be refused, got %', e; end if;
   begin delete from public.pda_quote_requests where id = (req2->>'requestId')::uuid; e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_IMMUTABLE' then raise exception 'Q7: a request delete must be refused, got %', e; end if;
-  raise notice 'Q7 ok: quotes never change; a request only moves open → withdrawn';
+  begin truncate public.pda_quote_request_recipients cascade; e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_IMMUTABLE' then raise exception 'Q7: TRUNCATE of the recipients must be refused, got %', e; end if;
+  raise notice 'Q7 ok: quotes never change; a request only moves open → withdrawn; TRUNCATE refused';
 
   -- Q8 · notifications (when the shared core is installed)
   if v_core then

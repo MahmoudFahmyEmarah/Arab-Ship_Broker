@@ -103,6 +103,8 @@ drop trigger if exists pda_quote_requests_no_truncate on public.pda_quote_reques
 create trigger pda_quote_requests_no_truncate before truncate on public.pda_quote_requests for each statement execute function public.fn_pda_quote_guard();
 drop trigger if exists pda_quote_request_recipients_guard on public.pda_quote_request_recipients;
 create trigger pda_quote_request_recipients_guard before update or delete on public.pda_quote_request_recipients for each row execute function public.fn_pda_quote_guard();
+drop trigger if exists pda_quote_request_recipients_no_truncate on public.pda_quote_request_recipients;
+create trigger pda_quote_request_recipients_no_truncate before truncate on public.pda_quote_request_recipients for each statement execute function public.fn_pda_quote_guard();
 drop trigger if exists pda_agency_quotes_guard on public.pda_agency_quotes;
 create trigger pda_agency_quotes_guard before update or delete on public.pda_agency_quotes for each row execute function public.fn_pda_quote_guard();
 drop trigger if exists pda_agency_quotes_no_truncate on public.pda_agency_quotes;
@@ -157,9 +159,13 @@ begin
   end if;
   if p_leg not in ('load', 'discharge') then raise exception 'PDA_VALIDATION: choose the load or the discharge port' using errcode = '22023'; end if;
   select * into s from public.pda_estimate_sets x where x.id = p_set_id;
-  if s.id is null or not public.fn_can_read_pda_estimate(s.load_estimate_id) then
-    raise exception 'PDA_AUTH: estimate set is not accessible' using errcode = '42501';
+  -- only the member who saved the set asks for quotes: only they can accept one into a new version (pre-audit P1-3),
+  -- and no colleague or admin sends a member's vessel and cargo particulars to agencies
+  if s.id is null or s.owner_user_id <> v_user then
+    raise exception 'PDA_AUTH: only the member who saved this estimate can request quotes for it' using errcode = '42501';
   end if;
+  -- serialised with saving a new version of the same owner's sets (pda_save_estimate_set takes the same lock)
+  perform pg_advisory_xact_lock(hashtext('pda_estimate_set_owner:' || s.owner_user_id::text));
   if exists (select 1 from public.pda_estimate_sets n where n.supersedes_id = s.id) then
     raise exception 'PDA_CONFLICT: request quotes from the latest version of this estimate' using errcode = '40001';
   end if;
@@ -180,8 +186,8 @@ begin
   end if;
   if cardinality(v_agencies) > 10 then raise exception 'PDA_VALIDATION: at most 10 agencies per request' using errcode = '22023'; end if;
 
-  select m.org_id into v_org from public.organization_members m
-   where m.user_id = v_user and m.is_current and m.status = 'active' order by m.org_id limit 1;
+  -- the set's own organisation: the company revealed and the colleagues who may read the answers (pre-audit P2-7)
+  v_org := s.owner_org_id;
 
   -- the MASKED snapshot (A5): what an agency needs to price the call, never who or which vessel
   v_snapshot := jsonb_strip_nulls(jsonb_build_object(
@@ -329,9 +335,9 @@ begin
   end if;
   for v_line in select value from jsonb_array_elements(p_lines) loop
     if char_length(btrim(coalesce(v_line->>'label', ''))) not between 1 and 200
-       or coalesce(v_line->>'amount', '') !~ '^[0-9]+(\.[0-9]{1,2})?$'
+       or coalesce(v_line->>'amount', '') !~ '^[0-9]{1,12}(\.[0-9]{1,2})?$'
        or (nullif(v_line->>'serviceCode', '') is not null and v_line->>'serviceCode' <> all (r.services)) then
-      raise exception 'PDA_VALIDATION: each line needs a label, an amount (up to 2 decimals) and, if given, a requested service' using errcode = '22023';
+      raise exception 'PDA_VALIDATION: each line needs a label, an amount (up to 12 digits and 2 decimals) and, if given, a requested service' using errcode = '22023';
     end if;
     v_lines := v_lines || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
       'label', btrim(v_line->>'label'), 'serviceCode', nullif(v_line->>'serviceCode', ''), 'amount', (v_line->>'amount')::numeric)));
@@ -348,9 +354,11 @@ begin
    where request_id = r.id and agency_org_id = p_agency_org_id;
 
   select a.display_name into v_agency from public.pda_agencies a where a.org_id = p_agency_org_id;
+  if exists (select 1 from public.users u where u.id = r.requester_user_id and u.is_active) then
   perform public.fn_notification_enqueue(r.requester_user_id, 'pda.quote_received', 'pda-q:' || v_id,
     'Quote received', v_agency || ' quoted ' || upper(p_currency) || ' ' || to_char(v_total, 'FM999G999G999G990D00') || ' for ' || r.port_locode || '.',
     '/dashboard/ports-da', 'normal', jsonb_build_object('requestId', r.id, 'port', r.port_locode));
+  end if;
   return jsonb_build_object('quoteId', v_id, 'revision', v_rev, 'total', v_total);
 end $$;
 revoke all on function public.submit_pda_agency_quote(uuid, uuid, text, jsonb, date, text, text) from public, anon;
@@ -374,9 +382,11 @@ begin
   update public.pda_quote_request_recipients set status = 'declined', decline_reason = btrim(p_reason), responded_at = now()
    where request_id = r.id and agency_org_id = p_agency_org_id;
   select a.display_name into v_agency from public.pda_agencies a where a.org_id = p_agency_org_id;
+  if exists (select 1 from public.users u where u.id = r.requester_user_id and u.is_active) then
   perform public.fn_notification_enqueue(r.requester_user_id, 'pda.quote_declined', 'pda-qd:' || r.id || ':' || p_agency_org_id,
     'Quote request declined', v_agency || ' declined the quote request for ' || r.port_locode || '.',
     '/dashboard/ports-da', 'info', jsonb_build_object('requestId', r.id, 'port', r.port_locode));
+  end if;
   return jsonb_build_object('requestId', r.id, 'status', 'declined');
 end $$;
 revoke all on function public.decline_pda_quote_request(uuid, uuid, text) from public, anon;

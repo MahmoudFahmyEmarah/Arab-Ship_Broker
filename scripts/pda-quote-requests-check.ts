@@ -40,10 +40,11 @@ ok(good.ok && good.lines.length === 2 && good.total === 1250.6 && good.lines[0]!
   "blank lines are ignored; labels trimmed; 'Other' lines carry no service; the total is rounded to cents");
 ok(!validateQuoteLines([{ label: "Agency", serviceCode: "agency", amount: "12.345" }], ["agency"]).ok
   && !validateQuoteLines([{ label: "Agency", serviceCode: "agency", amount: "-5" }], ["agency"]).ok
+  && !validateQuoteLines([{ label: "Agency", serviceCode: "agency", amount: "1234567890123" }], ["agency"]).ok
   && !validateQuoteLines([{ label: "Towage", serviceCode: "towage", amount: "5" }], ["agency"]).ok
   && !validateQuoteLines([{ label: "", serviceCode: "", amount: "5" }], ["agency"]).ok
   && !validateQuoteLines([], ["agency"]).ok,
-  "the form refuses 3-decimal or negative amounts, services that were not requested, unlabelled lines and an empty quote");
+  "the form refuses 3-decimal, negative or 13-digit amounts, services that were not requested, unlabelled lines and an empty quote");
 
 // 2 · the database
 const migration = read("supabase/migrations/20261019100000_pda_quote_requests.sql");
@@ -64,13 +65,16 @@ const create = body.slice(body.indexOf("create or replace function public.create
 const snapshot = create.slice(create.indexOf("v_snapshot :="), create.indexOf("insert into public.pda_quote_requests"));
 ok(!/vesselName|vessel_name|imo|vesselId|vesselAvailabilityId|cargoId|full_name|email|user_id/i.test(snapshot) && /'requester', case when coalesce\(p_reveal_identity, false\)/.test(snapshot),
   "the masked snapshot never reads the vessel name, IMO, listing ids or the member; the company only on reveal");
-ok(/not public\.fn_pda_member_entitled\(\)/.test(create) && /fn_can_read_pda_estimate\(s\.load_estimate_id\)/.test(create) && /where n\.supersedes_id = s\.id/.test(create),
-  "a request needs the estimator gate, a readable set and its latest version");
+ok(/not public\.fn_pda_member_entitled\(\)/.test(create) && /s\.owner_user_id <> v_user/.test(create) && /where n\.supersedes_id = s\.id/.test(create)
+  && /pg_advisory_xact_lock\(hashtext\('pda_estimate_set_owner:'/.test(create) && /v_org := s\.owner_org_id;/.test(create),
+  "a request needs the estimator gate, the set's OWNER (no colleague or admin) and its latest version under the owner's save lock; the set's own organisation");
 ok(/pa\.port_locode = e\.port_locode/.test(create) && /a\.status = 'active' and pa\.status = 'active'/.test(create) && /cardinality\(v_agencies\) > 10/.test(create),
   "only active agencies actively listed at that port, at most 10 per request");
 ok(/fn_pda_is_agency_staff\(p_agency_org_id\)/.test(body.slice(body.indexOf("function public.submit_pda_agency_quote")))
-  && /'\^\[0-9\]\+\(\\\.\[0-9\]\{1,2\}\)\?\$'/.test(body) && /coalesce\(max\(q\.revision\), 0\) \+ 1/.test(body),
-  "only staff of an addressed agency quote; amounts have at most 2 decimals; a revision is n+1, never an edit");
+  && /'\^\[0-9\]\{1,12\}\(\\\.\[0-9\]\{1,2\}\)\?\$'/.test(body) && /coalesce\(max\(q\.revision\), 0\) \+ 1/.test(body),
+  "only staff of an addressed agency quote; amounts have at most 12 digits and 2 decimals; a revision is n+1, never an edit");
+ok(/before truncate on public\.pda_quote_request_recipients/.test(body) && (body.match(/where u\.id = r\.requester_user_id and u\.is_active/g) ?? []).length === 2,
+  "recipients refuse TRUNCATE; an inactive requester's notification never blocks an agency's answer");
 ok(/tg_table_name = 'pda_agency_quotes' or tg_op in \('DELETE', 'TRUNCATE'\)/.test(body) && /before truncate on public\.pda_agency_quotes/.test(body)
   && /old\.status <> 'open' or new\.status <> 'withdrawn'/.test(body), "quotes are append-only; a request only moves open → withdrawn");
 ok(/'pda\.quote_request'/.test(body) && /'pda\.quote_received'/.test(body) && /'pda\.quote_declined'/.test(body) && /'\/dashboard\/agency'/.test(body),
