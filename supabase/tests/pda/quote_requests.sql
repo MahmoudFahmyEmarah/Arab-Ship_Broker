@@ -53,7 +53,7 @@ begin
 
   -- a saved set (two manual-quote legs) with identifying vessel facts that must never leave in a request
   load_req := jsonb_build_object('portLocode', pol, 'callDate', '2026-11-01',
-    'vessel', jsonb_build_object('vesselId', gen_random_uuid(), 'vesselName', 'MV SECRET NAME', 'imo', '9999999', 'vesselType', 'Bulk carrier',
+    'vessel', jsonb_build_object('vesselName', 'MV SECRET NAME', 'imo', '9999999', 'vesselType', 'Bulk carrier',
                                  'gt', 17000, 'dwt', 28000, 'loaM', 169.4, 'registeredMaxDraftM', 9.8, 'flagState', 'Malta'),
     'call', jsonb_build_object('days', 3.5, 'cargoQuantityMt', 26000, 'cargoStatus', 'laden', 'voyageScope', 'international', 'location', 'alongside',
                                'requestedServices', jsonb_build_array('agency')));
