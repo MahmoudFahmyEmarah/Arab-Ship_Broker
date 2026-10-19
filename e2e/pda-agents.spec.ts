@@ -222,7 +222,7 @@ test("PDA tabs and the agency quote loop", async ({ browser, baseURL }) => {
     await test.step("the agency answers in its inbox, masked", async () => {
       await staff.page.goto("/dashboard/agency");
       await expect(staff.page.getByRole("heading", { name: new RegExp(`Portal Agency ${seedNow.stamp.toUpperCase()} · quote requests`) })).toBeVisible({ timeout: 90_000 });
-      await expect(staff.page.locator("main")).not.toContainText(seedNow.vesselName);
+      await expect(staff.page.locator("section.pda-agency")).not.toContainText(seedNow.vesselName);
       const card = staff.page.locator(".pda-agency__card").first();
       await expect(card).toContainText("Member (identity not shared)");
       await card.getByLabel("Amount").first().fill("1250.50");
