@@ -15,6 +15,8 @@ export interface PdaAgencyQuote {
   reference: string | null;
   note: string | null;
   createdAt: string;
+  /** accepted into a new version of the estimate (Agents phase 3) */
+  accepted: boolean;
 }
 
 export interface PdaRequestAgency {
@@ -90,6 +92,7 @@ function parseQuotes(raw: unknown): PdaAgencyQuote[] {
       reference: str(q.reference),
       note: str(q.note),
       createdAt: String(q.createdAt ?? ""),
+      accepted: q.accepted === true,
     };
   }).filter((q) => q.quoteId);
 }

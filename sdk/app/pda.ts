@@ -5,6 +5,7 @@ import { parsePdaPortsWorkspace, type PdaPortsWorkspace } from "@/lib/pda/ports-
 import { parsePdaPreferences, type PdaPreferences, type PdaStartTab } from "@/lib/pda/preferences";
 import { parsePdaAdminAgencies, parsePdaAgencies, type PdaAdminAgency, type PdaAgency } from "@/lib/pda/agents";
 import { parsePdaAgencyInbox, parsePdaQuoteRequests, type PdaAgencyInboxItem, type PdaQuoteRequest } from "@/lib/pda/quote-requests";
+import { parsePdaQuoteAcceptanceContext, type PdaQuoteAcceptanceContext } from "@/lib/pda/quote-acceptance";
 import {
   parsePdaSaveSetResult,
   parsePdaSetDetail,
@@ -215,4 +216,39 @@ export async function submitPdaAgencyQuote(supabase: SupabaseClient, input: {
 export async function declinePdaQuoteRequest(supabase: SupabaseClient, requestId: string, agencyId: string, reason: string): Promise<void> {
   const { error } = await supabase.rpc("decline_pda_quote_request", { p_request_id: requestId, p_agency_org_id: agencyId, p_reason: reason });
   if (error) throw new Error(error.message);
+}
+
+/** Service read: the quote and the saved route input an acceptance is rebuilt from (the requester only). */
+export async function getPdaQuoteAcceptanceContext(admin: SupabaseClient, actorId: string, quoteId: string): Promise<PdaQuoteAcceptanceContext> {
+  const { data, error } = await admin.rpc("pda_quote_acceptance_context", { p_actor: actorId, p_quote_id: quoteId });
+  if (error) throw new Error(error.message);
+  return parsePdaQuoteAcceptanceContext(data);
+}
+
+/** Service command: save the new version with the quoted port priced from the quote, and record the acceptance. */
+export async function acceptPdaAgencyQuote(
+  admin: SupabaseClient,
+  input: {
+    actorId: string;
+    ownerOrgId: string | null;
+    quoteId: string;
+    loadRequest: PdaRequest;
+    loadResult: PdaCalculationResult;
+    dischargeRequest: PdaRequest;
+    dischargeResult: PdaCalculationResult;
+    route: PdaRouteSnapshot;
+  },
+): Promise<PdaSaveSetResult> {
+  const { data, error } = await admin.rpc("pda_accept_agency_quote", {
+    p_actor: input.actorId,
+    p_owner_org_id: input.ownerOrgId,
+    p_quote_id: input.quoteId,
+    p_load_request: input.loadRequest,
+    p_load_result: input.loadResult,
+    p_discharge_request: input.dischargeRequest,
+    p_discharge_result: input.dischargeResult,
+    p_route: input.route,
+  });
+  if (error) throw new Error(error.message);
+  return parsePdaSaveSetResult(data);
 }

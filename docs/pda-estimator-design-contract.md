@@ -163,7 +163,14 @@ answered by the agencies themselves are phase 2, see `docs/pda-agents-workspace-
 independently with its own retry (`previewPdaRouteLeg` / `previewPdaRouteFrame`), and the **Saved** state is real: one
 immutable estimate set referencing both immutable leg estimates, content-hashed by the database, versioned by
 supersede (`pda_save_estimate_set`), listed in "Saved estimates" and exported as a deterministic PDF of the saved set only.
-Still not claimed: agency accounts and quote requests (Agents phase 2) and Fixture linkage of a saved set.
+**Update 19 Oct 2026 (Agents phases 2–3):** a member requests quotes for one port of the latest saved set from agencies
+listed there (`create_pda_quote_request`, masked snapshot unless the member shares their company); agency staff answer
+in `/dashboard/agency` (append-only quotes, revisions, reasoned declines). Each quote is shown beside the member's own
+estimate for that port (a difference only in the same currency). Accepting one (`pda_accept_agency_quote`, service only)
+saves a new version: the quoted port is priced from the quote's lines (basis `agency_quote`, attributed to the agency,
+checked line by line by the database), the other port and the transits are recomputed at today's tariffs, and the
+member confirms the figures first. An agency-quoted port counts as sourced only for the services its lines name.
+Still not claimed: Fixture linkage of a saved set.
 
 ## File ownership
 

@@ -20,7 +20,8 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaCalculationContext, getPdaEstimateSet, listMyPdaEstimateSets, listPdaPortAgents, listPdaPortsWorkspace, savePdaEstimate, savePdaEstimateSet, setMyPdaPreferences } from "@/sdk/app/pda";
 import type { PdaAgency } from "@/lib/pda/agents";
 import type { PdaQuoteRequest } from "@/lib/pda/quote-requests";
-import { createPdaQuoteRequest, listMyPdaQuoteRequests, withdrawPdaQuoteRequest } from "@/sdk/app/pda";
+import { acceptPdaAgencyQuote, createPdaQuoteRequest, getPdaQuoteAcceptanceContext, listMyPdaQuoteRequests, withdrawPdaQuoteRequest } from "@/sdk/app/pda";
+import { pdaAgencyQuoteLegResult, type PdaAcceptableQuote } from "@/lib/pda/quote-acceptance";
 import { PDA_OWNER_MARKER, pdaRouteSnapshot, type PdaEstimateSetDetail, type PdaEstimateSetSummary, type PdaSaveSetResult } from "@/lib/pda/estimate-sets";
 import type { PdaPreferences, PdaStartTab } from "@/lib/pda/preferences";
 import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
@@ -688,5 +689,100 @@ export async function withdrawPdaQuotes(requestId: string): Promise<ActionResult
     return { ok: true, data: null };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "The request could not be withdrawn") };
+  }
+}
+
+/** The port of the new version, priced from the accepted quote (Agents phase 3): no tariff, the quote's lines only. */
+async function computeQuotedLeg(route: PreparedRoute, side: PdaRouteSide, quote: PdaAcceptableQuote): Promise<PdaRouteLegPreview> {
+  const leg = side === "load" ? route.input.load : route.input.discharge;
+  const canonical = canonicalRouteLeg({
+    leg: { ...leg, manualLines: undefined },
+    vessel: route.vessel,
+    cargo: route.cargo,
+    quantityMt: route.input.selection.quantityMt,
+    days: side === "load" ? route.timeline.loadPortDays : route.timeline.dischargePortDays,
+    manualActorLabel: route.manualActorLabel,
+    flagState: route.flagState,
+  });
+  const fx = await forDisplayCurrency(route.supabase, canonical, quote.currency, route.input.displayCurrency);
+  return { side, request: fx.request, result: pdaAgencyQuoteLegResult(quote, fx.request), fx: fx.fx };
+}
+
+/**
+ * Rebuild the route for accepting one quote: the saved set's OWN input is read on the server (never from the page),
+ * the quoted port is priced from the quote, the other port and the frame are recomputed exactly as a save does.
+ */
+async function buildQuoteAcceptance(quoteId: string) {
+  if (!REQUEST_ID.test(quoteId)) throw new UserFacingActionError("Unknown quote");
+  const { appUser } = await viewer();
+  const context = await getPdaQuoteAcceptanceContext(getSupabaseAdminClient(), appUser.id, quoteId);
+  if (context.requestStatus !== "open") throw new UserFacingActionError("This quote request was withdrawn.");
+  if (context.accepted) throw new UserFacingActionError("A quote from this request has already been accepted.");
+  if (!context.setIsLatest) throw new UserFacingActionError("This estimate has a newer version; open it and request quotes from there.");
+  if (!context.latestRevision) throw new UserFacingActionError("The agency has sent a newer revision; accept that one.");
+  if (context.quote.validUntil < new Date().toISOString().slice(0, 10)) throw new UserFacingActionError("This quote is no longer valid; ask the agency for a new one.");
+  const route = { ...(await prepareRoutePreview(context.routeInput as PdaRoutePreviewInput)), manualActorLabel: PDA_OWNER_MARKER };
+  const [load, discharge, frame] = await Promise.all([
+    context.leg === "load" ? computeQuotedLeg(route, "load", context.quote) : computeRouteLeg(route, "load"),
+    context.leg === "discharge" ? computeQuotedLeg(route, "discharge", context.quote) : computeRouteLeg(route, "discharge"),
+    computeRouteFrame(route),
+  ]);
+  const result = composePdaRoutePreview({ displayCurrency: route.input.displayCurrency, allocation: route.input.allocation, frame, load, discharge });
+  return { context, route, load, discharge, result };
+}
+
+/** What accepting a quote would save — shown to the member before they confirm. */
+export interface PdaQuoteAcceptancePreview {
+  leg: "load" | "discharge";
+  port: string;
+  agencyName: string;
+  displayCurrency: string;
+  totals: PdaSaveExpectation;
+  notSourced: number;
+}
+
+export async function previewPdaQuoteAcceptance(quoteId: string): Promise<ActionResult<PdaQuoteAcceptancePreview>> {
+  try {
+    const { context, result } = await buildQuoteAcceptance(quoteId);
+    return { ok: true, data: {
+      leg: context.leg, port: context.quote.port, agencyName: context.quote.agencyName, displayCurrency: result.displayCurrency,
+      totals: { loadPortKnown: result.totals.loadPortKnown, dischargePortKnown: result.totals.dischargePortKnown,
+                allInKnown: result.totals.allInKnown, allInComplete: result.totals.allInComplete },
+      notSourced: result.notSourced.length,
+    } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The quote could not be prepared for acceptance") };
+  }
+}
+
+/** Accept the quote: a new version of the saved estimate, the quoted port priced from the quote (O2ALL-009 A4). */
+export async function acceptPdaQuote(quoteId: string, expected: PdaSaveExpectation): Promise<ActionResult<PdaSaveSetResult>> {
+  try {
+    const { context, route, load, discharge, result } = await buildQuoteAcceptance(quoteId);
+    if (!(sameFigure(expected.loadPortKnown, result.totals.loadPortKnown) && sameFigure(expected.dischargePortKnown, result.totals.dischargePortKnown)
+        && sameFigure(expected.allInKnown, result.totals.allInKnown) && sameFigure(expected.allInComplete, result.totals.allInComplete))) {
+      throw new UserFacingActionError("The figures changed since you opened this (a tariff or exchange rate may just have been updated). Nothing was saved; review and accept again.");
+    }
+    const saved = await acceptPdaAgencyQuote(getSupabaseAdminClient(), {
+      actorId: route.appUserId,
+      ownerOrgId: route.ownerOrgId,
+      quoteId: context.quote.quoteId,
+      loadRequest: load.request,
+      loadResult: load.result,
+      dischargeRequest: discharge.request,
+      dischargeResult: discharge.result,
+      route: pdaRouteSnapshot(route.input, result, route.vessel.name ?? null),
+    });
+    return { ok: true, data: saved };
+  } catch (error) {
+    // the database's refusals are written for members (withdrawn, expired, newer revision, already accepted/superseded)
+    if (error instanceof Error && /^PDA_(STATE|CONFLICT|VALIDATION): /.test(error.message)) {
+      const text = error.message.replace(/^PDA_[A-Z]+: /, "");
+      return { ok: false, error: `${text.charAt(0).toUpperCase()}${text.slice(1)}.` };
+    }
+    if (error instanceof Error && /^PDA_AUTH: only the (owner|member)/.test(error.message)) {
+      return { ok: false, error: "Only the member who saved this estimate and requested the quote can accept it." };
+    }
+    return { ok: false, error: actionErrorMessage(error, "The quote could not be accepted") };
   }
 }

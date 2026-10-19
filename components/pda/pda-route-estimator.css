@@ -1600,3 +1600,25 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+
+/* Agents phase 3: a quote beside the member's estimate, and the accept confirmation */
+.pda-quotes__compare {
+  flex-basis: 100%;
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.pda-quotes__confirm {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--ds-blue);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-blue-soft);
+  padding: 8px 10px;
+}
+
+.pda-quotes__confirm p {
+  margin: 0;
+  color: var(--ds-navy);
+  font-size: 12px;
+}

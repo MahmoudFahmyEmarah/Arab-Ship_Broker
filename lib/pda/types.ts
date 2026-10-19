@@ -163,7 +163,8 @@ export interface PdaExplainedLine {
   ruleId: string | null;
   ruleCode: string | null;
   label: string;
-  basis: PdaBasis | "manual";
+  /** "agency_quote": a line of an accepted agency quote (Agents phase 3) — attributed, no tariff rule */
+  basis: PdaBasis | "manual" | "agency_quote";
   quantity: number | null;
   rate: number | null;
   amount: number;
@@ -197,7 +198,8 @@ export interface PdaWarning {
     | "MANUAL_QUOTE_UNMATCHED"
     | "MANUAL_QUOTE_NOT_APPLIED"
     | "MANUAL_LINE"
-    | "NO_APPLICABLE_RULES";
+    | "NO_APPLICABLE_RULES"
+    | "AGENCY_QUOTE";
   message: string;
   ruleCode?: string;
 }
