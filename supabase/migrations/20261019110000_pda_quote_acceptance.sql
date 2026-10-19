@@ -74,7 +74,9 @@ revoke all on function public.fn_pda_recipient_quotes(uuid, uuid) from public, a
 -- a request with an accepted quote is closed (pre-audit P1-1): no further quote, decline or withdraw
 create or replace function public.fn_pda_quote_request_closed()
 returns trigger language plpgsql set search_path to '' as $$
-declare v_request uuid := case when tg_table_name = 'pda_quote_requests' then old.id else new.request_id end;
+-- the row is read through to_jsonb: PL/pgSQL resolves record fields even in a branch that is not taken
+declare v_request uuid := case when tg_table_name = 'pda_quote_requests' then (to_jsonb(old)->>'id')::uuid
+                               else (to_jsonb(new)->>'request_id')::uuid end;
 begin
   if exists (select 1 from public.pda_quote_acceptances a where a.request_id = v_request) then
     raise exception 'PDA_STATE: a quote from this request has already been accepted' using errcode = '55000';
