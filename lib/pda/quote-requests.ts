@@ -61,7 +61,7 @@ export interface PdaAgencyInboxItem {
   snapshot: PdaQuoteSnapshot;
   services: PdaRouteServiceCode[];
   note: string | null;
-  requestStatus: "open" | "withdrawn" | "expired";
+  requestStatus: "open" | "withdrawn" | "expired" | "accepted";
   createdAt: string;
   expiresAt: string;
   myStatus: "sent" | "quoted" | "declined";
@@ -125,7 +125,7 @@ export function parsePdaQuoteRequests(raw: unknown): PdaQuoteRequest[] {
 export function parsePdaAgencyInbox(raw: unknown): PdaAgencyInboxItem[] {
   return (Array.isArray(raw) ? raw : []).map((item) => {
     const r = (item ?? {}) as Record<string, unknown>;
-    const st: PdaAgencyInboxItem["requestStatus"] = r.requestStatus === "withdrawn" ? "withdrawn" : r.requestStatus === "expired" ? "expired" : "open";
+    const st: PdaAgencyInboxItem["requestStatus"] = r.requestStatus === "withdrawn" ? "withdrawn" : r.requestStatus === "expired" ? "expired" : r.requestStatus === "accepted" ? "accepted" : "open";
     const my: PdaAgencyInboxItem["myStatus"] = r.myStatus === "quoted" ? "quoted" : r.myStatus === "declined" ? "declined" : "sent";
     return {
       requestId: String(r.requestId ?? ""),

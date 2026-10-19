@@ -77,7 +77,8 @@ function RequestCard({ item, onDone }: { item: PdaAgencyInboxItem; onDone: () =>
       <div className="pda-agency__head">
         <h2 id={`req-${item.requestId}`}>{s.port?.name ?? item.port} <em>{item.port}{s.port?.terminal ? ` · ${s.port.terminal}` : ""}</em></h2>
         <span className={`pda-agency__status is-${item.requestStatus === "open" ? item.myStatus : item.requestStatus}`}>
-          {item.requestStatus !== "open" ? item.requestStatus : item.myStatus === "sent" ? "awaiting your answer" : item.myStatus}
+          {item.requestStatus === "accepted" ? (item.quotes.some((q) => q.accepted) ? "your quote was accepted" : "another agency's quote was accepted")
+            : item.requestStatus !== "open" ? item.requestStatus : item.myStatus === "sent" ? "awaiting your answer" : item.myStatus}
         </span>
       </div>
       <dl className="pda-agency__facts">

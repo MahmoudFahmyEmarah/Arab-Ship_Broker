@@ -718,13 +718,17 @@ async function buildQuoteAcceptance(quoteId: string) {
   const context = await getPdaQuoteAcceptanceContext(getSupabaseAdminClient(), appUser.id, quoteId);
   if (context.requestStatus !== "open") throw new UserFacingActionError("This quote request was withdrawn.");
   if (context.accepted) throw new UserFacingActionError("A quote from this request has already been accepted.");
+  if (!context.agencyActive) throw new UserFacingActionError("This agency is suspended; its quotes cannot be accepted now.");
   if (!context.setIsLatest) throw new UserFacingActionError("This estimate has a newer version; open it and request quotes from there.");
   if (!context.latestRevision) throw new UserFacingActionError("The agency has sent a newer revision; accept that one.");
   if (context.quote.validUntil < new Date().toISOString().slice(0, 10)) throw new UserFacingActionError("This quote is no longer valid; ask the agency for a new one.");
   const route = { ...(await prepareRoutePreview(context.routeInput as PdaRoutePreviewInput)), manualActorLabel: PDA_OWNER_MARKER };
+  // the other port keeps an earlier accepted quote (pre-audit P1-2); otherwise it is recomputed like any save
+  const sideLeg = (side: PdaRouteSide) => (context.leg === side ? computeQuotedLeg(route, side, context.quote)
+    : context.carried?.leg === side ? computeQuotedLeg(route, side, context.carried.quote) : computeRouteLeg(route, side));
   const [load, discharge, frame] = await Promise.all([
-    context.leg === "load" ? computeQuotedLeg(route, "load", context.quote) : computeRouteLeg(route, "load"),
-    context.leg === "discharge" ? computeQuotedLeg(route, "discharge", context.quote) : computeRouteLeg(route, "discharge"),
+    sideLeg("load"),
+    sideLeg("discharge"),
     computeRouteFrame(route),
   ]);
   const result = composePdaRoutePreview({ displayCurrency: route.input.displayCurrency, allocation: route.input.allocation, frame, load, discharge });
@@ -739,6 +743,8 @@ export interface PdaQuoteAcceptancePreview {
   displayCurrency: string;
   totals: PdaSaveExpectation;
   notSourced: number;
+  /** the other port keeps the quote accepted earlier (named), instead of being recomputed */
+  otherKeeps: string | null;
 }
 
 export async function previewPdaQuoteAcceptance(quoteId: string): Promise<ActionResult<PdaQuoteAcceptancePreview>> {
@@ -749,6 +755,7 @@ export async function previewPdaQuoteAcceptance(quoteId: string): Promise<Action
       totals: { loadPortKnown: result.totals.loadPortKnown, dischargePortKnown: result.totals.dischargePortKnown,
                 allInKnown: result.totals.allInKnown, allInComplete: result.totals.allInComplete },
       notSourced: result.notSourced.length,
+      otherKeeps: context.carried ? context.carried.quote.agencyName : null,
     } };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "The quote could not be prepared for acceptance") };

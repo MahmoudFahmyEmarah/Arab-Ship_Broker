@@ -144,7 +144,7 @@ function RequestRow({ request, estimate, canAccept, onChange, onAccepted }: {
         <div className="pda-quotes__confirm" role="group" aria-label="Confirm the new version">
           <p>
             Accepting saves a <b>new version</b> of this estimate: {confirm.preview.leg === "load" ? "the load port" : "the discharge port"} {confirm.preview.port} is
-            priced from {confirm.preview.agencyName}&apos;s quote; the other port and the transits are recomputed at today&apos;s published tariffs.
+            priced from {confirm.preview.agencyName}&apos;s quote; {confirm.preview.otherKeeps ? <>the other port keeps the quote you accepted from {confirm.preview.otherKeeps}, and the transits are recomputed.</> : <>the other port and the transits are recomputed at today&apos;s published tariffs.</>}
             The current version stays in your history.
           </p>
           <p>

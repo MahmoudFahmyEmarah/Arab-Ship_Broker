@@ -13,6 +13,9 @@
 --   pda_accept_agency_quote(actor, org, quote, legs…, route)   service only: checks, saves the superseding set through
 --                                                pda_save_estimate_set, records the acceptance, notifies the agency
 --   fn_pda_recipient_quotes         — now also says which quote was accepted (both sides)
+--   list_agency_pda_quote_requests  — requestStatus 'accepted' once a quote of the request is accepted
+--   a request with an accepted quote is CLOSED: no new quote, decline or withdraw (triggers)
+--   fn_pda_leg_matches_quote        — the one check that a priced leg IS a quote (native + governed FX figures)
 -- Plain SQL. DOWN: supabase/rollback/20261019110000_pda_quote_acceptance_down.sql (refuses while acceptances exist).
 -- ════════════════════════════════════════════════════════════════════════
 set local lock_timeout = '5s';
@@ -68,6 +71,98 @@ returns jsonb language sql stable security definer set search_path to '' as $$
 $$;
 revoke all on function public.fn_pda_recipient_quotes(uuid, uuid) from public, anon, authenticated;
 
+-- a request with an accepted quote is closed (pre-audit P1-1): no further quote, decline or withdraw
+create or replace function public.fn_pda_quote_request_closed()
+returns trigger language plpgsql set search_path to '' as $$
+declare v_request uuid := case when tg_table_name = 'pda_quote_requests' then old.id else new.request_id end;
+begin
+  if exists (select 1 from public.pda_quote_acceptances a where a.request_id = v_request) then
+    raise exception 'PDA_STATE: a quote from this request has already been accepted' using errcode = '55000';
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_pda_quote_request_closed() from public, anon, authenticated;
+drop trigger if exists pda_agency_quotes_closed on public.pda_agency_quotes;
+create trigger pda_agency_quotes_closed before insert on public.pda_agency_quotes
+  for each row execute function public.fn_pda_quote_request_closed();
+drop trigger if exists pda_quote_request_recipients_closed on public.pda_quote_request_recipients;
+create trigger pda_quote_request_recipients_closed before update on public.pda_quote_request_recipients
+  for each row execute function public.fn_pda_quote_request_closed();
+drop trigger if exists pda_quote_requests_closed on public.pda_quote_requests;
+create trigger pda_quote_requests_closed before update on public.pda_quote_requests
+  for each row execute function public.fn_pda_quote_request_closed();
+
+-- the agency inbox, now saying 'accepted' (replaces the 20261019100000 body; the DOWN restores it)
+create or replace function public.list_agency_pda_quote_requests()
+returns jsonb language plpgsql stable security definer set search_path to '' as $$
+declare v_result jsonb;
+begin
+  if public.fn_app_user_id() is null then raise exception 'PDA_AUTH: sign in required' using errcode = '42501'; end if;
+  -- the agency inbox: requests addressed to an active listed agency the caller staffs; the snapshot is already masked
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'requestId', r.id, 'agencyId', rc.agency_org_id, 'agencyName', a.display_name,
+    'port', r.port_locode, 'snapshot', r.snapshot, 'services', to_jsonb(r.services), 'note', r.note,
+    'requestStatus', case when exists (select 1 from public.pda_quote_acceptances qa where qa.request_id = r.id) then 'accepted'
+                          when r.status = 'withdrawn' then 'withdrawn' when r.expires_at < now() then 'expired' else 'open' end,
+    'createdAt', r.created_at, 'expiresAt', r.expires_at,
+    'myStatus', rc.status, 'declineReason', rc.decline_reason, 'respondedAt', rc.responded_at,
+    'quotes', public.fn_pda_recipient_quotes(r.id, rc.agency_org_id)
+  ) order by r.created_at desc), '[]'::jsonb) into v_result
+  from public.pda_quote_request_recipients rc
+  join public.pda_quote_requests r on r.id = rc.request_id
+  join public.pda_agencies a on a.org_id = rc.agency_org_id
+  where public.fn_pda_is_agency_staff(rc.agency_org_id);
+  return v_result;
+end $$;
+revoke all on function public.list_agency_pda_quote_requests() from public, anon;
+grant execute on function public.list_agency_pda_quote_requests() to authenticated, service_role;
+
+-- is this priced leg exactly the quote? native lines in order (label, service, amount, attribution, no rule), currency,
+-- total, no tariff version; converted figures only at the governed rate for the call date (pre-audit P2-10)
+create or replace function public.fn_pda_leg_matches_quote(p_req jsonb, p_res jsonb, p_quote_id uuid, p_port text)
+returns boolean language plpgsql stable security definer set search_path to '' as $$
+declare
+  q public.pda_agency_quotes;
+  v_agency text;
+  v_conv text := nullif(upper(coalesce(p_res->>'convertedCurrency', '')), '');
+  v_rate numeric;
+begin
+  select * into q from public.pda_agency_quotes x where x.id = p_quote_id;
+  if q.id is null then return false; end if;
+  select a.display_name into v_agency from public.pda_agencies a where a.org_id = q.agency_org_id;
+  if upper(coalesce(p_req->>'portLocode', '')) <> p_port
+     or coalesce(p_res->>'coverage', '') <> 'manual_required' or nullif(p_res->>'tariffVersionId', '') is not null
+     or upper(coalesce(p_res->>'nativeCurrency', '')) <> q.currency
+     or jsonb_typeof(p_res->'lines') is distinct from 'array'
+     or (p_res#>>'{totals,native}')::numeric is distinct from q.total
+     or jsonb_array_length(p_res->'lines') <> jsonb_array_length(q.lines)
+     or exists (
+          select 1 from jsonb_array_elements(p_res->'lines') with ordinality l(v, n)
+          join jsonb_array_elements(q.lines) with ordinality ql(v, n) on ql.n = l.n
+          where l.v->>'basis' is distinct from 'agency_quote'
+             or (l.v->>'amount')::numeric is distinct from (ql.v->>'amount')::numeric
+             or l.v->>'label' is distinct from ql.v->>'label'
+             or coalesce(l.v->>'ruleCode', '') <> coalesce(ql.v->>'serviceCode', '')
+             or nullif(l.v->>'ruleId', '') is not null
+             or l.v->>'enteredBy' is distinct from v_agency) then
+    return false;
+  end if;
+  if v_conv is null or v_conv = q.currency then
+    -- not converted: no converted figure may be carried
+    return nullif(p_res#>>'{totals,converted}', '') is null
+       and not exists (select 1 from jsonb_array_elements(p_res->'lines') l where nullif(l->>'convertedAmount', '') is not null);
+  end if;
+  v_rate := nullif(public.fn_pda_fx_rate(q.currency, v_conv, (p_req->>'callDate')::date)->>'rate', '')::numeric;
+  if v_rate is null or v_rate <= 0 then return false; end if;
+  return not exists (
+           select 1 from jsonb_array_elements(p_res->'lines') l
+           where nullif(l->>'convertedAmount', '') is null
+              or abs((l->>'convertedAmount')::numeric - round((l->>'amount')::numeric * v_rate, 2)) > 0.005)
+     and abs(coalesce(nullif(p_res#>>'{totals,converted}', '')::numeric, -1)
+             - (select sum(round((l->>'amount')::numeric * v_rate, 2)) from jsonb_array_elements(p_res->'lines') l)) <= 0.005;
+end $$;
+revoke all on function public.fn_pda_leg_matches_quote(jsonb, jsonb, uuid, text) from public, anon, authenticated;
+
 create or replace function public.pda_quote_acceptance_context(p_actor uuid, p_quote_id uuid)
 returns jsonb language plpgsql stable security definer set search_path to '' as $$
 declare q public.pda_agency_quotes; r public.pda_quote_requests; s public.pda_estimate_sets;
@@ -86,7 +181,17 @@ begin
     'setIsLatest', not exists (select 1 from public.pda_estimate_sets n where n.supersedes_id = s.id),
     'latestRevision', not exists (select 1 from public.pda_agency_quotes x
                                    where x.request_id = q.request_id and x.agency_org_id = q.agency_org_id and x.revision > q.revision),
-    'accepted', exists (select 1 from public.pda_quote_acceptances a where a.request_id = r.id));
+    'accepted', exists (select 1 from public.pda_quote_acceptances a where a.request_id = r.id),
+    'agencyActive', exists (select 1 from public.pda_agencies a where a.org_id = q.agency_org_id and a.status = 'active'),
+    -- the other port of the request's set, when that set was itself made by accepting a quote: carried forward
+    'carried', (select jsonb_build_object('leg', pr.leg, 'quoteId', pq.id, 'port', pr.port_locode,
+                  'agencyName', (select a.display_name from public.pda_agencies a where a.org_id = pq.agency_org_id),
+                  'currency', pq.currency, 'total', pq.total, 'revision', pq.revision, 'reference', pq.reference,
+                  'validUntil', pq.valid_until, 'lines', pq.lines)
+                from public.pda_quote_acceptances pa
+                join public.pda_quote_requests pr on pr.id = pa.request_id
+                join public.pda_agency_quotes pq on pq.id = pa.quote_id
+                where pa.set_id = r.set_id and pr.leg <> r.leg));
 end $$;
 revoke all on function public.pda_quote_acceptance_context(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.pda_quote_acceptance_context(uuid, uuid) to service_role;
@@ -102,6 +207,9 @@ declare
   v_req jsonb;
   v_res jsonb;
   v_other jsonb;
+  v_other_req jsonb;
+  v_carried uuid;
+  v_carried_port text;
   v_saved jsonb;
   v_member uuid;
 begin
@@ -120,30 +228,32 @@ begin
   end if;
   select a.display_name into v_agency from public.pda_agencies a where a.org_id = q.agency_org_id;
 
+  if not exists (select 1 from public.pda_agencies a where a.org_id = q.agency_org_id and a.status = 'active') then
+    raise exception 'PDA_STATE: this agency is suspended; its quotes cannot be accepted now' using errcode = '55000';
+  end if;
+  -- the new version is the SAME route: only the quoted port is re-priced (pre-audit P2-10)
+  if (p_route->'routeInput') is distinct from (select s.route_input from public.pda_estimate_sets s where s.id = r.set_id) then
+    raise exception 'PDA_VALIDATION: the new version must keep the saved route input' using errcode = '22023';
+  end if;
+
   v_req := case when r.leg = 'load' then p_load_request else p_discharge_request end;
   v_res := case when r.leg = 'load' then p_load_result else p_discharge_result end;
+  v_other_req := case when r.leg = 'load' then p_discharge_request else p_load_request end;
   v_other := case when r.leg = 'load' then p_discharge_result else p_load_result end;
-  -- the quoted port must be priced exactly as the agency quoted: same port, currency, lines in order and total
-  if upper(coalesce(v_req->>'portLocode', '')) <> r.port_locode
-     or coalesce(v_res->>'coverage', '') <> 'manual_required' or nullif(v_res->>'tariffVersionId', '') is not null
-     or upper(coalesce(v_res->>'nativeCurrency', '')) <> q.currency
-     or jsonb_typeof(v_res->'lines') is distinct from 'array'
-     or (v_res#>>'{totals,native}')::numeric is distinct from q.total
-     or jsonb_array_length(v_res->'lines') <> jsonb_array_length(q.lines)
-     or exists (
-          select 1 from jsonb_array_elements(v_res->'lines') with ordinality l(v, n)
-          join jsonb_array_elements(q.lines) with ordinality ql(v, n) on ql.n = l.n
-          where l.v->>'basis' is distinct from 'agency_quote'
-             or (l.v->>'amount')::numeric is distinct from (ql.v->>'amount')::numeric
-             or l.v->>'label' is distinct from ql.v->>'label'
-             or coalesce(l.v->>'ruleCode', '') <> coalesce(ql.v->>'serviceCode', '')
-             or nullif(l.v->>'ruleId', '') is not null
-             or l.v->>'enteredBy' is distinct from v_agency) then
+  if not public.fn_pda_leg_matches_quote(v_req, v_res, q.id, r.port_locode) then
     raise exception 'PDA_VALIDATION: the accepted port must be priced exactly as the agency quoted' using errcode = '22023';
   end if;
-  -- no other figure may be passed off as an agency quote
+  -- the other port carries agency_quote lines only when the request's set was itself an acceptance for that port,
+  -- and then exactly that quote (pre-audit P1-2: a second acceptance never silently drops the first)
+  select pa.quote_id, pr.port_locode into v_carried, v_carried_port
+    from public.pda_quote_acceptances pa join public.pda_quote_requests pr on pr.id = pa.request_id
+   where pa.set_id = r.set_id and pr.leg <> r.leg;
   if exists (select 1 from jsonb_array_elements(coalesce(v_other->'lines', '[]'::jsonb)) l where l->>'basis' = 'agency_quote') then
-    raise exception 'PDA_VALIDATION: only the accepted port carries the agency quote' using errcode = '22023';
+    if v_carried is null or not public.fn_pda_leg_matches_quote(v_other_req, v_other, v_carried, v_carried_port) then
+      raise exception 'PDA_VALIDATION: only the accepted port carries the agency quote' using errcode = '22023';
+    end if;
+  elsif v_carried is not null then
+    raise exception 'PDA_VALIDATION: the other port was priced from an accepted quote and must keep it' using errcode = '22023';
   end if;
 
   -- the new version supersedes the set the request was made from (owner, same vessel + cargo, not yet superseded)

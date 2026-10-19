@@ -142,6 +142,61 @@ begin
   if e is distinct from 'PDA_STATE' then raise exception 'A4: a withdrawn request must be refused, got %', e; end if;
   raise notice 'A4 ok: once per request; older revisions, other members and withdrawn requests refused';
 
+  -- A7 · a request with an accepted quote is closed (pre-audit P1-1)
+  perform set_config('request.jwt.claim.sub', staff_a::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_a,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  begin perform public.submit_pda_agency_quote((req->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency fee","serviceCode":"agency","amount":"1"}]', current_date + 30); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_STATE' then raise exception 'A7: a new revision after acceptance must be refused, got %', e; end if;
+  if (select x->>'requestStatus' from jsonb_array_elements(public.list_agency_pda_quote_requests()) x where x->>'requestId' = req->>'requestId') <> 'accepted' then
+    raise exception 'A7: the agency inbox must say accepted'; end if;
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  begin perform public.withdraw_pda_quote_request((req->>'requestId')::uuid); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_STATE' then raise exception 'A7: withdrawing an accepted request must be refused, got %', e; end if;
+  raise notice 'A7 ok: once a quote is accepted the request is closed: no new revision or withdraw; the inbox says accepted';
+
+  -- A8 · accepting the other port keeps the first acceptance (pre-audit P1-2); suspended agency, route input, FX figures
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform public.pda_admin_set_port_agent(owner_admin, agency_a, pod, array['agency'], true);
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  req2 := public.create_pda_quote_request((saved->>'id')::uuid, 'discharge', array[agency_a], array['agency']);
+  perform set_config('request.jwt.claim.sub', staff_a::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_a,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  q1 := public.submit_pda_agency_quote((req2->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency fee","serviceCode":"agency","amount":"900"}]', current_date + 30);
+  perform set_config('request.jwt.claim.sub', '', true);
+  ctx := public.pda_quote_acceptance_context(member, (q1->>'quoteId')::uuid);
+  if ctx#>>'{carried,leg}' <> 'load' or (ctx#>>'{carried,total}')::numeric <> 1950.50 or (ctx->>'agencyActive')::boolean is not true then
+    raise exception 'A8: the context carries the accepted load quote forward: %', ctx; end if;
+  good := jsonb_build_object('coverage','manual_required','tariffVersionId',null,'nativeCurrency','USD','warnings','[]'::jsonb,
+    'totals', jsonb_build_object('native', 900),
+    'lines', jsonb_build_array(jsonb_build_object('ruleId',null,'ruleCode','agency','label','Agency fee','basis','agency_quote','amount',900,'explanation','Agency quote from QA Agency','manual',true,'manualReason','Agency quote','enteredBy','QA Agency','serviceCodes',jsonb_build_array('agency'),'inputs','{}'::jsonb,'evidence',jsonb_build_object('title','Agency quote · QA Agency'))));
+  begin perform public.pda_accept_agency_quote(member, member_org, (q1->>'quoteId')::uuid, load_req, leg_res, dis_req, good, route); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'A8: dropping the accepted load quote must be refused, got %', e; end if;
+  begin perform public.pda_accept_agency_quote(member, member_org, (q1->>'quoteId')::uuid, load_req, quoted, dis_req, good,
+          jsonb_set(route, '{routeInput,load,portLocode}', to_jsonb(pod))); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'A8: a changed route input must be refused, got %', e; end if;
+  begin perform public.pda_accept_agency_quote(member, member_org, (q1->>'quoteId')::uuid, load_req, quoted, dis_req,
+          jsonb_set(jsonb_set(jsonb_set(good, '{convertedCurrency}', '"EUR"'), '{totals,converted}', '850'), '{lines,0,convertedAmount}', '850'), route); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'A8: converted figures without a governed rate must be refused, got %', e; end if;
+  perform public.pda_admin_upsert_agency(owner_admin, agency_a, '{"displayName":"QA Agency","status":"suspended"}');
+  begin perform public.pda_accept_agency_quote(member, member_org, (q1->>'quoteId')::uuid, load_req, quoted, dis_req, good, route); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_STATE' then raise exception 'A8: a suspended agency''s quote must be refused, got %', e; end if;
+  perform public.pda_admin_upsert_agency(owner_admin, agency_a, '{"displayName":"QA Agency","status":"active"}');
+  mine := public.pda_accept_agency_quote(member, member_org, (q1->>'quoteId')::uuid, load_req, quoted, dis_req, good, route);
+  if (select supersedes_id from public.pda_estimate_sets where id = (mine->>'id')::uuid) <> (saved->>'id')::uuid
+     or (select count(*) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.load_estimate_id = l.estimate_id
+          where s.id = (mine->>'id')::uuid and l.basis = 'agency_quote') <> 2
+     or (select count(*) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.discharge_estimate_id = l.estimate_id
+          where s.id = (mine->>'id')::uuid and l.basis = 'agency_quote') <> 1 then
+    raise exception 'A8: the new version keeps the load quote and adds the discharge quote: %', mine; end if;
+  raise notice 'A8 ok: a second port''s acceptance keeps the first; route input, governed FX figures and a suspended agency are checked';
+
   -- A5 · notification + immutability
   if v_core and not exists (select 1 from public.notifications n where n.recipient_user_id = staff_a and n.kind = 'pda.quote_accepted') then
     raise exception 'A5: the agency staff are told their quote was accepted'; end if;

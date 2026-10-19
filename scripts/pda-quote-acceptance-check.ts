@@ -87,7 +87,9 @@ const prior = read("supabase/migrations/20261019100000_pda_quote_requests.sql");
 ok(/revoke all on table public\.pda_quote_acceptances from public, anon, authenticated, service_role;/.test(migration)
   && /grant execute on function public\.pda_accept_agency_quote\(uuid, uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb\) to service_role;/.test(migration)
   && /grant execute on function public\.pda_quote_acceptance_context\(uuid, uuid\) to service_role;/.test(migration)
-  && !/to authenticated/.test(migration), "no table grant; both functions are service-only (the saved route input never reaches a member's API)");
+  && (migration.match(/to authenticated/g) ?? []).length === 1 && /list_agency_pda_quote_requests\(\) to authenticated, service_role;/.test(migration)
+  && /revoke all on function public\.fn_pda_leg_matches_quote\(jsonb, jsonb, uuid, text\) from public, anon, authenticated;/.test(migration),
+  "no table grant; acceptance functions service-only (the saved route input never reaches a member's API); only the inbox read stays a member call");
 ok(/'manual_quote','manual','agency_quote'/.test(migration) && /basis <> 'agency_quote' or \(is_manual and tariff_rule_id is null and source_id is null\)/.test(migration)
   && /'manual_quote','manual'\n  \)\);/.test(down) && /basis = 'agency_quote'/.test(down),
   "saved lines accept agency_quote only as manual lines with no tariff rule or source; the DOWN restores the old check and refuses while such lines exist");
@@ -96,14 +98,24 @@ ok(/request_id\s+uuid not null unique/.test(migration) && /set_id\s+uuid not nul
 const accept = migration.slice(migration.indexOf("create or replace function public.pda_accept_agency_quote"));
 ok(/r\.requester_user_id is distinct from p_actor/.test(accept) && /q\.valid_until < current_date/.test(accept) && /x\.revision > q\.revision/.test(accept)
   && /r\.status <> 'open'/.test(accept), "only the requester, an open request, a valid quote and its latest revision");
-ok(/with ordinality/.test(accept) && /'agency_quote'/.test(accept) && /is distinct from q\.total/.test(accept) && /<> q\.currency/.test(accept)
-  && /enteredBy' is distinct from v_agency/.test(accept), "the quoted leg must be the quote line by line (amount, label, service, attribution), currency and total");
-ok(/l->>'basis' = 'agency_quote'/.test(accept), "the other port may not carry agency_quote lines");
+const matches = migration.slice(migration.indexOf("create or replace function public.fn_pda_leg_matches_quote"), migration.indexOf("create or replace function public.pda_quote_acceptance_context"));
+ok(/with ordinality/.test(matches) && /'agency_quote'/.test(matches) && /is distinct from q\.total/.test(matches) && /<> q\.currency/.test(matches)
+  && /enteredBy' is distinct from v_agency/.test(matches) && /fn_pda_fx_rate\(q\.currency, v_conv/.test(matches) && /round\(\(l->>'amount'\)::numeric \* v_rate, 2\)/.test(matches),
+  "a leg is the quote only line by line (amount, label, service, attribution), currency and total, with converted figures only at the governed rate");
+ok(/fn_pda_leg_matches_quote\(v_req, v_res, q\.id, r\.port_locode\)/.test(accept) && /fn_pda_leg_matches_quote\(v_other_req, v_other, v_carried, v_carried_port\)/.test(accept)
+  && /must keep it/.test(accept), "the other port carries agency lines only as the earlier accepted quote of the request's set, and must keep it (P1-2)");
+ok(/a\.status = 'active'\) then\n    raise exception 'PDA_STATE: this agency is suspended/.test(accept) && /\(p_route->'routeInput'\) is distinct from \(select s\.route_input/.test(accept),
+  "a suspended agency's quote is refused; the new version keeps the saved route input");
+ok(/before insert on public\.pda_agency_quotes/.test(migration) && /before update on public\.pda_quote_request_recipients/.test(migration)
+  && /before update on public\.pda_quote_requests/.test(migration) && /then 'accepted'/.test(migration),
+  "a request with an accepted quote is closed (no new revision, decline or withdraw); the inbox says accepted (P1-1)");
 ok(/pda_save_estimate_set\(p_actor, p_owner_org_id,[\s\S]*r\.set_id\)/.test(accept) && /'pda\.quote_accepted'/.test(accept),
   "the new version supersedes the set the request came from, through the governed save; the agency is notified");
 const restored = down.slice(down.indexOf("create or replace function public.fn_pda_recipient_quotes"), down.indexOf("revoke all on function public.fn_pda_recipient_quotes"));
 const original = prior.slice(prior.indexOf("create or replace function public.fn_pda_recipient_quotes"), prior.indexOf("revoke all on function public.fn_pda_recipient_quotes"));
 ok(restored.length > 100 && restored === original, "the DOWN restores fn_pda_recipient_quotes byte for byte");
+const inboxOf = (t: string) => t.slice(t.indexOf("create or replace function public.list_agency_pda_quote_requests"), t.indexOf("grant execute on function public.list_agency_pda_quote_requests"));
+ok(inboxOf(down).length > 100 && inboxOf(down) === inboxOf(prior), "the DOWN restores list_agency_pda_quote_requests byte for byte");
 ok(/PDA_DOWN_REFUSED/.test(down) && /history-exported:/.test(down) && !/\\(gset|if|echo|endif)\b/.test(migration + down), "the DOWN refuses while acceptances exist; plain SQL");
 
 // 5 · the server and the page
@@ -114,6 +126,8 @@ ok(/getPdaQuoteAcceptanceContext\(getSupabaseAdminClient\(\), appUser\.id, quote
 const preview = actions.slice(actions.indexOf("export async function previewPdaQuoteAcceptance"), actions.indexOf("export async function acceptPdaQuote"));
 ok(!/routeInput|context,|quoteId:|setId/.test(preview.slice(preview.indexOf("return { ok: true"))), "the preview returns figures only: no route input, quote or set id");
 const acceptAction = actions.slice(actions.indexOf("export async function acceptPdaQuote"));
+ok(/context\.carried\?\.leg === side \? computeQuotedLeg\(route, side, context\.carried\.quote\)/.test(build) && /!context\.agencyActive/.test(build),
+  "the server re-prices an earlier accepted port from its quote and refuses a suspended agency");
 ok(/sameFigure\(expected\.allInKnown, result\.totals\.allInKnown\)/.test(acceptAction) && /acceptPdaAgencyQuote\(getSupabaseAdminClient\(\)/.test(acceptAction),
   "accepting refuses if the figures moved since the member's confirmation, then uses the service-only command");
 const quotedLeg = actions.slice(actions.indexOf("async function computeQuotedLeg"), actions.indexOf("async function buildQuoteAcceptance"));

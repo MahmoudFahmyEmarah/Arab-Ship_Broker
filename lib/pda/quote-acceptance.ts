@@ -92,12 +92,14 @@ export interface PdaQuoteAcceptanceContext {
   setIsLatest: boolean;
   latestRevision: boolean;
   accepted: boolean;
+  agencyActive: boolean;
+  /** the other port, when the request's set was itself made by accepting a quote for it: kept as accepted */
+  carried: { leg: "load" | "discharge"; quote: PdaAcceptableQuote } | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() && Number.isFinite(Number(v)) ? Number(v) : null);
 
-export function parsePdaQuoteAcceptanceContext(raw: unknown): PdaQuoteAcceptanceContext {
-  const r = (raw ?? {}) as Record<string, unknown>;
+function parseQuote(r: Record<string, unknown>): PdaAcceptableQuote {
   const lines = Array.isArray(r.lines) ? r.lines : [];
   const quote: PdaAcceptableQuote = {
     quoteId: String(r.quoteId ?? ""),
@@ -114,8 +116,14 @@ export function parsePdaQuoteAcceptanceContext(raw: unknown): PdaQuoteAcceptance
     }),
   };
   if (!quote.quoteId || !quote.agencyName || !/^[A-Z]{3}$/.test(quote.currency) || !quote.lines.length) throw new Error("PDA_INPUT: the quote could not be read");
+  return quote;
+}
+
+export function parsePdaQuoteAcceptanceContext(raw: unknown): PdaQuoteAcceptanceContext {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const carried = r.carried && typeof r.carried === "object" ? (r.carried as Record<string, unknown>) : null;
   return {
-    quote,
+    quote: parseQuote(r),
     requestId: String(r.requestId ?? ""),
     setId: String(r.setId ?? ""),
     leg: r.leg === "discharge" ? "discharge" : "load",
@@ -124,5 +132,7 @@ export function parsePdaQuoteAcceptanceContext(raw: unknown): PdaQuoteAcceptance
     setIsLatest: r.setIsLatest === true,
     latestRevision: r.latestRevision === true,
     accepted: r.accepted === true,
+    agencyActive: r.agencyActive === true,
+    carried: carried ? { leg: carried.leg === "discharge" ? "discharge" : "load", quote: parseQuote(carried) } : null,
   };
 }
