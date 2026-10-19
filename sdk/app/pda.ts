@@ -6,6 +6,7 @@ import { parsePdaPreferences, type PdaPreferences, type PdaStartTab } from "@/li
 import { parsePdaAdminAgencies, parsePdaAgencies, type PdaAdminAgency, type PdaAgency } from "@/lib/pda/agents";
 import { parsePdaAgencyInbox, parsePdaQuoteRequests, type PdaAgencyInboxItem, type PdaQuoteRequest } from "@/lib/pda/quote-requests";
 import { parsePdaQuoteAcceptanceContext, type PdaQuoteAcceptanceContext } from "@/lib/pda/quote-acceptance";
+import { parsePdaDeskQuoteRequests, type PdaDeskQuoteRequest } from "@/lib/pda/desk-quotes";
 import {
   parsePdaSaveSetResult,
   parsePdaSetDetail,
@@ -167,6 +168,27 @@ export async function pdaAdminListAgencies(admin: SupabaseClient, actorId: strin
   const { data, error } = await admin.rpc("pda_admin_list_agencies", { p_actor: actorId });
   if (error) throw new Error(error.message);
   return parsePdaAdminAgencies(data);
+}
+
+/** Service read (owner-tier actor): open requests awaiting an agency that has no portal account (Agents phase 4). */
+export async function pdaAdminListQuoteRequests(admin: SupabaseClient, actorId: string): Promise<PdaDeskQuoteRequest[]> {
+  const { data, error } = await admin.rpc("pda_admin_list_quote_requests", { p_actor: actorId });
+  if (error) throw new Error(error.message);
+  return parsePdaDeskQuoteRequests(data);
+}
+
+/** Service command (owner-tier actor): record an agency's emailed quote on its behalf, with its source. */
+export async function pdaAdminRecordAgencyQuote(admin: SupabaseClient, input: {
+  actorId: string; requestId: string; agencyId: string; currency: string; lines: { label: string; serviceCode: string | null; amount: string }[];
+  validUntil: string; source: string; reference: string | null; note: string | null;
+}): Promise<{ quoteId: string; revision: number }> {
+  const { data, error } = await admin.rpc("pda_admin_record_agency_quote", {
+    p_actor: input.actorId, p_request_id: input.requestId, p_agency_org_id: input.agencyId, p_currency: input.currency,
+    p_lines: input.lines, p_valid_until: input.validUntil, p_source: input.source, p_reference: input.reference, p_note: input.note,
+  });
+  if (error) throw new Error(error.message);
+  const r = (data ?? {}) as { quoteId?: string; revision?: number };
+  return { quoteId: String(r.quoteId ?? ""), revision: Number(r.revision ?? 1) };
 }
 
 // ── Agents phase 2: quote requests (20261019100000) — every call runs in the caller's own session ──

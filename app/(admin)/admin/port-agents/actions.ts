@@ -7,8 +7,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdmin } from "@/lib/admin/require-admin";
+import { deskQuoteLinesFromForm } from "@/lib/pda/desk-quotes";
 import { PDA_ROUTE_SERVICE_CODES } from "@/lib/pda/route-types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { pdaAdminRecordAgencyQuote } from "@/sdk/app/pda";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const value = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
@@ -59,4 +61,26 @@ export async function setPortAgent(form: FormData) {
   });
   if (error) finish(dbMessage(error, "The port listing could not be saved"), true);
   finish(value(form, "active") === "false" ? "Agency withdrawn from the port" : "Port listing saved");
+}
+
+/**
+ * Record a quote an agency without a portal account sent by email (Agents phase 4). The database re-checks the actor,
+ * that the agency has no account, the request is open and addressed to it, and every line; the source is required.
+ */
+export async function recordAgencyQuote(form: FormData) {
+  const { actorId, db } = await context();
+  const requestId = value(form, "requestId");
+  const agencyId = value(form, "agencyId");
+  if (!UUID.test(requestId) || !UUID.test(agencyId)) finish("Unknown request", true);
+  const validUntil = value(form, "validUntil");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(validUntil)) finish("Give the date the quote is valid until", true);
+  try {
+    await pdaAdminRecordAgencyQuote(db, {
+      actorId, requestId, agencyId, currency: value(form, "currency").toUpperCase(), lines: deskQuoteLinesFromForm(form), validUntil,
+      source: value(form, "source"), reference: value(form, "reference") || null, note: value(form, "note") || null,
+    });
+  } catch (error) {
+    finish(dbMessage(error instanceof Error ? error : { message: String(error) }, "The quote could not be recorded"), true);
+  }
+  finish("Quote recorded; the member has been notified");
 }

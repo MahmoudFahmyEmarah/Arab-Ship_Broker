@@ -17,6 +17,8 @@ export interface PdaAgencyQuote {
   createdAt: string;
   /** accepted into a new version of the estimate (Agents phase 3) */
   accepted: boolean;
+  /** 'desk': recorded by Arab ShipBroker from the agency's email (Agents phase 4) */
+  enteredVia: "agency" | "desk";
 }
 
 export interface PdaRequestAgency {
@@ -93,6 +95,7 @@ function parseQuotes(raw: unknown): PdaAgencyQuote[] {
       note: str(q.note),
       createdAt: String(q.createdAt ?? ""),
       accepted: q.accepted === true,
+      enteredVia: (q.enteredVia === "desk" ? "desk" : "agency") as "agency" | "desk",
     };
   }).filter((q) => q.quoteId);
 }

@@ -96,7 +96,7 @@ function RequestCard({ item, onDone }: { item: PdaAgencyInboxItem; onDone: () =>
       <p className="pda-agency__meta">Received {day(item.createdAt)} · answer by {day(item.expiresAt)}</p>
       {item.myStatus === "declined" ? <p className="pda-agency__meta">You declined: {item.declineReason}</p> : null}
       {latest ? (
-        <p className="pda-agency__meta">Your latest quote (revision {latest.revision}): <b>{latest.currency} {fmt(latest.total)}</b>, valid until {day(latest.validUntil)}{latest.reference ? ` · ref ${latest.reference}` : ""}{latest.accepted ? " · accepted by the member" : ""}</p>
+        <p className="pda-agency__meta">Your latest quote (revision {latest.revision}): <b>{latest.currency} {fmt(latest.total)}</b>, valid until {day(latest.validUntil)}{latest.reference ? ` · ref ${latest.reference}` : ""}{latest.enteredVia === "desk" ? " · recorded by Arab ShipBroker from your email" : ""}{latest.accepted ? " · accepted by the member" : ""}</p>
       ) : null}
       {open ? <QuoteForm item={item} onDone={onDone} /> : null}
     </article>

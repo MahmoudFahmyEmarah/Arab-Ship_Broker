@@ -127,7 +127,7 @@ function RequestRow({ request, estimate, canAccept, onChange, onAccepted }: {
               <span>{agency.displayName}</span>
               <span>
                 {agency.status === "quoted" && quote
-                  ? <><b>{money(quote.total, quote.currency)}</b> · valid until {day(quote.validUntil)}{quote.revision > 1 ? ` · revision ${quote.revision}` : ""}{quote.reference ? ` · ref ${quote.reference}` : ""}{quote.accepted ? " · accepted" : ""}</>
+                  ? <><b>{money(quote.total, quote.currency)}</b> · valid until {day(quote.validUntil)}{quote.revision > 1 ? ` · revision ${quote.revision}` : ""}{quote.reference ? ` · ref ${quote.reference}` : ""}{quote.enteredVia === "desk" ? " · recorded by Arab ShipBroker from the agency's email" : ""}{quote.accepted ? " · accepted" : ""}</>
                   : agency.status === "declined" ? `declined: ${agency.declineReason ?? ""}` : "awaiting answer"}
               </span>
               {agency.status === "quoted" && quote ? <Comparison estimate={estimate} quote={quote} /> : null}
