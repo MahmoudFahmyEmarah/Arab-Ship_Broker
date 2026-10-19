@@ -39,7 +39,7 @@ begin
   perform public.pda_admin_upsert_agency(owner_admin, agency_a, '{"displayName":"Email Agency"}');
   perform public.pda_admin_upsert_agency(owner_admin, agency_b, '{"displayName":"Portal Agency"}');
   perform public.pda_admin_set_port_agent(owner_admin, agency_a, pol, array['agency','cargo_handling'], true);
-  perform public.pda_admin_set_port_agent(owner_admin, agency_b, pol, array['agency'], true);
+  perform public.pda_admin_set_port_agent(owner_admin, agency_b, pol, array['agency','cargo_handling'], true);
 
   load_req := jsonb_build_object('portLocode', pol, 'callDate', '2026-11-01', 'vessel', jsonb_build_object('vesselName', 'MV DESK SECRET', 'dwt', 28000),
     'call', jsonb_build_object('days', 3, 'cargoQuantityMt', 26000, 'requestedServices', jsonb_build_array('agency')));
