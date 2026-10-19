@@ -39,6 +39,7 @@ export function SupplierPortFields({ suppliers }: { suppliers: SupplierPortOptio
           value={port}
           onChange={onPort}
           inputClassName="adm-input"
+          ariaLabel="Port registered for the supplier"
           emptyListNote="This supplier has no registered ports — add one under Suppliers first."
         />
       </label>

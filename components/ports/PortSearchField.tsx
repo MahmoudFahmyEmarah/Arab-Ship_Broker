@@ -54,6 +54,12 @@ export function PortSearchField({
     }
   }, [options, selectedCode, controlled, onChange]);
 
+  // a controlled value set from outside (e.g. a newly chosen cargo with a fixed port) shows as chosen, and a cleared
+  // one reopens the search (Opus O2B-048 P2-1); pressing Change does not move the value, so it is not undone here
+  React.useEffect(() => {
+    if (controlled) setEditing(!findPort(options, selectedCode));
+  }, [controlled, selectedCode, options]);
+
   const choose = (p: PortChoice | null) => {
     if (!controlled) setOwn(p?.locode ?? null);
     onChange?.(p);
@@ -102,7 +108,7 @@ export function PortSearchField({
         aria-expanded={open}
         aria-controls={listId}
         aria-activedescendant={activeId}
-        aria-label={ariaLabel}
+        aria-label={ariaLabel ?? "Port"}
         aria-required={required || undefined}
         autoComplete="off"
         disabled={disabled}
