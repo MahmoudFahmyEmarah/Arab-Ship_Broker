@@ -114,5 +114,8 @@ const printed = (ui: string) => ui.replace(/[\w-]+=\{`[^`]*`\}/g, "").replace(/[
 ok(!/\{\s*(request|agency|item|quote|q)\.(requestId|agencyId|setId|quoteId)\s*\}/.test(printed(requestsUi) + printed(inboxUi)),
   "no internal id is ever printed on either page");
 ok(/createPdaQuoteRequest/.test(sdk) && /submitPdaAgencyQuote/.test(sdk) && /declinePdaQuoteRequest/.test(sdk), "the SDK exposes the six calls");
+const betaOpen = read("lib/portal/beta-open.ts");
+ok(/"\/dashboard\/agency"/.test(betaOpen) && !/"\/dashboard\/ports-da"/.test(betaOpen) && /get_my_pda_agency/.test(agencyPage),
+  "Beta mode keeps the agency inbox open (invitation-only; the page asks the database who is staff) and still locks the estimator");
 
 console.log(`\nPDA quote requests: ${n} checks passed`);

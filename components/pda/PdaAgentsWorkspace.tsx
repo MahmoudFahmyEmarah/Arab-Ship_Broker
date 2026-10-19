@@ -43,7 +43,8 @@ export function PdaAgentsWorkspace({ initialPort = null }: { initialPort?: strin
           <h2 id="pda-agents-title" className="pda-ports__title">Port agents</h2>
           <p className="pda-ports__lede">
             Agencies invited by Arab ShipBroker, listed at the verified ports they attend, with the services they quote.
-            Requesting a quote from an agency is coming next: your request will be masked by default and answered by the agency itself.
+            To ask agencies for a real quote, save your estimate and open Quotes on it under Saved estimates: the request is masked by
+            default, the agency answers itself, and an accepted quote becomes a new version of your estimate.
           </p>
         </div>
         {state.status === "ready" ? (

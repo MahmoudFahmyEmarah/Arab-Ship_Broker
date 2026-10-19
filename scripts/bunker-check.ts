@@ -169,8 +169,8 @@ check("age runs from when a price takes effect, not from submission", () => {
 });
 
 check("Beta mode leaves the invitation-only tools open, nothing else", () => {
-  for (const p of ["/dashboard/bunker-supplier", "/dashboard/fixture-room", "/dashboard/fixture-room/abc"]) assert.equal(isBetaOpenPath(p), true, p);
-  for (const p of ["/dashboard/bunker-supplierx", "/dashboard/voyage-estimator", "/dashboard/cargo", "/admin/bunker"]) assert.equal(isBetaOpenPath(p), false, p);
+  for (const p of ["/dashboard/bunker-supplier", "/dashboard/fixture-room", "/dashboard/fixture-room/abc", "/dashboard/agency"]) assert.equal(isBetaOpenPath(p), true, p);
+  for (const p of ["/dashboard/bunker-supplierx", "/dashboard/agencyx", "/dashboard/ports-da", "/dashboard/voyage-estimator", "/dashboard/cargo", "/admin/bunker"]) assert.equal(isBetaOpenPath(p), false, p);
 });
 
 // ── SDK boundary: runtime parsing and argument rules (fake client) ─────────

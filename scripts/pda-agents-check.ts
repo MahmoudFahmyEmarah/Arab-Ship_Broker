@@ -67,8 +67,8 @@ const estimator = read("components/pda/PdaRouteEstimator.tsx");
 ok(/activeTab === "agents" \? \(\s*<PdaAgentsWorkspace initialPort=\{agentsFocus\} \/>/.test(estimator) && !/pda-route__deferred/.test(estimator),
   "the Agents tab renders the directory; no tab is a placeholder any more");
 ok(/onOpenAgents=\{\(\) => openPortAgents\(loadPort\)\}/.test(estimator), "a port card opens the Agents tab filtered to that port");
-ok(/coming next/.test(agentsTab) && !/localStorage|sessionStorage|indexedDB|simulat/i.test(agentsTab.replace(/^\/\/.*$/gm, "")),
-  "the tab says quote requests come next instead of simulating them; nothing is kept in the browser");
+ok(/open Quotes on it under Saved estimates/.test(agentsTab) && !/coming next/.test(agentsTab) && !/localStorage|sessionStorage|indexedDB|simulat/i.test(agentsTab.replace(/^\/\/.*$/gm, "")),
+  "the tab points to the real quote requests (on a saved estimate) instead of simulating them; nothing is kept in the browser");
 ok(/rel="noopener noreferrer"/.test(agentsTab) && /target="_blank"/.test(agentsTab), "an agency website opens safely in a new tab");
 
 // 4 · Codex C2O-159 corrections
