@@ -126,6 +126,9 @@ begin
   if p_active is null then
     raise exception 'PDA_VALIDATION: say whether the agency attends this port' using errcode = '22023';
   end if;
+  if p_active and cardinality(v_services) = 0 then
+    raise exception 'PDA_VALIDATION: an active listing names at least one service the agency quotes' using errcode = '22023';
+  end if;
   insert into public.pda_port_agents (org_id, port_locode, services, status, verified_by)
   values (p_org_id, v_port, v_services, case when p_active then 'active' else 'withdrawn' end, p_actor)
   on conflict (org_id, port_locode) do update
@@ -184,7 +187,7 @@ begin
                                                     'country', p.country, 'services', to_jsonb(pa.services))
                                  order by p.trade_name)
                 from public.pda_port_agents pa join public.ports p on p.locode = pa.port_locode and p.is_active and p.is_verified
-                where pa.org_id = a.org_id and pa.status = 'active')
+                where pa.org_id = a.org_id and pa.status = 'active' and (v_port is null or pa.port_locode = v_port))
     ) as item
     from public.pda_agencies a
     where a.status = 'active'
@@ -211,11 +214,12 @@ begin
     'memberRole', m.member_role,
     'ports', coalesce((select jsonb_agg(jsonb_build_object('portLocode', pa.port_locode, 'portName', p.trade_name, 'services', to_jsonb(pa.services))
                                        order by p.trade_name)
-                       from public.pda_port_agents pa join public.ports p on p.locode = pa.port_locode
+                       from public.pda_port_agents pa join public.ports p on p.locode = pa.port_locode and p.is_active and p.is_verified
                        where pa.org_id = a.org_id and pa.status = 'active'), '[]'::jsonb)
   ) into v_result
   from public.pda_agencies a
   join public.organization_members m on m.org_id = a.org_id and m.user_id = v_user and m.is_current and m.status = 'active'
+  join public.users u on u.id = m.user_id and u.is_active   -- an inactive account keeps no agency view (C2O-157/159 P1-1)
   where a.status = 'active'
   order by a.display_name
   limit 1;

@@ -58,6 +58,9 @@ begin
   if e is distinct from 'PDA_VALIDATION' then raise exception 'G2: an unknown port, got %', e; end if;
   begin perform public.pda_admin_set_port_agent(owner, agency_org, pol, array['agency','bunkers'], true); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_VALIDATION' then raise exception 'G2: an unknown service, got %', e; end if;
+  -- C2O-159 P1-2: an active listing names at least one service (a withdrawal may carry none)
+  begin perform public.pda_admin_set_port_agent(owner, agency_org, pol, '{}'::text[], true); e := null; exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'G2: an active listing without services, got %', e; end if;
   raise notice 'G2 ok: organisation, name, website, port, service and invitation are all validated';
 
   r := public.pda_admin_set_port_agent(owner, agency_org, lower(pol), array['agency','agency','pilotage'], true);
@@ -70,8 +73,9 @@ begin
   r := (select x from jsonb_array_elements(public.list_pda_port_agents(null)) x where x->>'agencyId' = agency_org::text);
   if r is null or r->>'displayName' <> 'Seaside Agency' or jsonb_array_length(r->'ports') <> 2 or r ? 'organisation' or r ? 'members' then
     raise exception 'G3: the member sees the agency, its two ports and nothing internal: %', r; end if;
-  if not exists (select 1 from jsonb_array_elements(public.list_pda_port_agents(pod)) x where x->>'agencyId' = agency_org::text) then
-    raise exception 'G3: a port filter keeps the agency attending it'; end if;
+  r := (select x from jsonb_array_elements(public.list_pda_port_agents(pod)) x where x->>'agencyId' = agency_org::text);
+  if r is null or jsonb_array_length(r->'ports') <> 1 or r->'ports'->0->>'portLocode' <> pod then
+    raise exception 'G3: a port filter keeps the agency and returns only that port in its ports (C2O-159 nb 2): %', r; end if;
   perform set_config('request.jwt.claim.sub', '', true);
   perform public.pda_admin_set_port_agent(owner, agency_org, pod, array['agency'], false);
   perform set_config('request.jwt.claim.sub', member::text, true);
@@ -96,7 +100,25 @@ begin
   perform set_config('request.jwt.claim.sub', member::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
   if public.get_my_pda_agency() is not null then raise exception 'G4: a non-member must get null'; end if;
-  raise notice 'G4 ok: agency staff see their own listing; everyone else gets null';
+  -- C2O-159 P1-1: an inactive account keeps no agency view, though its seat remains; it returns on reactivation
+  perform set_config('request.jwt.claim.sub', '', true);
+  update public.users set is_active = false where id = staff;
+  perform set_config('request.jwt.claim.sub', staff::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  begin r := public.get_my_pda_agency(); e := null; exception when others then e := split_part(sqlerrm, ':', 1); r := null; end;
+  if r is not null then raise exception 'G4: an inactive staff account must not see the agency: %', r; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  update public.users set is_active = true where id = staff;
+  -- C2O-159 nb 1: the own listing names only active, verified ports
+  update public.ports set is_verified = false where locode = pol;
+  perform set_config('request.jwt.claim.sub', staff::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  r := public.get_my_pda_agency();
+  if r->>'agencyId' <> agency_org::text or jsonb_array_length(r->'ports') <> 0 then
+    raise exception 'G4: reactivated staff see the agency again, without the unverified port: %', r; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  update public.ports set is_verified = true where locode = pol;
+  raise notice 'G4 ok: agency staff see their own listing (active verified ports only); inactive accounts and non-members get null';
 
   -- G5 · log
   perform set_config('request.jwt.claim.sub', '', true);

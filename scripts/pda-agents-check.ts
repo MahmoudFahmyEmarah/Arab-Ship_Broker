@@ -71,4 +71,23 @@ ok(/coming next/.test(agentsTab) && !/localStorage|sessionStorage|indexedDB|simu
   "the tab says quote requests come next instead of simulating them; nothing is kept in the browser");
 ok(/rel="noopener noreferrer"/.test(agentsTab) && /target="_blank"/.test(agentsTab), "an agency website opens safely in a new tab");
 
+// 4 · Codex C2O-159 corrections
+const own = migration.slice(migration.indexOf("create or replace function public.get_my_pda_agency"));
+ok(/join public\.users u on u\.id = m\.user_id and u\.is_active/.test(own) && /p\.locode = pa\.port_locode and p\.is_active and p\.is_verified/.test(own),
+  "the own-agency read needs an active account (P1-1) and lists only active, verified ports");
+ok(/if p_active and cardinality\(v_services\) = 0 then/.test(migration), "an active listing names at least one service (P1-2)");
+ok(/pa\.status = 'active' and \(v_port is null or pa\.port_locode = v_port\)\)\n\s*\) as item/.test(migration.replace(/\r\n/g, "\n")),
+  "a port filter returns only that port in each agency's ports");
+const lineage = read("supabase/migrations/20261018140000_pda_estimate_set_org_lineage.sql").replace(/\r\n/g, "\n");
+const lineageDown = read("supabase/rollback/20261018140000_pda_estimate_set_org_lineage_down.sql").replace(/\r\n/g, "\n");
+const waveEight = read("supabase/migrations/20261018120000_pda_estimate_sets.sql").replace(/\r\n/g, "\n");
+const fnOf = (t: string) => t.slice(t.indexOf("create or replace function public.pda_save_estimate_set("), t.indexOf("\n$$;\n", t.indexOf("create or replace function public.pda_save_estimate_set(")) + 5);
+const undo = (t: string) => t
+  .replace("  -- C2O-159 P1-5: a new version stays in its predecessor's organisation (including none); never the caller's choice\n  v_org uuid := p_owner_org_id;\n", "")
+  .replace("  if p_supersedes_id is not null then\n    select s.owner_org_id into v_org from public.pda_estimate_sets s where s.id = p_supersedes_id;\n  end if;\n", "")
+  .replace(/v_org/g, "p_owner_org_id");
+ok(undo(fnOf(lineage)) === fnOf(waveEight), "the org-lineage body is the Wave 8 body with only the organisation derivation changed (P1-5)");
+ok(fnOf(lineageDown) === fnOf(waveEight) && /grant execute on function public\.pda_save_estimate_set\(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid\) to service_role;/.test(lineage + lineageDown),
+  "its DOWN restores the Wave 8 body byte for byte; the save stays service-only");
+
 console.log(`PDA AGENTS CHECK: ${n} passed`);
