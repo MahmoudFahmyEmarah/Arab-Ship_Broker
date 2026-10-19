@@ -1,8 +1,8 @@
 "use client";
 
 // Suez Canal transit cost calculator — member page (Voyage Economics, Stream S).
-// Layout follows the approved prototype's Suez page (rail of vessel facts with
-// Record/Manual, transit parameters, result strip, grouped cost cards); the
+// Layout follows the owner's design (Portal standalone 7 · PageSuezToll / TabSuez: rail of vessel facts with
+// Record/Manual, transit parameters, a four-cell strip and the three cost groups); the
 // arithmetic is lib/suez/engine.ts (suez-engine/2) over the published tariff
 // version in force on the transit date. Nothing here is a constant, and nothing
 // is substituted: a missing fact or tariff layer reads "unavailable", a flag
@@ -202,19 +202,23 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
   };
 
   const options = vessels.map((v) => ({ value: v.id, label: `${v.name}, IMO ${v.imo}` }));
+  const setF = (p: Partial<VesselFacts>) => setFacts((f) => ({ ...f, ...p }));
+  const setV = (p: Partial<VoyageFacts>) => setVoyage((v) => ({ ...v, ...p }));
+  const undecidedCount = estimate ? estimate.layers.conditional.filter((f) => f.triggered === null).length : 0;
 
   return (
     <div className="ve-page">
       <div className="ve-shell">
         <BunkerTicker />
+        {/* design (Portal standalone 7, PageSuezToll): title + eyebrow, ghost "Export estimate" on the right */}
         <div className="ve-head">
           <div className="ve-head__row">
             <div>
-              <div className="ve-head__title">Suez Canal Transit Cost</div>
-              <div className="ve-head__sub">Transit toll, accompanying charges and conditional risk flags from the published SCA tariff</div>
+              <h1 className="ve-head__title">Suez Canal Toll</h1>
+              <div className="ve-head__sub">Proforma transit toll estimate</div>
             </div>
             <div className="ve-head-right">
-              {estimate && <span className="sz-version" title={estimate.tariffVersion.sourceRef}>Tariff v{estimate.tariffVersion.versionNo} · {estimate.tariffVersion.effectiveFrom} → {estimate.tariffVersion.effectiveTo ?? "open"} · {estimate.algorithmVersion}</span>}
+              {estimate && <span className="sz-version" title={estimate.tariffVersion.sourceRef}>Tariff v{estimate.tariffVersion.versionNo} · {estimate.tariffVersion.effectiveFrom} → {estimate.tariffVersion.effectiveTo ?? "open"}</span>}
               <button className="ve-btn" type="button" onClick={exportEstimate} disabled={!estimate || !vessel}>Export estimate</button>
             </div>
           </div>
@@ -235,82 +239,80 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
 
         <div className="ve-content">
           {!vessel ? <div className="ve-empty">Select a vessel to calculate.</div> : (
-            <div className="sz-layout">
-              <aside className="sz-rail">
-                <div className="ve-input-card">
-                  <div className="ve-input-card__head">Vessel · from record {profile?.found && <span className="sz-tag">economics profile</span>}</div>
-                  <div className="ve-input-card__body">
-                    <div className="ve-kv"><span>Vessel</span><span className="is-auto">{vessel.name}</span></div>
-                    <div className="ve-kv"><span>IMO</span><span className="is-auto">{vessel.imo}</span></div>
-                    <div className="ve-kv"><span>DWT</span><span className="is-auto">{vessel.dwt}</span></div>
-                    <FactInput label="SCNT" tip="Suez Canal Net Tonnage from the Suez Canal special tonnage certificate — the toll basis." value={facts.scnt} record={record.scnt} onChange={(v) => setFacts({ ...facts, scnt: v })} />
-                    <FactInput label="SCGT" tip="Suez Canal Gross Tonnage, from the same certificate (floating-unit rule)." value={facts.scgt} record={record.scgt} onChange={(v) => setFacts({ ...facts, scgt: v })} />
-                    <FactInput label="GT" tip="International gross tonnage: mooring-service band and the mooring-boat rule, both from the tariff's own thresholds." value={facts.gt} record={record.gt} onChange={(v) => setFacts({ ...facts, gt: v })} />
-                    <FactInput label="Built (year)" tip="Older vessels are inspected on arrival (age threshold from the tariff)." value={facts.buildYear} record={record.buildYear} onChange={(v) => setFacts({ ...facts, buildYear: v })} />
-                    <label className="sz-field"><span>SCA vessel category</span>
-                      <select value={facts.category ?? ""} onChange={(e) => setFacts({ ...facts, category: e.target.value || null })}><option value="">— select —</option>{SUEZ_VESSEL_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
-                    </label>
-                    <TriState label="Cranes lift the mooring boats (tariff SWL / count)" value={facts.mooringCranesOk} onChange={(v) => setFacts({ ...facts, mooringCranesOk: v })} />
-                    <TriState label="Compliant searchlight (art. 28)" value={facts.searchlight} onChange={(v) => setFacts({ ...facts, searchlight: v })} />
-                    <TriState label="First Suez transit (measurement on arrival)" value={facts.firstTransit} onChange={(v) => setFacts({ ...facts, firstTransit: v })} />
-                    <label className="sz-field"><span>Arrival draft (ft) · escort-tug rules</span><input type="number" min="0" step="0.1" value={facts.draftFt} onChange={(e) => setFacts({ ...facts, draftFt: e.target.value })} placeholder="not sourced" /></label>
-                    <label className="sz-field"><span>Beam (ft) · escort-tug rules</span><input type="number" min="0" step="0.1" value={facts.beamFt} onChange={(e) => setFacts({ ...facts, beamFt: e.target.value })} placeholder="not sourced" /></label>
-                    <TriState label="Double-bottom tanks fitted" value={facts.doubleBottom} onChange={(v) => setFacts({ ...facts, doubleBottom: v })} />
-                    {canSave && (
-                      <div className="sz-save">
-                        <button type="button" className="ve-btn" onClick={saveFacts} disabled={saveState.busy || pending}>{saveState.busy ? "Saving…" : "Save facts to vessel profile"}</button>
-                        {saveState.note && <div className={`ve-note-sub${saveState.error ? " sz-error" : ""}`}>{saveState.note}</div>}
-                      </div>
-                    )}
-                    {!vessel.vesselId && <div className="ve-note-sub">Market listing: facts are entered manually for this estimate.</div>}
-                  </div>
-                </div>
+            <div className="vs-wrap">
+              <aside className="vs-rail" aria-label="Vessel and transit facts">
+                <div className="vs-h">Vessel, from record {profile?.found && <span className="vs-tag vs-tag--ok">economics profile</span>}</div>
+                <div className="vs-f"><span className="vs-f__k">Vessel name</span><span className="is-auto">{vessel.name}</span></div>
+                <div className="vs-f"><span className="vs-f__k">IMO</span><span className="is-auto">{vessel.imo}</span></div>
+                <div className="vs-f"><span className="vs-f__k">DWT</span><span className="is-auto">{vessel.dwt}</span></div>
+                <FactRow label="SCGT" tip="Suez Canal Gross Tonnage, from the Suez Canal Special Tonnage Certificate (floating-unit rule)." value={facts.scgt} record={record.scgt} onChange={(v) => setF({ scgt: v })} />
+                <FactRow label="SCNT" tip="Suez Canal Net Tonnage, the toll basis. From the Suez Canal Special Tonnage Certificate." value={facts.scnt} record={record.scnt} onChange={(v) => setF({ scnt: v })} />
+                <FactRow label="GT" tip="International gross tonnage: the mooring-service band and the mooring-boat rule, both from the tariff's own thresholds." value={facts.gt} record={record.gt} onChange={(v) => setF({ gt: v })} />
+                <FactRow label="Built" tip="Build year: older vessels are inspected on arrival (age threshold from the tariff)." value={facts.buildYear} record={record.buildYear} onChange={(v) => setF({ buildYear: v })} plain />
+                <div className="vs-note">From the vessel&apos;s Suez Canal Special Tonnage Certificate. Switch to Manual to type a value for this estimate.{!vessel.vesselId ? " Market listing: facts are entered manually." : ""}</div>
 
-                <div className="ve-input-card">
-                  <div className="ve-input-card__head">Transit parameters</div>
-                  <div className="ve-input-card__body">
-                    <div className="ve-field"><div className="ve-field__label">Direction</div><div className="ve-seg">{(["SB", "NB"] as const).map((d) => <button key={d} type="button" className={`ve-seg__btn${voyage.direction === d ? " is-active" : ""}`} onClick={() => setVoyage({ ...voyage, direction: d })}>{d === "SB" ? "Southbound" : "Northbound"}</button>)}</div></div>
-                    <div className="ve-field"><div className="ve-field__label">Cargo status</div><div className="ve-seg">{(["laden", "ballast"] as const).map((s) => <button key={s} type="button" className={`ve-seg__btn${voyage.cargoStatus === s ? " is-active" : ""}`} onClick={() => setVoyage({ ...voyage, cargoStatus: s })}>{s === "laden" ? "Laden" : "Ballast"}</button>)}</div></div>
-                    <label className="sz-field"><span>Expected transit date</span><input type="date" value={voyage.transitDate} onChange={(e) => setVoyage({ ...voyage, transitDate: e.target.value })} /></label>
-                    <div className="ve-kv"><span>SDR → USD</span><span className={estimate?.sdrRate.status === "trusted" ? "is-auto" : estimate?.sdrRate.status === "manual" ? "is-manual" : "is-amber"}>{estimate?.sdrRate.rateUsd != null ? `${estimate.sdrRate.rateUsd} (${estimate.sdrRate.status === "manual" ? "manual" : estimate.sdrRate.source}, ${estimate.sdrRate.asOf})` : "not on file"}</span></div>
-                    <label className="sz-field"><span>SDR rate override (manual, needs a reason)</span><input type="number" step="0.000001" min="0.5" max="5" value={voyage.sdrOverride} onChange={(e) => setVoyage({ ...voyage, sdrOverride: e.target.value })} placeholder="e.g. 1.36" /></label>
-                    {sdrOverrideValue != null && (
-                      <label className="sz-field"><span>Reason for the override</span><input value={voyage.sdrOverrideReason} onChange={(e) => setVoyage({ ...voyage, sdrOverrideReason: e.target.value })} placeholder="e.g. IMF rate of today, not yet on file" aria-label="SDR override reason" />{!sdrReasonOk && <span className="sz-error">The override is not applied until a reason is given.</span>}</label>
-                    )}
-                    <label className="sz-field"><span>Arrival for the SB convoy</span>
-                      <select value={voyage.lateArrivalBand} onChange={(e) => setVoyage({ ...voyage, lateArrivalBand: e.target.value as SuezLateBand })}>
-                        <option value="none">Before 23:00 LT (on time)</option><option value="b1">23:00–00:00</option><option value="b2">00:00–01:00</option><option value="b3">After 01:00</option>
-                      </select>
-                    </label>
-                    <label className="sz-check"><input type="checkbox" checked={voyage.heavyLift} onChange={(e) => setVoyage({ ...voyage, heavyLift: e.target.checked })} /> Heavy unit of 250 t or more on board</label>
-                    <label className="sz-check"><input type="checkbox" checked={voyage.floatingUnit} onChange={(e) => setVoyage({ ...voyage, floatingUnit: e.target.checked })} /> Floating unit of SCGT 300 or more carried</label>
-                    <label className="sz-check"><input type="checkbox" checked={voyage.military} onChange={(e) => setVoyage({ ...voyage, military: e.target.checked })} /> Navy / government charter or military cargo</label>
-                    <label className="sz-check"><input type="checkbox" checked={voyage.notReady} onChange={(e) => setVoyage({ ...voyage, notReady: e.target.checked })} /> Vessel may be found not ready in the convoy</label>
-                    <label className="sz-check"><input type="checkbox" checked={voyage.ladderNoncompliant} onChange={(e) => setVoyage({ ...voyage, ladderNoncompliant: e.target.checked })} /> Pilot / accommodation ladder not in order</label>
-                    <label className="sz-field"><span>Deck cargo protrusion beyond the limit (ft)</span><input type="number" min="0" step="0.5" value={voyage.deckProtrusionFt} onChange={(e) => setVoyage({ ...voyage, deckProtrusionFt: e.target.value })} /></label>
-                    <label className="sz-field"><span>Relieving pilots at the lakes</span><input type="number" min="0" step="1" value={voyage.relievingPilots} onChange={(e) => setVoyage({ ...voyage, relievingPilots: e.target.value })} /></label>
-                  </div>
-                </div>
+                <div className="vs-h vs-h--gap">Transit parameters</div>
+                <div className="vs-f"><span className="vs-f__k">Direction</span>
+                  <div className="ve-seg ve-seg--sm">{(["SB", "NB"] as const).map((d) => <button key={d} type="button" className={`ve-seg__btn${voyage.direction === d ? " is-active" : ""}`} onClick={() => setV({ direction: d })}>{d === "SB" ? "Southbound" : "Northbound"}</button>)}</div></div>
+                <div className="vs-f"><span className="vs-f__k">Cargo status</span>
+                  <div className="ve-seg ve-seg--sm">{(["laden", "ballast"] as const).map((s) => <button key={s} type="button" className={`ve-seg__btn${voyage.cargoStatus === s ? " is-active" : ""}`} onClick={() => setV({ cargoStatus: s })}>{s === "laden" ? "Laden" : "Ballast"}</button>)}</div></div>
+                <label className="vs-f"><span className="vs-f__k">Transit date</span><input className="vs-in vs-in--date" type="date" value={voyage.transitDate} onChange={(e) => setV({ transitDate: e.target.value })} /></label>
+                <label className="vs-f"><span className="vs-f__k">SCA category</span>
+                  <select className="vs-in vs-in--select" value={facts.category ?? ""} onChange={(e) => setF({ category: e.target.value || null })}>
+                    <option value="">— select —</option>{SUEZ_VESSEL_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  </select></label>
+                <div className="vs-f"><span className="vs-f__k">SDR to USD</span><span className={estimate?.sdrRate.status === "trusted" ? "is-auto" : estimate?.sdrRate.status === "manual" ? "is-manual" : "is-missing"}>{estimate?.sdrRate.rateUsd != null ? `${estimate.sdrRate.rateUsd} (${estimate.sdrRate.status === "manual" ? "manual" : "auto"})` : "not on file"}</span></div>
+                <div className="vs-f"><span className="vs-f__k">Tariff</span><span className={!estimate ? "is-missing" : scnt == null || estimate.layers.toll.tiers.length > 0 ? "is-auto" : "is-missing"}>{!estimate ? "—" : scnt == null ? `v${estimate.tariffVersion.versionNo} · SDR per SCNT band` : estimate.layers.toll.tiers.length > 0 ? `v${estimate.tariffVersion.versionNo} · ${estimate.layers.toll.tiers.length} SCNT band${estimate.layers.toll.tiers.length > 1 ? "s" : ""}` : `v${estimate.tariffVersion.versionNo} · bands not loaded`}</span></div>
+                <div className="vs-note">Toll bands, the SDR rate and every charge come from the published SCA tariff in force on the transit date.</div>
 
-                <div className="ve-input-card">
-                  <div className="ve-input-card__head">Waste delivery (Antipollution Egypt)</div>
-                  <div className="ve-input-card__body">
-                    <div className="ve-note-sub">The mandatory fee is charged by SCNT whether or not waste is delivered{estimate?.wasteIncludedM3 != null ? `; ${estimate.wasteIncludedM3} m³ are included` : ""}. Declare volumes to price the extras.</div>
-                    <label className="sz-field"><span>Non-hazardous waste (m³, categories A–I)</span><input type="number" min="0" step="0.5" value={voyage.wasteNormalM3} onChange={(e) => setVoyage({ ...voyage, wasteNormalM3: e.target.value })} /></label>
-                    <label className="sz-field"><span>Hazardous waste (m³, category F hazardous)</span><input type="number" min="0" step="0.5" value={voyage.wasteHazardousM3} onChange={(e) => setVoyage({ ...voyage, wasteHazardousM3: e.target.value })} /></label>
-                    <label className="sz-field"><span>Bags supplied by the contractor (m³)</span><input type="number" min="0" step="0.5" value={voyage.bagsM3} onChange={(e) => setVoyage({ ...voyage, bagsM3: e.target.value })} /></label>
-                    <label className="sz-field"><span>Barge waiting (hours)</span><input type="number" min="0" step="0.5" value={voyage.bargeHours} onChange={(e) => setVoyage({ ...voyage, bargeHours: e.target.value })} /></label>
+                <details className="vs-more" open={undecidedCount > 0 || undefined}>
+                  <summary>Risk-flag and waste facts{undecidedCount > 0 ? <span className="vs-tag vs-tag--est">{undecidedCount} undecided</span> : null}</summary>
+                  <TriRow label="Cranes lift the mooring boats" value={facts.mooringCranesOk} onChange={(v) => setF({ mooringCranesOk: v })} />
+                  <TriRow label="Compliant searchlight (art. 28)" value={facts.searchlight} onChange={(v) => setF({ searchlight: v })} />
+                  <TriRow label="First Suez transit" value={facts.firstTransit} onChange={(v) => setF({ firstTransit: v })} />
+                  <TriRow label="Double-bottom tanks" value={facts.doubleBottom} onChange={(v) => setF({ doubleBottom: v })} />
+                  <label className="vs-f"><span className="vs-f__k">Arrival draft (ft)</span><input className="vs-in" type="number" min="0" step="0.1" value={facts.draftFt} onChange={(e) => setF({ draftFt: e.target.value })} placeholder="—" /></label>
+                  <label className="vs-f"><span className="vs-f__k">Beam (ft)</span><input className="vs-in" type="number" min="0" step="0.1" value={facts.beamFt} onChange={(e) => setF({ beamFt: e.target.value })} placeholder="—" /></label>
+                  <label className="vs-f"><span className="vs-f__k">Arrival for the SB convoy</span>
+                    <select className="vs-in vs-in--select" value={voyage.lateArrivalBand} onChange={(e) => setV({ lateArrivalBand: e.target.value as SuezLateBand })}>
+                      <option value="none">Before 23:00 LT</option><option value="b1">23:00–00:00</option><option value="b2">00:00–01:00</option><option value="b3">After 01:00</option>
+                    </select></label>
+                  <label className="vs-check"><input type="checkbox" checked={voyage.heavyLift} onChange={(e) => setV({ heavyLift: e.target.checked })} /> Heavy unit of 250 t or more on board</label>
+                  <label className="vs-check"><input type="checkbox" checked={voyage.floatingUnit} onChange={(e) => setV({ floatingUnit: e.target.checked })} /> Floating unit of SCGT 300 or more carried</label>
+                  <label className="vs-check"><input type="checkbox" checked={voyage.military} onChange={(e) => setV({ military: e.target.checked })} /> Navy / government charter or military cargo</label>
+                  <label className="vs-check"><input type="checkbox" checked={voyage.notReady} onChange={(e) => setV({ notReady: e.target.checked })} /> May be found not ready in the convoy</label>
+                  <label className="vs-check"><input type="checkbox" checked={voyage.ladderNoncompliant} onChange={(e) => setV({ ladderNoncompliant: e.target.checked })} /> Pilot / accommodation ladder not in order</label>
+                  <label className="vs-f"><span className="vs-f__k">Deck protrusion beyond limit (ft)</span><input className="vs-in vs-in--sm" type="number" min="0" step="0.5" value={voyage.deckProtrusionFt} onChange={(e) => setV({ deckProtrusionFt: e.target.value })} /></label>
+                  <label className="vs-f"><span className="vs-f__k">Relieving pilots at the lakes</span><input className="vs-in vs-in--sm" type="number" min="0" step="1" value={voyage.relievingPilots} onChange={(e) => setV({ relievingPilots: e.target.value })} /></label>
+                  <div className="vs-sub">Waste delivery (Antipollution Egypt){estimate?.wasteIncludedM3 != null ? ` · ${estimate.wasteIncludedM3} m³ included in the mandatory fee` : ""}</div>
+                  <label className="vs-f"><span className="vs-f__k">Non-hazardous waste (m³)</span><input className="vs-in vs-in--sm" type="number" min="0" step="0.5" value={voyage.wasteNormalM3} onChange={(e) => setV({ wasteNormalM3: e.target.value })} /></label>
+                  <label className="vs-f"><span className="vs-f__k">Hazardous waste (m³)</span><input className="vs-in vs-in--sm" type="number" min="0" step="0.5" value={voyage.wasteHazardousM3} onChange={(e) => setV({ wasteHazardousM3: e.target.value })} /></label>
+                  <label className="vs-f"><span className="vs-f__k">Contractor bags (m³)</span><input className="vs-in vs-in--sm" type="number" min="0" step="0.5" value={voyage.bagsM3} onChange={(e) => setV({ bagsM3: e.target.value })} /></label>
+                  <label className="vs-f"><span className="vs-f__k">Barge waiting (h)</span><input className="vs-in vs-in--sm" type="number" min="0" step="0.5" value={voyage.bargeHours} onChange={(e) => setV({ bargeHours: e.target.value })} /></label>
+                  <div className="vs-sub">SDR rate override</div>
+                  <label className="vs-f"><span className="vs-f__k">Manual rate (needs a reason)</span><input className="vs-in" type="number" step="0.000001" min="0.5" max="5" value={voyage.sdrOverride} onChange={(e) => setV({ sdrOverride: e.target.value })} placeholder="e.g. 1.36" /></label>
+                  {sdrOverrideValue != null && (
+                    <label className="vs-f vs-f--stack"><span className="vs-f__k">Reason</span><input className="vs-in vs-in--wide" value={voyage.sdrOverrideReason} onChange={(e) => setV({ sdrOverrideReason: e.target.value })} placeholder="e.g. IMF rate of today, not yet on file" aria-label="SDR override reason" />{!sdrReasonOk && <span className="vs-error">Not applied until a reason is given.</span>}</label>
+                  )}
+                </details>
+
+                {canSave && (
+                  <div className="vs-save">
+                    <button type="button" className="ve-btn" onClick={saveFacts} disabled={saveState.busy || pending}>{saveState.busy ? "Saving…" : "Save facts to vessel profile"}</button>
+                    {saveState.note && <div className={`vs-note${saveState.error ? " vs-error" : ""}`}>{saveState.note}</div>}
                   </div>
-                </div>
+                )}
+                <div className="vs-grow" />
+                <div className="vs-note">Estimate only. Confirm SCNT and current SDR rate with the SCA agent before transit.</div>
               </aside>
 
-              <main className="sz-main">
-                {contextError && <div className="sz-unavailable">{contextError}</div>}
+              <main className="vs-main">
+                {contextError && <div className="vs-notice vs-notice--unavailable">{contextError}</div>}
                 {!context.found && !contextError && (
-                  <div className="sz-unavailable"><strong>No published Suez tariff covers {voyage.transitDate}.</strong> The calculator shows nothing it cannot source. Admins publish tariff versions under Admin → Voyage estimator data.</div>
+                  <div className="vs-notice vs-notice--unavailable"><strong>No published Suez tariff covers {voyage.transitDate}.</strong> Nothing is shown that cannot be sourced. Admins publish tariff versions under Admin → Voyage estimator data.</div>
                 )}
-                {context.found && !facts.category && <div className="sz-unavailable"><strong>SCA vessel category not known for this vessel type.</strong> Select it in the rail; the toll bands depend on it.</div>}
-                {estimate && <Results estimate={estimate} vessel={vessel} />}
+                {context.found && !facts.category && <div className="vs-notice vs-notice--unavailable"><strong>SCA vessel category not known for this vessel type.</strong> Choose it under Transit parameters; the toll bands depend on it.</div>}
+                {estimate && <Results estimate={estimate} vessel={vessel} scnt={scnt} />}
               </main>
             </div>
           )}
@@ -320,30 +322,31 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
   );
 }
 
-function FactInput({ label, tip, value, record, onChange }: { label: string; tip: string; value: FactField; record: number | null; onChange: (v: FactField) => void }) {
+/** One fact with the design's Record / Manual switch on the right (Suez Canal Special Tonnage Certificate facts). */
+function FactRow({ label, tip, value, record, onChange, plain }: { label: string; tip: string; value: FactField; record: number | null; onChange: (v: FactField) => void; plain?: boolean }) {
   const manual = value.mode === "manual";
+  const shown = record == null ? null : plain ? String(record) : record.toLocaleString("en-US");
   return (
-    <div className="sz-fact">
-      <div className="sz-fact__row">
-        <span className="sz-fact__label" title={tip}>{label}</span>
-        <div className="ve-seg ve-seg--sm">
-          <button type="button" className={`ve-seg__btn${!manual ? " is-active" : ""}`} onClick={() => onChange({ ...value, mode: "record" })}>Record</button>
-          <button type="button" className={`ve-seg__btn${manual ? " is-active" : ""}`} onClick={() => onChange({ ...value, mode: "manual" })}>Manual</button>
-        </div>
-      </div>
-      {manual
-        ? <input type="number" min="0" className="ve-inp ve-inp--num" value={value.manual} onChange={(e) => onChange({ ...value, manual: e.target.value })} placeholder={record != null ? String(record) : "enter"} aria-label={`${label} manual value`} />
-        : <div className={`sz-fact__value${record == null ? " is-missing" : ""}`}>{record != null ? record.toLocaleString() : "not sourced"}</div>}
+    <div className="vs-f">
+      <span className="vs-f__k" title={tip}>{label}</span>
+      <span className="vs-f__v">
+        <span className="vs-src" role="group" aria-label={`${label} source`}>
+          <button type="button" className={!manual ? "is-on" : ""} aria-pressed={!manual} onClick={() => onChange({ ...value, mode: "record" })} title="Use the value from the vessel record">Record</button>
+          <button type="button" className={manual ? "is-on" : ""} aria-pressed={manual} onClick={() => onChange({ ...value, mode: "manual" })} title="Type a value for this estimate">Manual</button>
+        </span>
+        {manual
+          ? <input type="number" min="0" className="vs-in" value={value.manual} onChange={(e) => onChange({ ...value, manual: e.target.value })} placeholder={shown ?? "enter"} aria-label={`${label} manual value`} />
+          : <span className={shown == null ? "is-missing" : "is-auto"}>{shown ?? "not sourced"}</span>}
+      </span>
     </div>
   );
 }
 
-function TriState({ label, value, onChange }: { label: string; value: Tri; onChange: (v: Tri) => void }) {
+function TriRow({ label, value, onChange }: { label: string; value: Tri; onChange: (v: Tri) => void }) {
   return (
-    <div className="sz-fact">
-      <div className="sz-fact__row"><span className="sz-fact__label">{label}</span>
-        <div className="ve-seg ve-seg--sm">{(["yes", "no", "unknown"] as const).map((o) => <button key={o} type="button" className={`ve-seg__btn${value === o ? " is-active" : ""}`} onClick={() => onChange(o)}>{o === "unknown" ? "?" : o}</button>)}</div>
-      </div>
+    <div className="vs-f">
+      <span className="vs-f__k">{label}</span>
+      <div className="ve-seg ve-seg--sm" role="group" aria-label={label}>{(["yes", "no", "unknown"] as const).map((o) => <button key={o} type="button" className={`ve-seg__btn${value === o ? " is-active" : ""}`} aria-pressed={value === o} onClick={() => onChange(o)}>{o === "unknown" ? "?" : o === "yes" ? "Yes" : "No"}</button>)}</div>
     </div>
   );
 }
@@ -365,86 +368,131 @@ function statusSummary(e: SuezEstimate): string {
 
 function headline(e: SuezEstimate): string | null {
   if (e.ok) return null;
-  if (e.scnt == null) return "SCNT is not sourced: enter it in Manual mode to compute the toll.";
+  if (e.scnt == null) return "SCNT is not sourced: switch SCNT to Manual and enter it to compute the toll.";
   if (e.layers.toll.status === "unavailable" && e.layers.toll.tiers.length === 0) return "The SCA toll bands for this version are not loaded, so the transit toll is unavailable; the other layers are priced.";
   if (e.sdrRate.status === "unavailable") return "The SDR rate is not on file: SDR amounts cannot be converted (an override needs a reason).";
   return null;
 }
 
-function Results({ estimate, vessel }: { estimate: SuezEstimate; vessel: SuezVesselOption }) {
+// The design's three groups (Portal standalone 7 · SUEZ_GROUPS). Any fixed line the tariff adds later lands in Services.
+const GROUPS = [
+  { key: "sca", title: "Canal authority", note: "Toll, pilotage, ETR, mooring", codes: ["pilotage", "sca_etr", "mooring"], toll: true },
+  { key: "port", title: "Port & state", note: "Port authorities, lights, quarantine, police", codes: ["port_said_pa", "red_sea_pa", "lights_dues", "quarantine", "security_immigration"], toll: false },
+  { key: "svc", title: "Services", note: "Waste, boat, bank, agency", codes: [] as string[], toll: false },
+] as const;
+
+function lineClass(status: LineStatus, amount: number | null | undefined): string {
+  if (amount == null) return "is-missing";
+  return status === "trusted" ? "is-auto" : status === "manual" ? "is-manual" : "is-missing";
+}
+
+function Results({ estimate, vessel, scnt }: { estimate: SuezEstimate; vessel: SuezVesselOption; scnt: number | null }) {
   const t = estimate.totals;
   const applied = estimate.layers.conditional.filter((f) => f.triggered === true);
   const undecided = estimate.layers.conditional.filter((f) => f.triggered === null);
   const notApplied = estimate.layers.conditional.filter((f) => f.triggered === false && !f.contingent);
   const contingent = estimate.layers.conditional.filter((f) => f.contingent);
   const head = headline(estimate);
+  const known = new Set<string>(GROUPS.flatMap((g) => [...g.codes]));
+  const groups = GROUPS.map((g) => {
+    const lines = estimate.layers.fixed.filter((l) => (g.key === "svc" ? !known.has(l.code) : (g.codes as readonly string[]).includes(l.code)));
+    const tollUsd = g.toll ? estimate.layers.toll.usd : null;
+    const surchargeUsd = g.toll ? t.surchargeUsd : 0;
+    const parts = lines.map((l) => l.amountUsd);
+    const missing = parts.some((a) => a == null) || (g.toll && tollUsd == null);
+    const sum = parts.reduce<number>((a, b) => a + (b ?? 0), 0) + (tollUsd ?? 0) + surchargeUsd;
+    return { ...g, lines, tollUsd, sum, missing };
+  });
   const flagRow = (f: SuezFlag, cls: string) => (
-    <div key={f.code} className={`ve-pl-row ve-pl-row--linked sz-flag ${cls}`}>
-      <span>{f.triggered === true ? <b>APPLIED</b> : f.triggered === null ? <b>UNDECIDED</b> : null} {f.label}<small className="sz-muted">{f.reason} · {f.explanation} · payer: {f.payerParty}{f.status !== "trusted" ? ` · ${STATUS_LABEL[f.status]}` : ""}</small></span>
-      <span className={f.triggered === true ? "is-amber" : "is-muted"}>{f.triggered === true ? fmtUSD2(f.appliedUsd) : f.potentialUsd != null ? `potential ${fmtUSD(f.potentialUsd)}` : "undetermined"}</span>
+    <div key={f.code} className={`vs-row vs-flag ${cls}`}>
+      <span>{f.triggered === true ? <b>Applied · </b> : f.triggered === null ? <b>Undecided · </b> : null}{f.label}<small>{f.reason} · {f.explanation} · payer: {f.payerParty}{f.status !== "trusted" ? ` · ${STATUS_LABEL[f.status]}` : ""}</small></span>
+      <span className={f.triggered === true ? "is-manual" : "is-muted"}>{f.triggered === true ? fmtUSD2(f.appliedUsd) : f.potentialUsd != null ? `potential ${fmtUSD(f.potentialUsd)}` : "undetermined"}</span>
     </div>
   );
   return (
     <>
-      <div className={`sz-status sz-status--${estimate.status}`}><span className="sz-status__k">{estimate.status}</span><span>{statusSummary(estimate)}</span></div>
-      {head && <div className="sz-unavailable">{head}</div>}
-      <div className="ve-results sz-results">
-        <div className="ve-result"><div className="ve-result__k">1 · Transit toll</div><div className={`ve-result__v ${estimate.layers.toll.usd != null ? "ve-result__v--navy" : "is-missing"}`}>{fmtUSD(estimate.layers.toll.usd)}</div><div className="ve-note-sub">{fmtSDR(estimate.layers.toll.sdr)} · {STATUS_LABEL[estimate.layers.toll.status]}{t.surchargeUsd > 0 ? ` · + category surcharge ${fmtUSD(t.surchargeUsd)} (${STATUS_LABEL[estimate.layers.surcharge.status]})` : ""}</div></div>
-        <div className="ve-result"><div className="ve-result__k">2 · Fixed charges</div><div className="ve-result__v ve-result__v--navy">{fmtUSD(t.fixedUsd)}</div><div className="ve-note-sub">{estimate.layers.fixed.filter((l) => l.amountUsd != null).length} of {estimate.layers.fixed.length} items priced</div></div>
-        <div className="ve-result"><div className="ve-result__k">3 · Conditional (applied)</div><div className={`ve-result__v ${t.conditionalAppliedUsd > 0 ? "ve-result__v--amber" : "ve-result__v--green"}`}>{fmtUSD(t.conditionalAppliedUsd)}</div><div className="ve-note-sub">{applied.length} applied · {undecided.length} undecided · {notApplied.length} not applicable</div></div>
-        <div className="ve-result ve-result--tce"><div className="ve-result__k">Total transit cost</div><div className="ve-result__v">{t.complete ? fmtUSD(t.appliedUsd) : "—"}</div><div className="ve-note-sub">{t.complete ? `Exposure incl. flags ${fmtUSD(t.potentialUsd)}` : `Incomplete: computable parts ${fmtUSD(t.appliedUsd)}`}{t.wasteUsd > 0 ? ` · waste extras ${fmtUSD(t.wasteUsd)}` : ""}</div></div>
+      {estimate.status !== "trusted" && (
+        <div className={`vs-notice vs-notice--${estimate.status}`} role="status">
+          <span className="vs-notice__k">{estimate.status}</span><span>{statusSummary(estimate)}{head ? <><br />{head}</> : null}</span>
+        </div>
+      )}
+
+      <div className="vs-strip">
+        {groups.map((g) => (
+          <div key={g.key} className="vs-cell">
+            <div className="vs-cell__k">{g.title}</div>
+            <div className={`vs-cell__v${g.missing && g.sum === 0 ? " is-missing" : ""}`}>{g.missing && g.sum === 0 ? "—" : fmtUSD2(g.sum)}</div>
+            <div className="vs-cell__n">{g.missing ? "incomplete: computable lines only" : g.note}</div>
+          </div>
+        ))}
+        <div className="vs-cell vs-cell--all">
+          <div className="vs-cell__k">Total transit cost</div>
+          <div className="vs-cell__v">{t.complete ? fmtUSD2(t.appliedUsd) : "—"}</div>
+          <div className="vs-cell__n" title="The Suez total feeds the Voyage Cost Estimator only when a transit leg applies">{t.complete ? "Feeds Voyage Cost Estimator when a transit leg applies" : `Incomplete · computable parts ${fmtUSD(t.appliedUsd)}`}</div>
+        </div>
       </div>
 
-      <div className="ve-pl-grid sz-cards">
-        <div className="ve-pl-card">
-          <div className="ve-pl-card__title">1 · Transit toll <span className="sz-muted">· {SUEZ_VESSEL_CATEGORIES.find((c) => c.key === estimate.vesselCategory)?.label ?? estimate.vesselCategory} · {estimate.cargoStatus}</span></div>
-          {estimate.layers.toll.tiers.length === 0 ? <div className="ve-pl-row"><span className="is-amber">{estimate.layers.toll.reason ?? "SCA toll bands not loaded for this tariff version"}</span><span>—</span></div> : estimate.layers.toll.tiers.map((tier) => (
-            <div key={tier.tierOrder} className="ve-pl-row"><span>Band {tier.tierOrder + 1}: {tier.scntFrom.toLocaleString()} → {tier.scntTo == null ? "open" : tier.scntTo.toLocaleString()} SCNT · {tier.tons.toLocaleString()} t × {tier.sdrPerScnt} SDR</span><span>{fmtSDR(tier.sdr)}</span></div>
-          ))}
-          <div className="ve-pl-row is-subtotal"><span>Toll in SDR</span><span>{fmtSDR(estimate.layers.toll.sdr)}</span></div>
-          <div className="ve-pl-row"><span>× SDR rate {estimate.sdrRate.rateUsd != null ? `${estimate.sdrRate.rateUsd} (${estimate.sdrRate.asOf}, ${estimate.sdrRate.status})` : "not on file"}</span><span className={estimate.layers.toll.status === "trusted" ? "is-auto" : estimate.layers.toll.status === "manual" ? "is-manual" : "is-amber"}>{fmtUSD2(estimate.layers.toll.usd)}</span></div>
-          {estimate.layers.surcharge.lines.map((l) => <div key={l.code} className="ve-pl-row"><span>{l.label}<small className="sz-muted">{l.explanation}{l.status !== "trusted" ? ` · ${STATUS_LABEL[l.status]}` : ""}</small></span><span className={l.status === "trusted" ? "" : "is-amber"}>{fmtUSD2(l.amountUsd)}</span></div>)}
-          {estimate.layers.surcharge.lines.length === 0 && estimate.layers.toll.sdr != null && <div className={`ve-pl-row${estimate.layers.surcharge.status === "trusted" ? "" : " sz-surcharge-missing"}`}><span className={estimate.layers.surcharge.status === "trusted" ? "sz-muted" : "is-amber"}>Category surcharge: {estimate.layers.surcharge.reason}</span><span>{estimate.layers.surcharge.status === "trusted" ? fmtUSD2(0) : "—"}</span></div>}
-          {estimate.layers.toll.status === "placeholder" && <div className="ve-warn is-placeholder">Placeholder bands: not the official SCA circular. The toll is flagged, not trusted.</div>}
-          {estimate.layers.toll.status === "unavailable" && estimate.layers.toll.tiers.length > 0 && <div className="ve-warn">{estimate.layers.toll.reason}</div>}
-        </div>
+      <div className="vs-groups">
+        {groups.map((g) => (
+          <div key={g.key} className="vs-card">
+            <div className="vs-h">{g.title}</div>
+            {g.toll && (
+              <>
+                <div className="vs-row vs-row--hl">
+                  <span>Transit toll<small>{scnt != null ? `${scnt.toLocaleString("en-US")} SCNT` : "SCNT not sourced"} · {SUEZ_VESSEL_CATEGORIES.find((c) => c.key === estimate.vesselCategory)?.label ?? estimate.vesselCategory} · {estimate.cargoStatus}{estimate.sdrRate.rateUsd != null ? ` · × ${estimate.sdrRate.rateUsd} SDR` : ""}</small></span>
+                  <span className={lineClass(estimate.layers.toll.status, estimate.layers.toll.usd)}>{fmtUSD2(estimate.layers.toll.usd)}</span>
+                </div>
+                {estimate.layers.toll.tiers.filter((tier) => tier.tons > 0).map((tier) => (
+                  <div key={tier.tierOrder} className="vs-row vs-row--band"><span>Band {tier.tierOrder + 1}: {tier.scntFrom.toLocaleString("en-US")} → {tier.scntTo == null ? "open" : tier.scntTo.toLocaleString("en-US")} · {tier.tons.toLocaleString("en-US")} t × {tier.sdrPerScnt}</span><span>{fmtSDR(tier.sdr)}</span></div>
+                ))}
+                {estimate.layers.toll.tiers.length === 0 && scnt != null && <div className="vs-row"><span className="is-missing">{estimate.layers.toll.reason ?? "SCA toll bands not loaded for this tariff version"}</span><span>—</span></div>}
+                {estimate.layers.surcharge.lines.map((l) => <div key={l.code} className="vs-row"><span>{l.label}<small>{l.explanation}{l.status !== "trusted" ? ` · ${STATUS_LABEL[l.status]}` : ""}</small></span><span className={lineClass(l.status, l.amountUsd)}>{fmtUSD2(l.amountUsd)}</span></div>)}
+                {estimate.layers.surcharge.lines.length === 0 && estimate.layers.toll.sdr != null && estimate.layers.surcharge.status !== "trusted" && <div className="vs-row"><span className="is-missing">Category surcharge: {estimate.layers.surcharge.reason}</span><span>—</span></div>}
+                {estimate.layers.toll.status === "placeholder" && <div className="vs-note vs-error">Placeholder bands: not the official SCA circular. The toll is flagged, not trusted.</div>}
+              </>
+            )}
+            {g.lines.map((l) => (
+              <div key={l.code} className="vs-row"><span>{l.label}{(l.amountUsd == null || l.status !== "trusted") && <small>{l.explanation}{l.status !== "trusted" ? ` · ${STATUS_LABEL[l.status]}` : ""}</small>}</span><span className={lineClass(l.status, l.amountUsd)}>{fmtUSD2(l.amountUsd)}</span></div>
+            ))}
+            <div className="vs-row vs-row--sub"><span>Subtotal{g.missing ? " (computable lines)" : ""}</span><span>{fmtUSD2(g.sum)}</span></div>
+          </div>
+        ))}
+      </div>
 
-        <div className="ve-pl-card">
-          <div className="ve-pl-card__title">2 · Fixed accompanying charges</div>
-          {estimate.layers.fixed.map((l) => <div key={l.code} className="ve-pl-row ve-pl-row--linked"><span>{l.label}<small className="sz-muted">{l.explanation}{l.status !== "trusted" ? ` · ${STATUS_LABEL[l.status]}` : ""}</small></span><span className={l.amountUsd == null ? "is-amber" : l.status === "trusted" ? "is-auto" : "is-manual"}>{fmtUSD2(l.amountUsd)}</span></div>)}
-          <div className="ve-pl-row is-subtotal"><span>Subtotal (computable lines)</span><span>{fmtUSD2(estimate.totals.fixedUsd)}</span></div>
-        </div>
-
-        <div className="ve-pl-card">
-          <div className="ve-pl-card__title">3 · Conditional charges · risk flags</div>
+      <div className="vs-extra">
+        <div className="vs-card">
+          <div className="vs-h">Conditional charges · risk flags</div>
           {applied.map((f) => flagRow(f, "is-applied"))}
           {undecided.map((f) => flagRow(f, "is-undecided"))}
           {notApplied.map((f) => flagRow(f, ""))}
-          {contingent.length > 0 && <div className="ve-pl-row is-subtotal"><span>Contingent charges · only if they happen (listed, never added)</span><span /></div>}
-          {contingent.map((f) => <div key={f.code} className="ve-pl-row"><span>{f.label}<small className="sz-muted">{f.reason}</small></span><span className="sz-muted">—</span></div>)}
-          <div className="ve-pl-row is-subtotal"><span>Applied</span><span>{fmtUSD2(estimate.totals.conditionalAppliedUsd)}</span></div>
-          {undecided.length > 0 && <div className="ve-note-sub">Undecided flags need a fact (cranes, searchlight, transit history, build year); they are counted in the exposure, never in the applied total.</div>}
+          {contingent.length > 0 && <div className="vs-row vs-row--sub"><span>Contingent · only if they happen (listed, never added)</span><span /></div>}
+          {contingent.map((f) => <div key={f.code} className="vs-row"><span>{f.label}<small>{f.reason}</small></span><span className="is-muted">—</span></div>)}
+          <div className="vs-row vs-row--sub"><span>Applied</span><span>{fmtUSD2(t.conditionalAppliedUsd)}</span></div>
+          {undecided.length > 0 && <div className="vs-note">Undecided flags need a fact (cranes, searchlight, transit history, build year) under “Risk-flag and waste facts”; they count in the exposure ({fmtUSD(t.potentialUsd)}), never in the applied total.</div>}
         </div>
-
-        <div className="ve-pl-card">
-          <div className="ve-pl-card__title">4 · Waste extras <span className="sz-muted">· mandatory fee is in layer 2{estimate.wasteIncludedM3 != null ? ` (${estimate.wasteIncludedM3} m³ included)` : ""}</span></div>
-          {estimate.layers.waste.length === 0 ? <div className="ve-pl-row"><span className="is-muted">No extra volumes declared</span><span>{fmtUSD2(0)}</span></div> : estimate.layers.waste.map((l) => <div key={l.code} className="ve-pl-row ve-pl-row--linked"><span>{l.label}<small className="sz-muted">{l.explanation}</small></span><span>{fmtUSD2(l.amountUsd)}</span></div>)}
-          <div className="ve-pl-row is-grand"><span>Total transit cost (applied)</span><span>{t.complete ? fmtUSD2(estimate.totals.appliedUsd) : "incomplete"}</span></div>
-          <div className="ve-pl-row"><span>Feeds the Voyage Estimator as a voyage cost plus {estimate.transitDays} transit + {estimate.anchorageDays} anchorage days</span><span><Link href={`/dashboard/voyage-estimator?vessel=${encodeURIComponent(vessel.id)}`} className="sz-link">Open estimator →</Link></span></div>
+        <div className="vs-card">
+          <div className="vs-h">Waste extras<span className="vs-h__aside">mandatory fee is under Services{estimate.wasteIncludedM3 != null ? ` · ${estimate.wasteIncludedM3} m³ included` : ""}</span></div>
+          {estimate.layers.waste.length === 0 ? <div className="vs-row"><span>No extra volumes declared</span><span>{fmtUSD2(0)}</span></div> : estimate.layers.waste.map((l) => <div key={l.code} className="vs-row"><span>{l.label}<small>{l.explanation}</small></span><span className={lineClass(l.status, l.amountUsd)}>{fmtUSD2(l.amountUsd)}</span></div>)}
+          <div className="vs-row vs-row--sub"><span>Total transit cost (applied)</span><span>{t.complete ? fmtUSD2(t.appliedUsd) : "incomplete"}</span></div>
+          <div className="vs-row"><span>Feeds the Voyage Estimator as a voyage cost plus {estimate.transitDays} transit + {estimate.anchorageDays} anchorage days</span><span><Link href={`/dashboard/voyage-estimator?vessel=${encodeURIComponent(vessel.id)}`} className="sz-link">Open estimator →</Link></span></div>
         </div>
       </div>
 
-      {(estimate.unavailable.length > 0 || estimate.invalid.length > 0) && (
-        <div className="sz-warnings"><div className="ve-pl-card__title">Not priced</div><ul className="sz-list">{estimate.unavailable.map((u) => <li key={`u-${u.code}`}><b>{u.code}</b>: {u.reason}</li>)}{estimate.invalid.map((u) => <li key={`i-${u.code}`} className="is-placeholder"><b>{u.code}</b> (malformed tariff line): {u.reason}</li>)}</ul></div>
+      {(estimate.unavailable.length > 0 || estimate.invalid.length > 0 || estimate.warnings.length > 0) && (
+        <div className="vs-card">
+          <div className="vs-h">Not priced and notes</div>
+          <ul className="vs-list">
+            {estimate.unavailable.map((u) => <li key={`u-${u.code}`}><b>{u.code}</b>: {u.reason}</li>)}
+            {estimate.invalid.map((u) => <li key={`i-${u.code}`} className="vs-error"><b>{u.code}</b> (malformed tariff line): {u.reason}</li>)}
+            {estimate.warnings.map((w, i) => <li key={`w-${i}`}>{w}</li>)}
+          </ul>
+        </div>
       )}
-      {estimate.warnings.length > 0 && (
-        <div className="sz-warnings"><div className="ve-pl-card__title">Notes on this estimate</div><ul>{estimate.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>
-      )}
-      <div className="sz-sources">
-        <div className="ve-pl-card__title">Sources of tariff v{estimate.tariffVersion.versionNo}</div>
-        {estimate.sources.length === 0 ? <div className="is-placeholder">No source record is cited on this version.</div> : <ul>{estimate.sources.map((s) => <li key={s.id}>{s.title} · {s.issuer}{s.documentNo ? ` · ${s.documentNo}` : ""}{s.issueDate ? ` · ${s.issueDate}` : ""} · {s.authority} · {s.evidenceStatus === "on_file" ? <>on file <code>{s.sha256?.slice(0, 12)}…</code></> : <span className="is-placeholder">document pending</span>}</li>)}</ul>}
+      <div className="vs-card">
+        <div className="vs-h">Sources of tariff v{estimate.tariffVersion.versionNo}</div>
+        {estimate.sources.length === 0 ? <div className="vs-note vs-error">No source record is cited on this version.</div> : <ul className="vs-list">{estimate.sources.map((s) => <li key={s.id}>{s.title} · {s.issuer}{s.documentNo ? ` · ${s.documentNo}` : ""}{s.issueDate ? ` · ${s.issueDate}` : ""} · {s.authority} · {s.evidenceStatus === "on_file" ? <>on file <code>{s.sha256?.slice(0, 12)}…</code></> : <span className="vs-error">document pending</span>}</li>)}</ul>}
+        <div className="vs-note">Estimate only · {estimate.algorithmVersion} · Tariff v{estimate.tariffVersion.versionNo}, {estimate.tariffVersion.sourceRef}. Confirm SCNT, the SDR rate and the circulars in force with the SCA agent before transit.</div>
       </div>
-      <div className="ve-note-line">Estimate only · {estimate.algorithmVersion} · Tariff v{estimate.tariffVersion.versionNo} — {estimate.tariffVersion.sourceRef}. Confirm SCNT, the SDR rate and the circulars in force with the SCA agent before transit.</div>
     </>
   );
 }

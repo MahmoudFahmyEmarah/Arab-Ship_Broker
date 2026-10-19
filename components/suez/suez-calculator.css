@@ -41,3 +41,71 @@
 .sz-list { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
 .is-placeholder { color: var(--asb-red); }
 .is-manual { font-style: italic; }
+
+/* ── Design layout (Portal standalone 7 · TabSuez), owner 19 Oct 2026 ─────────────────────────────────
+   Ported from the design's .vs-* rules; the app-only parts (risk-flag facts, notices, flags, extras) follow
+   the same card, row and type scale. */
+.ve-head__title { margin: 0; }
+.vs-wrap { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+.vs-rail, .vs-card, .vs-strip { background: var(--asb-white); border-radius: 12px; box-shadow: 0 1px 2px rgba(13, 37, 69, .05), 0 4px 16px rgba(13, 37, 69, .05); }
+.vs-rail { padding: 10px 16px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.vs-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.vs-h { font-size: 13px; font-weight: 600; color: var(--asb-navy); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.vs-h--gap { margin-top: 14px; }
+.vs-h__aside { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--asb-gray-500); }
+.vs-f { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; min-height: 28px; }
+.vs-f--stack { flex-wrap: wrap; }
+.vs-f__k { color: var(--asb-gray-500); min-width: 0; }
+.vs-f__v { display: inline-flex; align-items: center; gap: 8px; }
+.vs-rail .is-auto, .vs-card .is-auto { color: var(--asb-green); font-weight: 500; }
+.vs-rail .is-manual, .vs-card .is-manual { color: var(--asb-amber); font-weight: 500; }
+.vs-rail .is-missing, .vs-card .is-missing, .vs-cell__v.is-missing { color: var(--asb-amber); }
+.vs-card .is-muted { color: var(--asb-gray-500); }
+.vs-src { display: inline-flex; background: var(--asb-gray-50); border-radius: 8px; padding: 2px; }
+.vs-src button { border: 0; background: none; font: inherit; font-size: 11px; padding: 2px 6px; border-radius: 6px; color: var(--asb-gray-500); cursor: pointer; }
+.vs-src button.is-on { background: var(--asb-white); color: var(--asb-navy); box-shadow: 0 1px 2px rgba(13, 37, 69, .08); }
+.vs-in { width: 78px; height: 24px; border: 0; border-radius: 8px; background: var(--asb-gray-50); box-shadow: inset 0 0 0 1px var(--asb-gray-100); padding: 0 6px; font: inherit; font-size: 13px; text-align: right; color: var(--asb-blue); }
+.vs-in:focus { outline: none; box-shadow: inset 0 0 0 1px var(--asb-blue), 0 0 0 3px rgba(24, 95, 165, .12); }
+.vs-in--sm { width: 56px; }
+.vs-in--date { width: 132px; text-align: left; }
+.vs-in--select { width: 150px; text-align: left; color: var(--asb-navy); }
+.vs-in--wide { width: 100%; text-align: left; margin-top: 4px; }
+.vs-tag { font-style: normal; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
+.vs-tag--est { background: var(--asb-amber-bg); color: var(--asb-amber); }
+.vs-tag--ok { background: var(--asb-green-bg); color: var(--asb-green); }
+.vs-note { font-size: 11px; color: var(--asb-gray-500); line-height: 1.4; margin-top: 2px; }
+.vs-error { color: var(--asb-red); }
+.vs-grow { flex: 1; min-height: 8px; }
+.vs-sub { font-size: 11px; font-weight: 600; color: var(--asb-navy); margin-top: 10px; }
+.vs-check { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--asb-gray-500); padding: 3px 0; }
+.vs-more { margin-top: 12px; border-top: 1px solid var(--asb-gray-100); padding-top: 8px; }
+.vs-more > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--asb-navy); list-style: none; display: flex; align-items: center; gap: 4px; padding: 2px 0 6px; }
+.vs-more > summary::-webkit-details-marker { display: none; }
+.vs-more > summary::before { content: "▸"; font-size: 10px; color: var(--asb-gray-500); transition: transform 120ms; }
+.vs-more[open] > summary::before { transform: rotate(90deg); }
+.vs-save { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.vs-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 8px; }
+.vs-cell { background: var(--asb-gray-50); border-radius: 10px; padding: 8px 12px; min-width: 0; }
+.vs-cell__k { font-size: 11px; color: var(--asb-gray-500); }
+.vs-cell__v { font-size: 16px; font-weight: 600; color: var(--asb-navy); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.vs-cell__n { font-size: 11px; color: var(--asb-gray-500); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-cell--all { background: var(--asb-navy); }
+.vs-cell--all .vs-cell__k, .vs-cell--all .vs-cell__v { color: var(--asb-white); }
+.vs-cell--all .vs-cell__n { color: var(--asb-tonnage-blue); }
+.vs-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.vs-extra { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; }
+.vs-card { padding: 10px 16px; min-width: 0; }
+.vs-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 5px 0; color: var(--asb-gray-500); }
+.vs-row span:last-child { font-variant-numeric: tabular-nums; text-align: right; flex: none; }
+.vs-row small { display: block; font-size: 11px; color: var(--asb-gray-500); }
+.vs-row--hl { background: var(--asb-gray-50); border-radius: 8px; padding: 6px 10px; margin: 0 -10px; color: var(--asb-navy); }
+.vs-row--band { font-size: 11px; padding: 2px 0 2px 10px; }
+.vs-row--sub { border-top: 1px solid var(--asb-gray-100); margin-top: 4px; padding-top: 7px; font-weight: 600; color: var(--asb-navy); }
+.vs-flag.is-applied > span:first-child { color: var(--asb-navy); }
+.vs-flag.is-undecided b { color: var(--asb-amber); }
+.vs-notice { display: flex; gap: 10px; align-items: baseline; border-radius: 12px; padding: 8px 14px; font-size: 12px; line-height: 1.45; background: var(--asb-amber-bg); color: var(--asb-amber-print); }
+.vs-notice--unavailable, .vs-notice--invalid { background: var(--asb-red-bg); color: var(--asb-red-print); }
+.vs-notice__k { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; flex: none; }
+.vs-list { margin: 0; padding-left: 18px; font-size: 12px; color: var(--asb-gray-600); line-height: 1.5; }
+@media (max-width: 900px) { .vs-wrap { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .vs-strip { grid-template-columns: 1fr 1fr; } .vs-groups, .vs-extra { grid-template-columns: 1fr; } }
