@@ -1648,3 +1648,14 @@
   font-size: 12px;
 }
 .pm-scope .pe-verify b { color: var(--asb-navy); font-size: 12.5px; }
+
+/* Design fidelity (B2ALL-061): the Estimate tab body is the design's .pf column; panels not yet converted sit in it
+   without their own side margins, and the deal bar's clear/new controls */
+.pm-scope .pf > .pda-workspace,
+.pm-scope .pf > .pda-history,
+.pm-scope .pf > .pda-route__notice { margin-left: 0; margin-right: 0; }
+.pm-scope .pf > .pda-workspace { margin-top: 0; padding-bottom: 0; }
+.pm-scope .pf-deal__new { flex: 0 0 auto; align-self: center; }
+.pm-scope .pf-ta__x { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); }
+.pm-scope .pf-empty__t { margin: 0; }
+.pm-scope .pf-empty__s { margin-bottom: 0; }

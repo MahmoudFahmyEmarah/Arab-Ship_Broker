@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Anchor, CalendarDays, ChevronRight, FileText, Loader2, Map, Package, Plus, Settings2, ShieldCheck, Ship, UserRound, X, RefreshCw } from "lucide-react";
+import { Anchor, CalendarDays, ChevronRight, FileText, Loader2, Map, Plus, Settings2, ShieldCheck, Ship, UserRound, X, RefreshCw } from "lucide-react";
 
 import { measuredPdaPassage, previewPdaRouteFrame, previewPdaRouteLeg } from "@/app/(dashboard)/dashboard/ports-da/actions";
 import {
@@ -621,8 +621,8 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       ) : activeTab === "setup" ? (
         <PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} />
       ) : (
-        <>
-          <section className={`pda-selection asb-card ${selected ? "is-selected" : ""}`} aria-label="Estimate records">
+        <div className="pf">
+          <section className={`pf-deal ${selected ? "is-selected" : ""}`} aria-label="Estimate records">
             {selected && vessel && cargo ? (
               <>
                 <SelectedRecord
@@ -637,8 +637,8 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                   detail={`${cargo.quantityLabel} · ${cargo.loadPort.name} → ${cargo.dischargePort.name}`}
                   onClear={() => chooseCargo("")}
                 />
-                <button type="button" className="asb-button pda-selection__new" onClick={reset}>
-                  <Plus size={14} /> New
+                <button type="button" className="asb-btn pf-deal__new" onClick={reset}>
+                  <Plus size={14} aria-hidden="true" /> New
                 </button>
               </>
             ) : (
@@ -666,10 +666,9 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
           ))}
 
           {!selected || !vessel || !cargo ? (
-            <section className="pda-empty-state asb-card">
-              <div className="pda-empty-state__icons" aria-hidden="true"><Ship size={23} /><Package size={23} /></div>
-              <h2>Pick a vessel and a cargo.</h2>
-              <p>Both come from your own records. The vessel is the reference; the cargo supplies quantity, type and the two ports. Both PDAs are priced from the tariff that governs each port, then from quotes, and say not sourced where neither exists.</p>
+            <section className="pf-empty" aria-labelledby="pda-empty-title">
+              <h2 id="pda-empty-title" className="pf-empty__t">Pick a vessel and a cargo.</h2>
+              <p className="pf-empty__s">Both come from your own records. The vessel is the reference; the cargo supplies quantity, type and the two ports. Both PDAs are priced from the tariff that governs each port, then from quotes, and say not sourced where neither exists.</p>
             </section>
           ) : (
             <div className="pda-workspace">
@@ -827,7 +826,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
           )}
 
           <PdaSavedEstimates refreshKey={historyKey} />
-        </>
+        </div>
       )}
       </section>
     </div>
@@ -836,13 +835,13 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
 
 function SelectedRecord({ label, title, detail, onClear }: { label: string; title: string; detail: string; onClear: () => void }) {
   return (
-    <div className="pda-selection__record">
-      <span className="pda-selection__label">{label}</span>
-      <div>
-        <strong>{title}</strong>
-        <p>{detail}</p>
+    <div className="pf-deal__slot">
+      <div className="pf-deal__k">{label}</div>
+      <div className="pf-deal__v">
+        <span className="pf-deal__n" title={title}>{title}</span>
+        <span className="pf-deal__m">{detail}</span>
+        <button type="button" className="pf-deal__x" aria-label={`Clear ${label.toLowerCase()}`} onClick={onClear}><X size={14} aria-hidden="true" /></button>
       </div>
-      <button type="button" aria-label={`Clear ${label.toLowerCase()}`} onClick={onClear}><X size={13} /></button>
     </div>
   );
 }
@@ -884,13 +883,11 @@ function CatalogPicker({
   }
 
   return (
-    <div className="pda-picker">
-      <label htmlFor={`pda-${kind}-search`}>{label}</label>
-      <div className="pda-picker__control">
-        {kind === "vessel" ? <Ship size={15} /> : <Package size={15} />}
+    <div className="pf-deal__slot">
+      <label className="pf-deal__k" htmlFor={`pda-${kind}-search`}>{label}</label>
+      <div className="pf-ta">
         <input
           id={`pda-${kind}-search`}
-          className="asb-control"
           value={open ? query : selectedLabel}
           placeholder={kind === "vessel" ? "Search your fleet" : "Search your cargoes"}
           disabled={disabled}
@@ -928,27 +925,28 @@ function CatalogPicker({
             }
           }}
         />
-        {selected ? <button type="button" onClick={() => onChange("")} aria-label={`Clear ${label.toLowerCase()}`}><X size={13} /></button> : null}
-      </div>
+        {selected ? <button type="button" className="pf-deal__x pf-ta__x" onClick={() => onChange("")} aria-label={`Clear ${label.toLowerCase()}`}><X size={14} aria-hidden="true" /></button> : null}
       {open && !disabled ? (
-        <div className="pda-picker__menu asb-card" id={`pda-${kind}-options`} role="listbox">
+        <div className="pf-sug" id={`pda-${kind}-options`} role="listbox">
           {filtered.length ? filtered.map((item) => (
             <button
               key={item.id}
               id={`pda-${kind}-option-${item.id}`}
               type="button"
               role="option"
+              className={`pf-sug__o${activeItem?.id === item.id ? " is-cur" : ""}`}
               aria-selected={item.id === value}
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setActiveIndex(filtered.indexOf(item))}
               onClick={() => choose(item)}
             >
-              <strong>{"name" in item ? item.name : item.cargo}</strong>
-              <span>{"name" in item ? `${item.type} · ${item.dwt} DWT · IMO ${item.imo}` : `${item.quantityLabel} · ${item.loadPort.name} → ${item.dischargePort.name}`}</span>
+              <div className="pf-sug__n">{"name" in item ? item.name : item.cargo}</div>
+              <div className="pf-sug__m">{"name" in item ? `${item.type} · ${item.dwt} DWT · IMO ${item.imo}` : `${item.quantityLabel} · ${item.loadPort.name} → ${item.dischargePort.name}`}</div>
             </button>
-          )) : <p>No authorised {kind === "vessel" ? "vessels" : "cargoes"} match this search.</p>}
+          )) : <div className="pf-sug__none">No authorised {kind === "vessel" ? "vessels" : "cargoes"} match “{query.trim()}”.</div>}
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
