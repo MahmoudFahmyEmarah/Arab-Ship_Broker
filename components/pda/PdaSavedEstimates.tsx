@@ -105,7 +105,7 @@ export function PdaSaveBar({
   }
 
   return (
-    <section className="pda-save asb-card" aria-label="Save this estimate">
+    <section id="pda-save" className="pda-save asb-card" aria-label="Save this estimate">
       <div className="pda-save__text">
         <b>Save this estimate</b>
         <span>

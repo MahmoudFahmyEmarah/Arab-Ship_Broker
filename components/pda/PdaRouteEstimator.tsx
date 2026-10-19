@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Anchor, CalendarDays, ChevronRight, Loader2, Map, Package, Plus, Settings2, Ship, UserRound, X, RefreshCw } from "lucide-react";
+import { Anchor, CalendarDays, ChevronRight, FileText, Loader2, Map, Package, Plus, Settings2, ShieldCheck, Ship, UserRound, X, RefreshCw } from "lucide-react";
 
 import { measuredPdaPassage, previewPdaRouteFrame, previewPdaRouteLeg } from "@/app/(dashboard)/dashboard/ports-da/actions";
 import {
@@ -41,6 +41,7 @@ import { PdaAgentsWorkspace } from "./PdaAgentsWorkspace";
 import { PdaSaveBar, PdaSavedEstimates } from "./PdaSavedEstimates";
 import { initialPdaTab, type PdaPreferences } from "@/lib/pda/preferences";
 import "./pda-route-estimator.css";
+import "./ports-module.css";
 
 interface Props {
   bootstrap: PdaEstimatorBootstrap;
@@ -148,6 +149,8 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
     || bootstrap.initial.loadPortLocode || bootstrap.initial.dischargePortLocode);
   const [preferences, setPreferences] = React.useState<PdaPreferences>(initialPreferences);
   const [activeTab, setActiveTab] = React.useState<PdaEstimatorTab>(() => initialPdaTab(initialPreferences, hasHandoff));
+  // the head's Verification panel (design): honest empty state until verification requests exist
+  const [verifyOpen, setVerifyOpen] = React.useState(false);
   // the member's saved row height wins over the bootstrap default; it never changes a figure
   const density = preferences.saved ? preferences.density : bootstrap.initial.density;
   const [vesselId, setVesselId] = React.useState(bootstrap.initial.vesselId ?? "");
@@ -542,14 +545,37 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
 
   return (
     // a <div>: the dashboard shell already provides the page's <main> landmark (no nested main)
-    <div className={`asb-ds pda-route pda-route--${density}`}>
-      <header className="pda-route__header">
-        <h1>Ports Cost Estimator</h1>
-        <p>{subtitle}</p>
+    <div className={`asb-ds pm-scope pda-route pda-route--${density}${density === "compact" ? " is-compact" : ""}`}>
+      {/* the design's head (owner B2ALL-061): page title with an inline eyebrow, then the page actions */}
+      <header className="pe-head">
+        <div className="pe-head__top">
+          <div className="pe-head__title">
+            <h1 className="page-title">Ports Cost Estimator</h1>
+            <p className="eyebrow">{subtitle}</p>
+          </div>
+          <div className="pe-head__act pe-icons">
+            {selected ? (
+              <button type="button" className="asb-btn pe-iconbtn" title="Save or export this estimate" aria-label="Save or export this estimate"
+                onClick={() => document.getElementById("pda-save")?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                <FileText size={14} aria-hidden="true" />
+              </button>
+            ) : null}
+            <button type="button" className="asb-btn pe-iconbtn" title="Verification requests" aria-label="Verification requests"
+              aria-expanded={verifyOpen} onClick={() => setVerifyOpen((open) => !open)}>
+              <ShieldCheck size={14} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        {verifyOpen ? (
+          <div className="pe-verify" role="region" aria-label="Verification requests">
+            <b>No verification asked for yet.</b>
+            <span>Asking a port agent or the desk to confirm a charge line is not built yet; quotes from agencies are requested from a saved estimate.</span>
+          </div>
+        ) : null}
       </header>
 
       <nav
-        className="pda-route__tabs asb-tabs"
+        className="pe-tabs"
         aria-label="Ports Cost Estimator sections"
         role="tablist"
         onKeyDown={(event) => {
@@ -567,7 +593,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       >
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
-            className="asb-tab"
+            className={`pe-tabs__b${activeTab === id ? " is-on" : ""}`}
             key={id}
             id={`pda-tab-${id}`}
             type="button"
@@ -577,7 +603,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
             tabIndex={activeTab === id ? 0 : -1}
             onClick={() => setActiveTab(id)}
           >
-            <Icon size={14} /> {label}
+            <Icon size={14} aria-hidden="true" />{label}
           </button>
         ))}
       </nav>

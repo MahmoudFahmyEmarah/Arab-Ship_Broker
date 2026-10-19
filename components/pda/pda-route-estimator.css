@@ -1632,3 +1632,19 @@
   color: var(--ds-navy);
   font-size: 12px;
 }
+
+/* Design fidelity (B2ALL-061): the head's title row (inline in the design) and the Verification panel */
+.pm-scope .pe-head__title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0; }
+.pm-scope .pe-head__title .page-title,
+.pm-scope .pe-head__title .eyebrow { margin: 0; }
+.pm-scope .pe-verify {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+  border-radius: 10px;
+  background: var(--asb-gray-50);
+  padding: 10px 14px;
+  color: var(--asb-gray-700);
+  font-size: 12px;
+}
+.pm-scope .pe-verify b { color: var(--asb-navy); font-size: 12.5px; }
