@@ -6,7 +6,7 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { createBoundTestUser } from "./e2e-auth";
-import { resolveLocalTarget, type LocalE2ETarget } from "./e2e-db";
+import { resolveTarget, type E2ETarget } from "./e2e-db";
 
 const PASSWORD = "e2e-PDA-Agents-Passw0rd!";
 
@@ -29,14 +29,15 @@ interface Seed {
   dischargePortName: string;
 }
 
-function service(): { db: SupabaseClient; target: LocalE2ETarget } {
-  const target = resolveLocalTarget();
+// the local stack, or the approved hosted staging project (resolveTarget refuses production and any unbound target)
+function service(): { db: SupabaseClient; target: E2ETarget } {
+  const target = resolveTarget();
   const key = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error("E2E_SUPABASE_SERVICE_ROLE_KEY is required");
   return { db: createClient(target.apiUrl, key, { auth: { persistSession: false } }), target };
 }
 
-async function user(db: SupabaseClient, target: LocalE2ETarget, email: string, row: Record<string, unknown>) {
+async function user(db: SupabaseClient, target: E2ETarget, email: string, row: Record<string, unknown>) {
   const { data, error } = await createBoundTestUser(db, target, { email, password: PASSWORD, email_confirm: true });
   if (error || !data.user) throw new Error(`create ${email}: ${error?.message}`);
   const { error: rowError } = await db.from("users").insert({ id: data.user.id, supabase_user_id: data.user.id, email, is_active: true, ...row });
