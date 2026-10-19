@@ -15,6 +15,11 @@ begin
     raise exception 'PDA_DOWN_REFUSED: % accepted quote(s) would lose their record; export them, then set local asb.pda_acceptances_down = ''history-exported:<ref>'' in this transaction', v_rows
       using errcode = '55000';
   end if;
+  -- saved agency-quote lines are immutable history: the narrower basis check cannot come back while any exists
+  if exists (select 1 from public.pda_estimate_lines where basis = 'agency_quote') then
+    raise exception 'PDA_DOWN_REFUSED: saved estimates hold accepted agency-quote lines; they are immutable, so the basis check cannot be narrowed again'
+      using errcode = '55000';
+  end if;
 end $$;
 
 drop function if exists public.pda_accept_agency_quote(uuid, uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb);
@@ -31,4 +36,11 @@ $$;
 revoke all on function public.fn_pda_recipient_quotes(uuid, uuid) from public, anon, authenticated;
 
 drop table if exists public.pda_quote_acceptances;
+alter table public.pda_estimate_lines drop constraint if exists pda_estimate_lines_agency_quote_ck;
+alter table public.pda_estimate_lines drop constraint if exists pda_estimate_lines_basis_ck;
+alter table public.pda_estimate_lines add constraint pda_estimate_lines_basis_ck check (basis in (
+    'flat','per_call','per_day','per_hour','per_gt','per_nt','per_scnrt','per_dwt','per_loa',
+    'per_cargo_mt','per_unit','per_gt_day','per_loa_day','per_loa_hour',
+    'percentage','tiered_flat','tiered_rate','progressive','manual_quote','manual'
+  ));
 drop function if exists public.fn_pda_quote_acceptance_immutable();

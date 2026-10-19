@@ -88,6 +88,9 @@ ok(/revoke all on table public\.pda_quote_acceptances from public, anon, authent
   && /grant execute on function public\.pda_accept_agency_quote\(uuid, uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb\) to service_role;/.test(migration)
   && /grant execute on function public\.pda_quote_acceptance_context\(uuid, uuid\) to service_role;/.test(migration)
   && !/to authenticated/.test(migration), "no table grant; both functions are service-only (the saved route input never reaches a member's API)");
+ok(/'manual_quote','manual','agency_quote'/.test(migration) && /basis <> 'agency_quote' or \(is_manual and tariff_rule_id is null and source_id is null\)/.test(migration)
+  && /'manual_quote','manual'\n  \)\);/.test(down) && /basis = 'agency_quote'/.test(down),
+  "saved lines accept agency_quote only as manual lines with no tariff rule or source; the DOWN restores the old check and refuses while such lines exist");
 ok(/request_id\s+uuid not null unique/.test(migration) && /set_id\s+uuid not null unique/.test(migration) && /before truncate on public\.pda_quote_acceptances/.test(migration),
   "one acceptance per request and per set; append-only, TRUNCATE refused");
 const accept = migration.slice(migration.indexOf("create or replace function public.pda_accept_agency_quote"));

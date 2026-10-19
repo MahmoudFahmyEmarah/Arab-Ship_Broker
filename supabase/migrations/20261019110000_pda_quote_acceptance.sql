@@ -6,6 +6,7 @@
 -- the one the request was made from. The database re-checks that the quoted leg IS the quote — same port, currency,
 -- lines in order and total, no tariff version — so no other figure can be passed off as an agency quote.
 --
+--   pda_estimate_lines.basis        — also accepts 'agency_quote' (manual, attributed, never a tariff rule or source)
 --   pda_quote_acceptances           — one row per accepted quote (one per request); append-only
 --   pda_quote_acceptance_context(actor, quote)   service only: what the server needs to rebuild the route (incl. the
 --                                                saved route input, which never goes to the browser)
@@ -15,6 +16,17 @@
 -- Plain SQL. DOWN: supabase/rollback/20261019110000_pda_quote_acceptance_down.sql (refuses while acceptances exist).
 -- ════════════════════════════════════════════════════════════════════════
 set local lock_timeout = '5s';
+
+-- a saved line may carry the basis 'agency_quote' (an accepted agency quote's line; manual, attributed, no tariff rule)
+alter table public.pda_estimate_lines drop constraint if exists pda_estimate_lines_basis_ck;
+alter table public.pda_estimate_lines add constraint pda_estimate_lines_basis_ck check (basis in (
+    'flat','per_call','per_day','per_hour','per_gt','per_nt','per_scnrt','per_dwt','per_loa',
+    'per_cargo_mt','per_unit','per_gt_day','per_loa_day','per_loa_hour',
+    'percentage','tiered_flat','tiered_rate','progressive','manual_quote','manual','agency_quote'
+  ));
+alter table public.pda_estimate_lines drop constraint if exists pda_estimate_lines_agency_quote_ck;
+alter table public.pda_estimate_lines add constraint pda_estimate_lines_agency_quote_ck check (
+  basis <> 'agency_quote' or (is_manual and tariff_rule_id is null and source_id is null));
 
 create table if not exists public.pda_quote_acceptances (
   quote_id       uuid primary key references public.pda_agency_quotes(id),
