@@ -228,6 +228,7 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
                 <option value="">Select vessel…</option>
                 {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+              <span className="ve-selector__caret" aria-hidden="true">▾</span>
             </span>
           </label>
         </div>

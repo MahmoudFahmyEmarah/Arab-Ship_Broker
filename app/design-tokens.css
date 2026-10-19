@@ -31,7 +31,7 @@
   --asb-navy: #0D2545;
   --asb-navy-deep: #0D2240;
   --asb-navy-global: #1B3A5C;
-  --asb-blue: #24486B;
+  --asb-blue: #185FA5; /* design value (Portal standalone 7); the sidebar and the map keep #24486B, see the pins below */
   --asb-blue-light: #E6F1FB;
   --asb-steel-bg: #E7EEF5;
   --asb-steel: #2C5F8A;
@@ -59,12 +59,14 @@
   --ccx-soft: #F2F6FB;
 
   /* ── status: vivid ramp (print ramp kept for dense text) ── */
-  --asb-green: #2E8B57;
-  --asb-green-bg: #DFF0E6;
-  --asb-amber: #A66A0C;
-  --asb-amber-bg: #F8ECD6;
-  --asb-red: #A83A3A;
-  --asb-red-bg: #F5E1E1;
+  --asb-green: #2A9962;
+  --asb-green-bg: #DEF1E2;
+  --asb-amber: #B17311;
+  --asb-amber-bg: #FBF2DF;
+  --asb-red: #C84A4A;
+  --asb-red-bg: #FAE5E5;
+  --asb-purple: #7B61FF; /* design: PDA cards layer */
+  --asb-coral: #F0957B;  /* design: Suez canal layer */
   --asb-green-print: #27500A;
   --asb-green-print-bg: #EAF3DE;
   --asb-amber-print: #854F0B;
@@ -95,9 +97,9 @@
   --map-ocean: #0C1929;
   --map-land: #1A2D3A;
   --map-coast: rgba(255, 255, 255, 0.18);
-  --map-cargo: var(--asb-green-bg);
+  --map-cargo: #DFF0E6; /* the map keeps the app's own palette (owner, 19 Oct 2026) */
   --map-review: #FBF4E2;
-  --map-alert: var(--asb-red);
+  --map-alert: #A83A3A;
   --map-alert-urgent: var(--asb-red-print);
   --map-tonnage: #7BB8F0;
   --map-route: #24486B;
@@ -112,9 +114,9 @@
   --map-feature: var(--asb-gold-soft);
   --map-label: var(--asb-blue-light);
   --map-base-light: var(--asb-gray-100);
-  --map-in: var(--asb-green);
-  --map-partial: var(--asb-amber);
-  --map-out: var(--asb-red);
+  --map-in: #2E8B57;
+  --map-partial: #A66A0C;
+  --map-out: #A83A3A;
   --map-bar-w: 44px;
   --map-icon: 36px;
   --map-panel-w: 248px;
@@ -199,4 +201,17 @@
   --z-map-panel: 580;
   --z-map-bar: 600;
   --z-map-fullscreen: 9999;
+}
+
+/* The member sidebar (both themes) and the map keep the app's own colours (owner, 19 Oct 2026): the design
+   palette above applies everywhere else. Every --asb-* status/blue read inside these two surfaces resolves here. */
+.asb-sidebar,
+.asb-map {
+  --asb-blue: #24486B;
+  --asb-green: #2E8B57;
+  --asb-green-bg: #DFF0E6;
+  --asb-amber: #A66A0C;
+  --asb-amber-bg: #F8ECD6;
+  --asb-red: #A83A3A;
+  --asb-red-bg: #F5E1E1;
 }

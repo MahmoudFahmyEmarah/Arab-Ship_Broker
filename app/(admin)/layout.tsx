@@ -1,6 +1,6 @@
 // Admin console shell — a distinct privileged surface (per the 14_admin_rebuild
-// design, restyled onto the ASB design system): navy topbar + baby-blue live-edit
-// banner + navy grouped rail with the brand block + read-only ribbon. It is
+// design, restyled onto the ASB design system): full-height navy grouped rail + amber live-edit
+// banner with the signed-in admin (design: Portal standalone 7) + read-only ribbon. It is
 // visibly the same product as the broker portal but deliberately marked as the
 // operator surface. Per-page requireAdmin() guards remain the real access
 // enforcement; the sidebar/ribbon are the UX layer.
@@ -9,7 +9,7 @@ import "./admin-dashboard.css";
 import "./admin-dq.css";
 import "./admin-data-sync.css";
 import { requireAdmin, getAdminSupabaseClient } from "@/lib/admin/require-admin";
-import { AdminTopbar } from "@/components/admin/shell/AdminTopbar";
+import { AdminBanner } from "@/components/admin/shell/AdminBanner";
 import { AdminSidebarNav } from "@/components/admin/shell/AdminSidebarNav";
 import { AdminReadonlyRibbon } from "@/components/admin/shell/AdminReadonlyRibbon";
 import { DqRunPill } from "@/components/admin/data-quality/DqRunPill";
@@ -47,19 +47,17 @@ export default async function AdminLayout({
 
   return (
     <div className="adm-shell">
-      <AdminTopbar name={admin.fullName} tier={admin.tier}>
-        <DqRunPill />
-      </AdminTopbar>
-      <div className="adm-banner">
-        <span aria-hidden>⚠</span>
-        Admin panel: changes here affect the live platform immediately.
-      </div>
       <div className="adm-body">
         <AdminSidebarNav tier={admin.tier} perms={admin.perms} counts={counts} />
-        <main className="adm-main">
-          <AdminReadonlyRibbon tier={admin.tier} perms={admin.perms} />
-          {children}
-        </main>
+        <div className="adm-col">
+          <AdminBanner name={admin.fullName} tier={admin.tier}>
+            <DqRunPill />
+          </AdminBanner>
+          <main className="adm-main">
+            <AdminReadonlyRibbon tier={admin.tier} perms={admin.perms} />
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );
