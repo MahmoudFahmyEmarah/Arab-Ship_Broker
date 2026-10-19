@@ -14,6 +14,7 @@ import {
 } from "@/app/(dashboard)/dashboard/ports-da/actions";
 import type { PdaEstimateSetSummary, PdaSaveSetResult } from "@/lib/pda/estimate-sets";
 import type { PdaRoutePreviewInput, PdaRoutePreviewResult } from "@/lib/pda/route-types";
+import { PdaQuoteRequests } from "./PdaQuoteRequests";
 
 function stamp(iso: string): string {
   const d = new Date(iso);
@@ -146,6 +147,8 @@ export function PdaSavedEstimates({ refreshKey }: { refreshKey: number }) {
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [exportError, setExportError] = React.useState("");
   const sequence = React.useRef(0);
+  // the saved estimate whose quote requests are open (Agents phase 2)
+  const [openQuotes, setOpenQuotes] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     const run = ++sequence.current;
@@ -209,6 +212,12 @@ export function PdaSavedEstimates({ refreshKey }: { refreshKey: number }) {
               <button type="button" className="pda-save__button" onClick={() => void exportPdf(item.id)} disabled={busyId === item.id} aria-label={`Export ${item.title} as PDF`}>
                 {busyId === item.id ? <Loader2 className="is-spinning" size={13} aria-hidden="true" /> : <Download size={13} aria-hidden="true" />} PDF
               </button>
+              <button type="button" className="pda-save__button" aria-expanded={openQuotes === item.id} onClick={() => setOpenQuotes((id) => (id === item.id ? null : item.id))}>
+                Quotes
+              </button>
+              {openQuotes === item.id ? (
+                <PdaQuoteRequests setId={item.id} loadPort={item.loadPort} dischargePort={item.dischargePort} isLatest={item.isLatest} />
+              ) : null}
             </li>
           ))}
         </ul>

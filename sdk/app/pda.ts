@@ -4,6 +4,7 @@ import type { PdaCalculationResult, PdaRequest, PdaTariffVersion } from "@/lib/p
 import { parsePdaPortsWorkspace, type PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
 import { parsePdaPreferences, type PdaPreferences, type PdaStartTab } from "@/lib/pda/preferences";
 import { parsePdaAdminAgencies, parsePdaAgencies, type PdaAdminAgency, type PdaAgency } from "@/lib/pda/agents";
+import { parsePdaAgencyInbox, parsePdaQuoteRequests, type PdaAgencyInboxItem, type PdaQuoteRequest } from "@/lib/pda/quote-requests";
 import {
   parsePdaSaveSetResult,
   parsePdaSetDetail,
@@ -165,4 +166,53 @@ export async function pdaAdminListAgencies(admin: SupabaseClient, actorId: strin
   const { data, error } = await admin.rpc("pda_admin_list_agencies", { p_actor: actorId });
   if (error) throw new Error(error.message);
   return parsePdaAdminAgencies(data);
+}
+
+// ── Agents phase 2: quote requests (20261019100000) — every call runs in the caller's own session ──
+
+export async function createPdaQuoteRequest(supabase: SupabaseClient, input: {
+  setId: string; leg: "load" | "discharge"; agencyIds: string[]; services: string[]; note: string | null; revealIdentity: boolean;
+}): Promise<{ requestId: string; agencies: number }> {
+  const { data, error } = await supabase.rpc("create_pda_quote_request", {
+    p_set_id: input.setId, p_leg: input.leg, p_agency_ids: input.agencyIds, p_services: input.services,
+    p_note: input.note, p_reveal_identity: input.revealIdentity,
+  });
+  if (error) throw new Error(error.message);
+  const r = (data ?? {}) as { requestId?: string; agencies?: number };
+  return { requestId: String(r.requestId ?? ""), agencies: Number(r.agencies ?? 0) };
+}
+
+export async function withdrawPdaQuoteRequest(supabase: SupabaseClient, requestId: string): Promise<void> {
+  const { error } = await supabase.rpc("withdraw_pda_quote_request", { p_request_id: requestId });
+  if (error) throw new Error(error.message);
+}
+
+export async function listMyPdaQuoteRequests(supabase: SupabaseClient, setId?: string | null): Promise<PdaQuoteRequest[]> {
+  const { data, error } = await supabase.rpc("list_my_pda_quote_requests", { p_set_id: setId ?? null });
+  if (error) throw new Error(error.message);
+  return parsePdaQuoteRequests(data);
+}
+
+export async function listAgencyPdaQuoteRequests(supabase: SupabaseClient): Promise<PdaAgencyInboxItem[]> {
+  const { data, error } = await supabase.rpc("list_agency_pda_quote_requests");
+  if (error) throw new Error(error.message);
+  return parsePdaAgencyInbox(data);
+}
+
+export async function submitPdaAgencyQuote(supabase: SupabaseClient, input: {
+  requestId: string; agencyId: string; currency: string; lines: { label: string; serviceCode: string | null; amount: string }[];
+  validUntil: string; reference: string | null; note: string | null;
+}): Promise<{ quoteId: string; revision: number }> {
+  const { data, error } = await supabase.rpc("submit_pda_agency_quote", {
+    p_request_id: input.requestId, p_agency_org_id: input.agencyId, p_currency: input.currency,
+    p_lines: input.lines, p_valid_until: input.validUntil, p_reference: input.reference, p_note: input.note,
+  });
+  if (error) throw new Error(error.message);
+  const r = (data ?? {}) as { quoteId?: string; revision?: number };
+  return { quoteId: String(r.quoteId ?? ""), revision: Number(r.revision ?? 1) };
+}
+
+export async function declinePdaQuoteRequest(supabase: SupabaseClient, requestId: string, agencyId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc("decline_pda_quote_request", { p_request_id: requestId, p_agency_org_id: agencyId, p_reason: reason });
+  if (error) throw new Error(error.message);
 }

@@ -19,6 +19,8 @@ import { resolveDeclaredFlag, resolveFlagName, type FlagStateRow } from "@/lib/p
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaCalculationContext, getPdaEstimateSet, listMyPdaEstimateSets, listPdaPortAgents, listPdaPortsWorkspace, savePdaEstimate, savePdaEstimateSet, setMyPdaPreferences } from "@/sdk/app/pda";
 import type { PdaAgency } from "@/lib/pda/agents";
+import type { PdaQuoteRequest } from "@/lib/pda/quote-requests";
+import { createPdaQuoteRequest, listMyPdaQuoteRequests, withdrawPdaQuoteRequest } from "@/sdk/app/pda";
 import { PDA_OWNER_MARKER, pdaRouteSnapshot, type PdaEstimateSetDetail, type PdaEstimateSetSummary, type PdaSaveSetResult } from "@/lib/pda/estimate-sets";
 import type { PdaPreferences, PdaStartTab } from "@/lib/pda/preferences";
 import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
@@ -630,5 +632,61 @@ export async function loadPdaAgents(): Promise<ActionResult<PdaAgency[]>> {
     return { ok: true, data: await listPdaPortAgents(supabase) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "The port agents could not be loaded") };
+  }
+}
+
+const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Agents phase 2: the agencies listed at one port (for choosing who to ask). */
+export async function loadPdaAgentsAtPort(portLocode: string): Promise<ActionResult<PdaAgency[]>> {
+  try {
+    if (!/^[A-Z]{2}[A-Z0-9]{3}$/.test(portLocode)) throw new UserFacingActionError("Unknown port");
+    const { supabase } = await viewer();
+    return { ok: true, data: await listPdaPortAgents(supabase, portLocode) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The port agents could not be loaded") };
+  }
+}
+
+/**
+ * Ask listed agencies for a real quote for one port of a SAVED estimate (Agents phase 2). The database builds the
+ * masked snapshot from the saved leg and checks the set, the latest version and that every agency attends the port.
+ */
+export async function requestPdaQuotes(input: {
+  setId: string; leg: "load" | "discharge"; agencyIds: string[]; services: string[]; note: string; revealIdentity: boolean;
+}): Promise<ActionResult<{ requestId: string; agencies: number }>> {
+  try {
+    if (!REQUEST_ID.test(input.setId) || (input.leg !== "load" && input.leg !== "discharge")) throw new UserFacingActionError("Unknown saved estimate");
+    if (!input.agencyIds.length || input.agencyIds.some((id) => !REQUEST_ID.test(id))) throw new UserFacingActionError("Choose at least one agency");
+    const { supabase } = await viewer();
+    return { ok: true, data: await createPdaQuoteRequest(supabase, {
+      setId: input.setId, leg: input.leg, agencyIds: input.agencyIds, services: input.services,
+      note: input.note.trim() || null, revealIdentity: input.revealIdentity === true,
+    }) };
+  } catch (error) {
+    if (error instanceof Error && /^PDA_(VALIDATION|CONFLICT): /.test(error.message)) return { ok: false, error: error.message.replace(/^PDA_[A-Z]+: /, "") };
+    return { ok: false, error: actionErrorMessage(error, "The quote request could not be sent") };
+  }
+}
+
+/** The quote requests of a saved estimate, with every agency's answer. */
+export async function listPdaQuoteRequests(setId: string): Promise<ActionResult<PdaQuoteRequest[]>> {
+  try {
+    if (!REQUEST_ID.test(setId)) throw new UserFacingActionError("Unknown saved estimate");
+    const { supabase } = await viewer();
+    return { ok: true, data: await listMyPdaQuoteRequests(supabase, setId) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The quote requests could not be loaded") };
+  }
+}
+
+export async function withdrawPdaQuotes(requestId: string): Promise<ActionResult<null>> {
+  try {
+    if (!REQUEST_ID.test(requestId)) throw new UserFacingActionError("Unknown request");
+    const { supabase } = await viewer();
+    await withdrawPdaQuoteRequest(supabase, requestId);
+    return { ok: true, data: null };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "The request could not be withdrawn") };
   }
 }
