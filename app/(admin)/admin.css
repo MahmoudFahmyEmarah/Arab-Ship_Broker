@@ -1672,3 +1672,11 @@ a.adm-stat:hover { transform: var(--lift); box-shadow: var(--adm-sh-hover); }
 .adm-toggle.is-on { background: var(--asb-green); }
 .adm-toggle.is-on::after { left: 14px; }
 .adm-toggle::after { width: 12px; height: 12px; border-radius: 99px; }
+
+/* bunker page to the design (Portal standalone 7 · PageBunker) */
+.adm-card__sub--amber { color: var(--asb-amber); }
+.adm-card__more { border-top: 0.5px solid var(--adm-bd); padding: 8px 16px 12px; }
+.adm-card__more > summary { cursor: pointer; font-size: 11px; font-weight: 600; color: var(--asb-navy); padding: 2px 0 8px; }
+.adm-list__when { font-size: 10px; color: var(--adm-d-muted); white-space: nowrap; }
+.adm-muted { color: var(--adm-d-muted); font-size: 10px; }
+.adm-sponsor-access:target { box-shadow: 0 0 0 2px var(--asb-amber); }
