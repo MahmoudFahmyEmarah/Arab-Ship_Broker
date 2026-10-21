@@ -263,4 +263,9 @@ ok(has(target, "api_health(){", "/auth/v1/health", '[ "$code" = 200 ]') && !/ech
   && before(runnerCode, 'api_health || { fail "the staging API host stopped', "npx playwright test --config=playwright.pda.config.ts"),
   "the staging API host must resolve and answer before the nonce is spent and again right before the browser run; the key is never printed");
 
+// 21 Oct 2026 (pdaag-ad36da805bae) · a modal that can open at any moment is dismissed by a locator handler, not once
+ok(has(spec, 'page.addLocatorHandler(page.getByRole("dialog", { name: "Vessel position check-in" })', 'getByRole("button", { name: "Remind me later" }).click()')
+  && has(alignment, 'page.addLocatorHandler(page.getByRole("dialog", { name: "Vessel position check-in" })') && /timeout: 900_000/.test(pwConfig),
+  "both PDA browser specs dismiss the vessel check-in modal whenever it appears; the PDA config allows 15 minutes per test on hosted staging");
+
 console.log(`\nPDA agents run lifecycle: ${n} checks passed`);

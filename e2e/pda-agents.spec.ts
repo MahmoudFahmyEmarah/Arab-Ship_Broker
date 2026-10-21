@@ -135,6 +135,11 @@ async function seed(): Promise<Seed> {
 async function signIn(browser: Browser, baseURL: string, email: string) {
   const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
+  // the vessel position check-in modal can open at any moment for a member with an open position (it did mid-flow in
+  // run pdaag-ad36da805bae and blocked every click for 10 minutes): dismiss it whenever it appears
+  await page.addLocatorHandler(page.getByRole("dialog", { name: "Vessel position check-in" }), async (dialog) => {
+    await dialog.getByRole("button", { name: "Remind me later" }).click();
+  });
   await page.goto("/auth/login");
   await expect(page.locator('input[name="email"]')).toBeVisible({ timeout: 90_000 });
   const overlay = page.locator(".asb-loading-overlay");

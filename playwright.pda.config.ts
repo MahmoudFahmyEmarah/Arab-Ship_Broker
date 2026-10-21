@@ -13,7 +13,7 @@ export default defineConfig({
   reporter: [["list"]],
   // emptied by Playwright at start-up: nothing else may live under it (21 Oct 2026, the runner's logs did)
   outputDir: "test-results/pda-agents",
-  timeout: 600_000,
+  timeout: 900_000, // hosted staging answers every server action from this machine; run 4 needed more than 10 min of real work
   expect: { timeout: 90_000 },
   use: {
     baseURL: process.env.E2E_BASE_URL ?? managedBaseURL,

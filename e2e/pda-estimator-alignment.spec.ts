@@ -233,6 +233,11 @@ async function dismissPortalDialogs(page: Page) {
 async function signIn(browser: Browser, baseURL: string, seed: PdaSeed, width: number, height: number) {
   const context = await browser.newContext({ baseURL, viewport: { width, height }, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
+  // the vessel position check-in modal can open at any moment for a member with an open position (it did mid-flow in
+  // run pdaag-ad36da805bae and blocked every click for 10 minutes): dismiss it whenever it appears
+  await page.addLocatorHandler(page.getByRole("dialog", { name: "Vessel position check-in" }), async (dialog) => {
+    await dialog.getByRole("button", { name: "Remind me later" }).click();
+  });
   await page.goto("/auth/login");
   const emailInput = page.locator('input[name="email"]');
   await expect(emailInput).toBeVisible({ timeout: 90_000 });
