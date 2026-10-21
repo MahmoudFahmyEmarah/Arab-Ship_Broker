@@ -87,6 +87,7 @@ diff -q <(tr -d '\r' < supabase/tests/e2e/staging-released-manifest.txt) "$LOG/b
 BASE_SCHEMA=$SCHEMA_MD5; BASE_DATA=$DATA_MD5; BASE_MANIFEST=$(tr -d '\r' < supabase/tests/e2e/staging-released-manifest.txt)
 echo "  ok   gates: receipt GO (one use), audited clean checkout, manifest, invariants, schema $BASE_SCHEMA, data $BASE_DATA = reviewed"
 
+api_health || { echo "REFUSED: the staging API host does not resolve or /auth/v1/health does not answer 200"; exit 2; }
 # spend the receipt BEFORE any write, then the grace period, then everything again
 echo "$R_NONCE" >> "$LEDGER" || { echo "REFUSED: could not spend the receipt"; exit 2; }
 echo "  ..   receipt spent; 60 s grace (a STOP, HOLD or revoked receipt now still stops the run)"
@@ -167,6 +168,7 @@ export E2E_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" E2E_SUPABASE_ANON_KEY="$NEXT
 export E2E_ALLOW_REMOTE="$STAGING_REF" E2E_DB_URL="$DBURL" E2E_PG_IMAGE="$IMG" E2E_RUN_ID="$RUN"
 bl=$(npx next build --webpack 2>&1) || { keep "$LOG/build.log" "$bl"; fail "next build (see $LOG/build.log)"; exit 1; }
 keep "$LOG/build.log" "$bl"; echo "  ok   next build against staging"
+api_health || { fail "the staging API host stopped resolving or answering right before the browser run"; exit 1; }
 # Playwright empties its own outputDir (test-results/pda-agents, playwright.pda.config.ts) at start-up; the runner's logs are elsewhere
 pl=$(npx playwright test --config=playwright.pda.config.ts e2e/pda-agents.spec.ts 2>&1); PW=$?
 keep "$LOG/playwright.log" "$pl"; printf '%s\n' "$pl" | tail -25

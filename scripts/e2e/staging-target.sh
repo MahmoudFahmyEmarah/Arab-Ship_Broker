@@ -23,6 +23,13 @@ psqlro(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root
             --entrypoint sh "$IMG" -c 'psql "$PGURL" -X -q -At -v ON_ERROR_STOP=1 "$@"' sh "$@"; }
 redact(){ sed 's/postgres[a-z]*:\/\/[^ ]*/<db-url>/g'; }
 
+# api_health: the staging API host resolves and GoTrue answers /auth/v1/health (pdaag-0dd272ccebec: the browser run lost
+# the host mid-way — ECONNRESET, then ENOTFOUND — and failed on the symptom). The anon key is public by design.
+api_health(){ local url key code
+  url=$(sed -n 's/^NEXT_PUBLIC_SUPABASE_URL=//p' "$ENV_FILE" | tr -d '\r'); key=$(sed -n 's/^NEXT_PUBLIC_SUPABASE_ANON_KEY=//p' "$ENV_FILE" | tr -d '\r')
+  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 -H "apikey: $key" "${url%/}/auth/v1/health" 2>/dev/null)
+  [ "$code" = 200 ]; }
+
 # measure <dir>: the four read-only measurements every gate compares (manifest, invariants, schema, data)
 measure(){
   local out="$1"; mkdir -p "$out"

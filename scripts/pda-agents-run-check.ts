@@ -245,4 +245,22 @@ ok(enumLabels.has("profile_type_enum") && enumLabels.get("profile_type_enum")!.h
 ok(seeded.length >= 20 && badSeeds.length === 0 && spec.includes('profile_type: "cargo"') && !spec.includes('profile_type: "broker"'),
   `every enum-typed value the spec seeds is a declared label (${seeded.length} seeds checked${badSeeds.length ? `; bad: ${badSeeds.map((b) => `${b.column}=${b.value}`).join(", ")}` : ""})`);
 
+// 21 Oct 2026 (pdaag-0dd272ccebec) · the consent tracker never writes during a run; its rows are torn down and proved
+// zero anyway; the preflight pins the pre-existing platform_events orphans; the API host must resolve and answer
+const alignment = read("e2e/pda-estimator-alignment.spec.ts");
+const fixtureHelpers = read("e2e/fixture-room.helpers.ts");
+ok([spec, alignment, fixtureHelpers].every((t) => t.includes('{ name: "Necessary only" }') && !t.includes('"Accept all"')),
+  "the PDA specs and the Fixture Room helper decline analytics consent (Necessary only), so the portal tracker writes nothing");
+ok(before(teardown, "delete from public.platform_events where user_id = any (v_users) or user_id = any (v_auth);", "delete from public.users where id = any (v_users);")
+  && teardown.includes("(select count(*) from public.platform_events where user_id = any (v_users) or user_id = any (v_auth))"),
+  "the teardown deletes the run users' platform_events before the users and counts them in the zero-residue proof");
+ok(has(invariants, "public.platform_events without a user (pre-existing, before 2026-10-08; pinned 149)", "e.at < '2026-10-08'", "true, 149",
+    "on/after 2026-10-08, ids <= 435 (18-19 Oct residue, disclosed; pinned 4)", "e.id <= 435", "true, 4",
+    "public.platform_events without a user, id > 435 (any run residue)", "e.id > 435", "false, null"),
+  "the preflight pins the pre-existing platform_events orphans (149 old, 4 disclosed) and fails on any newer one");
+ok(has(target, "api_health(){", "/auth/v1/health", '[ "$code" = 200 ]') && !/echo.*\$key/.test(target)
+  && before(runnerCode, 'api_health || { echo "REFUSED: the staging API host', 'echo "$R_NONCE" >> "$LEDGER"')
+  && before(runnerCode, 'api_health || { fail "the staging API host stopped', "npx playwright test --config=playwright.pda.config.ts"),
+  "the staging API host must resolve and answer before the nonce is spent and again right before the browser run; the key is never printed");
+
 console.log(`\nPDA agents run lifecycle: ${n} checks passed`);

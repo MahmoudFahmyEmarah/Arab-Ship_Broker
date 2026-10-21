@@ -149,7 +149,7 @@ async function signIn(browser: Browser, baseURL: string, email: string) {
 
 async function dismissDialogs(page: Page) {
   const cookie = page.getByRole("dialog", { name: "Cookie consent" });
-  if (await cookie.isVisible().catch(() => false)) await cookie.getByRole("button", { name: "Accept all" }).click();
+  if (await cookie.isVisible().catch(() => false)) await cookie.getByRole("button", { name: "Necessary only" }).click();
   const checkin = page.getByRole("dialog", { name: "Vessel position check-in" });
   await checkin.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined);
   if (await checkin.isVisible().catch(() => false)) await checkin.getByRole("button", { name: "Remind me later" }).click();

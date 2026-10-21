@@ -223,7 +223,7 @@ async function cleanupDanglingPdaFixtures() {
 
 async function dismissPortalDialogs(page: Page) {
   const cookie = page.getByRole("dialog", { name: "Cookie consent" });
-  if (await cookie.isVisible().catch(() => false)) await cookie.getByRole("button", { name: "Accept all" }).click();
+  if (await cookie.isVisible().catch(() => false)) await cookie.getByRole("button", { name: "Necessary only" }).click();
 
   const checkin = page.getByRole("dialog", { name: "Vessel position check-in" });
   await checkin.waitFor({ state: "visible", timeout: 10_000 }).catch(() => undefined);
