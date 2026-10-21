@@ -20,6 +20,7 @@ const suite = read("supabase/tests/pda/tariff_packs.sql");
 const sdk = read("sdk/app/pda.ts");
 const index = read("components/pda/PdaTariffPacks.tsx");
 const recordView = read("components/pda/PdaTariffPackRecord.tsx");
+const shell = read("components/pda/PdaRecordShell.tsx");
 const indexPage = read("app/(dashboard)/dashboard/ports-da/tariff-packs/page.tsx");
 const recordPage = read("app/(dashboard)/dashboard/ports-da/tariff-packs/[ref]/page.tsx");
 
@@ -88,9 +89,9 @@ for (const [name, page] of [["index", indexPage], ["record", recordPage]] as con
 }
 ok(/isPdaTariffPackRef\(ref\)/.test(recordPage) && /Rather than fall back to another authority's tariff/.test(recordPage), "the record page refuses a bad reference and never falls back");
 ok(/Not recorded yet/.test(index) && /0 of \{pack\.lines\}/.test(index) && /none recorded/.test(index), "index: shape, verification and findings say they are not recorded");
-ok(/const NR = "Not recorded yet"/.test(recordView) && /Published record/.test(recordView) && !/<input|<textarea|onClick/.test(recordView),
-  "record: read-only published view with honest empty slots");
+ok(/export const NR = "Not recorded yet"/.test(shell) && /Published record/.test(shell) && !/<input|<textarea|onClick/.test(recordView + shell) && /PdaRecordShell/.test(recordView),
+  "record: read-only published view on the shared RecordShell with honest empty slots");
 ok(!/\b(id|Id)\b\s*[:=]\s*(record|pack|e|l)\./.test(index + recordView), "no internal id is rendered");
-ok(!/<main\b/.test(index + recordView + recordPage), "no nested <main> landmark");
+ok(!/<main\b/.test(index + recordView + shell + recordPage), "no nested <main> landmark");
 
 console.log(`\nPDA tariff packs: ${n} checks passed`);
