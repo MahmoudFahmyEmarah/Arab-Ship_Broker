@@ -104,6 +104,27 @@ export function PdaSetupWorkspace({
           ) : null}
         </div>
       </div>
+
+      <div className="pe-set-card">
+        <div className="pe-set-card__hd">
+          <h2 className="pe-set-card__t">Ports Module and reference</h2>
+          <span>The module's own pages: the hub with Quick DA, the directory and the map ranked by live listings, and the tariff atlas.</span>
+        </div>
+        <div className="pe-set-rows">
+          {[
+            { href: "/dashboard/ports-da/hub", label: "Ports Module hub", desc: "Quick DA from your own cargo and vessel, the tools, the most touched ports and the tariff coverage." },
+            { href: "/dashboard/ports-da/directory", label: "Port directory", desc: "Every port in the network, searchable, ranked by the live listings that touch it." },
+            { href: "/dashboard/ports-da/map", label: "Ports map", desc: "Pins sized by touches, filled where a tariff is held; the record a click away." },
+            { href: "/dashboard/ports-da/tariff-layouts", label: "Tariff layouts", desc: "The atlas of tariff shapes, and which published pack prices which port." },
+          ].map((link) => (
+            <Link key={link.href} className="pe-set-row" href={link.href}>
+              <span className="pe-set-row__ic"><FileText size={17} aria-hidden="true" /></span>
+              <span className="pe-set-row__tx"><b>{link.label}</b><span>{link.desc}</span></span>
+              <span className="pe-set-row__go" aria-hidden="true"><ChevronRight size={15} /></span>
+            </Link>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

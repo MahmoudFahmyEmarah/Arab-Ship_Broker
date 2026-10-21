@@ -4,6 +4,7 @@ import type { PdaCalculationResult, PdaRequest, PdaTariffVersion } from "@/lib/p
 import { parsePdaPortsWorkspace, type PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
 import { parsePdaTariffPacks, type PdaTariffPack } from "@/lib/pda/tariff-packs";
 import { parsePdaTariffPackRecord, type PdaTariffPackRecord } from "@/lib/pda/tariff-pack-record";
+import { parsePdaPortCensus, type PdaPortCensus } from "@/lib/pda/port-census";
 import { parsePdaPreferences, type PdaPreferences, type PdaStartTab } from "@/lib/pda/preferences";
 import { parsePdaAdminAgencies, parsePdaAgencies, type PdaAdminAgency, type PdaAgency } from "@/lib/pda/agents";
 import { parsePdaAgencyInbox, parsePdaQuoteRequests, type PdaAgencyInboxItem, type PdaQuoteRequest } from "@/lib/pda/quote-requests";
@@ -71,6 +72,13 @@ export async function getPdaTariffPack(supabase: SupabaseClient, packRef: string
     throw new Error(error.message);
   }
   return parsePdaTariffPackRecord(data);
+}
+
+/** The port touch census (20261019140000): live listings per active, verified port today; small cohorts suppressed. */
+export async function getPdaPortCensus(supabase: SupabaseClient): Promise<PdaPortCensus> {
+  const { data, error } = await supabase.rpc("get_port_touch_census");
+  if (error) throw new Error(error.message);
+  return parsePdaPortCensus(data);
 }
 
 /** The caller's Setup preferences (20261018110000); defaults when none are saved. */

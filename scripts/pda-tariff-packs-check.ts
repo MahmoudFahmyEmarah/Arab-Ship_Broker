@@ -110,4 +110,18 @@ ok(isoDayOrToday("2026-06-01") === "2026-06-01" && isoDayOrToday("2026-02-31") =
   && [indexPage, recordPage].every((page) => page.includes("isoDayOrToday(") && !page.includes("ISO_DAY")), "P2-10: an impossible date falls back to today on both pages");
 ok(!/K2  a superseding edition[^\n]*\n[^\n]*and back on a date before/.test(suite), "P2-1: K2's claim no longer promises a superseded version comes back");
 
+// step 12 · Tariff Layouts: a reference without figures; 05 read from the packs, the shape never guessed
+const layouts = read("components/pda/PdaTariffLayouts.tsx");
+const layoutsPage = read("app/(dashboard)/dashboard/ports-da/tariff-layouts/page.tsx");
+const setup = read("components/pda/PdaSetupWorkspace.tsx");
+ok(layoutsPage.includes('redirect("/auth/login")') && layoutsPage.includes("isCalculatorLocked(tier)") && layoutsPage.includes("isoDayOrToday(") && layoutsPage.includes("listPdaTariffPacks(supabase, on)") && layoutsPage.includes("RecordMissing"),
+  "layouts page: signed-in, tier-gated, date validated, reads the governed packs, fails honestly");
+ok(!/\d+(\.\d+)?\s*\/\s*(GT|NT|tonne|m|day)|Dhs|USD\s*\d|EUR\s*\d/.test(layouts) && layouts.includes("per GT or NT, per call") && layouts.includes("a genuine zero, not a sourcing gap"),
+  "section 01 shows the two shapes without any figure");
+ok(layouts.includes("resolvePdaTariffPorts(packs)") && layouts.includes("not derived yet") && (layouts.match(/Not recorded yet/g) ?? []).length >= 1 && layouts.includes('SECTIONS.slice(0, 3)') && layouts.includes('SECTIONS.slice(3)'),
+  "section 05 lists the ports and their packs from the database with the shape honestly empty; 02–04 and 06–07 say what they need");
+ok(!/<input|<textarea|<select|onClick/.test(layouts) && layouts.includes('<nav className="pd-crumbs" aria-label="Breadcrumb">'), "the reference is read-only with breadcrumbs as a nav");
+ok(["/dashboard/ports-da/hub", "/dashboard/ports-da/directory", "/dashboard/ports-da/map", "/dashboard/ports-da/tariff-layouts"].every((h) => setup.includes(`href: "${h}"`)) && setup.includes("Ports Module and reference"),
+  "Setup links the hub, the directory, the map and the layouts (spec P4 reference card)");
+
 console.log(`\nPDA tariff packs: ${n} checks passed`);
