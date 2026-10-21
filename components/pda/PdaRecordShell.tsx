@@ -16,9 +16,11 @@ export type PdaRecordSection = { n: string; id: string; title: string; src: stri
 export type PdaRecordTab<Id extends string = string> = { id: Id; label: string; icon: React.ComponentType<{ size?: number; "aria-hidden"?: boolean }> };
 export type PdaRecordMeta = { k: string; v: string | null; empty?: boolean };
 
-export function PdaRecordShell({ back, crumbs, tabs, tab, tabHref, eyebrow, title, sub, seal, meta, trust, railFoot, sections }: {
+export function PdaRecordShell({ back, crumbs, topbarExtra, tabs, tab, tabHref, eyebrow, title, sub, seal, meta, trust, railFoot, sections }: {
   back: { href: string; label: string };
   crumbs: React.ReactNode;
+  /** an optional action beside the "Published record" badge (a link to a sibling page, never a write) */
+  topbarExtra?: React.ReactNode;
   tabs: readonly PdaRecordTab[];
   tab: string;
   tabHref: (id: string) => string;
@@ -37,7 +39,7 @@ export function PdaRecordShell({ back, crumbs, tabs, tab, tabHref, eyebrow, titl
       <div className="pd-topbar">
         <Link className="pd-back" href={back.href}><ArrowLeft size={15} aria-hidden="true" /> {back.label}</Link>
         <div className="pd-crumbs">{crumbs}</div>
-        <span className="pdr-role pd-topbar__end">Published record</span>
+        <div className="pd-topbar__end">{topbarExtra}<span className="pdr-role">Published record</span></div>
       </div>
 
       <nav className="pp-tabs" aria-label="Record tabs">

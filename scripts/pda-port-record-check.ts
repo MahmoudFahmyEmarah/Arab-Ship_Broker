@@ -76,7 +76,7 @@ ok(meta.find((m) => m.k === "Charge lines")?.v === "5" && meta.find((m) => m.k =
 ok(/PdaRecordShell/.test(view) && !/<input|<textarea|onClick/.test(view) && /Not recorded yet|NR/.test(view + shell), "the record is a read-only published view on the shared shell");
 ok(/isPdaPortLocode\(locode\)/.test(page) && /Rather than fall back to another port/.test(page) && /isCalculatorLocked\(tier\)/.test(page) && /redirect\("\/auth\/login"\)/.test(page) && page.includes("isoDayOrToday("),
   "the page is gated, validates the code and the date, and never falls back to another port");
-ok(/catch \{\n\s*agents = null;/.test(page), "an unreadable agency registry (pre-Wave 9) leaves the section honest instead of failing the page");
+ok(/catch \{\n\s*agents = null;/.test(read("app/(dashboard)/dashboard/ports-da/ports/[locode]/load.ts")) && page.includes("loadPortRecordInput("), "an unreadable agency registry (pre-Wave 9) leaves the section honest instead of failing the page");
 ok(!/\b(id|Id)\b\s*[:=]\s*(port|pack|agency|a|e)\./.test(view), "no internal id is rendered");
 
 // 3 · B2O-050 P1-3: the slide-over is a real modal

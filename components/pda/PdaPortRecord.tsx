@@ -32,6 +32,7 @@ export function PdaPortRecord({ input, tab }: { input: PdaPortRecordInput; tab: 
     <PdaRecordShell
       back={{ href: "/dashboard/ports-da?tab=ports", label: "Ports" }}
       crumbs={<>Ports Module · Ports · <b>{port.name}</b></>}
+      topbarExtra={<Link className="asb-btn pd-topbar__link" href={`${base}/settings?on=${on}`}>Port settings</Link>}
       tabs={TABS}
       tab={tab}
       tabHref={(id) => `${base}?on=${on}&tab=${id}`}
