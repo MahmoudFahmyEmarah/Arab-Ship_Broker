@@ -90,12 +90,17 @@ begin
   delete from public.organization_members where user_id = any (v_users) or org_id = any (v_orgs);
   delete from public.users where id = any (v_users);
   delete from public.organizations where id = any (v_orgs);
-  -- MFA factors and one-time tokens exist on hosted Supabase; a rebuilt local stand-in may lack them
+  -- sessions, refresh tokens, MFA factors and one-time tokens exist on hosted Supabase; a rebuilt local stand-in
+  -- carries only users + identities, so each is deleted only where it exists (and proved zero below the same way)
   if to_regclass('auth.mfa_factors') is not null then
     execute 'delete from auth.mfa_factors where user_id = any ($1)' using v_auth;
   end if;
-  delete from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x);
-  delete from auth.sessions where user_id = any (v_auth);
+  if to_regclass('auth.refresh_tokens') is not null then
+    execute 'delete from auth.refresh_tokens where user_id = any (select x::text from unnest($1::uuid[]) x)' using v_auth;
+  end if;
+  if to_regclass('auth.sessions') is not null then
+    execute 'delete from auth.sessions where user_id = any ($1)' using v_auth;
+  end if;
   if to_regclass('auth.one_time_tokens') is not null then
     execute 'delete from auth.one_time_tokens where user_id = any ($1)' using v_auth;
   end if;
@@ -111,9 +116,13 @@ begin
        + (select count(*) from public.cargo_listings where ref = 'E2E-' || v_run)
        + (select count(*) from public.pda_estimates where owner_user_id = any (v_users))
        + (select count(*) from public.notifications where recipient_user_id = any (v_users))
-       + (select count(*) from auth.identities where user_id = any (v_auth))
-       + (select count(*) from auth.sessions where user_id = any (v_auth))
-       + (select count(*) from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x)) into n;
+       + (select count(*) from auth.identities where user_id = any (v_auth)) into n;
+  if to_regclass('auth.sessions') is not null then
+    execute 'select $1 + (select count(*) from auth.sessions where user_id = any ($2))' into n using n, v_auth;
+  end if;
+  if to_regclass('auth.refresh_tokens') is not null then
+    execute 'select $1 + (select count(*) from auth.refresh_tokens where user_id = any (select x::text from unnest($2::uuid[]) x))' into n using n, v_auth;
+  end if;
   if to_regclass('auth.mfa_factors') is not null then
     execute 'select $1 + (select count(*) from auth.mfa_factors where user_id = any ($2))' into n using n, v_auth;
   end if;

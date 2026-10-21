@@ -62,8 +62,9 @@ ok(has(runner, 'diff "$LOG/before/schema.txt" "$LOG/after/schema.txt"', 'diff "$
 ok(has(dataFp, "md5(t::text)", "order by h", "'auth'", "'storage'", "'vault'", "'supabase_migrations'", "not (n.nspname = 'auth' and c.relname = 'audit_log_entries')"),
   "the data fingerprint digests every row of every covered table; the only table excluded is the Auth audit log");
 ok(runner.includes("exceptions: Auth audit log, sequence positions") && dataFp.includes("Declared exceptions"), "the declared exceptions are named, never called exact restoration");
-ok(has(teardown, "delete from auth.sessions where user_id = any (v_auth)", "delete from auth.refresh_tokens", "delete from auth.mfa_factors where user_id = any ($1)",
-    "to_regclass('auth.mfa_factors')", "(select count(*) from auth.sessions where user_id = any (v_auth))", "(select count(*) from auth.refresh_tokens", "(select count(*) from auth.identities where user_id = any (v_auth))")
+ok(has(teardown, "delete from auth.sessions where user_id = any ($1)", "delete from auth.refresh_tokens where user_id = any", "delete from auth.mfa_factors where user_id = any ($1)",
+    "to_regclass('auth.sessions')", "to_regclass('auth.refresh_tokens')", "to_regclass('auth.mfa_factors')", "(select count(*) from auth.sessions where user_id = any ($2))",
+    "(select count(*) from auth.refresh_tokens where user_id = any", "(select count(*) from auth.identities where user_id = any (v_auth))")
   && before(teardown, "into v_auth from auth.users", "delete from public.users"),
   "the teardown finds the run's Auth accounts first, deletes their sessions, refresh tokens, MFA and identities, and proves them zero");
 
