@@ -62,8 +62,8 @@ ok(has(runner, 'diff "$LOG/before/schema.txt" "$LOG/after/schema.txt"', 'diff "$
 ok(has(dataFp, "md5(t::text)", "order by h", "'auth'", "'storage'", "'vault'", "'supabase_migrations'", "not (n.nspname = 'auth' and c.relname = 'audit_log_entries')"),
   "the data fingerprint digests every row of every covered table; the only table excluded is the Auth audit log");
 ok(runner.includes("exceptions: Auth audit log, sequence positions") && dataFp.includes("Declared exceptions"), "the declared exceptions are named, never called exact restoration");
-ok(has(teardown, "delete from auth.sessions where user_id = any (v_auth)", "delete from auth.refresh_tokens", "delete from auth.mfa_factors",
-    "(select count(*) from auth.sessions where user_id = any (v_auth))", "(select count(*) from auth.refresh_tokens", "(select count(*) from auth.identities where user_id = any (v_auth))")
+ok(has(teardown, "delete from auth.sessions where user_id = any (v_auth)", "delete from auth.refresh_tokens", "delete from auth.mfa_factors where user_id = any ($1)",
+    "to_regclass('auth.mfa_factors')", "(select count(*) from auth.sessions where user_id = any (v_auth))", "(select count(*) from auth.refresh_tokens", "(select count(*) from auth.identities where user_id = any (v_auth))")
   && before(teardown, "into v_auth from auth.users", "delete from public.users"),
   "the teardown finds the run's Auth accounts first, deletes their sessions, refresh tokens, MFA and identities, and proves them zero");
 
@@ -124,7 +124,8 @@ ok(has(spec, "`e2e-${run}-m@arabshipbroker.test`", "`E2E ${run} Charterers`", "`
 // C2O-161/162 P1 · the race fixture reaches the race and leaves nothing
 ok(has(race, "select token from asb_disposable.marker", "ASB_SCRATCH_TOKEN", "^[0-9a-f]{32}$") && !race.includes('case "$DBNAME" in postgres'),
   "the race binds to the disposable database's private marker, not a name denylist");
-ok(!/create schema asb_disposable|insert into asb_disposable|create table asb_disposable/.test(race) && race.includes('REFUSED: $DBNAME is not reachable or carries no disposable marker'),
+const raceCode = race.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+ok(!/create schema asb_disposable|insert into asb_disposable|create table asb_disposable/.test(raceCode) && race.includes('REFUSED: $DBNAME is not reachable or carries no disposable marker'),
   "the race only READS the marker; only the proof harness creates it, inside the fresh TEMPLATE clone it just made");
 ok(has(race, "insert into public.cargo_listings", "insert into public.vessels", "insert into public.vessel_availability", "insert into public.listing_ownership",
     "'vesselAvailabilityId',avail,'vesselId',vessel,'cargoId',cargo") && !/'cargoId',gen_random_uuid|'vesselAvailabilityId',gen_random_uuid/.test(race),

@@ -90,7 +90,10 @@ begin
   delete from public.organization_members where user_id = any (v_users) or org_id = any (v_orgs);
   delete from public.users where id = any (v_users);
   delete from public.organizations where id = any (v_orgs);
-  delete from auth.mfa_factors where user_id = any (v_auth);
+  -- MFA factors and one-time tokens exist on hosted Supabase; a rebuilt local stand-in may lack them
+  if to_regclass('auth.mfa_factors') is not null then
+    execute 'delete from auth.mfa_factors where user_id = any ($1)' using v_auth;
+  end if;
   delete from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x);
   delete from auth.sessions where user_id = any (v_auth);
   if to_regclass('auth.one_time_tokens') is not null then
@@ -110,8 +113,10 @@ begin
        + (select count(*) from public.notifications where recipient_user_id = any (v_users))
        + (select count(*) from auth.identities where user_id = any (v_auth))
        + (select count(*) from auth.sessions where user_id = any (v_auth))
-       + (select count(*) from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x))
-       + (select count(*) from auth.mfa_factors where user_id = any (v_auth)) into n;
+       + (select count(*) from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x)) into n;
+  if to_regclass('auth.mfa_factors') is not null then
+    execute 'select $1 + (select count(*) from auth.mfa_factors where user_id = any ($2))' into n using n, v_auth;
+  end if;
   if n <> 0 then raise exception 'TEARDOWN_RESIDUE: % run-stamped row(s) remain for %', n, v_run; end if;
   if exists (select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace s on s.oid = c.relnamespace
              where s.nspname = 'public' and not t.tgisinternal and t.tgenabled = 'D'
