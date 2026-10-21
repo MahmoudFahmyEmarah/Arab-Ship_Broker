@@ -29,9 +29,10 @@ R_SCHEMA=$(tr -d '\r' < "$RECEIPT" | sed -n 's/^SCHEMA=//p'); R_DATA=$(tr -d '\r
 R_STATUS=$(tr -d '\r' < "$RECEIPT" | sed -n 's/^STATUS=//p'); R_SHA=$(tr -d '\r' < "$RECEIPT" | sed -n 's/^SHA=//p')
 [[ "$R_SCHEMA" =~ ^[0-9a-f]{32}$ && "$R_DATA" =~ ^[0-9a-f]{32}$ && "$R_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "REFUSED: the receipt lacks SHA, SCHEMA or DATA"; exit 2; }
 case "$R_STATUS" in GO|HOLD) ;; *) echo "REFUSED: the receipt says '${R_STATUS}', not GO or HOLD"; exit 2;; esac
-# the SQL this recovery runs must be the audited head's: migrations, DOWNs and e2e SQL identical, no local change
-git diff --quiet "$R_SHA" -- supabase/ && [ -z "$(git status --porcelain --untracked-files=no -- supabase/)" ] \
-  || { echo "REFUSED: supabase/ (migrations, DOWNs, e2e SQL) differs from the audited head ${R_SHA:0:12}"; exit 2; }
+# the SQL this recovery runs must be the audited head's: migrations, DOWNs and e2e SQL identical to it; and nothing
+# under supabase/ or scripts/e2e/ may be edited locally (a newer COMMITTED script may recover, an uncommitted one may not)
+git diff --quiet "$R_SHA" -- supabase/ && [ -z "$(git status --porcelain --untracked-files=no -- supabase/ scripts/e2e/)" ] \
+  || { echo "REFUSED: supabase/ differs from the audited head ${R_SHA:0:12}, or supabase/ or scripts/e2e/ carries an uncommitted change"; exit 2; }
 LOG="tmp/pda-agents-recover/$RUN-$(date +%H%M%S)"; mkdir -p "$LOG" || { echo "REFUSED: cannot create $LOG"; exit 2; }
 FAILED=0; fail(){ echo "  FAIL $*"; FAILED=1; }
 echo "== recovery of $RUN ($(date +%H:%M:%S)) → $LOG; receipt ${R_SHA:0:12} $R_STATUS; discard remaining rows: $([ $DISCARD = 1 ] && echo yes || echo no)"
@@ -67,7 +68,7 @@ for m in 20261019120000_pda_desk_quotes 20261019110000_pda_quote_acceptance 2026
     *) fail "probe for $m answered neither t nor f"; exit 1;;
   esac
   if dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } 2>&1 | psqlq -1 -f - 2>&1); then keep "$LOG/down-$m.log" "$dn"; echo "  ok   DOWN $m"
-  else keep "$LOG/down-$m.log" "$dn"; fail "DOWN $m: $(printf '%s\n' "$dn" | grep -m1 -i error || printf '%s\n' "$dn" | head -1 | redact)"
+  else keep "$LOG/down-$m.log" "$dn"; fail "DOWN $m: $({ printf '%s\n' "$dn" | grep -m1 -i error || printf '%s\n' "$dn" | head -1; } | redact)"
     printf '%s\n' "$dn" | grep -q PDA_DOWN_REFUSED && echo "       rows that are not the run's remain; re-run with --discard-remaining only if they are declared exported"; exit 1; fi
 done
 

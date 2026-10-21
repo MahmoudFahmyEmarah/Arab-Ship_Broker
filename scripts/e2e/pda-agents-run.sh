@@ -128,7 +128,7 @@ finish(){
       *) marker="";;
     esac
     if dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } 2>&1 | psqlq -1 -f - 2>&1); then keep "$LOG/down-$m.log" "$dn"; echo "  ok   DOWN $m"
-    else keep "$LOG/down-$m.log" "$dn"; fail "DOWN $m: $(printf '%s\n' "$dn" | grep -m1 -i error || printf '%s\n' "$dn" | head -1 | redact)"; fi
+    else keep "$LOG/down-$m.log" "$dn"; fail "DOWN $m: $({ printf '%s\n' "$dn" | grep -m1 -i error || printf '%s\n' "$dn" | head -1; } | redact)"; fi
   done
   psqlq -c "update public.app_settings set value = '$BETA'::jsonb where key = 'beta_mode'" > /dev/null 2>&1 && echo "  ok   beta_mode restored to $BETA" || fail "beta_mode not restored"
   if measure "$LOG/after"; then
@@ -152,7 +152,7 @@ for m in 20261018100000_pda_ports_workspace 20261018110000_pda_member_preference
   if [ -n "$(psqlro -c "select 1 from supabase_migrations.schema_migrations where version = '${m%%_*}'")" ]; then
     fail "migration $m is already recorded on staging; this run applies only unreleased PDA migrations"; exit 1
   fi
-  ap=$(psqlq -1 -f - < "supabase/migrations/$m.sql" 2>&1) || { keep "$LOG/apply-$m.log" "$ap"; fail "apply $m: $(printf '%s\n' "$ap" | grep -m1 -i error || printf '%s\n' "$ap" | head -1 | redact)"; exit 1; }
+  ap=$(psqlq -1 -f - < "supabase/migrations/$m.sql" 2>&1) || { keep "$LOG/apply-$m.log" "$ap"; fail "apply $m: $({ printf '%s\n' "$ap" | grep -m1 -i error || printf '%s\n' "$ap" | head -1; } | redact)"; exit 1; }
   keep "$LOG/apply-$m.log" "$ap"; APPLIED+=("$m"); echo "  ok   applied $m"
 done
 

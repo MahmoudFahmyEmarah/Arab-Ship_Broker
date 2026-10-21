@@ -170,7 +170,8 @@ const allowedTarget = (t: string) => ["/dev/null", '"/dev/null"', "&1", "&2", "&
 const trapTargets = redirectTargets(trap);
 ok(trapTargets.length >= 6 && trapTargets.every(allowedTarget) && !/\btee\b/.test(trap)
   && has(trap, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", '[ "$tdok" = "TEARDOWN OK $RUN" ]', 'keep "$LOG/teardown.log" "$td"', "last line '${tdok:-<none>}'",
-    'dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } 2>&1 | psqlq -1 -f - 2>&1)', 'keep "$LOG/down-$m.log" "$dn"', "grep -m1 -i error ||"),
+    'dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } 2>&1 | psqlq -1 -f - 2>&1)', 'keep "$LOG/down-$m.log" "$dn"', "grep -m1 -i error ||")
+  && !/\|\| printf '%s\\n' "\$(dn|ap)" \| head -1 \| redact/.test(runnerCode) && (runnerCode.match(/head -1; } \| redact\)/g) ?? []).length === 2,
   `no step in the trap runs through a file redirect (targets: ${[...new Set(trapTargets)].join(" ")}); teardown and DOWN output are captured in memory, then kept if they can be`);
 ok(before(runnerCode, "BASE_MANIFEST=$(tr -d '\\r' < supabase/tests/e2e/staging-released-manifest.txt)", "trap finish EXIT")
   && has(trap, `diff -q <(printf '%s\\n' "$BASE_MANIFEST") "$LOG/after/manifest.txt"`, '[ "$SCHEMA_MD5" = "$BASE_SCHEMA" ]', '[ "$DATA_MD5" = "$BASE_DATA" ]', '[ -f "$LOG/before/schema.txt" ] &&', '[ -f "$LOG/before/data.txt" ] &&')
@@ -180,7 +181,7 @@ ok(has(runnerCode, 'ap=$(psqlq -1 -f - < "supabase/migrations/$m.sql" 2>&1) ||',
     'pl=$(npx playwright test --config=playwright.pda.config.ts e2e/pda-agents.spec.ts 2>&1); PW=$?', 'keep "$LOG/playwright.log" "$pl"'),
   "apply, build and browser output are captured in memory and kept best effort; a lost log never stops a step the trap would then have to undo");
 ok(has(recoverCode, "--i-hold-the-staging-window", "^pdaag-[0-9a-f]{12}$", ". scripts/e2e/staging-target.sh", 'LOG="tmp/pda-agents-recover/$RUN-', "REFUSED: the receipt lacks SHA, SCHEMA or DATA",
-    'case "$R_STATUS" in GO|HOLD) ;; *)', 'git diff --quiet "$R_SHA" -- supabase/ && [ -z "$(git status --porcelain --untracked-files=no -- supabase/)" ]')
+    'case "$R_STATUS" in GO|HOLD) ;; *)', 'git diff --quiet "$R_SHA" -- supabase/ && [ -z "$(git status --porcelain --untracked-files=no -- supabase/ scripts/e2e/)" ]')
   && has(recoverCode, "pda-agents-teardown.sql", '"TEARDOWN OK $RUN"') && before(recover, "# 0 · the state as found", "# 1 · teardown") && before(recoverCode, 'measure "$LOG/before"', '"TEARDOWN OK $RUN"')
   && before(recover, '"TEARDOWN OK $RUN"', "# 2 · DOWNs") && recoverCode.includes('redact | cut -c1-300)"; exit 1; fi'),
   "recovery runs only inside a window, for one run id, with a GO/HOLD receipt whose SHA's supabase/ tree is the checkout's; it measures the state as found, then tears down first and stops at the first failure");
@@ -194,7 +195,7 @@ ok(has(recoverCode, "20261019120000_pda_desk_quotes 20261019110000_pda_quote_acc
     "history-exported:$RUN", "registry-exported:$RUN", "discard-preferences") && recoverCode.includes('present=$(psqlro -c "$probe"'),
   "recovery rolls back newest-first with the same markers as the trap, each DOWN only where a read-only probe finds the migration's objects");
 ok(before(recoverCode, ". scripts/e2e/run-log-helpers.sh || { echo \"REFUSED", "td=$(") && recoverCode.includes('mkdir -p "$LOG" || { echo "REFUSED')
-  && has(recoverCode, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", 'keep "$LOG/teardown.log" "$td"', "last line '${tdok:-<none>}'", 'keep "$LOG/down-$m.log" "$dn"', "grep -m1 -i error ||")
+  && has(recoverCode, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", 'keep "$LOG/teardown.log" "$td"', "last line '${tdok:-<none>}'", 'keep "$LOG/down-$m.log" "$dn"', "grep -m1 -i error ||", "head -1; } | redact)")
   && redirectTargets(recoverCode.slice(recoverCode.indexOf("td=$("))).every(allowedTarget)
   && has(recoverCode, 'present=$(psqlro -c "$probe" 2>&1) ||', "probe for $m failed", "probe for $m answered neither t nor f", 'f) echo "  ..   $m not present')
   && recoverCode.includes("like '%v_org uuid := p_owner_org_id%', false)"),
