@@ -5,7 +5,11 @@
 --   I1  the 15:27 run (19 Oct, staging-browser-run-20261019-152658, pre-runner spec) left nothing: no row of ANY identity
 --       shape that spec could create (its exact stamp was not kept, so every stamp of those shapes is checked), across
 --       Auth (users, identities, sessions, refresh tokens, MFA, one-time tokens), public, market_private and the
---       notification descendants; plus no orphaned descendant of a deleted user or listing
+--       notification descendants; plus no orphaned descendant of a deleted user or listing CREATED ON OR AFTER
+--       2026-10-08. Older Auth orphans exist on staging (identities 36, sessions 45, refresh tokens 45, all created
+--       5-7 Oct 2026 by earlier e2e cleanups that deleted users with constraint triggers off; O2B-057); they are
+--       reported, not failed: the run's exact data fingerprint already holds them as found, and anything younger is
+--       residue by definition
 --   I2  no run of the CURRENT runner left anything either (the pdaag-<12 hex> shapes)
 --   I3  the post-Wave-7 target: none of the Wave 8 / Agents objects exists (the runner applies them unrecorded)
 --   I4  every named guard trigger is present and enabled
@@ -29,22 +33,27 @@ begin
     into n;
   acc := acc || case when n = 0 then 'ok   ' else 'FAIL ' end || 'I1 15:27-run identity shapes remaining: ' || n || E'\n'; bad := bad + (n <> 0)::int;
 
-  -- I1 · orphans a partial delete would leave (one line per class, so pre-existing orphans can be told from 15:27 residue)
+  -- I1 · orphans a partial delete would leave (one line per class). An Auth orphan created on or after the cut-off is
+  --      residue and fails; older ones (the 5-7 Oct leftovers, O2B-057) are reported on their own lines and never fail
   for r in
-    select 'auth.identities without a user' as what, (select count(*) from auth.identities i where not exists (select 1 from auth.users u where u.id = i.user_id)) as n
-    union all select 'auth.sessions without a user', (select count(*) from auth.sessions s where not exists (select 1 from auth.users u where u.id = s.user_id))
-    union all select 'auth.refresh_tokens without a user', (select count(*) from auth.refresh_tokens t where t.user_id is not null and not exists (select 1 from auth.users u where u.id::text = t.user_id))
-    union all select 'auth.mfa_factors without a user', (select count(*) from auth.mfa_factors f where not exists (select 1 from auth.users u where u.id = f.user_id))
-    union all select 'public.users without an Auth account', (select count(*) from public.users p where p.supabase_user_id is not null and not exists (select 1 from auth.users u where u.id = p.supabase_user_id))
-    union all select 'notifications without a recipient', (select count(*) from public.notifications x where not exists (select 1 from public.users u where u.id = x.recipient_user_id))
-    union all select 'notification_deliveries without a notification', (select count(*) from public.notification_deliveries d where not exists (select 1 from public.notifications x where x.id = d.notification_id))
-    union all select 'notification_digest_batches without a recipient', (select count(*) from public.notification_digest_batches b where not exists (select 1 from public.users u where u.id = b.recipient_user_id))
-    union all select 'listing_ownership (cargo) without a listing', (select count(*) from public.listing_ownership o where o.listing_type = 'cargo' and not exists (select 1 from public.cargo_listings c where c.id = o.listing_id))
-    union all select 'listing_ownership (availability) without a listing', (select count(*) from public.listing_ownership o where o.listing_type = 'vessel_availability' and not exists (select 1 from public.vessel_availability a where a.id = o.listing_id))
-    union all select 'market_private.listing_handles without an actor', (select count(*) from market_private.listing_handles h where h.actor_user_id is not null and not exists (select 1 from public.users u where u.id = h.actor_user_id))
-    union all select 'organization_members without a user', (select count(*) from public.organization_members m where not exists (select 1 from public.users u where u.id = m.user_id))
+    select 'auth.identities without a user (pre-existing, before 2026-10-08)' as what, (select count(*) from auth.identities i where i.created_at < '2026-10-08' and not exists (select 1 from auth.users u where u.id = i.user_id)) as n, true as informational
+    union all select 'auth.identities without a user, created on/after 2026-10-08', (select count(*) from auth.identities i where coalesce(i.created_at >= '2026-10-08', true) and not exists (select 1 from auth.users u where u.id = i.user_id)), false
+    union all select 'auth.sessions without a user (pre-existing, before 2026-10-08)', (select count(*) from auth.sessions s where s.created_at < '2026-10-08' and not exists (select 1 from auth.users u where u.id = s.user_id)), true
+    union all select 'auth.sessions without a user, created on/after 2026-10-08', (select count(*) from auth.sessions s where coalesce(s.created_at >= '2026-10-08', true) and not exists (select 1 from auth.users u where u.id = s.user_id)), false
+    union all select 'auth.refresh_tokens without a user (pre-existing, before 2026-10-08)', (select count(*) from auth.refresh_tokens t where t.user_id is not null and t.created_at < '2026-10-08' and not exists (select 1 from auth.users u where u.id::text = t.user_id)), true
+    union all select 'auth.refresh_tokens without a user, created on/after 2026-10-08', (select count(*) from auth.refresh_tokens t where t.user_id is not null and coalesce(t.created_at >= '2026-10-08', true) and not exists (select 1 from auth.users u where u.id::text = t.user_id)), false
+    union all select 'auth.mfa_factors without a user', (select count(*) from auth.mfa_factors f where not exists (select 1 from auth.users u where u.id = f.user_id)), false
+    union all select 'public.users without an Auth account', (select count(*) from public.users p where p.supabase_user_id is not null and not exists (select 1 from auth.users u where u.id = p.supabase_user_id)), false
+    union all select 'notifications without a recipient', (select count(*) from public.notifications x where not exists (select 1 from public.users u where u.id = x.recipient_user_id)), false
+    union all select 'notification_deliveries without a notification', (select count(*) from public.notification_deliveries d where not exists (select 1 from public.notifications x where x.id = d.notification_id)), false
+    union all select 'notification_digest_batches without a recipient', (select count(*) from public.notification_digest_batches b where not exists (select 1 from public.users u where u.id = b.recipient_user_id)), false
+    union all select 'listing_ownership (cargo) without a listing', (select count(*) from public.listing_ownership o where o.listing_type = 'cargo' and not exists (select 1 from public.cargo_listings c where c.id = o.listing_id)), false
+    union all select 'listing_ownership (availability) without a listing', (select count(*) from public.listing_ownership o where o.listing_type = 'vessel_availability' and not exists (select 1 from public.vessel_availability a where a.id = o.listing_id)), false
+    union all select 'market_private.listing_handles without an actor', (select count(*) from market_private.listing_handles h where h.actor_user_id is not null and not exists (select 1 from public.users u where u.id = h.actor_user_id)), false
+    union all select 'organization_members without a user', (select count(*) from public.organization_members m where not exists (select 1 from public.users u where u.id = m.user_id)), false
   loop
-    acc := acc || case when r.n = 0 then 'ok   ' else 'FAIL ' end || 'I1.orphans ' || r.what || ': ' || r.n || E'\n'; bad := bad + (r.n <> 0)::int;
+    acc := acc || case when r.informational then '..   ' when r.n = 0 then 'ok   ' else 'FAIL ' end || 'I1.orphans ' || r.what || ': ' || r.n || E'\n';
+    bad := bad + (r.n <> 0 and not r.informational)::int;
   end loop;
 
   -- I2 · the current runner's shapes (pdaag-<12 hex>) and the race fixture's

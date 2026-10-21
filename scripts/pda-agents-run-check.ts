@@ -89,7 +89,10 @@ ok(target.includes('*"postgres.$STAGING_REF:"*'), "P2-2: the pooler form with an
 ok(race.includes("pg_stat_activity") && race.includes("query like 'select pg_sleep(3)%'") && !/^sleep 1$/m.test(race), "P2-3: the race waits for session A to hold its lock instead of sleeping 1 s");
 ok(!/'\{carried,leg\}' <> 'discharge'/.test(acceptance) && /'\{carried,leg\}' is distinct from 'discharge'/.test(acceptance) && /coalesce\(\(select sum\(l\.amount\)/.test(acceptance),
   "P2-4: A12 compares with IS DISTINCT FROM / COALESCE so a missing key cannot pass it");
-ok(invariants.includes("'I1.orphans ' || r.what") && (invariants.match(/union all select '[^']+ without /g) ?? []).length >= 10, "P2-5: the preflight prints each orphan class on its own line");
+ok(invariants.includes("'I1.orphans ' || r.what") && (invariants.match(/union all select '[^']+ without /g) ?? []).length >= 13, "P2-5: the preflight prints each orphan class on its own line");
+ok((invariants.match(/created_at < '2026-10-08'/g) ?? []).length === 3 && (invariants.match(/coalesce\([a-z]\.created_at >= '2026-10-08', true\)/g) ?? []).length === 3
+  && invariants.includes("bad := bad + (r.n <> 0 and not r.informational)::int") && invariants.includes("when r.informational then '..   '"),
+  "O2B-057: an Auth orphan created on/after 2026-10-08 (or with no date) is residue and fails; the 5-7 Oct leftovers are reported, never counted as a pass of anything");
 ok(runner.includes("for f in opus-to-codex.md opusb-to-all.md") && !/codex-to-opus\.md/.test(runner) && !/Codex mints/.test(runner), "P2-6: the live mailboxes are watched; the minter is the peer auditor");
 ok(preflight.includes("cron_jobs | sed") && target.includes("cron_jobs(){") && target.includes("to_regclass('cron.job')"), "the preflight lists the target's scheduled jobs (unstamped writers)");
 
