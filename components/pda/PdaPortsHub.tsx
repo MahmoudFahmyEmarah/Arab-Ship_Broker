@@ -24,12 +24,14 @@ const TOOLS = [
   { href: "/dashboard/ports-da?tab=setup", title: "Setup", desc: "How the estimator is shown to you, and the records behind it.", icon: Settings2 },
 ] as const;
 
-export function PdaPortsHub({ arm, census, packs, cargos, vessels, tariffHeld, on }: {
+export function PdaPortsHub({ arm, census, packs, cargos, vessels, catalogUnavailable, tariffHeld, on }: {
   arm: PdaHubArm;
   census: PdaPortCensus;
   packs: PdaTariffPack[];
   cargos: PdaEstimatorCargoOption[];
   vessels: PdaEstimatorVesselOption[];
+  /** the estimator's catalog could not be read: Quick DA must say so, not "none" */
+  catalogUnavailable: boolean;
   tariffHeld: string[];
   on: string;
 }) {
@@ -52,7 +54,7 @@ export function PdaPortsHub({ arm, census, packs, cargos, vessels, tariffHeld, o
             <h1 className="pd-band__title">Two calls, one estimate</h1>
             <p className="pd-band__sub">Pick a cargo and a vessel of yours; the estimator opens with both and prices the load and discharge calls from the tariff that governs each port.</p>
           </div>
-          <PdaQuickDa cargos={cargos} vessels={vessels} tariffHeld={tariffHeld} />
+          <PdaQuickDa cargos={cargos} vessels={vessels} catalogUnavailable={catalogUnavailable} tariffHeld={tariffHeld} />
         </>
       ) : (
         <>
@@ -61,7 +63,7 @@ export function PdaPortsHub({ arm, census, packs, cargos, vessels, tariffHeld, o
             <h1 className="pd-band__title">Ports Module</h1>
             <p className="pd-band__sub">Everything about a port — its record, its tariffs, the agents who attend it and the vessels and cargoes moving through it — in one place, read from published records.</p>
             <div className="pd-band__badges">
-              <span className="pd-badge"><span className="dot" aria-hidden="true"></span>{targetedCount(census)} port{targetedCount(census) === 1 ? "" : "s"} touched by {totalTouches(census)} live listing{totalTouches(census) === 1 ? "" : "s"}</span>
+              <span className="pd-badge"><span className="dot" aria-hidden="true"></span>{targetedCount(census)} port{targetedCount(census) === 1 ? "" : "s"} touched {totalTouches(census)} time{totalTouches(census) === 1 ? "" : "s"} by live listings · reported counts only</span>
               <span className="pd-badge">{census.ports.length} in network</span>
               <span className="pd-badge"><ShieldCheck size={13} aria-hidden="true" /> {packs.length} tariff pack{packs.length === 1 ? "" : "s"}, held by authority</span>
             </div>

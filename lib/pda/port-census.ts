@@ -1,9 +1,11 @@
 // PDA · the port touch census model (design B2ALL-061, build step 11): what the hub, the directory and the map read.
 //
 // One governed RPC, get_port_touch_census (20261019140000): every active, verified port with the number of live,
-// approved listings that touch it today — exactly what the member can already see on the boards. A port touched by
-// fewer than the cohort minimum is suppressed (null counts) so a figure never points at one or two listings. These
-// helpers are pure (parse, rank, zone shares, pin sizes) so the pages and the contract check share one definition.
+// approved listings that touch it today — exactly what the member can already see on the boards. Counts are touches
+// (a listing loading AND discharging at a port touches it twice); the cohort rule counts distinct listings and vessels:
+// fewer than the minimum → suppressed (every count null). A reported port whose breakdown has a cell of 1–2 keeps its
+// total and withholds every cell (loads/discharges/vessels null, suppressed false), so no cell points at one listing.
+// These helpers are pure (parse, rank, zone shares, pin sizes) so the pages and the contract check share one definition.
 
 export interface PdaPortTouch {
   locode: string;
@@ -12,8 +14,9 @@ export interface PdaPortTouch {
   zone: string | null;
   latitude: number | null;
   longitude: number | null;
-  /** null when suppressed (1 … minimumCohort-1 touches) */
+  /** null when suppressed (1 … minimumCohort-1 listings or vessels) */
   touches: number | null;
+  /** null when suppressed, and null when the breakdown is withheld (a cell of 1 … minimumCohort-1) */
   loads: number | null;
   discharges: number | null;
   vessels: number | null;
@@ -56,8 +59,9 @@ export function parsePdaPortCensus(raw: unknown): PdaPortCensus {
 }
 
 /** The port's role among the listings that touch it, in the design's words. */
-export function touchRole(p: PdaPortTouch): "load" | "discharge" | "both" | "vessels" | "none" | "suppressed" {
+export function touchRole(p: PdaPortTouch): "load" | "discharge" | "both" | "vessels" | "none" | "suppressed" | "touched" {
   if (p.suppressed) return "suppressed";
+  if ((p.touches ?? 0) > 0 && p.loads == null && p.discharges == null && p.vessels == null) return "touched";
   const loads = p.loads ?? 0;
   const discharges = p.discharges ?? 0;
   if (loads && discharges) return "both";
@@ -68,6 +72,7 @@ export function touchRole(p: PdaPortTouch): "load" | "discharge" | "both" | "ves
 
 export const TOUCH_ROLE_LABEL: Record<ReturnType<typeof touchRole>, string> = {
   load: "loads here", discharge: "discharges here", both: "loads and discharges", vessels: "vessels open here", none: "no live listing", suppressed: "fewer than 3 listings",
+  touched: "live listings touch it (breakdown withheld)",
 };
 
 /** Rank by touches (suppressed and zero ports have none); ties by name. */

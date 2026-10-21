@@ -36,7 +36,8 @@ begin
   ),
   cargo_touches as (select distinct listing_id, btrim(locode) as locode, role from cargo_slots),
   vessel_touches as (
-    select distinct a.id as listing_id, btrim(a.open_port_locode) as locode
+    -- one touch per vessel, however many open positions it holds at the port
+    select distinct a.vessel_id as entity_id, btrim(a.open_port_locode) as locode
     from public.vessel_availability a
     where a.status = 'OPEN' and a.review_status = 'APPROVED' and nullif(btrim(a.open_port_locode), '') is not null
   ),
@@ -45,23 +46,36 @@ begin
            (select count(*) from cargo_touches t where t.locode = p.locode) as cargo_n,
            (select count(*) from cargo_touches t where t.locode = p.locode and t.role = 'load') as loads,
            (select count(*) from cargo_touches t where t.locode = p.locode and t.role = 'discharge') as discharges,
-           (select count(*) from vessel_touches v where v.locode = p.locode) as vessels
+           (select count(*) from vessel_touches v where v.locode = p.locode) as vessels,
+           -- the cohort counts distinct listings and distinct vessels, never touches: a listing that loads and
+           -- discharges here is one listing, a vessel with three open positions is one vessel
+           (select count(distinct t.listing_id) from cargo_touches t where t.locode = p.locode)
+             + (select count(*) from vessel_touches v where v.locode = p.locode) as entities
     from public.ports p
     where p.is_active and p.is_verified
+  ),
+  judged as (
+    select pp.*, pp.cargo_n + pp.vessels as total,
+           pp.entities between 1 and v_min - 1 as suppressed,
+           -- a breakdown cell of 1 or 2 points at one or two listings, and hiding only that cell leaves it to
+           -- subtraction from the total: when any cell is small, every cell is withheld and only the total is reported
+           (pp.loads between 1 and v_min - 1 or pp.discharges between 1 and v_min - 1 or pp.vessels between 1 and v_min - 1) as small_cell
+    from per_port pp
   )
+  -- suppressed ports sort with the untouched ones, by name only: the order must never rank what the counts withhold
   select jsonb_build_object(
     'asOf', current_date,
     'minimumCohort', v_min,
     'ports', coalesce(jsonb_agg(jsonb_build_object(
-      'locode', pp.locode, 'name', pp.trade_name, 'country', pp.country, 'zone', pp.zone, 'latitude', pp.latitude, 'longitude', pp.longitude,
-      'suppressed', (pp.cargo_n + pp.vessels) between 1 and v_min - 1,
-      'touches',    case when (pp.cargo_n + pp.vessels) = 0 or (pp.cargo_n + pp.vessels) >= v_min then pp.cargo_n + pp.vessels end,
-      'loads',      case when (pp.cargo_n + pp.vessels) = 0 or (pp.cargo_n + pp.vessels) >= v_min then pp.loads end,
-      'discharges', case when (pp.cargo_n + pp.vessels) = 0 or (pp.cargo_n + pp.vessels) >= v_min then pp.discharges end,
-      'vessels',    case when (pp.cargo_n + pp.vessels) = 0 or (pp.cargo_n + pp.vessels) >= v_min then pp.vessels end
-    ) order by (pp.cargo_n + pp.vessels) desc, pp.trade_name, pp.locode), '[]'::jsonb)
+      'locode', j.locode, 'name', j.trade_name, 'country', j.country, 'zone', j.zone, 'latitude', j.latitude, 'longitude', j.longitude,
+      'suppressed', j.suppressed,
+      'touches',    case when not j.suppressed then j.total end,
+      'loads',      case when not j.suppressed and not j.small_cell then j.loads end,
+      'discharges', case when not j.suppressed and not j.small_cell then j.discharges end,
+      'vessels',    case when not j.suppressed and not j.small_cell then j.vessels end
+    ) order by case when j.suppressed then 0 else j.total end desc, j.trade_name, j.locode), '[]'::jsonb)
   ) into v_result
-  from per_port pp;
+  from judged j;
   return v_result;
 end $$;
 revoke all on function public.get_port_touch_census() from public, anon;

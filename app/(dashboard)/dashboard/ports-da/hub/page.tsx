@@ -42,6 +42,6 @@ export default async function PortsHubPage({ searchParams }: { searchParams: Pro
   const tariffHeld = loaded.workspace.ports.filter((p) => p.tariffs.length > 0).map((p) => p.locode);
   return (
     <PdaPortsHub arm={arm} census={loaded.census} packs={loaded.packs} cargos={loaded.estimator.bootstrap.catalog.cargos}
-      vessels={loaded.estimator.bootstrap.catalog.vessels} tariffHeld={tariffHeld} on={on} />
+      vessels={loaded.estimator.bootstrap.catalog.vessels} catalogUnavailable={loaded.estimator.bootstrap.catalogState === "unavailable"} tariffHeld={tariffHeld} on={on} />
   );
 }

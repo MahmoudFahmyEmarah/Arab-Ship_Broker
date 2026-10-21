@@ -9,7 +9,9 @@ import { ChevronRight } from "lucide-react";
 
 import type { PdaEstimatorCargoOption, PdaEstimatorVesselOption } from "@/lib/pda/estimator-contract";
 
-export function PdaQuickDa({ cargos, vessels, tariffHeld }: { cargos: PdaEstimatorCargoOption[]; vessels: PdaEstimatorVesselOption[]; tariffHeld: readonly string[] }) {
+export function PdaQuickDa({ cargos, vessels, catalogUnavailable = false, tariffHeld }: {
+  cargos: PdaEstimatorCargoOption[]; vessels: PdaEstimatorVesselOption[]; catalogUnavailable?: boolean; tariffHeld: readonly string[];
+}) {
   const [cargoId, setCargoId] = React.useState(cargos[0]?.id ?? "");
   const [vesselId, setVesselId] = React.useState(vessels[0]?.id ?? "");
   const cargo = cargos.find((c) => c.id === cargoId) ?? null;
@@ -34,21 +36,23 @@ export function PdaQuickDa({ cargos, vessels, tariffHeld }: { cargos: PdaEstimat
         <label className="qd-f"><span>Cargo</span>
           <div className="qd-sel">
             <select value={cargoId} onChange={(e) => setCargoId(e.target.value)} aria-label="Cargo">
-              {cargos.length === 0 ? <option value="">No cargo of yours is live</option> : cargos.map((c) => <option key={c.id} value={c.id}>{c.cargo} · {c.quantityLabel} · {c.loadPort.name} → {c.dischargePort.name}</option>)}
+              {cargos.length === 0 ? <option value="">{catalogUnavailable ? "Your listings could not be read" : "No cargo of yours is live"}</option> : cargos.map((c) => <option key={c.id} value={c.id}>{c.cargo} · {c.quantityLabel} · {c.loadPort.name} → {c.dischargePort.name}</option>)}
             </select>
           </div>
         </label>
         <label className="qd-f"><span>Vessel</span>
           <div className="qd-sel">
             <select value={vesselId} onChange={(e) => setVesselId(e.target.value)} aria-label="Vessel">
-              {vessels.length === 0 ? <option value="">No vessel of yours is open</option> : vessels.map((v) => <option key={v.id} value={v.id}>{v.name} · {v.type} · {v.dwt} DWT</option>)}
+              {vessels.length === 0 ? <option value="">{catalogUnavailable ? "Your listings could not be read" : "No vessel of yours is open"}</option> : vessels.map((v) => <option key={v.id} value={v.id}>{v.name} · {v.type} · {v.dwt} DWT</option>)}
             </select>
           </div>
         </label>
         <label className="qd-f"><span>Quantity (MT)</span>
           <input inputMode="numeric" value={mt} onChange={(e) => setMt(e.target.value.replace(/[^\d]/g, "").slice(0, 9))} aria-label="Quantity in metric tonnes" placeholder={cargo?.quantityLabel ?? "—"} />
         </label>
-        <div className="qd-ctx">Both records are yours; the estimator re-reads them on open and prices each call from the tariff that governs the port.</div>
+        {catalogUnavailable
+          ? <div className="qd-ctx" role="alert">Your listings could not be read just now, so nothing is offered here; try again in a moment.</div>
+          : <div className="qd-ctx">Both records are yours; the estimator re-reads them on open and prices each call from the tariff that governs the port.</div>}
       </div>
 
       <div className="qd-legs">

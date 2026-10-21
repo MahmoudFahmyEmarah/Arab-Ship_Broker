@@ -12,7 +12,7 @@ import "./ports-module.css";
 
 const NR = "Not recorded yet";
 const COLUMNS: Array<{ key: PortSortKey; label: string }> = [{ key: "rank", label: "Targeting" }, { key: "name", label: "Port" }, { key: "country", label: "Country" }, { key: "zone", label: "Zone" }];
-const ROLE_MARK = { load: "▲", discharge: "▼", both: "⇅", vessels: "●", none: "", suppressed: "" } as const;
+const ROLE_MARK = { load: "▲", discharge: "▼", both: "⇅", vessels: "●", none: "", suppressed: "", touched: "◆" } as const;
 
 export function PdaPortDirectory({ census, tariffHeld, query, zone, sort, desc, on }: {
   census: PdaPortCensus;
