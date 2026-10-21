@@ -5,18 +5,23 @@
 -- parents; the append-only guards are disabled only inside this one transaction (DDL is transactional: an error rolls
 -- the disable back as well) and re-enabled before commit. The transaction proves zero residue before it commits;
 -- any failure aborts it, and the runner reports the run FAILED. Works for a partial seed and for a completed run.
+-- Auth (C2O-162 P0-3): the run's Auth accounts are found by email BEFORE anything is deleted, and their sessions,
+-- refresh tokens, MFA factors, one-time tokens and identities are deleted explicitly and proved zero (a real browser
+-- sign-in creates sessions and refresh tokens). Auth's own audit log is durable and is not touched.
 select set_config('e2e.run', :'run', false);
 
 begin;
 do $$
 declare
   v_run text := current_setting('e2e.run');
-  v_users uuid[]; v_orgs uuid[]; v_sets uuid[] := '{}'; v_reqs uuid[] := '{}'; v_cargo uuid[]; v_vessels uuid[]; v_avail uuid[]; v_ports text[];
+  v_users uuid[]; v_auth uuid[]; v_orgs uuid[]; v_sets uuid[] := '{}'; v_reqs uuid[] := '{}'; v_cargo uuid[]; v_vessels uuid[]; v_avail uuid[]; v_ports text[];
   n bigint;
 begin
   if v_run !~ '^pdaag-[0-9a-f]{12}$' then raise exception 'TEARDOWN_REFUSED: malformed run id %', v_run; end if;
 
   select coalesce(array_agg(u.id), '{}') into v_users from public.users u where u.email like 'e2e-' || v_run || '-%@arabshipbroker.test';
+  select coalesce(array_agg(a.id), '{}') into v_auth from auth.users a
+   where a.email like 'e2e-' || v_run || '-%@arabshipbroker.test' or a.id = any (v_users);
   select coalesce(array_agg(o.id), '{}') into v_orgs from public.organizations o where o.name like 'E2E ' || v_run || ' %';
   select coalesce(array_agg(c.id), '{}') into v_cargo from public.cargo_listings c where c.ref = 'E2E-' || v_run;
   select coalesce(array_agg(v.id), '{}') into v_vessels from public.vessels v where v.vessel_name like 'E2E ' || upper(v_run) || ' %';
@@ -85,8 +90,14 @@ begin
   delete from public.organization_members where user_id = any (v_users) or org_id = any (v_orgs);
   delete from public.users where id = any (v_users);
   delete from public.organizations where id = any (v_orgs);
-  delete from auth.identities where user_id = any (v_users);
-  delete from auth.users where id = any (v_users) or email like 'e2e-' || v_run || '-%@arabshipbroker.test';
+  delete from auth.mfa_factors where user_id = any (v_auth);
+  delete from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x);
+  delete from auth.sessions where user_id = any (v_auth);
+  if to_regclass('auth.one_time_tokens') is not null then
+    execute 'delete from auth.one_time_tokens where user_id = any ($1)' using v_auth;
+  end if;
+  delete from auth.identities where user_id = any (v_auth);
+  delete from auth.users where id = any (v_auth);
 
   -- zero residue, or the whole teardown aborts
   select (select count(*) from public.users where email like 'e2e-' || v_run || '-%')
@@ -96,7 +107,11 @@ begin
        + (select count(*) from public.vessels where vessel_name like 'E2E ' || upper(v_run) || ' %')
        + (select count(*) from public.cargo_listings where ref = 'E2E-' || v_run)
        + (select count(*) from public.pda_estimates where owner_user_id = any (v_users))
-       + (select count(*) from public.notifications where recipient_user_id = any (v_users)) into n;
+       + (select count(*) from public.notifications where recipient_user_id = any (v_users))
+       + (select count(*) from auth.identities where user_id = any (v_auth))
+       + (select count(*) from auth.sessions where user_id = any (v_auth))
+       + (select count(*) from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x))
+       + (select count(*) from auth.mfa_factors where user_id = any (v_auth)) into n;
   if n <> 0 then raise exception 'TEARDOWN_RESIDUE: % run-stamped row(s) remain for %', n, v_run; end if;
   if exists (select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace s on s.oid = c.relnamespace
              where s.nspname = 'public' and not t.tgisinternal and t.tgenabled = 'D'

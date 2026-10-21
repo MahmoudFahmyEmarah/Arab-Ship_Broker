@@ -6,6 +6,8 @@
 --   A4  one acceptance per request; an older revision, another member and a withdrawn request are refused
 --   A5  the agency staff are notified; acceptances are never edited or deleted
 --   A6  grants: no table grant; both functions service-only
+--   A12 the symmetric lineage (C2O-162 nb): discharge accepted first, then load, then a replacement load quote keeps
+--       the discharge quote accepted two versions back
 begin;
 
 do $$
@@ -19,6 +21,7 @@ declare
   pol text; pod text;
   load_req jsonb; dis_req jsonb; leg_res jsonb; route jsonb; quoted jsonb; good jsonb;
   set1 jsonb; req jsonb; req2 jsonb; q1 jsonb; q2 jsonb; ctx jsonb; saved jsonb; mine jsonb; e text; v_core boolean;
+  route2 jsonb; s_d jsonb; s_dl jsonb; s_dll jsonb; dq jsonb; lq jsonb; good_d jsonb; good_l jsonb;
 begin
   v_core := to_regclass('public.notifications') is not null;
   insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -240,6 +243,56 @@ begin
   exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_STATE' then raise exception 'A9: an expired request must not take an acceptance, got %', e; end if;
   raise notice 'A9 ok: an expired request takes no acceptance';
+
+  -- A12 · the symmetric lineage (C2O-162 nb): a new estimate for another cargo; discharge accepted first (800), then load
+  --        (600), then a replacement load quote (650) must still carry the discharge quote accepted two versions back
+  route2 := jsonb_set(route, '{canonical,cargoId}', to_jsonb(gen_random_uuid()));
+  set1 := public.pda_save_estimate_set(member, member_org, load_req, leg_res, dis_req, leg_res, route2, null);
+  good_d := jsonb_set(jsonb_set(good, '{totals,native}', '800'), '{lines,0,amount}', '800');
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  req2 := public.create_pda_quote_request((set1->>'id')::uuid, 'discharge', array[agency_a], array['agency']);
+  perform set_config('request.jwt.claim.sub', staff_a::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_a,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  dq := public.submit_pda_agency_quote((req2->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency fee","serviceCode":"agency","amount":"800"}]', current_date + 30);
+  perform set_config('request.jwt.claim.sub', '', true);
+  s_d := public.pda_accept_agency_quote(member, member_org, (dq->>'quoteId')::uuid, load_req, leg_res, dis_req, good_d, route2);
+
+  good_l := jsonb_set(jsonb_set(good, '{totals,native}', '600'), '{lines,0,amount}', '600');
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  req2 := public.create_pda_quote_request((s_d->>'id')::uuid, 'load', array[agency_a], array['agency']);
+  perform set_config('request.jwt.claim.sub', staff_a::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_a,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  lq := public.submit_pda_agency_quote((req2->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency fee","serviceCode":"agency","amount":"600"}]', current_date + 30);
+  perform set_config('request.jwt.claim.sub', '', true);
+  ctx := public.pda_quote_acceptance_context(member, (lq->>'quoteId')::uuid);
+  if ctx#>>'{carried,leg}' <> 'discharge' or (ctx#>>'{carried,total}')::numeric <> 800 then
+    raise exception 'A12: the discharge quote is carried into the load acceptance: %', ctx; end if;
+  s_dl := public.pda_accept_agency_quote(member, member_org, (lq->>'quoteId')::uuid, load_req, good_l, dis_req, good_d, route2);
+
+  good_l := jsonb_set(jsonb_set(good, '{totals,native}', '650'), '{lines,0,amount}', '650');
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  req2 := public.create_pda_quote_request((s_dl->>'id')::uuid, 'load', array[agency_a], array['agency']);
+  perform set_config('request.jwt.claim.sub', staff_a::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',staff_a,'app_metadata',jsonb_build_object('role','broker'))::text, true);
+  lq := public.submit_pda_agency_quote((req2->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency fee","serviceCode":"agency","amount":"650"}]', current_date + 30);
+  perform set_config('request.jwt.claim.sub', '', true);
+  ctx := public.pda_quote_acceptance_context(member, (lq->>'quoteId')::uuid);
+  if ctx#>>'{carried,leg}' <> 'discharge' or (ctx#>>'{carried,total}')::numeric <> 800 then
+    raise exception 'A12: the discharge quote accepted two versions back is still carried: %', ctx; end if;
+  begin perform public.pda_accept_agency_quote(member, member_org, (lq->>'quoteId')::uuid, load_req, good_l, dis_req, leg_res, route2); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'A12: dropping the still-effective discharge quote must be refused, got %', e; end if;
+  s_dll := public.pda_accept_agency_quote(member, member_org, (lq->>'quoteId')::uuid, load_req, good_l, dis_req, good_d, route2);
+  if (select supersedes_id from public.pda_estimate_sets where id = (s_dll->>'id')::uuid) <> (s_dl->>'id')::uuid
+     or (select sum(l.amount) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.load_estimate_id = l.estimate_id
+          where s.id = (s_dll->>'id')::uuid and l.basis = 'agency_quote') <> 650
+     or (select sum(l.amount) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.discharge_estimate_id = l.estimate_id
+          where s.id = (s_dll->>'id')::uuid and l.basis = 'agency_quote') <> 800 then
+    raise exception 'A12: the third version takes the replacement load quote and keeps the discharge quote: %', s_dll; end if;
+  raise notice 'A12 ok: discharge → load → replacement load keeps the discharge quote through the supersede lineage';
 
   -- A5 · notification + immutability
   if v_core and not exists (select 1 from public.notifications n where n.recipient_user_id = staff_a and n.kind = 'pda.quote_accepted') then

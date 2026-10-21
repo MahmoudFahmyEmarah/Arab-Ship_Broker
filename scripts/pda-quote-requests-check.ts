@@ -76,7 +76,7 @@ ok(/select \* into r from public\.pda_quote_requests x where x\.id = p_request_i
   && /r\.status <> 'open' or r\.expires_at < now\(\)/.test(decline),
   "C2O-159 P1-3: decline locks the request before its recipient and refuses an expired request");
 const race = read("scripts/db/pda-quote-race.sh");
-ok(/withdraw_pda_quote_request/.test(race) && /decline_pda_quote_request/.test(race) && /withdrawn\/sent/.test(race) && /REFUSED: \$DBNAME is not a scratch database/.test(race),
+ok(/withdraw_pda_quote_request/.test(race) && /decline_pda_quote_request/.test(race) && /withdrawn\/sent/.test(race) && /does not carry this run's disposable marker/.test(race),
   "a real two-session withdraw-versus-decline race script exists for the scratch DB proof (one terminal outcome)");
 ok(/not public\.fn_pda_member_entitled\(\)/.test(create) && /s\.owner_user_id <> v_user/.test(create) && /where n\.supersedes_id = s\.id/.test(create)
   && /pg_advisory_xact_lock\(hashtext\('pda_estimate_set_owner:'/.test(create) && /v_org := s\.owner_org_id;/.test(create),
