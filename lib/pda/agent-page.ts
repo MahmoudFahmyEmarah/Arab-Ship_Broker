@@ -28,12 +28,12 @@ export function agencyPortRows(agency: PdaAgency): PdaAgencyPortRow[] {
     .map((p) => ({ locode: p.portLocode, name: p.portName, country: p.country, services: p.services.map((s) => PDA_SERVICE_LABELS[s]).join(" · ") }));
 }
 
-/** Only an http(s) address is ever rendered as a link. */
+/** Only an https address is ever rendered as a link (B2O-056 P2-3). */
 export function safeWebsite(v: string | null): { href: string; host: string } | null {
   if (!v) return null;
   try {
     const url = new URL(v.trim());
-    return url.protocol === "https:" || url.protocol === "http:" ? { href: url.toString(), host: url.host } : null;
+    return url.protocol === "https:" ? { href: url.toString(), host: url.host } : null;
   } catch {
     return null;
   }

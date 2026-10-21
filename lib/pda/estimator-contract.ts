@@ -213,7 +213,7 @@ export function buildPdaEstimatorCatalog(input: {
 /** Accepted hand-off sources. Context from either is applied only through the
  *  authorised PDA catalog: a cargo or vessel id that is not the viewer's own is
  *  reported, never promoted to a foreign key; route and quantity are explicit facts. */
-export const PDA_HANDOFF_SOURCES = ["fixture", "voyage"] as const;
+export const PDA_HANDOFF_SOURCES = ["fixture", "voyage", "quick"] as const;
 export type PdaHandoffSource = (typeof PDA_HANDOFF_SOURCES)[number];
 
 export function parsePdaEstimatorHandoff(

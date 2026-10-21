@@ -1763,3 +1763,42 @@
 /* B2O-054: settings slots are a definition list; the inert wrapper is layout-neutral */
 .pm-scope dl.ps-slots { margin: 0; }
 .pm-scope .ps-slot dt, .pm-scope .ps-slot dd { margin: 0; }
+
+/* Step 11 (directory, map, hub, agent page): classes the design renders inline or that the app's semantics need */
+.pm-scope nav.pd-crumbs { display: block; }
+.pm-scope .pt-ctl { display: flex; gap: 8px; align-items: center; margin-top: 14px; max-width: 520px; }
+.pm-scope .pt-search { position: relative; flex: 1; display: flex; align-items: center; }
+.pm-scope .pt-search > svg { position: absolute; left: 10px; color: var(--asb-gray-500); pointer-events: none; }
+.pm-scope .pt-search .pt-text { width: 100%; padding-left: 30px; }
+.pm-scope .pd-chips a.pd-chip { text-decoration: none; }
+.pm-scope .pd-chip.is-on { background: var(--asb-blue-light); color: var(--asb-blue); }
+.pm-scope .pd-chip--zone { font-variant-numeric: tabular-nums; }
+.pm-scope .pt-wrap { margin: 18px 24px 60px; }
+.pm-scope .pt-lines th a.pt-sort { color: inherit; text-decoration: none; }
+.pm-scope .pt-lines th[scope="row"] { text-align: left; }
+.pm-scope .pt-li__code { font-size: 10.5px; color: var(--asb-gray-400); font-weight: 400; margin-left: 6px; }
+.pm-scope .pt-rank__n { font-weight: 700; color: var(--asb-navy); white-space: nowrap; }
+.pm-scope .pt-rank__few { font-size: 11px; color: var(--asb-amber); font-weight: 600; white-space: nowrap; }
+.pm-scope .pt-tariff { font-size: 11px; color: var(--asb-gray-500); }
+.pm-scope .pt-tariff.is-held { color: var(--asb-green); font-weight: 600; }
+.pm-scope .pt-open { color: var(--asb-gray-400); display: inline-flex; }
+.pm-scope .pt-open:hover { color: var(--asb-blue); }
+.pm-scope .pt-empty { padding: 16px; color: var(--asb-gray-500); font-size: 12px; }
+.pm-scope .pmap-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 0 24px 40px; }
+.pm-scope .pmap-host-wrap .pda-ports__map, .pm-scope .pmap-host-wrap .leaflet-container { min-height: 520px; height: 60vh; border-radius: 10px; }
+.pm-scope .pmap-side { display: flex; flex-direction: column; gap: 12px; }
+.pm-scope .pmap-facts { margin: 10px 0 0; display: grid; gap: 8px; }
+.pm-scope .pmap-facts > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; font-size: 12px; }
+.pm-scope .pmap-facts dt { color: var(--asb-gray-500); font-weight: 600; }
+.pm-scope .pmap-facts dd { margin: 0; color: var(--asb-gray-700); }
+.pm-scope .pmap-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pm-scope .pmap-actions a { text-decoration: none; }
+.pm-scope .pd-panel__body--flush { padding: 0; }
+.pm-scope .pd-charges__port { color: var(--asb-navy); font-weight: 600; font-size: 12.5px; text-decoration: none; }
+.pm-scope .pd-charges__port span { color: var(--asb-gray-400); font-weight: 400; font-size: 10.5px; margin-left: 6px; }
+.pm-scope .pd-charges__empty { padding: 16px; color: var(--asb-gray-500); font-size: 12px; }
+.pm-scope a.pm-card, .pm-scope a.pm-row { text-decoration: none; color: inherit; }
+.pm-scope a.pmx-arms__b { text-decoration: none; }
+.pm-scope .qd-sel select, .pm-scope .qd-f input { width: 100%; }
+.pm-scope .qd-leg__none { color: var(--asb-gray-500); font-size: 11.5px; }
+@media (max-width: 860px) { .pm-scope .pmap-body { grid-template-columns: 1fr; } }
