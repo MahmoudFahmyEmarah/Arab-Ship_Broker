@@ -205,6 +205,10 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
   const setF = (p: Partial<VesselFacts>) => setFacts((f) => ({ ...f, ...p }));
   const setV = (p: Partial<VoyageFacts>) => setVoyage((v) => ({ ...v, ...p }));
   const undecidedCount = estimate ? estimate.layers.conditional.filter((f) => f.triggered === null).length : 0;
+  // the facts panel opens itself while a flag is undecided and then stays open: settling the last flag inside it
+  // never snaps it shut under the user's hands (O2B-052 P2-5)
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  if (undecidedCount > 0 && !moreOpen) setMoreOpen(true);
 
   return (
     <div className="ve-page">
@@ -258,14 +262,14 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
                   <div className="ve-seg ve-seg--sm">{(["laden", "ballast"] as const).map((s) => <button key={s} type="button" className={`ve-seg__btn${voyage.cargoStatus === s ? " is-active" : ""}`} onClick={() => setV({ cargoStatus: s })}>{s === "laden" ? "Laden" : "Ballast"}</button>)}</div></div>
                 <label className="vs-f"><span className="vs-f__k">Transit date</span><input className="vs-in vs-in--date" type="date" value={voyage.transitDate} onChange={(e) => setV({ transitDate: e.target.value })} /></label>
                 <label className="vs-f"><span className="vs-f__k">SCA category</span>
-                  <select className="vs-in vs-in--select" value={facts.category ?? ""} onChange={(e) => setF({ category: e.target.value || null })}>
+                  <select className="vs-in vs-in--select" value={facts.category ?? ""} onChange={(e) => setF({ category: e.target.value || null })} aria-label="SCA vessel category">
                     <option value="">— select —</option>{SUEZ_VESSEL_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select></label>
-                <div className="vs-f"><span className="vs-f__k">SDR to USD</span><span className={estimate?.sdrRate.status === "trusted" ? "is-auto" : estimate?.sdrRate.status === "manual" ? "is-manual" : "is-missing"}>{estimate?.sdrRate.rateUsd != null ? `${estimate.sdrRate.rateUsd} (${estimate.sdrRate.status === "manual" ? "manual" : "auto"})` : "not on file"}</span></div>
+                <div className="vs-f"><span className="vs-f__k">SDR to USD</span><span className={estimate?.sdrRate.status === "trusted" ? "is-auto" : estimate?.sdrRate.status === "manual" ? "is-manual" : "is-missing"}>{estimate?.sdrRate.rateUsd != null ? `${estimate.sdrRate.rateUsd} (${estimate.sdrRate.status === "manual" ? `manual: ${estimate.sdrRate.manual?.reason ?? "reason not given"}` : estimate.sdrRate.source}, ${estimate.sdrRate.asOf})` : "not on file"}</span></div>
                 <div className="vs-f"><span className="vs-f__k">Tariff</span><span className={!estimate ? "is-missing" : scnt == null || estimate.layers.toll.tiers.length > 0 ? "is-auto" : "is-missing"}>{!estimate ? "—" : scnt == null ? `v${estimate.tariffVersion.versionNo} · SDR per SCNT band` : estimate.layers.toll.tiers.length > 0 ? `v${estimate.tariffVersion.versionNo} · ${estimate.layers.toll.tiers.length} SCNT band${estimate.layers.toll.tiers.length > 1 ? "s" : ""}` : `v${estimate.tariffVersion.versionNo} · bands not loaded`}</span></div>
                 <div className="vs-note">Toll bands, the SDR rate and every charge come from the published SCA tariff in force on the transit date.</div>
 
-                <details className="vs-more" open={undecidedCount > 0 || undefined}>
+                <details className="vs-more" open={moreOpen || undefined}>
                   <summary>Risk-flag and waste facts{undecidedCount > 0 ? <span className="vs-tag vs-tag--est">{undecidedCount} undecided</span> : null}</summary>
                   <TriRow label="Cranes lift the mooring boats" value={facts.mooringCranesOk} onChange={(v) => setF({ mooringCranesOk: v })} />
                   <TriRow label="Compliant searchlight (art. 28)" value={facts.searchlight} onChange={(v) => setF({ searchlight: v })} />
@@ -306,14 +310,14 @@ export function SuezCalculator({ vessels, initialContext, viewerUserId, initialV
                 <div className="vs-note">Estimate only. Confirm SCNT and current SDR rate with the SCA agent before transit.</div>
               </aside>
 
-              <main className="vs-main">
+              <section className="vs-main" aria-label="Transit estimate">
                 {contextError && <div className="vs-notice vs-notice--unavailable">{contextError}</div>}
                 {!context.found && !contextError && (
                   <div className="vs-notice vs-notice--unavailable"><strong>No published Suez tariff covers {voyage.transitDate}.</strong> Nothing is shown that cannot be sourced. Admins publish tariff versions under Admin → Voyage estimator data.</div>
                 )}
                 {context.found && !facts.category && <div className="vs-notice vs-notice--unavailable"><strong>SCA vessel category not known for this vessel type.</strong> Choose it under Transit parameters; the toll bands depend on it.</div>}
                 {estimate && <Results estimate={estimate} vessel={vessel} scnt={scnt} />}
-              </main>
+              </section>
             </div>
           )}
         </div>
@@ -429,6 +433,7 @@ function Results({ estimate, vessel, scnt }: { estimate: SuezEstimate; vessel: S
           <div className="vs-cell__k">Total transit cost</div>
           <div className="vs-cell__v">{t.complete ? fmtUSD2(t.appliedUsd) : "—"}</div>
           <div className="vs-cell__n" title="The Suez total feeds the Voyage Cost Estimator only when a transit leg applies">{t.complete ? "Feeds Voyage Cost Estimator when a transit leg applies" : `Incomplete · computable parts ${fmtUSD(t.appliedUsd)}`}</div>
+          {(t.conditionalAppliedUsd > 0 || t.wasteUsd > 0) && <div className="vs-cell__n">= the three groups + risk flags applied {fmtUSD2(t.conditionalAppliedUsd)} + waste extras {fmtUSD2(t.wasteUsd)}</div>}
         </div>
       </div>
 
@@ -439,7 +444,7 @@ function Results({ estimate, vessel, scnt }: { estimate: SuezEstimate; vessel: S
             {g.toll && (
               <>
                 <div className="vs-row vs-row--hl">
-                  <span>Transit toll<small>{scnt != null ? `${scnt.toLocaleString("en-US")} SCNT` : "SCNT not sourced"} · {SUEZ_VESSEL_CATEGORIES.find((c) => c.key === estimate.vesselCategory)?.label ?? estimate.vesselCategory} · {estimate.cargoStatus}{estimate.sdrRate.rateUsd != null ? ` · × ${estimate.sdrRate.rateUsd} SDR` : ""}</small></span>
+                  <span>Transit toll<small>{scnt != null ? `${scnt.toLocaleString("en-US")} SCNT` : "SCNT not sourced"} · {SUEZ_VESSEL_CATEGORIES.find((c) => c.key === estimate.vesselCategory)?.label ?? estimate.vesselCategory} · {estimate.cargoStatus}{estimate.layers.toll.sdr != null ? ` · ${fmtSDR(estimate.layers.toll.sdr)}` : ""}{estimate.sdrRate.rateUsd != null ? ` × SDR rate ${estimate.sdrRate.rateUsd} (${estimate.sdrRate.status === "manual" ? `manual: ${estimate.sdrRate.manual?.reason ?? "reason not given"}` : estimate.sdrRate.source}, ${estimate.sdrRate.asOf})` : " · SDR rate not on file"}</small></span>
                   <span className={lineClass(estimate.layers.toll.status, estimate.layers.toll.usd)}>{fmtUSD2(estimate.layers.toll.usd)}</span>
                 </div>
                 {estimate.layers.toll.tiers.filter((tier) => tier.tons > 0).map((tier) => (

@@ -120,6 +120,8 @@ export function CurrentPrices({ dash, canEdit }: { dash: AdminBunkerDashboard; c
     <section className="adm-card" style={{ padding: 0 }}>
       <div className="adm-card__head" style={{ padding: "12px 16px 4px", marginBottom: 0 }}>
         <span className="adm-card__title">Current prices</span>
+        {/* the headline the stat grid used to carry: live approved quotes, and how many of them are current */}
+        <span className="adm-card__sub" data-testid="live-quotes">{live.length} live quote{live.length === 1 ? "" : "s"} · {live.filter((q) => q.freshness === "current" && q.validNow).length} current</span>
         <span className="adm-card__sub adm-card__sub--amber">Manual edits override the sponsor&apos;s published values until they republish.</span>
       </div>
       {live.length === 0 ? (
@@ -136,7 +138,7 @@ export function CurrentPrices({ dash, canEdit }: { dash: AdminBunkerDashboard; c
                     const qs = row.cells.get(p.key) ?? [];
                     if (qs.length === 0) return <td key={p.key} className="num">-</td>;
                     const best = qs.reduce((a, b) => (b.priceUsdMt < a.priceUsdMt ? b : a));
-                    return <td key={p.key} className="num" title={qs.map((q) => `${q.portName} ${usd(q.priceUsdMt)}`).join(" · ")}>{usd(best.priceUsdMt)}{qs.length > 1 ? <span className="adm-muted"> · {qs.length} ports</span> : null}</td>;
+                    return <td key={p.key} className="num" title={qs.map((q) => `${q.portName} ${usd(q.priceUsdMt)}`).join(" · ")}>{usd(best.priceUsdMt)}{qs.length > 1 ? <span className="adm-muted"> · lowest of {qs.length} ports</span> : null}</td>;
                   })}
                   <td style={{ textAlign: "right" }}>{canEdit && <a className="adm-btn ghost small" href="#override">Edit</a>}</td>
                 </tr>

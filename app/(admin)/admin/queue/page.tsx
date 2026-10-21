@@ -7,11 +7,11 @@ import {
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ReviewStatusBadge, TrustTierBadge } from "@/components/admin/AdminBadge";
 import { QueueFilters } from "@/components/admin/queue/QueueFilters";
-import { isPlainZoneName } from "@/lib/zones";
+import { ZONE_CODES, isPlainZoneName } from "@/lib/zones";
 import type { QueueItem } from "@/lib/admin/types";
 
 type StatusFilter = "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED" | "ALL";
-type TypeFilter = "cargo" | "vessel_availability";
+type TypeFilter = "all" | "cargo" | "vessel_availability";
 
 function formatAge(iso: string): { label: string; urgent: boolean } {
   const minutes = (Date.now() - new Date(iso).getTime()) / 60000;
@@ -25,11 +25,17 @@ function formatAge(iso: string): { label: string; urgent: boolean } {
 const STATUSES: StatusFilter[] = ["PENDING", "APPROVED", "REJECTED", "FLAGGED", "ALL"];
 const RANGES: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
 const sinceIso = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+const TABS: { value: TypeFilter; label: string }[] = [
+  { value: "all", label: "All submissions" },
+  { value: "cargo", label: "Cargo submissions" },
+  { value: "vessel_availability", label: "Vessel submissions" },
+];
 
-// The design's review queue (Portal standalone 7 · PageReview): Cargo / Vessel submission tabs with counts, a
-// filter bar of dropdowns with "N pending · oldest first", and one row per submission with Preview · Approve →
-// · Request changes · Reject. Every decision is still taken on the submission's own page (its checks and the
-// listing in full are there); the row buttons open it with that decision ready.
+// The design's review queue (Portal standalone 7 · PageReview): submission tabs with counts, a filter bar of
+// dropdowns with "N pending · oldest first", and one row per submission with Preview · Approve → · Request changes
+// · Reject. "All submissions" stays the landing tab (the rail's Review badge counts both types). Every decision is
+// still taken on the submission's own page (its checks and the listing in full are there); the row buttons open it
+// with that decision ready.
 export default async function AdminQueuePage({
   searchParams,
 }: {
@@ -40,43 +46,56 @@ export default async function AdminQueuePage({
   const supabase = await getAdminSupabaseClient();
 
   const statusFilter: StatusFilter = STATUSES.includes(params.status as StatusFilter) ? (params.status as StatusFilter) : "PENDING";
-  const typeFilter: TypeFilter = params.type === "vessel_availability" ? "vessel_availability" : "cargo";
+  const typeFilter: TypeFilter = TABS.some((t) => t.value === params.type) ? (params.type as TypeFilter) : "all";
+  // the zone goes into a PostgREST or() string, so only plain zone names pass (E.MED yes; quotes, commas, brackets no)
+  const zone = params.zone && isPlainZoneName(params.zone) ? params.zone : undefined;
 
   let query = supabase.from("v_admin_queue_detail").select("*").order("created_at", { ascending: true });
   if (statusFilter !== "ALL") query = query.eq("status", statusFilter);
-  query = query.eq("listing_type", typeFilter);
+  if (typeFilter !== "all") query = query.eq("listing_type", typeFilter);
   if (params.tier) query = query.eq("submitter_trust_tier", params.tier);
   if (params.commodity) query = query.eq("commodity_name", params.commodity);
-  // the zone goes into a PostgREST or() string, so only plain zone names pass (E.MED yes; quotes, commas, brackets no)
-  const zone = params.zone && isPlainZoneName(params.zone) ? params.zone : undefined;
-  if (zone) query = typeFilter === "cargo" ? query.or(`load_zone.eq."${zone}",disch_zone.eq."${zone}"`) : query.eq("open_zone", zone);
+  if (zone) {
+    query = typeFilter === "cargo" ? query.or(`load_zone.eq."${zone}",disch_zone.eq."${zone}"`)
+      : typeFilter === "vessel_availability" ? query.eq("open_zone", zone)
+      : query.or(`load_zone.eq."${zone}",disch_zone.eq."${zone}",open_zone.eq."${zone}"`);
+  }
   if (params.range && RANGES[params.range]) query = query.gte("created_at", sinceIso(RANGES[params.range]));
-  const { data } = await query.limit(200);
+  const { data, error: readError } = await query.limit(200);
   const items = (data ?? []) as QueueItem[];
 
-  // tab counts at the chosen status, and the option lists for the dropdowns
-  let countQuery = supabase.from("v_admin_queue_detail").select("listing_type, commodity_name, load_zone, disch_zone, open_zone");
-  if (statusFilter !== "ALL") countQuery = countQuery.eq("status", statusFilter);
-  const { data: all } = await countQuery.limit(2000);
-  const rows = (all ?? []) as { listing_type: string; commodity_name: string | null; load_zone: string | null; disch_zone: string | null; open_zone: string | null }[];
-  const count = (t: TypeFilter) => rows.filter((r) => r.listing_type === t).length;
-  const commodities = [...new Set(rows.map((r) => r.commodity_name).filter((x): x is string => !!x))].sort();
-  const zones = [...new Set(rows.filter((r) => r.listing_type === typeFilter).flatMap((r) => (typeFilter === "cargo" ? [r.load_zone, r.disch_zone] : [r.open_zone])).filter((x): x is string => !!x))].sort();
+  // exact tab counts at the chosen status (a count query, never a capped row list)
+  const countOf = async (t: TypeFilter) => {
+    let q = supabase.from("v_admin_queue_detail").select("id", { count: "exact", head: true });
+    if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
+    if (t !== "all") q = q.eq("listing_type", t);
+    const { count, error } = await q;
+    return error ? null : count;   // unknown is shown as "—", never as 0
+  };
+  const [allCount, cargoCount, vesselCount] = await Promise.all([countOf("all"), countOf("cargo"), countOf("vessel_availability")]);
+  const counts: Record<TypeFilter, number | null> = { all: allCount, cargo: cargoCount, vessel_availability: vesselCount };
 
-  const tabHref = (t: TypeFilter) => `/admin/queue?status=${statusFilter}&type=${t}`;
+  // dropdown options: zones from the registry; commodities from the cargo submissions at this status
+  let commodityQuery = supabase.from("v_admin_queue_detail").select("commodity_name").eq("listing_type", "cargo").not("commodity_name", "is", null);
+  if (statusFilter !== "ALL") commodityQuery = commodityQuery.eq("status", statusFilter);
+  const { data: commodityRows } = await commodityQuery.limit(1000);
+  const commodities = [...new Set(((commodityRows ?? []) as { commodity_name: string }[]).map((r) => r.commodity_name))].sort();
+  const zones = ZONE_CODES.filter((z) => z !== "Unknown");
+
+  const tabHref = (t: TypeFilter) => `/admin/queue?status=${statusFilter}${t === "all" ? "" : `&type=${t}`}`;
   const statusWord = statusFilter === "ALL" ? "shown" : statusFilter.toLowerCase();
+  const unfiltered = typeFilter === "all" && !params.tier && !params.commodity && !zone && !params.range;
 
   return (
     <div className="adm-page">
       <AdminPageHeader title="Listing review queue" subtitle="Approve, request changes, or reject pending submissions" />
 
       <div className="adm-tabs adm-tabs--card">
-        <Link href={tabHref("cargo")} className={`adm-tab${typeFilter === "cargo" ? " is-on" : ""}`} aria-current={typeFilter === "cargo" ? "page" : undefined}>
-          Cargo submissions <span className="adm-tab__count">{count("cargo")}</span>
-        </Link>
-        <Link href={tabHref("vessel_availability")} className={`adm-tab${typeFilter === "vessel_availability" ? " is-on" : ""}`} aria-current={typeFilter === "vessel_availability" ? "page" : undefined}>
-          Vessel submissions <span className="adm-tab__count">{count("vessel_availability")}</span>
-        </Link>
+        {TABS.map((t) => (
+          <Link key={t.value} href={tabHref(t.value)} className={`adm-tab${typeFilter === t.value ? " is-on" : ""}`} aria-current={typeFilter === t.value ? "page" : undefined}>
+            {t.label} <span className="adm-tab__count">{counts[t.value] ?? "—"}</span>
+          </Link>
+        ))}
       </div>
 
       <QueueFilters
@@ -85,16 +104,19 @@ export default async function AdminQueuePage({
           { key: "status", label: "Status: pending", options: STATUSES.filter((s) => s !== "PENDING").map((s) => ({ value: s, label: `Status: ${s.toLowerCase()}` })) },
           { key: "range", label: "Date range", options: [{ value: "7d", label: "Last 7 days" }, { value: "30d", label: "Last 30 days" }, { value: "90d", label: "Last 90 days" }] },
           { key: "tier", label: "User tier", options: [{ value: "NEW", label: "New" }, { value: "VERIFIED", label: "Verified" }, { value: "FLAGGED", label: "Flagged" }] },
-          ...(typeFilter === "cargo" ? [{ key: "commodity", label: "Commodity", options: commodities.map((c) => ({ value: c, label: c })) }] : []),
+          ...(typeFilter !== "vessel_availability" ? [{ key: "commodity", label: "Commodity", options: commodities.map((c) => ({ value: c, label: c })) }] : []),
           { key: "zone", label: "Zone", options: zones.map((z) => ({ value: z, label: z })) },
         ]}
       />
 
-      {items.length === 0 ? (
+      {readError ? (
+        <div className="adm-empty" role="alert">The review queue could not be read just now, so this is not an empty queue. Reload the page to try again.</div>
+      ) : items.length === 0 ? (
         <div className="adm-empty">
-          {statusFilter === "PENDING"
+          {statusFilter === "PENDING" && unfiltered
             ? "Queue is clear. All submissions have been reviewed."
-            : `No ${statusWord} submissions. Adjust the filters to see others.`}
+            : `No ${statusWord} ${typeFilter === "cargo" ? "cargo " : typeFilter === "vessel_availability" ? "vessel " : ""}submissions match. ${
+                typeFilter !== "all" && (counts.all ?? 0) > 0 ? `${counts.all} ${statusWord} in All submissions.` : "Adjust the filters to see others."}`}
         </div>
       ) : (
         <div className="adm-card adm-queue">

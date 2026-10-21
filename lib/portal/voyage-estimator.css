@@ -217,3 +217,12 @@
 @media (max-width: 720px) { .ve-pl-split { grid-template-columns: 1fr; } }
 .ve-pl-row .ve-linked-src { display: block; }
 .ve-pl-row .vy-badge { display: inline-block; width: auto; margin-left: 6px; vertical-align: middle; }
+
+/* Keyboard focus on the design's controls (O2B-052 P2-7): globals.css removes outlines from buttons and inputs. */
+.ve-page :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--asb-blue);
+  outline-offset: 2px;
+}
+
+/* a figure the legs table cannot source (e.g. ECA share unknown) reads amber, as the page key says */
+.ve-table td.is-amber { color: var(--asb-amber); font-weight: 500; }

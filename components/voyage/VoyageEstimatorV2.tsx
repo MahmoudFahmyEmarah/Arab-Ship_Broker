@@ -362,6 +362,9 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
   const knownUsd = (v: number | null | undefined) => (c && !c.complete && (v ?? 0) === 0 ? null : v ?? null);
   const assumed = (...areas: AssumptionArea[]) => (estimate ? assumedBadge(estimate, areas) : null);
   const legsNeedAttention = !!estimate && estimate.legs.some((l) => l.status === "unavailable" || l.status === "manual" || l.status === "fallback");
+  // opens itself when a leg needs attention and then stays open, so fixing the leg inside it never snaps it shut (O2B-052 P2-5)
+  const [legsOpen, setLegsOpen] = React.useState(false);
+  if (legsNeedAttention && !legsOpen) setLegsOpen(true);
   const pct = (part: number | null | undefined, whole: number | null | undefined) => (part == null || whole == null || whole <= 0 ? "—" : `${Math.round((part / whole) * 100)}%`);
 
   return (
@@ -483,23 +486,24 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
 
                 <div className="ve-legs">
                   <table className="ve-table">
-                    <thead><tr><th>Leg</th><th>From → To</th><th className="num">NM</th><th className="num">Days</th><th className="num">Fuel (MT)</th></tr></thead>
+                    <thead><tr><th>Leg</th><th>From → To</th><th className="num">NM</th><th className="num">ECA NM</th><th className="num">Days</th><th className="num">Fuel (MT)</th></tr></thead>
                     <tbody>
                       {(estimate?.legs ?? []).map((l, i) => (
                         <tr key={l.key} className={l.status === "unavailable" ? "is-disabled" : ""}>
                           <td><strong>{i + 1}</strong>, {l.label}{l.status !== "trusted" && <span className={`vy-badge vy-badge--${BADGE[l.status]}`}>{l.status}</span>}</td>
                           <td>{l.from ?? "—"}{l.to && l.to !== l.from ? <span className="ve-table__to"> → {l.to}</span> : ""}</td>
                           <td className={`num ${l.nm != null ? "is-auto" : ""}`}>{l.kind === "sea" || l.kind === "canal" ? fmtNM(l.nm) : "—"}</td>
+                          <td className={`num ${l.kind === "sea" && l.ecaNm == null ? "is-amber" : "is-auto"}`}>{l.kind === "sea" ? (l.ecaNm != null ? fmtNM(l.ecaNm) : "unknown") : "—"}</td>
                           <td className="num is-auto">{fmtDays(l.days)}{legArea(l.kind) ? assumed(legArea(l.kind)!) : null}</td>
                           <td className="num is-auto" title={l.burns.map((b) => `${b.productKey} ${fmtMT(b.mt)}`).join(" · ")}>{l.burns.length ? fmtMT(l.burns.reduce((a, b) => a + b.mt, 0)) : "—"}</td>
                         </tr>
                       ))}
                       {estimate && (
-                        <tr className="ve-table__total"><td colSpan={2}><strong>Totals</strong></td><td className="num"><strong>{fmtNM(estimate.legs.reduce((a, l) => a + (l.kind === "sea" || l.kind === "canal" ? l.nm ?? 0 : 0), 0))}</strong></td><td className="num"><strong>{fmtDays(estimate.days.total)}</strong></td><td className="num"><strong>{fmtMT(estimate.fuel.totalMt)}</strong></td></tr>
+                        <tr className="ve-table__total"><td colSpan={2}><strong>Totals</strong></td><td className="num"><strong>{fmtNM(estimate.legs.reduce((a, l) => a + (l.kind === "sea" || l.kind === "canal" ? l.nm ?? 0 : 0), 0))}</strong></td><td className="num"><strong>{estimate.legs.some((l) => l.kind === "sea" && l.ecaNm == null) ? "—" : fmtNM(estimate.legs.reduce((a, l) => a + (l.kind === "sea" ? l.ecaNm ?? 0 : 0), 0))}</strong></td><td className="num"><strong>{fmtDays(estimate.days.total)}</strong></td><td className="num"><strong>{fmtMT(estimate.fuel.totalMt)}</strong></td></tr>
                       )}
                     </tbody>
                   </table>
-                  <details className="ve-more ve-more--card" open={legsNeedAttention || undefined}>
+                  <details className="ve-more ve-more--card" open={legsOpen || undefined}>
                     <summary>Route, sea margin and canal{legsNeedAttention ? <span className="vy-badge vy-badge--fallback">check</span> : null}</summary>
                     <LegEditor title="Ballast" from={openCode} to={polCode} leg={ballast} auto={ballastAuto} loading={ballastLoading} onChange={setBallast} hidden={!openCode || openCode === polCode} />
                     <LegEditor title="Laden" from={polCode} to={podCode} leg={laden} auto={ladenAuto} loading={ladenLoading} onChange={setLaden} />
@@ -691,7 +695,7 @@ function assumedBadge(estimate: VoyageEstimate, areas: AssumptionArea[]) {
 function pdaMoney(v: { usd: number | null; status: ComponentStatus }, missingText: string) {
   return v.usd == null
     ? <span className="is-unavailable">{missingText}</span>
-    : <span className={v.status === "trusted" ? "is-auto" : v.status === "manual" ? "is-manual" : "is-fallback"}>{fmtUSD(v.usd)}{v.status !== "trusted" ? ` · ${v.status}` : ""}</span>;
+    : <span className={v.status === "trusted" ? "is-auto" : v.status === "manual" ? "is-manual" : "is-fallback"}>{fmtUSD2(v.usd)}{v.status !== "trusted" ? ` · ${v.status}` : ""}</span>;
 }
 
 function blankProfile(vessel?: VoyageVesselOption | null): ProfileForm {

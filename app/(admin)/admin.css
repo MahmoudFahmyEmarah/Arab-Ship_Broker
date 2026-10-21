@@ -1674,3 +1674,9 @@ a.adm-stat:hover { transform: var(--lift); box-shadow: var(--adm-sh-hover); }
 .adm-queue__by { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 .adm-queue__late { color: var(--asb-red); font-weight: 600; }
 .adm-decision-focus { box-shadow: 0 0 0 2px var(--asb-green); border-radius: 8px; }
+
+/* Keyboard focus on the design's controls (O2B-052 P2-7): globals.css removes outlines from buttons and inputs. */
+.adm-shell :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--asb-blue);
+  outline-offset: 2px;
+}

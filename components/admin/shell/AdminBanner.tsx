@@ -27,7 +27,7 @@ export function AdminBanner({ name, tier, children }: { name: string; tier: Admi
   };
 
   return (
-    <div className="adm-banner" role="status">
+    <div className="adm-banner" role="region" aria-label="Admin session">
       <span className="adm-banner__icon" aria-hidden="true">⚠</span>
       <span className="adm-banner__text">Admin panel, changes here affect the live platform immediately.</span>
       <div className="adm-role">

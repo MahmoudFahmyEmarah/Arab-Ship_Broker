@@ -109,3 +109,9 @@
 .vs-list { margin: 0; padding-left: 18px; font-size: 12px; color: var(--asb-gray-600); line-height: 1.5; }
 @media (max-width: 900px) { .vs-wrap { grid-template-columns: 1fr; } }
 @media (max-width: 1100px) { .vs-strip { grid-template-columns: 1fr 1fr; } .vs-groups, .vs-extra { grid-template-columns: 1fr; } }
+
+/* Keyboard focus on the design's controls (O2B-052 P2-7): globals.css removes outlines from buttons and inputs. */
+.vs-wrap :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--asb-blue);
+  outline-offset: 2px;
+}
