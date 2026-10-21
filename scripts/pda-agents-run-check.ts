@@ -55,7 +55,7 @@ ok(classes.every((c) => schemaFp.includes(c)), `the schema fingerprint covers ${
 ok(has(schemaFp, "relrowsecurity", "relforcerowsecurity", "relacl", "attacl", "proacl", "nspacl", "attidentity", "attgenerated", "pg_get_expr(d.adbin",
     "tgenabled", "pg_get_viewdef", "format_type(a.atttypid, a.atttypmod)", "'public', 'market_private', 'fixture_private'"),
   "…with RLS flags, schema/table/column/function ACLs, identity, generated, defaults, exact types, trigger state, view definitions");
-ok(has(runner, 'diff "$LOG/before/schema.txt" "$LOG/after/schema.txt"', 'diff "$LOG/before/data.txt" "$LOG/after/data.txt"', "invariants hold again", "migration history unchanged"),
+ok(has(runner, 'diff "$LOG/before/schema.txt" "$LOG/after/schema.txt"', 'diff "$LOG/before/data.txt" "$LOG/after/data.txt"', "invariants hold again", "migration history = pinned manifest"),
   "after the run the manifest, invariants, schema and data are compared line by line with the baseline");
 
 // C2O-162 P0-3 · the exact data fingerprint and Auth
@@ -141,5 +141,41 @@ ok(has(race, 'RUN="pdaag-$(od -An -N6 -tx1 /dev/urandom', "'e2e-' || v_run || '-
   "the race fixture is stamped in exactly the shapes the teardown removes");
 ok(has(race, "withdrawn/sent", "PDA_STATE", "pg_sleep(3)"), "the race still holds A's lock and asserts the single terminal outcome");
 ok(has(acceptance, "-- A12 · the symmetric lineage", "'{carried,leg}' is distinct from 'discharge'", "A12 ok"), "nb: the symmetric discharge → load → replacement-load lineage case");
+
+// 21 Oct 2026 (pdaag-071e362f5fba, B2O-061) · the runner's logs live where nothing in the run cleans, the trap's database
+// steps never depend on a log being writable, and the recovery of a run whose trap could not finish is checked in
+const pwConfig = read("playwright.pda.config.ts");
+const recover = read("scripts/e2e/pda-agents-recover.sh");
+const helpers = read("scripts/e2e/run-log-helpers.sh");
+const helpersTest = read("scripts/e2e/run-log-helpers-test.sh");
+const trap = runner.slice(runner.indexOf("finish(){"), runner.indexOf("trap finish EXIT"));
+ok(runner.includes('LOG="tmp/pda-agents-run/$RUN"') && !runner.includes("test-results/pda-agents-run") && pwConfig.includes('outputDir: "test-results/pda-agents"')
+  && !/outputDir:.*tmp\//.test(pwConfig),
+  "the runner logs under tmp/pda-agents-run/<run>; Playwright has its own explicit outputDir (test-results/pda-agents), which it empties");
+ok(has(trap, 'LOG=$(logdir "$LOG" "pda-agents-run-$RUN")') && before(runner, ". scripts/e2e/run-log-helpers.sh", "finish(){")
+  && has(helpers, 'logdir(){ mkdir -p "$1" 2>/dev/null && [ -w "$1" ]', "mktemp -d", 'keep(){ { printf', '; } 2>/dev/null || true; }')
+  && has(helpersTest, ". scripts/e2e/run-log-helpers.sh", "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", "logdir re-created the removed directory", "keep on an unwritable path"),
+  "the trap first takes a writable log directory (the run's, or a fresh temporary one); keep/logdir are shared, sourced and behaviour-tested");
+ok(!/>\s*"\$LOG\//.test(trap) && has(trap, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", '[ "$tdok" = "TEARDOWN OK $RUN" ]', 'keep "$LOG/teardown.log" "$td"',
+    'dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } | psqlq -1 -f - 2>&1)', 'keep "$LOG/down-$m.log" "$dn"'),
+  "no database step in the trap runs through a file redirect: teardown and DOWN output are captured in memory, then kept if they can be");
+ok(has(trap, "staging-released-manifest.txt", '[ "$SCHEMA_MD5" = "$BASE_SCHEMA" ]', '[ "$DATA_MD5" = "$BASE_DATA" ]', '[ -f "$LOG/before/schema.txt" ] &&', '[ -f "$LOG/before/data.txt" ] &&')
+  && !trap.includes('diff -q "$LOG/before/manifest.txt"'),
+  "the trap's baseline is the pinned manifest and the fingerprints held in memory; a lost before/ directory can neither pass nor fail it");
+ok(has(runner, 'ap=$(psqlq -1 -f - < "supabase/migrations/$m.sql" 2>&1) ||', 'keep "$LOG/apply-$m.log" "$ap"', 'bl=$(npx next build --webpack 2>&1) ||', 'keep "$LOG/build.log" "$bl"',
+    'pl=$(npx playwright test --config=playwright.pda.config.ts e2e/pda-agents.spec.ts 2>&1); PW=$?', 'keep "$LOG/playwright.log" "$pl"'),
+  "apply, build and browser output are captured in memory and kept best effort; a lost log never stops a step the trap would then have to undo");
+ok(has(recover, "--i-hold-the-staging-window", "^pdaag-[0-9a-f]{12}$", ". scripts/e2e/staging-target.sh", 'LOG="tmp/pda-agents-recover/$RUN-', "REFUSED: no receipt fingerprints to compare with")
+  && has(recover, "pda-agents-teardown.sql", '"TEARDOWN OK $RUN"') && before(recover, '"TEARDOWN OK $RUN"', "# 2 · DOWNs") && recover.includes('redact | cut -c1-300)"; exit 1; fi'),
+  "the recovery script runs only inside a window, for one run id, against the receipt, teardown first, and stops at the first failure");
+ok(has(recover, "20261019120000_pda_desk_quotes 20261019110000_pda_quote_acceptance 20261019100000_pda_quote_requests 20261018140000_pda_estimate_set_org_lineage",
+    "20261018130000_pda_agencies 20261018120000_pda_estimate_sets 20261018110000_pda_member_preferences 20261018100000_pda_ports_workspace",
+    "column_name = 'entered_via'", "to_regclass('public.pda_quote_acceptances')", "to_regclass('public.pda_quote_requests')", "to_regclass('public.pda_agencies')",
+    "to_regclass('public.pda_estimate_sets')", "to_regclass('public.pda_member_preferences')", "list_pda_ports_workspace(date)", "not present; nothing to roll back",
+    "history-exported:$RUN", "registry-exported:$RUN", "discard-preferences") && recover.includes('present=$(psqlro -c "$probe"'),
+  "recovery rolls back newest-first with the same markers as the trap, each DOWN only where a read-only probe finds the migration's objects");
+ok(has(recover, "set value = 'true'::jsonb where key = 'beta_mode'", 'measure "$LOG/after"', "staging-released-manifest.txt", "PREFLIGHT INVARIANTS OK",
+    '[ "$SCHEMA_MD5" = "$R_SCHEMA" ]', '[ "$DATA_MD5" = "$R_DATA" ]', "RECOVERY OK", "RECOVERY INCOMPLETE"),
+  "recovery restores beta and proves the pinned manifest, the invariants and the receipt's exact schema and data fingerprints");
 
 console.log(`\nPDA agents run lifecycle: ${n} checks passed`);

@@ -11,6 +11,8 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: [["list"]],
+  // emptied by Playwright at start-up: nothing else may live under it (21 Oct 2026, the runner's logs did)
+  outputDir: "test-results/pda-agents",
   timeout: 600_000,
   expect: { timeout: 90_000 },
   use: {

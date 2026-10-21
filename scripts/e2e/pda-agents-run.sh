@@ -29,6 +29,9 @@
 #   - the four measurements again, compared LINE BY LINE with the baseline
 # Any teardown, rollback or measurement difference makes the run FAILED, never a warning. Declared exceptions (not
 # exact restoration): auth.audit_log_entries rows and sequence positions (see supabase/tests/e2e/data-fingerprint.sql).
+# Logs live under tmp/pda-agents-run/<run id>/, which nothing in the run cleans (21 Oct 2026, pdaag-071e362f5fba: they
+# lived under test-results/, Playwright's output directory, which it empties at start-up; the trap's redirects then
+# failed and its teardown and DOWNs never ran). The trap's database steps never depend on a log being writable.
 set -uo pipefail
 [ "${1:-}" = "--i-hold-the-staging-window" ] || { echo "REFUSED: run only inside an announced STAGING EXCLUSIVE window (--i-hold-the-staging-window)"; exit 2; }
 READ_AT="${2:-}"; READ_AT="${READ_AT#--peer-mail-read-at=}"
@@ -71,7 +74,7 @@ peer_mail "before the gates"
 
 RUN="pdaag-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
 [[ "$RUN" =~ ^pdaag-[0-9a-f]{12}$ ]] || { echo "REFUSED: could not make a run id"; exit 2; }
-LOG="test-results/pda-agents-run/$RUN"; mkdir -p "$LOG"
+LOG="tmp/pda-agents-run/$RUN"; mkdir -p "$LOG" || { echo "REFUSED: cannot create $LOG"; exit 2; }
 echo "== PDA agents staging run $RUN at ${R_SHA:0:12} ($(date +%H:%M:%S))"
 
 # read-only measurements = what Codex reviewed
@@ -95,14 +98,24 @@ measure "$LOG/grace" && [ "$SCHEMA_MD5" = "$BASE_SCHEMA" ] && [ "$DATA_MD5" = "$
 FAILED=0; APPLIED=(); BETA="true"; ENVBK=""; STAGED=0; PW=1
 fail(){ echo "  FAIL $*"; FAILED=1; }
 
+# The trap's own rule: every database step runs whatever happened to the log directory, and a log is written only
+# when it can be (keep is best effort; logdir gives the trap a writable directory or a fresh temporary one).
+. scripts/e2e/run-log-helpers.sh
+
 finish(){
   echo "== teardown, rollback, verification ($(date +%H:%M:%S))"
+  LOG=$(logdir "$LOG" "pda-agents-run-$RUN"); echo "  ..   trap logs: $LOG"
   # the operator's own .env.local is touched only if step 3 replaced it with the staging copy
   if [ "$STAGED" = 1 ]; then rm -f .env.local; [ -n "$ENVBK" ] && mv "$ENVBK" .env.local; fi
-  if out=$(psqlq -v run="$RUN" -f - < supabase/tests/e2e/pda-agents-teardown.sql 2>"$LOG/teardown.err") && [ "$(echo "$out" | tail -1)" = "TEARDOWN OK $RUN" ]; then
+  # teardown: stdout and stderr captured in memory (stderr lines marked), never through a file redirect
+  local td tdok tderr
+  td=$( { psqlq -v run="$RUN" -f - < supabase/tests/e2e/pda-agents-teardown.sql 2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )
+  tdok=$(printf '%s\n' "$td" | grep -v '^STDERR ' | tail -1); tderr=$(printf '%s\n' "$td" | sed -n 's/^STDERR //p')
+  keep "$LOG/teardown.log" "$td"
+  if [ "$tdok" = "TEARDOWN OK $RUN" ]; then
     echo "  ok   teardown: every row of $RUN removed (incl. Auth sessions, refresh tokens, identities, MFA), guards re-enabled, zero residue proved"
-  else fail "teardown: $(tr '\n' ' ' < "$LOG/teardown.err" | redact | cut -c1-300)"; fi
-  local i m marker
+  else fail "teardown: $(printf '%s' "$tderr" | tr '\n' ' ' | redact | cut -c1-300)"; fi
+  local i m marker dn
   for (( i=${#APPLIED[@]}-1; i>=0; i-- )); do
     m="${APPLIED[$i]}"
     case "$m" in
@@ -114,20 +127,21 @@ finish(){
       20261018110000_*) marker="set local asb.pda_prefs_down = 'discard-preferences';";;
       *) marker="";;
     esac
-    if { echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } | psqlq -1 -f - > "$LOG/down-$m.log" 2>&1; then echo "  ok   DOWN $m"
-    else fail "DOWN $m: $(grep -m1 ERROR "$LOG/down-$m.log" | redact)"; fi
+    if dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } | psqlq -1 -f - 2>&1); then keep "$LOG/down-$m.log" "$dn"; echo "  ok   DOWN $m"
+    else keep "$LOG/down-$m.log" "$dn"; fail "DOWN $m: $(printf '%s\n' "$dn" | grep -m1 ERROR | redact)"; fi
   done
   psqlq -c "update public.app_settings set value = '$BETA'::jsonb where key = 'beta_mode'" > /dev/null 2>&1 && echo "  ok   beta_mode restored to $BETA" || fail "beta_mode not restored"
   if measure "$LOG/after"; then
-    diff -q "$LOG/before/manifest.txt" "$LOG/after/manifest.txt" > /dev/null && echo "  ok   migration history unchanged" || fail "migration history changed"
+    # the baseline is the pinned manifest and the fingerprints held in memory, so a lost before/ directory cannot pass or fail this
+    diff -q <(tr -d '\r' < supabase/tests/e2e/staging-released-manifest.txt) "$LOG/after/manifest.txt" > /dev/null && echo "  ok   migration history = pinned manifest" || fail "migration history differs from the pinned manifest"
     [ "$(tail -1 "$LOG/after/invariants.txt")" = "PREFLIGHT INVARIANTS OK" ] && echo "  ok   invariants hold again (no run or 15:27 shape, guards on, email off, beta true)" \
       || { fail "invariants after the run:"; sed 's/^/        /' "$LOG/after/invariants.txt"; }
     if [ "$SCHEMA_MD5" = "$BASE_SCHEMA" ]; then echo "  ok   schema fingerprint = baseline ($BASE_SCHEMA, $(wc -l < "$LOG/after/schema.txt") catalog lines)"
-    else fail "schema fingerprint differs:"; diff "$LOG/before/schema.txt" "$LOG/after/schema.txt" | grep '^[<>]' | head -20 | sed 's/^/        /'; fi
+    else fail "schema fingerprint $SCHEMA_MD5 differs from the baseline $BASE_SCHEMA:"; [ -f "$LOG/before/schema.txt" ] && diff "$LOG/before/schema.txt" "$LOG/after/schema.txt" | grep '^[<>]' | head -20 | sed 's/^/        /'; fi
     if [ "$DATA_MD5" = "$BASE_DATA" ]; then echo "  ok   data fingerprint = baseline (every row of $(wc -l < "$LOG/after/data.txt") tables; exceptions: Auth audit log, sequence positions)"
-    else fail "data fingerprint differs:"; diff "$LOG/before/data.txt" "$LOG/after/data.txt" | grep '^[<>]' | head -20 | sed 's/^/        /'; fi
+    else fail "data fingerprint $DATA_MD5 differs from the baseline $BASE_DATA:"; [ -f "$LOG/before/data.txt" ] && diff "$LOG/before/data.txt" "$LOG/after/data.txt" | grep '^[<>]' | head -20 | sed 's/^/        /'; fi
   else fail "a measurement after the run failed: $(cat "$LOG"/after/*.err 2>/dev/null | redact | tr '\n' ' ' | cut -c1-300)"; fi
-  [ $PW = 0 ] || fail "browser run (see $LOG)"
+  [ $PW = 0 ] || fail "browser run (see $LOG/playwright.log and test-results/pda-agents/)"
   if [ $FAILED = 0 ]; then echo "== RUN $RUN PASSED ($(date +%H:%M:%S))"; exit 0; else echo "== RUN $RUN FAILED ($(date +%H:%M:%S))"; exit 1; fi
 }
 trap finish EXIT
@@ -138,8 +152,8 @@ for m in 20261018100000_pda_ports_workspace 20261018110000_pda_member_preference
   if [ -n "$(psqlro -c "select 1 from supabase_migrations.schema_migrations where version = '${m%%_*}'")" ]; then
     fail "migration $m is already recorded on staging; this run applies only unreleased PDA migrations"; exit 1
   fi
-  psqlq -1 -f - < "supabase/migrations/$m.sql" > "$LOG/apply-$m.log" 2>&1 || { fail "apply $m: $(grep -m1 ERROR "$LOG/apply-$m.log" | redact)"; exit 1; }
-  APPLIED+=("$m"); echo "  ok   applied $m"
+  ap=$(psqlq -1 -f - < "supabase/migrations/$m.sql" 2>&1) || { keep "$LOG/apply-$m.log" "$ap"; fail "apply $m: $(printf '%s\n' "$ap" | grep -m1 ERROR | redact)"; exit 1; }
+  keep "$LOG/apply-$m.log" "$ap"; APPLIED+=("$m"); echo "  ok   applied $m"
 done
 
 # ── 2 · beta off
@@ -151,8 +165,9 @@ cp "$ENV_FILE" .env.local; STAGED=1
 set -a; . "$ENV_FILE"; set +a
 export E2E_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" E2E_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY" E2E_SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY"
 export E2E_ALLOW_REMOTE="$STAGING_REF" E2E_DB_URL="$DBURL" E2E_PG_IMAGE="$IMG" E2E_RUN_ID="$RUN"
-npx next build --webpack > "$LOG/build.log" 2>&1 || { fail "next build (see $LOG/build.log)"; exit 1; }
-echo "  ok   next build against staging"
-npx playwright test --config=playwright.pda.config.ts e2e/pda-agents.spec.ts > "$LOG/playwright.log" 2>&1; PW=$?
-tail -25 "$LOG/playwright.log"
+bl=$(npx next build --webpack 2>&1) || { keep "$LOG/build.log" "$bl"; fail "next build (see $LOG/build.log)"; exit 1; }
+keep "$LOG/build.log" "$bl"; echo "  ok   next build against staging"
+# Playwright empties its own outputDir (test-results/pda-agents, playwright.pda.config.ts) at start-up; the runner's logs are elsewhere
+pl=$(npx playwright test --config=playwright.pda.config.ts e2e/pda-agents.spec.ts 2>&1); PW=$?
+keep "$LOG/playwright.log" "$pl"; printf '%s\n' "$pl" | tail -25
 exit 0
