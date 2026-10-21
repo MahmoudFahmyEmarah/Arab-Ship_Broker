@@ -122,8 +122,10 @@ ok(has(spec, "`e2e-${run}-m@arabshipbroker.test`", "`E2E ${run} Charterers`", "`
   "every seeded identity carries the run id in the shape the teardown matches");
 
 // C2O-161/162 P1 · the race fixture reaches the race and leaves nothing
-ok(has(race, "current_setting('asb.disposable', true)", "ASB_SCRATCH_TOKEN", "^[0-9a-f]{32}$") && !race.includes('case "$DBNAME" in postgres'),
+ok(has(race, "select token from asb_disposable.marker", "ASB_SCRATCH_TOKEN", "^[0-9a-f]{32}$") && !race.includes('case "$DBNAME" in postgres'),
   "the race binds to the disposable database's private marker, not a name denylist");
+ok(!/create schema asb_disposable|insert into asb_disposable|create table asb_disposable/.test(race) && race.includes('REFUSED: $DBNAME is not reachable or carries no disposable marker'),
+  "the race only READS the marker; only the proof harness creates it, inside the fresh TEMPLATE clone it just made");
 ok(has(race, "insert into public.cargo_listings", "insert into public.vessels", "insert into public.vessel_availability", "insert into public.listing_ownership",
     "'vesselAvailabilityId',avail,'vesselId',vessel,'cargoId',cargo") && !/'cargoId',gen_random_uuid|'vesselAvailabilityId',gen_random_uuid/.test(race),
   "the race seeds a real owned cargo, vessel and availability and saves the estimate for them (no random listing ids)");

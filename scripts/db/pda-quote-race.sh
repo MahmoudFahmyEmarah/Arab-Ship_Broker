@@ -3,9 +3,11 @@
 #
 #   ASB_SCRATCH_TOKEN=<32 hex> scripts/db/pda-quote-race.sh <scratch-db-name>
 #
-# Disposable databases only. The target must carry the private marker the proof harness sets when it clones the
-# scratch database:   alter database <scratch> set asb.disposable = '<the same 32-hex token>';
-# A database without that exact marker (any shared or long-lived database) is refused, whatever its name.
+# Disposable databases only. The target must carry the private marker the proof harness creates right after it clones
+# the scratch database:   create schema asb_disposable; create table asb_disposable.marker (token text primary key);
+#                          insert into asb_disposable.marker values ('<the same 32-hex token>');
+# A database without that exact marker (any shared or long-lived database) is refused, whatever its name. The marker is
+# a table, not a database parameter: ALTER DATABASE SET needs a superuser the local stack does not give.
 #
 # Session A withdraws and holds its transaction open; session B declines meanwhile. B must wait on the request lock
 # and then refuse (PDA_STATE); the request ends withdrawn with its recipient still 'sent' — one valid terminal outcome.
@@ -21,7 +23,7 @@ TOKEN="${ASB_SCRATCH_TOKEN:-}"
 [[ "$TOKEN" =~ ^[0-9a-f]{32}$ ]] || { echo "REFUSED: ASB_SCRATCH_TOKEN (32 hex) is required"; exit 2; }
 [[ "$DBNAME" =~ ^[a-z][a-z0-9_]{0,62}$ ]] || { echo "REFUSED: not a plain database name"; exit 2; }
 PSQL="docker exec -i supabase_db_arab-ship-broker psql -U postgres -d $DBNAME -X -q -At -v ON_ERROR_STOP=1"
-MARK=$($PSQL -c "select coalesce(current_setting('asb.disposable', true), '')" 2>/dev/null) || { echo "REFUSED: cannot reach $DBNAME"; exit 2; }
+MARK=$($PSQL -c "select token from asb_disposable.marker" 2>/dev/null) || { echo "REFUSED: $DBNAME is not reachable or carries no disposable marker"; exit 2; }
 [ "$MARK" = "$TOKEN" ] || { echo "REFUSED: $DBNAME does not carry this run's disposable marker"; exit 2; }
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
