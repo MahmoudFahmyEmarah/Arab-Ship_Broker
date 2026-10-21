@@ -6,6 +6,7 @@
 // nothing is typed, simulated or kept in the browser, so a port cannot look covered when it is not.
 import * as React from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { FileText, RefreshCw, ShieldCheck, X } from "lucide-react";
 
 import { loadPdaPortsWorkspace } from "@/app/(dashboard)/dashboard/ports-da/actions";
@@ -250,6 +251,7 @@ function PortDetail({ port, onClose }: { port: PdaWorkspacePort; onClose: () => 
           <p className="pe-rec__s">{port.locode}{port.country ? ` · ${port.country}` : ""}{port.zone ? ` · ${port.zone}` : ""} · the port record, as published</p>
         </div>
         <div className="pe-rec__a">
+          <Link className="asb-btn is-primary pe-rec__go" href={`/dashboard/ports-da/ports/${port.locode}`}><FileText size={13} aria-hidden="true" /> Open the port record</Link>
           <button type="button" className="pe-rec__x" onClick={onClose} aria-label="Close the record"><X size={16} aria-hidden="true" /></button>
         </div>
       </div>

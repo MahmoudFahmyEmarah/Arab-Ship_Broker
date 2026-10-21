@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { RecordMissing } from "@/components/pda/PdaRecordShell";
 import { PdaTariffPackRecord } from "@/components/pda/PdaTariffPackRecord";
 import { CalculatorLocked } from "@/components/portal/calculators";
 import { loadViewerContext } from "@/lib/portal/data";
@@ -9,9 +9,6 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isPdaTariffPackRef } from "@/lib/pda/tariff-packs";
 import { isPdaTariffPackTab } from "@/lib/pda/tariff-pack-record";
 import { getPdaTariffPack } from "@/sdk/app/pda";
-
-import "@/components/pda/pda-route-estimator.css";
-import "@/components/pda/ports-module.css";
 
 export const metadata = { title: "Tariff pack · Arab ShipBroker" };
 
@@ -40,20 +37,9 @@ export default async function TariffPackPage({ params, searchParams }: { params:
   }
   if (!record) {
     // an unknown pack is said out loud, never answered with another authority's tariff
-    return (
-      <div className="asb-ds pm-scope pda-route pda-route--comfortable">
-        <div className="pdr-missing">
-          <div className="pdr-missing__ey">Tariff pack</div>
-          <h1 className="pdr-missing__t">{failed ? "The pack could not be loaded" : "No pack in force under this reference"}</h1>
-          <p>
-            {failed
-              ? "Try again in a moment."
-              : "Nothing published and in force on this date cites that document, so there is no record to show. Rather than fall back to another authority's tariff, this page stops here."}{" "}
-            <Link href={`/dashboard/ports-da/tariff-packs?on=${on}`}>Back to Tariff Packs</Link>.
-          </p>
-        </div>
-      </div>
-    );
+    return <RecordMissing eyebrow="Tariff pack" title={failed ? "The pack could not be loaded" : "No pack in force under this reference"}
+      text={failed ? "Try again in a moment." : "Nothing published and in force on this date cites that document, so there is no record to show. Rather than fall back to another authority's tariff, this page stops here."}
+      back={{ href: `/dashboard/ports-da/tariff-packs?on=${on}`, label: "Back to Tariff Packs" }} />;
   }
   return <PdaTariffPackRecord record={record} tab={tab} on={on} />;
 }

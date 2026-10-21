@@ -1,10 +1,6 @@
-// The design's Tariff Pack record (owner B2ALL-061, build step 7): the RecordShell (top bar → record tabs → rail +
-// head + numbered sections) in its published, read-only form. Every value comes from get_pda_tariff_pack; a slot no
-// table holds yet says "Not recorded yet" rather than showing a guess. The tab is in the URL, so the page is a plain
-// server render and each tab can be linked.
-import Link from "next/link";
-import { ArrowLeft, Clock, FileText, LayoutList, Receipt, ShieldCheck } from "lucide-react";
-import type * as React from "react";
+// The design's Tariff Pack record (owner B2ALL-061, build step 7) on the shared RecordShell. Every value comes from
+// get_pda_tariff_pack; a slot no table holds yet says "Not recorded yet" rather than showing a guess.
+import { Clock, FileText, LayoutList, Receipt, ShieldCheck } from "lucide-react";
 
 import {
   PDA_BASIS_LABELS,
@@ -18,153 +14,51 @@ import {
   type PdaTariffPackTab,
 } from "@/lib/pda/tariff-pack-record";
 
-import "./pda-route-estimator.css";
-import "./ports-module.css";
+import { Empty, Fields, PdaRecordShell, Protocol, Table, day, type PdaRecordSection, type PdaRecordTab } from "./PdaRecordShell";
 
-const TAB_ICON: Record<PdaTariffPackTab, React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>> = {
-  pack: FileText, layout: LayoutList, charges: Receipt, hours: Clock, sources: ShieldCheck,
-};
+const ICON = { pack: FileText, layout: LayoutList, charges: Receipt, hours: Clock, sources: ShieldCheck } as const;
+const TABS: readonly PdaRecordTab<PdaTariffPackTab>[] = PDA_TARIFF_PACK_TABS.map((t) => ({ ...t, icon: ICON[t.id] }));
 const SOURCE_KIND: Record<string, string> = {
   official: "Official publication", statutory: "Statutory instrument", agent: "Agent's schedule", reference: "Reference copy", unverified: "Not yet graded",
 };
 const ROUNDING: Record<string, string> = { half_up: "Half up", up: "Always up", down: "Always down" };
-const day = (iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : null);
-const NR = "Not recorded yet";
-
-type Section = { n: string; id: string; title: string; src: string; note?: string; body: React.ReactNode };
 
 export function PdaTariffPackRecord({ record, tab, on }: { record: Record_; tab: PdaTariffPackTab; on: string }) {
   const totals = packTotals(record);
   const base = `/dashboard/ports-da/tariff-packs/${record.packRef}`;
-  const sections = sectionsFor(tab, record, totals);
-  const showRail = sections.length >= 3;
   const portNames = [...new Set(record.editions.map((e) => e.portName))];
   const earliest = record.editions.map((e) => e.effectiveFrom).filter((d): d is string => !!d).sort()[0] ?? record.source.effectiveFrom;
-
   return (
-    <div className="asb-ds pm-scope pda-route pda-route--comfortable">
-      <div className="pd-topbar">
-        <Link className="pd-back" href={`/dashboard/ports-da/tariff-packs?on=${on}`}><ArrowLeft size={15} aria-hidden="true" /> Tariff Packs</Link>
-        <div className="pd-crumbs">Ports Module · Tariff Packs · <b>{record.authority}</b></div>
-        <span className="pdr-role pd-topbar__end">Published record</span>
-      </div>
-
-      <nav className="pp-tabs" aria-label="Record tabs">
-        {PDA_TARIFF_PACK_TABS.map((t) => {
-          const Icon = TAB_ICON[t.id];
-          return (
-            <Link key={t.id} className={`pp-tab${t.id === tab ? " is-on" : ""}`} href={`${base}?on=${on}&tab=${t.id}`} aria-current={t.id === tab ? "page" : undefined}>
-              <Icon size={15} aria-hidden={true} />{t.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className={`pdr-wrap${showRail ? "" : " is-norail"}`}>
-        {showRail ? (
-          <aside className="pdr-rail" aria-label="Sections on this tab">
-            <div className="pdr-rail__h">{PDA_TARIFF_PACK_TABS.find((t) => t.id === tab)?.label}</div>
-            <div className="pdr-rail__list">
-              {sections.map((s) => (
-                <a key={s.id} className="pdr-rail__item" href={`#sec-${s.id}`}>
-                  <span className="pdr-rail__n">{s.n}</span><span className="pdr-rail__t">{s.title}</span>
-                </a>
-              ))}
-            </div>
-            <div className="pdr-rail__foot">Published values only. Anything not published is not shown. One record per published tariff; a new edition is a new record.</div>
-          </aside>
-        ) : null}
-
-        <div>
-          <header className="pdr-head">
-            <div className="pdr-head__band">
-              <div className="pdr-head__seal" aria-hidden="true"><span>Authority<br />crest</span></div>
-              <div>
-                <div className="pdr-head__ey">Tariff pack · authority scoped</div>
-                <h1 className="pdr-head__title">{record.authority}</h1>
-                <div className="pdr-head__sub">{[record.source.title, totals.currencies.join(" / ") || null, `${portNames.length} port${portNames.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</div>
-              </div>
-            </div>
-            <dl className="pdr-head__meta">
-              <Meta k="Effective from" v={day(earliest)} />
-              <Meta k="Charge lines" v={String(totals.lines)} />
-              <Meta k="Verified slots" v={`0 of ${totals.lines}`} empty />
-              <Meta k="Read from the document" v={`${totals.lines} line${totals.lines === 1 ? "" : "s"}`} />
-              <Meta k="Open findings" v="none recorded" empty />
-              <Meta k="Source kind" v={SOURCE_KIND[record.source.authority] ?? record.source.authority} />
-            </dl>
-          </header>
-
-          <div className="pdr-trust">
-            <span className="pdr-access__ic"><ShieldCheck size={15} aria-hidden="true" /></span>
-            <span className="pdr-trust__t">
-              <b>Every rate here is the authority&apos;s own published figure</b>, read from the document named on the Sources tab and
-              published by Arab ShipBroker after a maker-checker review. No line has been verified by a named person yet, so each one
-              is shown as read from the document.
-            </span>
-          </div>
-
-          {sections.map((s) => (
-            <section key={s.id} className="pdr-sec" id={`sec-${s.id}`} aria-labelledby={`sec-${s.id}-h`}>
-              <div className="pdr-sec__hd">
-                <span className="pdr-sec__n" aria-hidden="true">{s.n}</span>
-                <h2 id={`sec-${s.id}-h`} className="pdr-sec__h">{s.title}</h2>
-                <span className="pdr-flag">{s.src}</span>
-              </div>
-              <div className="pdr-sec__body">
-                {s.note ? <p className="pdr-sec__note">{s.note}</p> : null}
-                {s.body}
-              </div>
-            </section>
-          ))}
-        </div>
-      </div>
-    </div>
+    <PdaRecordShell
+      back={{ href: `/dashboard/ports-da/tariff-packs?on=${on}`, label: "Tariff Packs" }}
+      crumbs={<>Ports Module · Tariff Packs · <b>{record.authority}</b></>}
+      tabs={TABS}
+      tab={tab}
+      tabHref={(id) => `${base}?on=${on}&tab=${id}`}
+      eyebrow="Tariff pack · authority scoped"
+      title={record.authority}
+      sub={[record.source.title, totals.currencies.join(" / ") || null, `${portNames.length} port${portNames.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}
+      seal={<span>Authority<br />crest</span>}
+      meta={[
+        { k: "Effective from", v: day(earliest) },
+        { k: "Charge lines", v: String(totals.lines) },
+        { k: "Verified slots", v: `0 of ${totals.lines}`, empty: true },
+        { k: "Read from the document", v: `${totals.lines} line${totals.lines === 1 ? "" : "s"}` },
+        { k: "Open findings", v: "none recorded", empty: true },
+        { k: "Source kind", v: SOURCE_KIND[record.source.authority] ?? record.source.authority },
+      ]}
+      trust={<>
+        <b>Every rate here is the authority&apos;s own published figure</b>, read from the document named on the Sources tab and
+        published by Arab ShipBroker after a maker-checker review. No line has been verified by a named person yet, so each one
+        is shown as read from the document.
+      </>}
+      railFoot="Published values only. Anything not published is not shown. One record per published tariff; a new edition is a new record."
+      sections={sectionsFor(tab, record, totals)}
+    />
   );
 }
 
-function Meta({ k, v, empty }: { k: string; v: string | null; empty?: boolean }) {
-  return <div className="pdr-head__mi"><dt className="k">{k}</dt><dd className={`v${empty || !v ? " is-empty" : ""}`}>{v ?? "-"}</dd></div>;
-}
-
-function Fields({ title, rows }: { title?: string; rows: Array<[string, React.ReactNode | null]> }) {
-  return (
-    <div className="pdr-blk">
-      {title ? <div className="pdr-blk__hd"><span className="pdr-blk__t">{title}</span></div> : null}
-      <dl className="pdr-fields">
-        {rows.map(([k, v]) => (
-          <div key={k} className="pdr-f">
-            <dt className="pdr-f__k">{k}</dt>
-            <dd className="pdr-f__v">
-              <span className={`pp-dot ${v == null ? "is-empty" : "is-extracted"}`} aria-hidden="true"></span>
-              <span className={`pp-val${v == null ? " is-empty" : ""}`}>{v ?? NR}</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}
-
-function Empty({ what }: { what: string }) {
-  return <p className="pdr-sec__note pdr-empty">{NR}. {what}</p>;
-}
-
-function Table({ caption, cols, num = [], rows, wide }: { caption: string; cols: string[]; num?: number[]; rows: React.ReactNode[][]; wide?: boolean }) {
-  return (
-    <div className={`pdr-blk${wide ? " pp-scrollx" : ""}`}>
-      <table className="pdr-tbl pdr-tbl--filled">
-        <caption className="asb-sr-only">{caption}</caption>
-        <thead><tr>{cols.map((c, i) => <th key={c} scope="col" className={num.includes(i) ? "num" : undefined}>{c}</th>)}</tr></thead>
-        <tbody>
-          {rows.map((r, ri) => <tr key={ri}>{r.map((cell, ci) => <td key={ci} className={num.includes(ci) ? "num" : undefined}>{cell ?? <span className="pp-val is-empty">-</span>}</td>)}</tr>)}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function sectionsFor(tab: PdaTariffPackTab, record: Record_, totals: ReturnType<typeof packTotals>): Section[] {
+function sectionsFor(tab: PdaTariffPackTab, record: Record_, totals: ReturnType<typeof packTotals>): PdaRecordSection[] {
   const portCount = new Set(record.editions.map((e) => e.port)).size;
   if (tab === "pack") {
     const versions = [...new Set(record.editions.map((e) => e.edition))];
@@ -288,16 +182,7 @@ function sectionsFor(tab: PdaTariffPackTab, record: Record_, totals: ReturnType<
     { n: "14", id: "findings", title: "Findings to put to the authority", src: "ASB", body: <Empty what="No finding has been raised against this pack." /> },
     {
       n: "15", id: "protocol", title: "Verification protocol", src: "ASB, applies to every slot on every tab",
-      body: (
-        <ul className="pdr-proto">
-          <li><span className="pp-dot is-empty" aria-hidden="true"></span><b>Empty</b> No value yet. Nobody has claimed it.</li>
-          <li><span className="pp-dot is-extracted" aria-hidden="true"></span><b>Read from the document</b> Taken from the published tariff and published after a maker-checker review; shown, but not yet confirmed by a named person.</li>
-          <li><span className="pp-dot is-review" aria-hidden="true"></span><b>Under review</b> An expert has it open.</li>
-          <li><span className="pp-dot is-verified" aria-hidden="true"></span><b>Verified</b> A named person confirmed it against a named document on a date.</li>
-          <li><span className="pp-dot is-disputed" aria-hidden="true"></span><b>Disputed</b> The document says two things, or two sources disagree. Both kept, neither published.</li>
-          <li><span className="pp-dot is-superseded" aria-hidden="true"></span><b>Superseded</b> A newer edition replaced it. The old value stays in history.</li>
-        </ul>
-      ),
+      body: <Protocol extracted="Taken from the published tariff and published after a maker-checker review; shown, but not yet confirmed by a named person." />,
     },
   ];
 }

@@ -1742,3 +1742,7 @@
 .pm-scope .pdr-missing__t { font-size: 20px; font-weight: 600; color: var(--asb-navy); margin: 6px 0 10px; }
 .pm-scope .pdr-missing a { color: var(--asb-blue); }
 .pm-scope a.pe-set-row { text-decoration: none; color: inherit; }
+
+/* Port record (design step 8): the slide-over's "open the record" action beside its close button */
+.pm-scope .pe-rec__a { display: flex; align-items: center; gap: 8px; }
+.pm-scope a.pe-rec__go { text-decoration: none; white-space: nowrap; }
