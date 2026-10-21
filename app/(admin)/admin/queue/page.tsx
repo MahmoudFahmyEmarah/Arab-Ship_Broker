@@ -46,7 +46,9 @@ export default async function AdminQueuePage({
   query = query.eq("listing_type", typeFilter);
   if (params.tier) query = query.eq("submitter_trust_tier", params.tier);
   if (params.commodity) query = query.eq("commodity_name", params.commodity);
-  if (params.zone) query = typeFilter === "cargo" ? query.or(`load_zone.eq.${params.zone},disch_zone.eq.${params.zone}`) : query.eq("open_zone", params.zone);
+  // the zone goes into a PostgREST or() string, so only plain zone names (letters, digits, spaces, - / &) pass
+  const zone = params.zone && /^[\w &/-]{1,60}$/.test(params.zone) ? params.zone : undefined;
+  if (zone) query = typeFilter === "cargo" ? query.or(`load_zone.eq."${zone}",disch_zone.eq."${zone}"`) : query.eq("open_zone", zone);
   if (params.range && RANGES[params.range]) query = query.gte("created_at", sinceIso(RANGES[params.range]));
   const { data } = await query.limit(200);
   const items = (data ?? []) as QueueItem[];
