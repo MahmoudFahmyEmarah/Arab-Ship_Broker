@@ -7,6 +7,7 @@ import {
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ReviewStatusBadge, TrustTierBadge } from "@/components/admin/AdminBadge";
 import { QueueFilters } from "@/components/admin/queue/QueueFilters";
+import { isPlainZoneName } from "@/lib/zones";
 import type { QueueItem } from "@/lib/admin/types";
 
 type StatusFilter = "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED" | "ALL";
@@ -46,8 +47,8 @@ export default async function AdminQueuePage({
   query = query.eq("listing_type", typeFilter);
   if (params.tier) query = query.eq("submitter_trust_tier", params.tier);
   if (params.commodity) query = query.eq("commodity_name", params.commodity);
-  // the zone goes into a PostgREST or() string, so only plain zone names (letters, digits, spaces, - / &) pass
-  const zone = params.zone && /^[\w &/-]{1,60}$/.test(params.zone) ? params.zone : undefined;
+  // the zone goes into a PostgREST or() string, so only plain zone names pass (E.MED yes; quotes, commas, brackets no)
+  const zone = params.zone && isPlainZoneName(params.zone) ? params.zone : undefined;
   if (zone) query = typeFilter === "cargo" ? query.or(`load_zone.eq."${zone}",disch_zone.eq."${zone}"`) : query.eq("open_zone", zone);
   if (params.range && RANGES[params.range]) query = query.gte("created_at", sinceIso(RANGES[params.range]));
   const { data } = await query.limit(200);

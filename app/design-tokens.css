@@ -216,3 +216,28 @@
   --asb-red: #A32D2D;
   --asb-red-bg: #FCEBEB;
 }
+
+/* Named design shades for the admin console (Portal standalone 7, owner 19 Oct 2026): the design values that have no
+   project token. Only the admin shell reads them (app/(admin)/admin.css, design block). */
+.adm-shell {
+  --adm-d-navy: #111F35;
+  --adm-d-green-hover: #237D50;
+  --adm-d-slate: #5C6573;
+  --adm-d-plum: #6B3F8E;
+  --adm-d-flag: #9C2E1F;
+  --adm-d-red-hover: #A53C3C;
+  --adm-d-amber-hover: #C5821F;
+  --adm-d-gold-line: #C8B188;
+  --adm-d-line-hover: #C8D0DC;
+  --adm-d-hover: #EEF1F6;
+  --adm-d-amber-line: #EF9F27;
+  --adm-d-chip: #F0F2F5;
+  --adm-d-chip-2: #F0F2F6;
+  --adm-d-plum-bg: #F3E5F5;
+  --adm-d-faint: #F7F8FA;
+  --adm-d-red-bg: #FBE7E7;
+  --adm-d-flag-bg: #FFD7D2;
+  --adm-d-amber-ink: #5C2E0B;
+  --adm-d-muted: #8B95A3;
+  --adm-d-line: #DDE2EA;
+}
