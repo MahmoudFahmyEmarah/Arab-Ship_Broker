@@ -225,9 +225,10 @@ async function dismissPortalDialogs(page: Page) {
   const cookie = page.getByRole("dialog", { name: "Cookie consent" });
   if (await cookie.isVisible().catch(() => false)) await cookie.getByRole("button", { name: "Necessary only" }).click();
 
-  const checkin = page.getByRole("dialog", { name: "Vessel position check-in" });
-  await checkin.waitFor({ state: "visible", timeout: 10_000 }).catch(() => undefined);
-  if (await checkin.isVisible().catch(() => false)) await checkin.getByRole("button", { name: "Remind me later" }).click();
+  // the vessel check-in modal is dismissed ONLY by the locator handler registered in signIn: a second, explicit click
+  // here raced it (pdaag-f9f5fad561fd — Playwright ran the handler, the dialog closed, then the explicit click waited
+  // 30 s for a button that was gone). If one is up, give the handler's dismissal a moment; never click it here.
+  await page.getByRole("dialog", { name: "Vessel position check-in" }).waitFor({ state: "hidden", timeout: 10_000 }).catch(() => undefined);
 }
 
 async function signIn(browser: Browser, baseURL: string, seed: PdaSeed, width: number, height: number) {

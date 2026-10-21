@@ -270,4 +270,8 @@ ok([spec, alignment].every((t) => has(t, 'page.addLocatorHandler(page.getByRole(
   && /timeout: 900_000/.test(pwConfig) && /actionTimeout: 30_000/.test(pwConfig),
   "both PDA browser specs dismiss the vessel check-in modal whenever it appears with a bounded, never-throwing click; the PDA config allows 15 minutes per test and 30 s per action");
 
+// pdaag-f9f5fad561fd · exactly one dismissal path for the check-in modal (the locator handler); no explicit click may race it
+ok([spec, alignment].every((t) => (t.match(/name: "Remind me later" \}\)\.click\(/g) ?? []).length === 1 && t.includes('.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => undefined)')),
+  "the check-in modal is dismissed only by the locator handler; dismissDialogs merely waits for it to be gone (no second click to race the handler)");
+
 console.log(`\nPDA agents run lifecycle: ${n} checks passed`);
