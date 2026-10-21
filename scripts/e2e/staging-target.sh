@@ -38,7 +38,8 @@ measure(){
 cron_jobs(){ psqlro -c "do \$\$ declare acc text := ''; r record; begin
   if to_regclass('cron.job') is null then acc := '(no cron schema)'; else
     for r in execute 'select jobid, jobname, schedule, active, left(command, 120) as command from cron.job order by jobid' loop
-      acc := acc || r.jobid || ' ' || coalesce(r.jobname, '-') || ' [' || r.schedule || '] active=' || r.active || ' ' || r.command || E'\\n';
+      acc := acc || r.jobid || ' ' || coalesce(r.jobname, '-') || ' [' || r.schedule || '] active=' || r.active || ' '
+                 || case when r.command ~ '^\\s*select\\s+public\\.[a-z_]+\\(\\)\\s*;?\\s*$' then r.command else '<command withheld: not a plain public function call>' end || E'\\n';
     end loop;
   end if;
-  perform set_config('e2e.cron_jobs', acc, false); end \$\$; select current_setting('e2e.cron_jobs');"; }
+  perform set_config('e2e.cron_jobs', acc, false); end \$\$; select current_setting('e2e.cron_jobs');" | sed -E 's/(Bearer|eyJ)[A-Za-z0-9._-]*/<redacted>/g'; }
