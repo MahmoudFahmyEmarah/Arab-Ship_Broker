@@ -4,7 +4,8 @@
 // A preference never changes a figure and never hides where a figure came from; it is saved in the member's own
 // governed row (set_my_pda_preferences), never in browser storage.
 import * as React from "react";
-import { ChevronRight, Map as MapIcon, UserRound } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, FileText, Map as MapIcon, UserRound } from "lucide-react";
 
 import { savePdaPreferences } from "@/app/(dashboard)/dashboard/ports-da/actions";
 import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
@@ -89,6 +90,14 @@ export function PdaSetupWorkspace({
         <div className="pe-set-rows">
           <Row icon={<MapIcon size={17} aria-hidden="true" />} label="Ports" onOpen={onOpenPorts}
             desc="One record per port. Map first, then port by port, with what is known and which tariff prices it." />
+          <Link className="pe-set-row" href="/dashboard/ports-da/tariff-packs">
+            <span className="pe-set-row__ic"><FileText size={17} aria-hidden="true" /></span>
+            <span className="pe-set-row__tx">
+              <b>Tariff packs</b>
+              <span>One pack per published tariff, under the authority that issued it, and the port-to-packs resolver. Each pack opens its record.</span>
+            </span>
+            <span className="pe-set-row__go" aria-hidden="true"><ChevronRight size={15} /></span>
+          </Link>
           {onOpenAgents ? (
             <Row icon={<UserRound size={17} aria-hidden="true" />} label="Agents and contributions" onOpen={onOpenAgents}
               desc="The agencies Arab ShipBroker has invited, quote requests to them, and their answers." />

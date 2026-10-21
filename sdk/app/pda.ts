@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { PdaCalculationResult, PdaRequest, PdaTariffVersion } from "@/lib/pda/types";
 import { parsePdaPortsWorkspace, type PdaPortsWorkspace } from "@/lib/pda/ports-workspace";
+import { parsePdaTariffPacks, type PdaTariffPack } from "@/lib/pda/tariff-packs";
+import { parsePdaTariffPackRecord, type PdaTariffPackRecord } from "@/lib/pda/tariff-pack-record";
 import { parsePdaPreferences, type PdaPreferences, type PdaStartTab } from "@/lib/pda/preferences";
 import { parsePdaAdminAgencies, parsePdaAgencies, type PdaAdminAgency, type PdaAgency } from "@/lib/pda/agents";
 import { parsePdaAgencyInbox, parsePdaQuoteRequests, type PdaAgencyInboxItem, type PdaQuoteRequest } from "@/lib/pda/quote-requests";
@@ -52,6 +54,23 @@ export async function listPdaPortsWorkspace(supabase: SupabaseClient, callDate: 
   const { data, error } = await supabase.rpc("list_pda_ports_workspace", { p_call_date: callDate });
   if (error) throw new Error(error.message);
   return parsePdaPortsWorkspace(data);
+}
+
+/** The Tariff Packs library (20261019130000): one pack per published document cited by a tariff in force on the date. */
+export async function listPdaTariffPacks(supabase: SupabaseClient, on: string): Promise<PdaTariffPack[]> {
+  const { data, error } = await supabase.rpc("list_pda_tariff_packs", { p_on: on });
+  if (error) throw new Error(error.message);
+  return parsePdaTariffPacks(data);
+}
+
+/** One pack's record by its opaque reference; null when the reference names no pack in force on the date. */
+export async function getPdaTariffPack(supabase: SupabaseClient, packRef: string, on: string): Promise<PdaTariffPackRecord | null> {
+  const { data, error } = await supabase.rpc("get_pda_tariff_pack", { p_ref: packRef, p_on: on });
+  if (error) {
+    if (error.message.startsWith("PDA_VALIDATION")) return null;
+    throw new Error(error.message);
+  }
+  return parsePdaTariffPackRecord(data);
 }
 
 /** The caller's Setup preferences (20261018110000); defaults when none are saved. */

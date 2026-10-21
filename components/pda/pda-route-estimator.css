@@ -1699,3 +1699,46 @@
 @media (max-width: 720px) {
   .pm-scope .ap-quote__line, .pm-scope .ap-quote__terms { grid-template-columns: 1fr; }
 }
+
+/* Tariff Packs (design step 6): the design's cards are divs with role=button; here they are list items holding one link,
+   and the kv pairs are a definition list, so reset the semantic elements to the design's boxes. */
+.pm-scope .pd-band--navy { background: linear-gradient(135deg, var(--asb-navy), var(--asb-navy-deep)); padding-bottom: 18px; }
+.pm-scope .pd-band__title { margin: 0; }
+.pm-scope .tp-h { margin-left: 0; margin-right: 0; }
+.pm-scope ul.tp-grid { list-style: none; margin: 0; padding: 0; }
+.pm-scope .tp-card { padding: 0; }
+.pm-scope .tp-card__link { display: flex; flex-direction: column; gap: 10px; padding: 13px 15px 14px; color: inherit; text-decoration: none; height: 100%; border-radius: inherit; }
+.pm-scope .tp-card__link:focus-visible { outline: 2px solid var(--asb-blue); outline-offset: 2px; }
+.pm-scope .tp-card__who { flex: 1; min-width: 0; }
+.pm-scope .tp-card__caret { color: var(--asb-gray-400); flex: none; }
+.pm-scope dl.tp-kv { margin: 0; }
+.pm-scope .tp-kv dd { margin: 0; }
+.pm-scope .tp-tbl th[scope="row"] { text-align: left; font-size: 12px; letter-spacing: 0; text-transform: none; background: none; border-bottom: .5px solid var(--asb-gray-100); padding: 9px 12px; }
+.pm-scope .tp-tbl td.is-empty { color: var(--asb-gray-400); }
+.pm-scope .tp-tbl a { color: inherit; text-decoration: underline; text-decoration-color: var(--asb-gray-200); text-underline-offset: 2px; }
+.pm-scope .tp-tbl a:hover { color: var(--asb-blue); }
+
+/* Tariff Pack record (design step 7): the read-only RecordShell. Tabs and rail items are links, fields and head meta are
+   definition lists, and filled table cells read in ink (the design's gray-200 cell is its empty-slot colour). */
+.pm-scope .pd-topbar__end { margin-left: auto; }
+.pm-scope a.pp-tab, .pm-scope a.pdr-rail__item { text-decoration: none; }
+.pm-scope a.pp-tab { color: var(--asb-gray-500); }
+.pm-scope a.pp-tab.is-on { color: var(--asb-navy); }
+.pm-scope .pp-tab:focus-visible, .pm-scope .pdr-rail__item:focus-visible { outline: 2px solid var(--asb-blue); outline-offset: -2px; }
+.pm-scope h1.pdr-head__title, .pm-scope h2.pdr-sec__h { margin: 0; }
+.pm-scope dl.pdr-head__meta, .pm-scope dl.pdr-fields { margin: 0; }
+.pm-scope .pdr-head__meta dd, .pm-scope .pdr-fields dd { margin: 0; }
+.pm-scope .pdr-tbl--filled td { color: var(--asb-gray-700); }
+.pm-scope .pdr-tbl--filled td .pp-val.is-empty { color: var(--asb-gray-200); }
+.pm-scope .pdr-f__v a { color: var(--asb-blue); }
+.pm-scope .pdr-empty { color: var(--asb-gray-500); }
+.pm-scope .pp-st { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: var(--asb-gray-500); }
+.pm-scope .pdr-proto { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.pm-scope .pdr-proto li { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: var(--asb-gray-700); line-height: 1.6; }
+.pm-scope .pdr-proto b { color: var(--asb-navy); font-weight: 600; margin-right: 4px; }
+.pm-scope .pdr-sec + .pdr-sec { margin-top: 14px; }
+.pm-scope .pdr-missing { max-width: 52ch; margin: 14vh auto; padding: 0 16px; font-size: 13px; line-height: 1.7; color: var(--asb-gray-700); }
+.pm-scope .pdr-missing__ey { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--asb-faint); font-weight: 700; }
+.pm-scope .pdr-missing__t { font-size: 20px; font-weight: 600; color: var(--asb-navy); margin: 6px 0 10px; }
+.pm-scope .pdr-missing a { color: var(--asb-blue); }
+.pm-scope a.pe-set-row { text-decoration: none; color: inherit; }
