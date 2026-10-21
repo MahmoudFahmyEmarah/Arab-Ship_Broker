@@ -64,7 +64,7 @@ ok(has(dataFp, "md5(t::text)", "order by h", "'auth'", "'storage'", "'vault'", "
 ok(runner.includes("exceptions: Auth audit log, sequence positions") && dataFp.includes("Declared exceptions"), "the declared exceptions are named, never called exact restoration");
 ok(has(teardown, "delete from auth.sessions where user_id = any ($1)", "delete from auth.refresh_tokens where user_id = any", "delete from auth.mfa_factors where user_id = any ($1)",
     "to_regclass('auth.sessions')", "to_regclass('auth.refresh_tokens')", "to_regclass('auth.mfa_factors')", "(select count(*) from auth.sessions where user_id = any ($2))",
-    "(select count(*) from auth.refresh_tokens where user_id = any", "(select count(*) from auth.identities where user_id = any (v_auth))")
+    "(select count(*) from auth.refresh_tokens where user_id = any", "to_regclass('auth.identities')", "(select count(*) from auth.identities where user_id = any ($2))")
   && before(teardown, "into v_auth from auth.users", "delete from public.users"),
   "the teardown finds the run's Auth accounts first, deletes their sessions, refresh tokens, MFA and identities, and proves them zero");
 
@@ -109,7 +109,7 @@ ok(teardown.includes("v_run !~ '^pdaag-[0-9a-f]{12}$'") && teardown.includes("TE
 ok(/^begin;$/m.test(teardown) && /^commit;$/m.test(teardown) && has(teardown, "TEARDOWN_RESIDUE", "TEARDOWN_TRIGGERS"),
   "one transaction that proves zero residue and re-enabled guards before it commits");
 const order = ["pda_quote_acceptances", "pda_agency_quotes", "pda_quote_request_recipients", "delete from public.pda_quote_requests", "delete from public.pda_estimate_sets",
-  "delete from public.pda_estimate_lines", "delete from public.pda_estimates", "delete from public.notifications", "delete from public.users", "delete from auth.sessions", "delete from auth.users"];
+  "delete from public.pda_estimate_lines", "delete from public.pda_estimates", "delete from public.notifications", "delete from public.users", "delete from auth.sessions", "delete from auth.identities", "delete from auth.users"];
 ok(order.every((t, i) => i === 0 || before(teardown, order[i - 1]!, t)), "children are removed before their parents, Auth accounts last");
 ok((teardown.match(/ disable trigger /g) ?? []).length > 0 && (teardown.match(/ disable trigger /g) ?? []).length === (teardown.match(/ enable trigger /g) ?? []).length,
   "every guard the teardown disables it re-enables in the same transaction");
