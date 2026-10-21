@@ -94,7 +94,7 @@ async function seed(): Promise<Seed> {
     { org_id: memberOrg, user_id: member.id, member_role: "admin", is_current: true, status: "active" },
     { org_id: portalAgency, user_id: staff.id, member_role: "admin", is_current: true, status: "active" },
   ]).select("user_id"));
-  must("profile", await db.from("profiles").insert({ account_id: member.id, profile_type: "broker", display_name: "E2E Agents Member", is_active: true }).select("account_id"));
+  must("profile", await db.from("profiles").insert({ account_id: member.id, profile_type: "cargo", display_name: "E2E Agents Member", is_active: true }).select("account_id"));
   must("ports", await db.from("ports").insert([
     { locode: loadLocode, trade_name: loadPortName, country: "Egypt", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
     { locode: dischargeLocode, trade_name: dischargePortName, country: "Saudi Arabia", zone: "R.SEA", port_type: "Sea Port", is_active: true, is_verified: true },

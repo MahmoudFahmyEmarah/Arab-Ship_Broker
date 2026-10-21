@@ -12,9 +12,9 @@
 #   DATA=<32 hex>             the data fingerprint Codex reviewed in the read-only preflight
 #   NONCE=<32 hex>            spent before the first write (ledger ~/.asb-staging-receipts-used); a receipt runs once
 #   ISSUED_AT=<unix seconds>
-# --peer-mail-read-at is when the operator finished reading BOTH live mailboxes IN FULL (opus-to-codex.md and
-# opusb-to-all.md; post your own RUN START first, then read). It must be after the receipt, within the last 15 minutes,
-# and neither mailbox may have changed since, both before and after the 60 s grace.
+# --peer-mail-read-at is when the operator finished reading ALL THREE live mailboxes IN FULL (opus-to-codex.md,
+# opusb-to-all.md and codex-to-opus.md; post your own RUN START first, then read). It must be after the receipt, within
+# the last 15 minutes, and no mailbox may have changed since, both before and after the 60 s grace.
 #
 # Lifecycle:
 #   0. gates: staging binding, receipt, clean audited checkout, peer mail; then the read-only measurements (manifest,
@@ -57,10 +57,10 @@ receipt(){ # receipt → R_STATUS R_SHA R_SCHEMA R_DATA R_NONCE R_ISSUED, strict
 }
 peer_mail(){ # every peer mailbox unchanged since the operator's full read
   local f m
-  for f in opus-to-codex.md opusb-to-all.md; do
+  for f in opus-to-codex.md opusb-to-all.md codex-to-opus.md; do
     [ -r "$MAILDIR/$f" ] || { echo "REFUSED: cannot read $MAILDIR/$f"; exit 2; }
     m=$(stat -c %Y "$MAILDIR/$f")
-    [ "$m" -le "$READ_AT" ] || { echo "REFUSED: $f changed after your read ($1); read both live mailboxes in full again and re-run"; exit 2; }
+    [ "$m" -le "$READ_AT" ] || { echo "REFUSED: $f changed after your read ($1); read all three live mailboxes in full again and re-run"; exit 2; }
   done
 }
 receipt

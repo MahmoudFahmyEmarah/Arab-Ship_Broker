@@ -75,7 +75,7 @@ ok(runner.includes('[ "$(git rev-parse HEAD)" = "$R_SHA" ]') && runner.includes(
   "the checkout must be exactly the audited SHA with no tracked change");
 ok(runner.includes('grep -qx "$R_NONCE" "$LEDGER"') && before(runner, 'echo "$R_NONCE" >> "$LEDGER"', "trap finish EXIT"),
   "the receipt is one-use: spent before the first write, refused if seen again");
-ok(runner.includes("--peer-mail-read-at=") && runner.includes("opus-to-codex.md opusb-to-all.md") && runner.includes("changed after your read")
+ok(runner.includes("--peer-mail-read-at=") && runner.includes("opus-to-codex.md opusb-to-all.md codex-to-opus.md") && runner.includes("changed after your read")
   && before(runner, "sleep 60", 'peer_mail "during the grace period"') && before(runner, 'peer_mail "during the grace period"', "trap finish EXIT"),
   "every peer mailbox must be unchanged since the operator's full read, before and after the 60 s grace");
 ok(before(runner, "sleep 60", "receipt; peer_mail") && runner.includes("staging changed during the grace period") && runner.includes("the checkout changed during the grace period"),
@@ -93,7 +93,8 @@ ok(invariants.includes("'I1.orphans ' || r.what") && (invariants.match(/union al
 ok((invariants.match(/created_at < '2026-10-08'/g) ?? []).length === 3 && (invariants.match(/coalesce\([a-z]\.created_at >= '2026-10-08', true\)/g) ?? []).length === 3
   && invariants.includes("bad := bad + ((r.n <> 0 and not r.informational) or (r.informational and r.n > r.pinned))::int") && has(invariants, "pinned 36)", "pinned 45)", "true as informational, 36 as pinned", "true, 45"),
   "O2B-057: an Auth orphan created on/after 2026-10-08 (or with no date) is residue and fails; the 5-7 Oct leftovers are reported, never counted as a pass of anything");
-ok(runner.includes("for f in opus-to-codex.md opusb-to-all.md") && !/codex-to-opus\.md/.test(runner) && !/Codex mints/.test(runner), "P2-6: the live mailboxes are watched; the minter is the peer auditor");
+ok(runner.includes("for f in opus-to-codex.md opusb-to-all.md codex-to-opus.md; do") && !/Codex mints/.test(runner) && runner.includes("ALL THREE live mailboxes IN FULL"),
+  "P2-6 / B2O-067: all three live mailboxes are watched (Codex is back, 21 Oct); the minter is the non-author peer auditor");
 ok(preflight.includes("cron_jobs | sed") && target.includes("cron_jobs(){") && target.includes("to_regclass('cron.job')"), "the preflight lists the target's scheduled jobs (unstamped writers)");
 
 // the lifecycle after the gates
@@ -204,5 +205,44 @@ ok((target.match(/-e PGCONNECT_TIMEOUT=30 /g) ?? []).length === 2, "both staging
 ok(has(recoverCode, "set value = 'true'::jsonb where key = 'beta_mode'", 'measure "$LOG/after"', "staging-released-manifest.txt", "PREFLIGHT INVARIANTS OK",
     '[ "$SCHEMA_MD5" = "$R_SCHEMA" ]', '[ "$DATA_MD5" = "$R_DATA" ]', "RECOVERY OK", "RECOVERY INCOMPLETE"),
   "recovery restores beta and proves the pinned manifest, the invariants and the receipt's exact schema and data fingerprints");
+
+// 21 Oct 2026 (pdaag-c0fb88d1aeea) · the browser spec's seed once used an enum label that no database has ("broker" for
+// profile_type). Every value the seed writes into an enum-typed column must be a label the repo's own SQL declares
+// (CREATE TYPE … AS ENUM / ALTER TYPE … ADD VALUE), so a seed can never fail for a label again.
+import { readdirSync } from "node:fs";
+const enumLabels = new Map<string, Set<string>>();
+const sqlDirs = ["supabase/baseline", "supabase/migrations", "supabase/migrations/_archive_pre_baseline"];
+const sqlFiles = sqlDirs.flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".sql")).map((f) => `${d}/${f}`));
+for (const file of sqlFiles) {
+  const sql = read(file);
+  for (const m of sql.matchAll(/create\s+type\s+(?:"?public"?\.)?"?([a-z_]+_enum)"?\s+as\s+enum\s*\(([^)]*)\)/gi)) {
+    const set = enumLabels.get(m[1]!) ?? new Set<string>();
+    for (const v of m[2]!.matchAll(/'((?:[^']|'')*)'/g)) set.add(v[1]!.replace(/''/g, "'"));
+    enumLabels.set(m[1]!, set);
+  }
+  for (const m of sql.matchAll(/alter\s+type\s+(?:"?public"?\.)?"?([a-z_]+_enum)"?\s+add\s+value\s+(?:if\s+not\s+exists\s+)?'((?:[^']|'')*)'/gi)) {
+    const set = enumLabels.get(m[1]!) ?? new Set<string>();
+    set.add(m[2]!.replace(/''/g, "'"));
+    enumLabels.set(m[1]!, set);
+  }
+}
+const seededEnumColumns: Record<string, string[]> = {
+  profile_type: ["profile_type_enum"], cargo_type: ["cargo_type_enum"], port_type: ["port_type_enum"], listing_type: ["listing_type_enum"],
+  load_terms: ["load_terms_enum"], load_zone: ["zone_enum"], disch_zone: ["zone_enum"], open_zone: ["zone_enum"], zone: ["zone_enum"],
+  vessel_type: ["vessel_type_enum"], review_status: ["review_status_enum"], subscription_tier: ["subscription_tier_enum"],
+  status: ["cargo_status_enum", "vessel_status_enum", "__text__"], role: ["ownership_role_enum", "__text__"],
+};
+const textAllowed: Record<string, string[]> = { status: ["active"], role: ["admin", "broker"] }; // organization_members.status, users.role are text
+const seeded = [...spec.matchAll(/\b(profile_type|cargo_type|port_type|listing_type|load_terms|load_zone|disch_zone|open_zone|zone|vessel_type|review_status|subscription_tier|status|role):\s*"([^"]*)"/g)]
+  .map((m) => ({ column: m[1]!, value: m[2]! }));
+const badSeeds = seeded.filter(({ column, value }) => {
+  const types = seededEnumColumns[column] ?? [];
+  if (types.includes("__text__") && (textAllowed[column] ?? []).includes(value)) return false;
+  return !types.some((t) => enumLabels.get(t)?.has(value));
+});
+ok(enumLabels.has("profile_type_enum") && enumLabels.get("profile_type_enum")!.has("cargo") && !enumLabels.get("profile_type_enum")!.has("broker") && enumLabels.has("zone_enum") && enumLabels.has("vessel_status_enum"),
+  `the repo's SQL declares the enums the seed writes to (${enumLabels.size} enum types parsed)`);
+ok(seeded.length >= 20 && badSeeds.length === 0 && spec.includes('profile_type: "cargo"') && !spec.includes('profile_type: "broker"'),
+  `every enum-typed value the spec seeds is a declared label (${seeded.length} seeds checked${badSeeds.length ? `; bad: ${badSeeds.map((b) => `${b.column}=${b.value}`).join(", ")}` : ""})`);
 
 console.log(`\nPDA agents run lifecycle: ${n} checks passed`);
