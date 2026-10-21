@@ -1680,3 +1680,19 @@ a.adm-stat:hover { transform: var(--lift); box-shadow: var(--adm-sh-hover); }
 .adm-list__when { font-size: 10px; color: var(--adm-d-muted); white-space: nowrap; }
 .adm-muted { color: var(--adm-d-muted); font-size: 10px; }
 .adm-sponsor-access:target { box-shadow: 0 0 0 2px var(--asb-amber); }
+
+/* review queue to the design (Portal standalone 7 · PageReview) */
+.adm-tabs--card { background: var(--asb-white); border-radius: 6px; padding: 0 4px; }
+.adm-filterbar--card { background: var(--asb-white); border: 0.5px solid var(--adm-bd); border-radius: 6px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.adm-filter-select select { appearance: none; -webkit-appearance: none; font: inherit; font-size: 11px; color: var(--adm-d-slate); background: var(--asb-white); border: 0.5px solid var(--adm-d-line); border-radius: 4px; padding: 4px 22px 4px 10px; cursor: pointer; background-image: linear-gradient(45deg, transparent 50%, var(--adm-d-muted) 50%), linear-gradient(135deg, var(--adm-d-muted) 50%, transparent 50%); background-position: right 10px center, right 6px center; background-size: 4px 4px, 4px 4px; background-repeat: no-repeat; }
+.adm-filter-select select:focus { outline: none; border-color: var(--asb-blue); }
+.adm-filterbar__summary { margin-left: auto; font-size: 10px; color: var(--asb-amber); }
+.adm-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.adm-queue { padding: 0; }
+.adm-queue__row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 0.5px solid var(--adm-bd); }
+.adm-queue__row:last-child { border-bottom: 0; }
+.adm-queue__row .adm-list__actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.adm-queue__ref { font-size: 10px; color: var(--adm-d-muted); letter-spacing: 0.04em; font-weight: 400; }
+.adm-queue__by { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.adm-queue__late { color: var(--asb-red); font-weight: 600; }
+.adm-decision-focus { box-shadow: 0 0 0 2px var(--asb-green); border-radius: 8px; }

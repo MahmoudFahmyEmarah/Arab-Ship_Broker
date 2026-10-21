@@ -30,10 +30,11 @@ type ActiveForm = "reject" | "amend" | "flag" | null;
 export function ReviewActions({
   queueItemId,
   successRedirectPath,
-}: ReviewActionsProps) {
+  initialForm = null,
+}: ReviewActionsProps & { initialForm?: ActiveForm }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [activeForm, setActiveForm] = useState<ActiveForm>(null);
+  const [activeForm, setActiveForm] = useState<ActiveForm>(initialForm);
   const [reason, setReason] = useState("");
   const [amendDetail, setAmendDetail] = useState("");
 

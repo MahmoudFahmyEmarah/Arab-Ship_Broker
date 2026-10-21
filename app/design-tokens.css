@@ -31,7 +31,7 @@
   --asb-navy: #0D2545;
   --asb-navy-deep: #0D2240;
   --asb-navy-global: #1B3A5C;
-  --asb-blue: #185FA5; /* design value (Portal standalone 7); the sidebar and the map keep #24486B, see the pins below */
+  --asb-blue: #185FA5; /* design value (Portal standalone 7) */
   --asb-blue-light: #E6F1FB;
   --asb-steel-bg: #E7EEF5;
   --asb-steel: #2C5F8A;
@@ -97,9 +97,9 @@
   --map-ocean: #0C1929;
   --map-land: #1A2D3A;
   --map-coast: rgba(255, 255, 255, 0.18);
-  --map-cargo: #DFF0E6; /* the map keeps the app's own palette (owner, 19 Oct 2026) */
+  --map-cargo: #EAF3DE; /* the map keeps the palette it renders today (owner, 19 Oct 2026; measured on the Wave 8 build) */
   --map-review: #FBF4E2;
-  --map-alert: #A83A3A;
+  --map-alert: #A32D2D;
   --map-alert-urgent: var(--asb-red-print);
   --map-tonnage: #7BB8F0;
   --map-route: #24486B;
@@ -114,9 +114,9 @@
   --map-feature: var(--asb-gold-soft);
   --map-label: var(--asb-blue-light);
   --map-base-light: var(--asb-gray-100);
-  --map-in: #2E8B57;
-  --map-partial: #A66A0C;
-  --map-out: #A83A3A;
+  --map-in: #27500A;
+  --map-partial: #854F0B;
+  --map-out: #A32D2D;
   --map-bar-w: 44px;
   --map-icon: 36px;
   --map-panel-w: 248px;
@@ -203,15 +203,16 @@
   --z-map-fullscreen: 9999;
 }
 
-/* The member sidebar (both themes) and the map keep the app's own colours (owner, 19 Oct 2026): the design
-   palette above applies everywhere else. Every --asb-* status/blue read inside these two surfaces resolves here. */
+/* The member sidebar (both themes) and the map keep the colours they render today (owner, 19 Oct 2026). These are
+   the values computed on the live Wave 8 build (21 Oct 2026 probe), not this file's older values, which other
+   :root blocks always overrode. The design palette above applies everywhere else. */
 .asb-sidebar,
 .asb-map {
-  --asb-blue: #24486B;
-  --asb-green: #2E8B57;
-  --asb-green-bg: #DFF0E6;
-  --asb-amber: #A66A0C;
-  --asb-amber-bg: #F8ECD6;
-  --asb-red: #A83A3A;
-  --asb-red-bg: #F5E1E1;
+  --asb-blue: #185FA5;
+  --asb-green: #27500A;
+  --asb-green-bg: #EAF3DE;
+  --asb-amber: #854F0B;
+  --asb-amber-bg: #FAEEDA;
+  --asb-red: #A32D2D;
+  --asb-red-bg: #FCEBEB;
 }
