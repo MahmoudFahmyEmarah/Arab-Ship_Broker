@@ -265,7 +265,7 @@ ok(has(target, "api_health(){", "/auth/v1/health", '[ "$code" = 200 ]') && !/ech
 
 // 21 Oct 2026 (pdaag-ad36da805bae) · a modal that can open at any moment is dismissed by a locator handler, not once
 ok([spec, alignment].every((t) => has(t, 'page.addLocatorHandler(page.getByRole("dialog", { name: "Vessel position check-in" })',
-    'getByRole("button", { name: "Remind me later" }).click({ timeout: 10_000, noWaitAfter: true }).catch(() => undefined)'))
+    'getByRole("button", { name: "Remind me later" }).click({ timeout: 10_000, noWaitAfter: true })', '.catch(() => page.keyboard.press("Escape").catch(() => undefined))'))
   && /timeout: 900_000/.test(pwConfig) && /actionTimeout: 30_000/.test(pwConfig),
   "both PDA browser specs dismiss the vessel check-in modal whenever it appears with a bounded, never-throwing click; the PDA config allows 15 minutes per test and 30 s per action");
 
