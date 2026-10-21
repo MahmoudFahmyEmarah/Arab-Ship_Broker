@@ -28,6 +28,7 @@ else
   echo "  FAIL migration history differs from the pinned manifest (< pinned only, > staging only):"; sed 's/^/        /' "$OUT/manifest.diff" | head -20; BAD=1
 fi
 sed 's/^/  /' "$OUT/invariants.txt"
+echo "  ..   scheduled jobs on the target (unstamped writes during a window fail the data fingerprint):"; cron_jobs | sed 's/^/        /'
 [ "$(tail -1 "$OUT/invariants.txt")" = "PREFLIGHT INVARIANTS OK" ] || BAD=1
 echo "  ..   schema fingerprint $SCHEMA_MD5 ($(wc -l < "$OUT/schema.txt") catalog lines), data fingerprint $DATA_MD5 ($(wc -l < "$OUT/data.txt") tables)"
 if [ $BAD = 0 ]; then

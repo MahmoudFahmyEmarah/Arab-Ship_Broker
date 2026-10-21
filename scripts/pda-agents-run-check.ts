@@ -74,11 +74,23 @@ ok(runner.includes('[ "$(git rev-parse HEAD)" = "$R_SHA" ]') && runner.includes(
   "the checkout must be exactly the audited SHA with no tracked change");
 ok(runner.includes('grep -qx "$R_NONCE" "$LEDGER"') && before(runner, 'echo "$R_NONCE" >> "$LEDGER"', "trap finish EXIT"),
   "the receipt is one-use: spent before the first write, refused if seen again");
-ok(runner.includes("--peer-mail-read-at=") && runner.includes("codex-to-opus.md opusb-to-all.md") && runner.includes("changed after your read")
+ok(runner.includes("--peer-mail-read-at=") && runner.includes("opus-to-codex.md opusb-to-all.md") && runner.includes("changed after your read")
   && before(runner, "sleep 60", 'peer_mail "during the grace period"') && before(runner, 'peer_mail "during the grace period"', "trap finish EXIT"),
   "every peer mailbox must be unchanged since the operator's full read, before and after the 60 s grace");
 ok(before(runner, "sleep 60", "receipt; peer_mail") && runner.includes("staging changed during the grace period") && runner.includes("the checkout changed during the grace period"),
   "after the grace the receipt, the checkout and both fingerprints are checked again");
+
+// B2O-048 corrections
+ok(runner.includes("STAGED=0") && runner.includes('cp "$ENV_FILE" .env.local; STAGED=1') && runner.includes('if [ "$STAGED" = 1 ]; then rm -f .env.local;') && !/^\s*\[ -f \.env\.local \] && rm -f \.env\.local/m.test(runner),
+  "P1: the operator's own .env.local is removed and restored only after step 3 replaced it (STAGED flag)");
+ok(target.includes('export PGURL="$DBURL"') && (target.match(/-e PGURL(?= )/g) ?? []).length === 2 && !/-e PGURL=/.test(target), "P2-1: the database URL reaches docker through the environment, never the argv");
+ok(target.includes('*"postgres.$STAGING_REF:"*'), "P2-2: the pooler form with an inline password is recognised");
+ok(race.includes("pg_stat_activity") && race.includes("query like 'select pg_sleep(3)%'") && !/^sleep 1$/m.test(race), "P2-3: the race waits for session A to hold its lock instead of sleeping 1 s");
+ok(!/'\{carried,leg\}' <> 'discharge'/.test(acceptance) && /'\{carried,leg\}' is distinct from 'discharge'/.test(acceptance) && /coalesce\(\(select sum\(l\.amount\)/.test(acceptance),
+  "P2-4: A12 compares with IS DISTINCT FROM / COALESCE so a missing key cannot pass it");
+ok(invariants.includes("'I1.orphans ' || r.what") && (invariants.match(/union all select '[^']+ without /g) ?? []).length >= 10, "P2-5: the preflight prints each orphan class on its own line");
+ok(runner.includes("for f in opus-to-codex.md opusb-to-all.md") && !/codex-to-opus\.md/.test(runner) && !/Codex mints/.test(runner), "P2-6: the live mailboxes are watched; the minter is the peer auditor");
+ok(preflight.includes("cron_jobs | sed") && target.includes("cron_jobs(){") && target.includes("to_regclass('cron.job')"), "the preflight lists the target's scheduled jobs (unstamped writers)");
 
 // the lifecycle after the gates
 ok(runner.includes('RUN="pdaag-$(od -An -N6 -tx1 /dev/urandom') && /export .*E2E_RUN_ID="\$RUN"/.test(runner),
@@ -121,6 +133,6 @@ ok(race.includes('$PSQL -1 -v run=') && before(race, "trap cleanup EXIT", "# ─
 ok(has(race, 'RUN="pdaag-$(od -An -N6 -tx1 /dev/urandom', "'e2e-' || v_run || '-m@arabshipbroker.test'", "'E2E ' || v_run || ' Charterers'", "'E2E-' || v_run", "'E2E ' || up || ' VESSEL'"),
   "the race fixture is stamped in exactly the shapes the teardown removes");
 ok(has(race, "withdrawn/sent", "PDA_STATE", "pg_sleep(3)"), "the race still holds A's lock and asserts the single terminal outcome");
-ok(has(acceptance, "-- A12 · the symmetric lineage", "'{carried,leg}' <> 'discharge'", "A12 ok"), "nb: the symmetric discharge → load → replacement-load lineage case");
+ok(has(acceptance, "-- A12 · the symmetric lineage", "'{carried,leg}' is distinct from 'discharge'", "A12 ok"), "nb: the symmetric discharge → load → replacement-load lineage case");
 
 console.log(`\nPDA agents run lifecycle: ${n} checks passed`);

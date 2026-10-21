@@ -9,16 +9,17 @@ CA_FILE="${ASB_STAGING_CA_FILE:-$HOME/.asb-staging-root.crt}"
 IMG="${E2E_PG_IMAGE:-public.ecr.aws/supabase/postgres:17.6.1.127}"
 for f in "$DB_FILE" "$ENV_FILE" "$CA_FILE"; do [ -r "$f" ] || { echo "REFUSED: $f is not readable"; exit 2; }; done
 DBURL="$(cat "$DB_FILE")"
-case "$DBURL" in *"$PROD_REF"*) echo "REFUSED: production database"; exit 2;; *"postgres.$STAGING_REF@"*|*"db.$STAGING_REF.supabase.co"*) ;; *) echo "REFUSED: the database is not the staging project"; exit 2;; esac
+case "$DBURL" in *"$PROD_REF"*) echo "REFUSED: production database"; exit 2;; *"postgres.$STAGING_REF@"*|*"postgres.$STAGING_REF:"*|*"db.$STAGING_REF.supabase.co"*) ;; *) echo "REFUSED: the database is not the staging project"; exit 2;; esac
+export PGURL="$DBURL"   # the URL (with its password) reaches docker through the environment only, never the argv
 grep -q "$PROD_REF" "$ENV_FILE" && { echo "REFUSED: production in the env file"; exit 2; }
 grep -q "^NEXT_PUBLIC_SUPABASE_URL=https://$STAGING_REF.supabase.co/*$" "$ENV_FILE" || { echo "REFUSED: the env file's API is not the staging project"; exit 2; }
 CERT="$(cygpath -w "$CA_FILE" 2>/dev/null || echo "$CA_FILE")"
 
 # psqlq [psql args…]   — read-write (the runner, after its gates)
 # psqlro [psql args…]  — every statement in a READ ONLY transaction (default_transaction_read_only=on)
-psqlq(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root.crt:ro" -e PGURL="$DBURL" --entrypoint sh "$IMG" \
+psqlq(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root.crt:ro" -e PGURL --entrypoint sh "$IMG" \
            -c 'psql "$PGURL" -X -q -At -v ON_ERROR_STOP=1 "$@"' sh "$@"; }
-psqlro(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root.crt:ro" -e PGURL="$DBURL" -e PGOPTIONS="-c default_transaction_read_only=on" \
+psqlro(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root.crt:ro" -e PGURL -e PGOPTIONS="-c default_transaction_read_only=on" \
             --entrypoint sh "$IMG" -c 'psql "$PGURL" -X -q -At -v ON_ERROR_STOP=1 "$@"' sh "$@"; }
 redact(){ sed 's/postgres[a-z]*:\/\/[^ ]*/<db-url>/g'; }
 
@@ -32,3 +33,12 @@ measure(){
   [ -s "$out/schema.txt" ] && [ -s "$out/data.txt" ] || return 1
   SCHEMA_MD5=$(md5sum < "$out/schema.txt" | cut -c1-32); DATA_MD5=$(md5sum < "$out/data.txt" | cut -c1-32)
 }
+
+# cron_jobs: the scheduled jobs on the target (read-only, informational): anything they write during a window is unstamped
+cron_jobs(){ psqlro -c "do \$\$ declare acc text := ''; r record; begin
+  if to_regclass('cron.job') is null then acc := '(no cron schema)'; else
+    for r in execute 'select jobid, jobname, schedule, active, left(command, 120) as command from cron.job order by jobid' loop
+      acc := acc || r.jobid || ' ' || coalesce(r.jobname, '-') || ' [' || r.schedule || '] active=' || r.active || ' ' || r.command || E'\\n';
+    end loop;
+  end if;
+  perform set_config('e2e.cron_jobs', acc, false); end \$\$; select current_setting('e2e.cron_jobs');"; }

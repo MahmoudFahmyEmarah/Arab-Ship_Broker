@@ -267,7 +267,7 @@ begin
   lq := public.submit_pda_agency_quote((req2->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency fee","serviceCode":"agency","amount":"600"}]', current_date + 30);
   perform set_config('request.jwt.claim.sub', '', true);
   ctx := public.pda_quote_acceptance_context(member, (lq->>'quoteId')::uuid);
-  if ctx#>>'{carried,leg}' <> 'discharge' or (ctx#>>'{carried,total}')::numeric <> 800 then
+  if ctx#>>'{carried,leg}' is distinct from 'discharge' or coalesce((ctx#>>'{carried,total}')::numeric, -1) <> 800 then
     raise exception 'A12: the discharge quote is carried into the load acceptance: %', ctx; end if;
   s_dl := public.pda_accept_agency_quote(member, member_org, (lq->>'quoteId')::uuid, load_req, good_l, dis_req, good_d, route2);
 
@@ -280,17 +280,17 @@ begin
   lq := public.submit_pda_agency_quote((req2->>'requestId')::uuid, agency_a, 'USD', '[{"label":"Agency fee","serviceCode":"agency","amount":"650"}]', current_date + 30);
   perform set_config('request.jwt.claim.sub', '', true);
   ctx := public.pda_quote_acceptance_context(member, (lq->>'quoteId')::uuid);
-  if ctx#>>'{carried,leg}' <> 'discharge' or (ctx#>>'{carried,total}')::numeric <> 800 then
+  if ctx#>>'{carried,leg}' is distinct from 'discharge' or coalesce((ctx#>>'{carried,total}')::numeric, -1) <> 800 then
     raise exception 'A12: the discharge quote accepted two versions back is still carried: %', ctx; end if;
   begin perform public.pda_accept_agency_quote(member, member_org, (lq->>'quoteId')::uuid, load_req, good_l, dis_req, leg_res, route2); e := null;
   exception when others then e := split_part(sqlerrm, ':', 1); end;
   if e is distinct from 'PDA_VALIDATION' then raise exception 'A12: dropping the still-effective discharge quote must be refused, got %', e; end if;
   s_dll := public.pda_accept_agency_quote(member, member_org, (lq->>'quoteId')::uuid, load_req, good_l, dis_req, good_d, route2);
-  if (select supersedes_id from public.pda_estimate_sets where id = (s_dll->>'id')::uuid) <> (s_dl->>'id')::uuid
-     or (select sum(l.amount) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.load_estimate_id = l.estimate_id
-          where s.id = (s_dll->>'id')::uuid and l.basis = 'agency_quote') <> 650
-     or (select sum(l.amount) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.discharge_estimate_id = l.estimate_id
-          where s.id = (s_dll->>'id')::uuid and l.basis = 'agency_quote') <> 800 then
+  if (select supersedes_id from public.pda_estimate_sets where id = (s_dll->>'id')::uuid) is distinct from (s_dl->>'id')::uuid
+     or coalesce((select sum(l.amount) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.load_estimate_id = l.estimate_id
+          where s.id = (s_dll->>'id')::uuid and l.basis = 'agency_quote'), -1) <> 650
+     or coalesce((select sum(l.amount) from public.pda_estimate_lines l join public.pda_estimate_sets s on s.discharge_estimate_id = l.estimate_id
+          where s.id = (s_dll->>'id')::uuid and l.basis = 'agency_quote'), -1) <> 800 then
     raise exception 'A12: the third version takes the replacement load quote and keeps the discharge quote: %', s_dll; end if;
   raise notice 'A12 ok: discharge → load → replacement load keeps the discharge quote through the supersede lineage';
 

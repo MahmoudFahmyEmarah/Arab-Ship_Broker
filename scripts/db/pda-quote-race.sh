@@ -123,7 +123,9 @@ claims(){ echo "select set_config('request.jwt.claim.sub', '$1', false), set_con
 # A: withdraw, then hold the transaction open for 3 s
 { claims "$MEMBER"; echo "begin; select public.withdraw_pda_quote_request('$REQ'); select pg_sleep(3); commit;"; } | $PSQL > "$LOGS/a.log" 2>&1 &
 A=$!
-sleep 1
+# wait until A is inside its hold (its pg_sleep is the active statement), so B provably starts second
+HELD=0; for _ in $(seq 1 60); do [ "$(q "select count(*) from pg_stat_activity where datname = current_database() and state = 'active' and query like 'select pg_sleep(3)%'")" = "1" ] && { HELD=1; break; }; sleep 0.25; done
+[ $HELD = 1 ] || { echo "  FAIL race: session A never reached its hold"; OK=0; exit 1; }
 # B: decline while A holds the request lock
 { claims "$STAFF"; echo "select public.decline_pda_quote_request('$REQ', '$AGENCY', 'No berth window');"; } | $PSQL > "$LOGS/b.log" 2>&1
 B_EXIT=$?

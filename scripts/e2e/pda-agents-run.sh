@@ -3,7 +3,8 @@
 #
 #   scripts/e2e/pda-agents-run.sh --i-hold-the-staging-window --peer-mail-read-at=<unix seconds>
 #
-# Only in an announced STAGING EXCLUSIVE window, and only with a one-use receipt Codex mints after GO
+# Only in an announced STAGING EXCLUSIVE window, and only with a one-use receipt the PEER AUDITOR mints after GO
+# (O2ALL-012: Opus B for Opus's runs, Opus for Opus B's)
 # ($ASB_STAGING_RECEIPT, default ~/.asb-staging-receipt; machine-readable, never parsed from mailbox prose):
 #   STATUS=GO                 anything else (HOLD, REVOKED, …) refuses
 #   SHA=<40 hex>              the audited head; the checkout must be exactly it, with no tracked change
@@ -11,8 +12,9 @@
 #   DATA=<32 hex>             the data fingerprint Codex reviewed in the read-only preflight
 #   NONCE=<32 hex>            spent before the first write (ledger ~/.asb-staging-receipts-used); a receipt runs once
 #   ISSUED_AT=<unix seconds>
-# --peer-mail-read-at is when the operator finished reading every peer mailbox IN FULL. It must be after the receipt,
-# within the last 15 minutes, and no peer mailbox may have changed since, both before and after the 60 s grace.
+# --peer-mail-read-at is when the operator finished reading BOTH live mailboxes IN FULL (opus-to-codex.md and
+# opusb-to-all.md; post your own RUN START first, then read). It must be after the receipt, within the last 15 minutes,
+# and neither mailbox may have changed since, both before and after the 60 s grace.
 #
 # Lifecycle:
 #   0. gates: staging binding, receipt, clean audited checkout, peer mail; then the read-only measurements (manifest,
@@ -41,7 +43,7 @@ RECEIPT="${ASB_STAGING_RECEIPT:-$HOME/.asb-staging-receipt}"
 LEDGER="${ASB_STAGING_LEDGER:-$HOME/.asb-staging-receipts-used}"
 MAILDIR="${ASB_MAILBOX_DIR:-$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/docs/coordination/live}"
 receipt(){ # receipt → R_STATUS R_SHA R_SCHEMA R_DATA R_NONCE R_ISSUED, strictly
-  [ -r "$RECEIPT" ] || { echo "REFUSED: no receipt at $RECEIPT (Codex mints it after GO)"; exit 2; }
+  [ -r "$RECEIPT" ] || { echo "REFUSED: no receipt at $RECEIPT (the peer auditor mints it after GO)"; exit 2; }
   local body; body="$(tr -d '\r' < "$RECEIPT")"
   echo "$body" | grep -vqE '^(STATUS=[A-Z]+|SHA=[0-9a-f]{40}|SCHEMA=[0-9a-f]{32}|DATA=[0-9a-f]{32}|NONCE=[0-9a-f]{32}|ISSUED_AT=[0-9]{10}|)$' \
     && { echo "REFUSED: the receipt has a line outside the format"; exit 2; }
@@ -52,10 +54,10 @@ receipt(){ # receipt → R_STATUS R_SHA R_SCHEMA R_DATA R_NONCE R_ISSUED, strict
 }
 peer_mail(){ # every peer mailbox unchanged since the operator's full read
   local f m
-  for f in codex-to-opus.md opusb-to-all.md; do
+  for f in opus-to-codex.md opusb-to-all.md; do
     [ -r "$MAILDIR/$f" ] || { echo "REFUSED: cannot read $MAILDIR/$f"; exit 2; }
     m=$(stat -c %Y "$MAILDIR/$f")
-    [ "$m" -le "$READ_AT" ] || { echo "REFUSED: $f changed after your read ($1); read every peer mailbox in full again and re-run"; exit 2; }
+    [ "$m" -le "$READ_AT" ] || { echo "REFUSED: $f changed after your read ($1); read both live mailboxes in full again and re-run"; exit 2; }
   done
 }
 receipt
@@ -90,12 +92,13 @@ receipt; peer_mail "during the grace period"
 [ "$(git rev-parse HEAD)" = "$R_SHA" ] && [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "REFUSED: the checkout changed during the grace period"; exit 2; }
 measure "$LOG/grace" && [ "$SCHEMA_MD5" = "$BASE_SCHEMA" ] && [ "$DATA_MD5" = "$BASE_DATA" ] || { echo "REFUSED: staging changed during the grace period"; exit 2; }
 
-FAILED=0; APPLIED=(); BETA="true"; ENVBK=""; PW=1
+FAILED=0; APPLIED=(); BETA="true"; ENVBK=""; STAGED=0; PW=1
 fail(){ echo "  FAIL $*"; FAILED=1; }
 
 finish(){
   echo "== teardown, rollback, verification ($(date +%H:%M:%S))"
-  [ -f .env.local ] && rm -f .env.local; [ -n "$ENVBK" ] && mv "$ENVBK" .env.local
+  # the operator's own .env.local is touched only if step 3 replaced it with the staging copy
+  if [ "$STAGED" = 1 ]; then rm -f .env.local; [ -n "$ENVBK" ] && mv "$ENVBK" .env.local; fi
   if out=$(psqlq -v run="$RUN" -f - < supabase/tests/e2e/pda-agents-teardown.sql 2>"$LOG/teardown.err") && [ "$(echo "$out" | tail -1)" = "TEARDOWN OK $RUN" ]; then
     echo "  ok   teardown: every row of $RUN removed (incl. Auth sessions, refresh tokens, identities, MFA), guards re-enabled, zero residue proved"
   else fail "teardown: $(tr '\n' ' ' < "$LOG/teardown.err" | redact | cut -c1-300)"; fi
@@ -144,7 +147,7 @@ psqlq -c "update public.app_settings set value = 'false'::jsonb where key = 'bet
 
 # ── 3 · build + browser, bound to staging and to this run id
 [ -f .env.local ] && { ENVBK=".env.local.bk-$RUN"; mv .env.local "$ENVBK"; }
-cp "$ENV_FILE" .env.local
+cp "$ENV_FILE" .env.local; STAGED=1
 set -a; . "$ENV_FILE"; set +a
 export E2E_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" E2E_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY" E2E_SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY"
 export E2E_ALLOW_REMOTE="$STAGING_REF" E2E_DB_URL="$DBURL" E2E_PG_IMAGE="$IMG" E2E_RUN_ID="$RUN"

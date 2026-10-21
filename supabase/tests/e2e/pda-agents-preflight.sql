@@ -13,7 +13,7 @@
 begin transaction read only;
 do $pf$
 declare
-  n bigint; bad int := 0; acc text := '';
+  n bigint; bad int := 0; acc text := ''; r record;
 begin
   -- I1 · the 15:27 run's shapes (e2e/pda-agents.spec.ts at c49618d: emails e2e-pda-ag-{m,s,a}-<stamp>@arabshipbroker.test,
   --       orgs 'E2E Agents Charterers|E2E Portal Agency|E2E Email Agency <S>', ports 'E2E AGENTS PORT …', vessel
@@ -29,21 +29,23 @@ begin
     into n;
   acc := acc || case when n = 0 then 'ok   ' else 'FAIL ' end || 'I1 15:27-run identity shapes remaining: ' || n || E'\n'; bad := bad + (n <> 0)::int;
 
-  -- I1 · orphans a partial delete would leave (descendants whose user or listing is gone)
-  select (select count(*) from auth.identities i where not exists (select 1 from auth.users u where u.id = i.user_id))
-       + (select count(*) from auth.sessions s where not exists (select 1 from auth.users u where u.id = s.user_id))
-       + (select count(*) from auth.refresh_tokens t where t.user_id is not null and not exists (select 1 from auth.users u where u.id::text = t.user_id))
-       + (select count(*) from auth.mfa_factors f where not exists (select 1 from auth.users u where u.id = f.user_id))
-       + (select count(*) from public.users p where p.supabase_user_id is not null and not exists (select 1 from auth.users u where u.id = p.supabase_user_id))
-       + (select count(*) from public.notifications x where not exists (select 1 from public.users u where u.id = x.recipient_user_id))
-       + (select count(*) from public.notification_deliveries d where not exists (select 1 from public.notifications x where x.id = d.notification_id))
-       + (select count(*) from public.notification_digest_batches b where not exists (select 1 from public.users u where u.id = b.recipient_user_id))
-       + (select count(*) from public.listing_ownership o where o.listing_type = 'cargo' and not exists (select 1 from public.cargo_listings c where c.id = o.listing_id))
-       + (select count(*) from public.listing_ownership o where o.listing_type = 'vessel_availability' and not exists (select 1 from public.vessel_availability a where a.id = o.listing_id))
-       + (select count(*) from market_private.listing_handles h where h.actor_user_id is not null and not exists (select 1 from public.users u where u.id = h.actor_user_id))
-       + (select count(*) from public.organization_members m where not exists (select 1 from public.users u where u.id = m.user_id))
-    into n;
-  acc := acc || case when n = 0 then 'ok   ' else 'FAIL ' end || 'I1 orphaned descendants (Auth, users, notifications, listings, handles, memberships): ' || n || E'\n'; bad := bad + (n <> 0)::int;
+  -- I1 · orphans a partial delete would leave (one line per class, so pre-existing orphans can be told from 15:27 residue)
+  for r in
+    select 'auth.identities without a user' as what, (select count(*) from auth.identities i where not exists (select 1 from auth.users u where u.id = i.user_id)) as n
+    union all select 'auth.sessions without a user', (select count(*) from auth.sessions s where not exists (select 1 from auth.users u where u.id = s.user_id))
+    union all select 'auth.refresh_tokens without a user', (select count(*) from auth.refresh_tokens t where t.user_id is not null and not exists (select 1 from auth.users u where u.id::text = t.user_id))
+    union all select 'auth.mfa_factors without a user', (select count(*) from auth.mfa_factors f where not exists (select 1 from auth.users u where u.id = f.user_id))
+    union all select 'public.users without an Auth account', (select count(*) from public.users p where p.supabase_user_id is not null and not exists (select 1 from auth.users u where u.id = p.supabase_user_id))
+    union all select 'notifications without a recipient', (select count(*) from public.notifications x where not exists (select 1 from public.users u where u.id = x.recipient_user_id))
+    union all select 'notification_deliveries without a notification', (select count(*) from public.notification_deliveries d where not exists (select 1 from public.notifications x where x.id = d.notification_id))
+    union all select 'notification_digest_batches without a recipient', (select count(*) from public.notification_digest_batches b where not exists (select 1 from public.users u where u.id = b.recipient_user_id))
+    union all select 'listing_ownership (cargo) without a listing', (select count(*) from public.listing_ownership o where o.listing_type = 'cargo' and not exists (select 1 from public.cargo_listings c where c.id = o.listing_id))
+    union all select 'listing_ownership (availability) without a listing', (select count(*) from public.listing_ownership o where o.listing_type = 'vessel_availability' and not exists (select 1 from public.vessel_availability a where a.id = o.listing_id))
+    union all select 'market_private.listing_handles without an actor', (select count(*) from market_private.listing_handles h where h.actor_user_id is not null and not exists (select 1 from public.users u where u.id = h.actor_user_id))
+    union all select 'organization_members without a user', (select count(*) from public.organization_members m where not exists (select 1 from public.users u where u.id = m.user_id))
+  loop
+    acc := acc || case when r.n = 0 then 'ok   ' else 'FAIL ' end || 'I1.orphans ' || r.what || ': ' || r.n || E'\n'; bad := bad + (r.n <> 0)::int;
+  end loop;
 
   -- I2 · the current runner's shapes (pdaag-<12 hex>) and the race fixture's
   select (select count(*) from auth.users where email ~ '^e2e-pdaag-[0-9a-f]{12}-')
