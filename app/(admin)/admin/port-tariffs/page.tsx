@@ -2,6 +2,8 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import type { ReactNode } from "react";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { PortSearchField } from "@/components/ports/PortSearchField";
+import type { PortChoice } from "@/lib/ports/port-search";
 
 import { attestSource, createDraft, createPublisher, decideStagedRule, publishVersion, recordFxRate, registerSource, replaceRules, returnVersion, stageImport, submitVersion, upsertTerminal, verifyTerminal } from "./actions";
 
@@ -11,7 +13,7 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
   await requireAdmin({ section: "porttariffs" });
   const db = getSupabaseAdminClient();
   const params = await searchParams;
-  const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }, { data: terminals }, { data: fxRates }, { data: attestations }, { data: unattestedSources }] = await Promise.all([
+  const [{ data: publishers }, { data: sources }, { data: sets }, { data: versions }, { data: staged }, { data: terminals }, { data: fxRates }, { data: attestations }, { data: unattestedSources }, { data: portRows }, { data: allSets }, { data: publishedVersions }] = await Promise.all([
     db.from("tariff_publishers").select("id,name,publisher_type,country").order("name"),
     db.from("tariff_sources").select("id,title,source_filename,authority,effective_from,sha256").order("registered_at", { ascending: false }).limit(50),
     db.from("port_tariff_sets").select("id,name,port_locode,terminal_id,publisher_id").order("created_at", { ascending: false }).limit(50),
@@ -22,7 +24,14 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
     db.from("tariff_source_attestations").select("id,source_id,from_authority,to_authority,provenance,attested_at,tariff_sources(title)").order("attested_at", { ascending: false }).limit(30),
     // Every reference/unverified source, however old (C2O-089 P2): the latest-50 list above may not reach them.
     db.from("tariff_sources").select("id,title,authority").in("authority", ["reference", "unverified"]).order("title").limit(500),
+    // the port fields search these (verified, active ports) instead of a hand-typed UN/LOCODE (owner, 19 Oct 2026)
+    db.from("ports").select("locode,trade_name,country").eq("is_active", true).eq("is_verified", true).order("trade_name").limit(2000),
+    db.from("port_tariff_sets").select("id,name,port_locode").order("port_locode").order("name").limit(1000),
+    db.from("port_tariff_versions").select("id,tariff_set_id,version_no,effective_from").eq("status", "published").order("effective_from", { ascending: false }).limit(1000),
   ]);
+  const setById = new Map((allSets ?? []).map((t) => [t.id, t]));
+  const portChoices: PortChoice[] = (portRows ?? []).map((p) => ({ locode: p.locode, name: p.trade_name, country: p.country }));
+  const verifiedTerminals = (terminals ?? []).filter((t) => t.is_verified);
   const unattested = unattestedSources ?? [];
 
   return <div className="adm-page">
@@ -32,7 +41,7 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
 
     <div className="adm-grid adm-grid--2">
       <Panel title="0. Port terminals"><form action={upsertTerminal} className="adm-form">
-        <input name="portLocode" required placeholder="UN/LOCODE" maxLength={5}/><input name="name" required placeholder="Terminal name"/><input name="aliases" placeholder="Aliases, comma separated"/><button type="submit">Save for verification</button>
+        <PortSearchField name="portLocode" required options={portChoices} ariaLabel="Port of the terminal"/><input name="name" required placeholder="Terminal name"/><input name="aliases" placeholder="Aliases, comma separated"/><button type="submit">Save for verification</button>
       </form><div className="adm-version-list">{(terminals ?? []).map((terminal) => <article key={terminal.id}><div><strong>{terminal.port_locode} · {terminal.name}</strong><span>{terminal.is_verified ? "Verified" : "Awaiting independent verification"}</span></div>{!terminal.is_verified && <form action={verifyTerminal}><input type="hidden" name="terminalId" value={terminal.id}/><button>Verify as checker</button></form>}</article>)}</div></Panel>
       <Panel title="1. Publisher"><form action={createPublisher} className="adm-form">
         <input name="name" required placeholder="Publisher name"/><select name="publisherType" defaultValue="port_authority"><option value="port_authority">Port authority</option><option value="terminal">Terminal</option><option value="agent">Agent</option><option value="statutory">Statutory</option><option value="other">Other</option></select><input name="country" placeholder="Country"/><input name="website" placeholder="Website"/><button type="submit">Save publisher</button>
@@ -44,7 +53,7 @@ export default async function PortTariffsPage({ searchParams }: { searchParams: 
         <select name="sourceId" required><option value="">Registered source</option>{(sources ?? []).map((s) => <option key={s.id} value={s.id}>{s.title} · {s.authority}</option>)}</select><input name="extractor" defaultValue="admin-json"/><textarea name="rowsJson" required rows={9} defaultValue={'[{"rawText":"Pilotage per GT…","sourcePage":"4","confidence":0.92,"portLocode":"TRMER","normalizedProposal":{"code":"pilotage","basis":"per_gt","rate":0},"validationErrors":[]}]'}/><button type="submit">Stage only</button>
       </form></Panel>
       <Panel title="4. Create tariff draft"><form action={createDraft} className="adm-form">
-        <input name="tariffSetId" placeholder="Existing tariff set UUID (optional)"/><input name="portLocode" required placeholder="UN/LOCODE" maxLength={5}/><input name="terminalId" placeholder="Verified terminal UUID (optional)"/><select name="publisherId" required><option value="">Publisher</option>{(publishers ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><input name="name" required placeholder="Tariff set name"/><select name="scope" defaultValue="port_call"><option value="port_call">Port call</option><option value="terminal">Terminal</option><option value="pilotage">Pilotage</option><option value="towage">Towage</option><option value="agency">Agency</option><option value="other">Other</option></select><input name="versionNo" required type="number" min="1" defaultValue="1"/><input name="currency" required maxLength={3} placeholder="USD"/><input name="effectiveFrom" required type="date"/><input name="effectiveTo" type="date"/><select name="roundingMode" defaultValue="half_up"><option value="half_up">Half up</option><option value="up">Up</option><option value="down">Down</option></select><input name="decimalPlaces" type="number" min="0" max="6" defaultValue="2"/><select name="primarySourceId" required><option value="">Primary source</option>{(sources ?? []).map((s) => <option key={s.id} value={s.id}>{s.title} · {s.authority}</option>)}</select><input name="supersedesId" placeholder="Superseded version UUID (for overlap)"/><textarea name="notes" placeholder="Review notes"/><button type="submit">Create draft</button>
+        <select name="tariffSetId" defaultValue=""><option value="">New tariff set (or choose an existing one for a new version)</option>{(allSets ?? []).map((t) => <option key={t.id} value={t.id}>{t.port_locode} · {t.name}</option>)}</select><PortSearchField name="portLocode" required options={portChoices} ariaLabel="Port of the tariff"/><select name="terminalId" defaultValue=""><option value="">Port-wide (no terminal)</option>{verifiedTerminals.map((t) => <option key={t.id} value={t.id}>{t.port_locode} · {t.name}</option>)}</select><select name="publisherId" required><option value="">Publisher</option>{(publishers ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><input name="name" required placeholder="Tariff set name"/><select name="scope" defaultValue="port_call"><option value="port_call">Port call</option><option value="terminal">Terminal</option><option value="pilotage">Pilotage</option><option value="towage">Towage</option><option value="agency">Agency</option><option value="other">Other</option></select><input name="versionNo" required type="number" min="1" defaultValue="1"/><input name="currency" required maxLength={3} placeholder="USD"/><input name="effectiveFrom" required type="date"/><input name="effectiveTo" type="date"/><select name="roundingMode" defaultValue="half_up"><option value="half_up">Half up</option><option value="up">Up</option><option value="down">Down</option></select><input name="decimalPlaces" type="number" min="0" max="6" defaultValue="2"/><select name="primarySourceId" required><option value="">Primary source</option>{(sources ?? []).map((s) => <option key={s.id} value={s.id}>{s.title} · {s.authority}</option>)}</select><select name="supersedesId" defaultValue=""><option value="">Supersedes no published version</option>{(publishedVersions ?? []).map((v) => { const t = setById.get(v.tariff_set_id); return <option key={v.id} value={v.id}>Supersedes {t ? `${t.port_locode} · ${t.name}` : "set"} · v{v.version_no} (from {v.effective_from})</option>; })}</select><textarea name="notes" placeholder="Review notes"/><button type="submit">Create draft</button>
       </form></Panel>
     </div>
 

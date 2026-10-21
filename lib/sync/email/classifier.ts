@@ -13,34 +13,39 @@ import type { Classifier, ClassifyResult, EmailMsg } from "./types";
 // part size (8000 + overlap) — it is a safety net, not a truncation point.
 const PER_EMAIL_CHARS = 8800;
 
+// Every field is REQUIRED and nullable — never .optional(). OpenAI-compatible providers in strict
+// structured-output mode (OpenAI, Groq) reject a schema whose `required` list omits any property
+// (18 Oct 2026: Groq openai/gpt-oss-20b refused every batch). A field the email does not state is
+// returned as null; the rest of the pipeline already treats null and missing alike.
+// scripts/sync-classifier-schema-check.ts asserts this on the exact request body.
 const CargoItem = z.object({
-  ref: z.string().nullable().optional().describe("broker reference if present, e.g. CM-123"),
-  cargo_type: z.enum(["Dry Bulk", "Break Bulk"]).nullable().optional().describe("bulk = loose in holds; break bulk = bagged/bundled/palletised/unitised"),
-  commodity: z.string().nullable().optional()
+  ref: z.string().nullable().describe("broker reference if present, e.g. CM-123"),
+  cargo_type: z.enum(["Dry Bulk", "Break Bulk"]).nullable().describe("bulk = loose in holds; break bulk = bagged/bundled/palletised/unitised"),
+  commodity: z.string().nullable()
     .describe("the commodity ITSELF, without packaging words — 'Brucite Ore in big bags' → 'Brucite Ore'; 'bagged urea' → 'Urea'; 'wheat in bulk' → 'Wheat'"),
-  packaging: z.string().nullable().optional()
+  packaging: z.string().nullable()
     .describe("how the cargo is packed, split out of the description: 'bags', 'big bags', 'bulk', 'bundles', 'drums', 'pallets'…; null if not stated"),
-  qty_min_mt: z.number().nullable().optional().describe("min quantity in metric tonnes, number only"),
-  qty_max_mt: z.number().nullable().optional(),
-  load_port: z.string().nullable().optional(),
-  load_zone: z.string().nullable().optional().describe("zone code if known, e.g. B.SEA, AG, NCONT"),
-  disch_port: z.string().nullable().optional(),
-  disch_zone: z.string().nullable().optional(),
-  laycan_from: z.string().nullable().optional().describe("ISO date YYYY-MM-DD, or 'SPOT'/'PPT' if prompt/spot"),
-  laycan_to: z.string().nullable().optional().describe("ISO date YYYY-MM-DD"),
-  freight_idea: z.number().nullable().optional().describe("freight idea in USD/MT, number only"),
-  commission_pct: z.number().nullable().optional(),
+  qty_min_mt: z.number().nullable().describe("min quantity in metric tonnes, number only"),
+  qty_max_mt: z.number().nullable(),
+  load_port: z.string().nullable(),
+  load_zone: z.string().nullable().describe("zone code if known, e.g. B.SEA, AG, NCONT"),
+  disch_port: z.string().nullable(),
+  disch_zone: z.string().nullable(),
+  laycan_from: z.string().nullable().describe("ISO date YYYY-MM-DD, or 'SPOT'/'PPT' if prompt/spot"),
+  laycan_to: z.string().nullable().describe("ISO date YYYY-MM-DD"),
+  freight_idea: z.number().nullable().describe("freight idea in USD/MT, number only"),
+  commission_pct: z.number().nullable(),
   // Rates/laytime — NOT load terms. "8000/3000", "4000 SSHEX", "1500 MT/day" go here.
-  load_rate: z.string().nullable().optional().describe("load rate as written, e.g. '4000 SSHEX' — NOT a term code"),
-  disch_rate: z.string().nullable().optional().describe("discharge rate as written, e.g. '3000'"),
-  laytime_structure: z.string().nullable().optional().describe("combined load/disch rate string, e.g. '8000 / 3000 SSHEX'"),
+  load_rate: z.string().nullable().describe("load rate as written, e.g. '4000 SSHEX' — NOT a term code"),
+  disch_rate: z.string().nullable().describe("discharge rate as written, e.g. '3000'"),
+  laytime_structure: z.string().nullable().describe("combined load/disch rate string, e.g. '8000 / 3000 SSHEX'"),
   // Only a real charter-terms code — leave null if the email only quotes rates.
   load_terms: z.enum(["FIO", "FIOT", "FIOST", "FIOS", "FIOS LSD", "Liner Terms", "FO", "FILO", "LIFO", "FLT"])
-    .nullable().optional().describe("ONLY a charter-terms code; null if the email only gives rates"),
-  asb_regime: z.enum(["GRAIN", "IMSBC", "CSS", "MULTI-PARCEL"]).nullable().optional()
+    .nullable().describe("ONLY a charter-terms code; null if the email only gives rates"),
+  asb_regime: z.enum(["GRAIN", "IMSBC", "CSS", "MULTI-PARCEL"]).nullable()
     .describe("classify the commodity's regime; leave null only if you truly cannot tell"),
-  broker: z.string().nullable().optional().describe("broker/desk name or email, if the sender identifies one"),
-  notes: z.string().nullable().optional().describe("anything else: firm/indication, WOG, SF, options, per-clauses"),
+  broker: z.string().nullable().describe("broker/desk name or email, if the sender identifies one"),
+  notes: z.string().nullable().describe("anything else: firm/indication, WOG, SF, options, per-clauses"),
 });
 
 const ZONE_CODES = [
@@ -49,23 +54,23 @@ const ZONE_CODES = [
 ] as const;
 
 const VesselItem = z.object({
-  imo: z.string().nullable().optional().describe("the vessel's IMO number AS WRITTEN — the digits after the word 'IMO' (typically 7 digits, but capture 6–8 digit values too; never invent one)"),
-  vessel_name: z.string().nullable().optional(),
-  vessel_type: z.string().nullable().optional(),
-  dwt: z.number().nullable().optional().describe("deadweight in tonnes, number only ('17k' → 17000)"),
-  grt: z.number().nullable().optional().describe("gross tonnage (GT/GRT), number only — key for port cost calculations"),
-  nrt: z.number().nullable().optional().describe("net tonnage (NRT), number only"),
-  flag: z.string().nullable().optional(),
-  built: z.number().nullable().optional().describe("build year, 4-digit"),
-  open_port: z.string().nullable().optional().describe("port where the vessel is/becomes open, e.g. 'Mostaganem'"),
-  open_date: z.string().nullable().optional().describe("date the vessel is/becomes OPEN (availability date), ISO yyyy-mm-dd — from 'open 10-12 Aug' take the first day; null if not stated; never use the email's send date"),
-  open_country: z.string().nullable().optional().describe("country of the open port, e.g. 'Algeria'"),
-  open_zone: z.enum(ZONE_CODES).nullable().optional().describe("zone code of the open position (see ZONES glossary)"),
-  direction: z.string().nullable().optional().describe("where she wants to go, as written, e.g. 'Black Sea or Turkey'"),
-  dest_zones: z.array(z.enum(ZONE_CODES)).nullable().optional().describe("zone codes for the desired direction, e.g. Black Sea/Turkey → ['B.SEA','E.MED']"),
+  imo: z.string().nullable().describe("the vessel's IMO number AS WRITTEN — the digits after the word 'IMO' (typically 7 digits, but capture 6–8 digit values too; never invent one)"),
+  vessel_name: z.string().nullable(),
+  vessel_type: z.string().nullable(),
+  dwt: z.number().nullable().describe("deadweight in tonnes, number only ('17k' → 17000)"),
+  grt: z.number().nullable().describe("gross tonnage (GT/GRT), number only — key for port cost calculations"),
+  nrt: z.number().nullable().describe("net tonnage (NRT), number only"),
+  flag: z.string().nullable(),
+  built: z.number().nullable().describe("build year, 4-digit"),
+  open_port: z.string().nullable().describe("port where the vessel is/becomes open, e.g. 'Mostaganem'"),
+  open_date: z.string().nullable().describe("date the vessel is/becomes OPEN (availability date), ISO yyyy-mm-dd — from 'open 10-12 Aug' take the first day; null if not stated; never use the email's send date"),
+  open_country: z.string().nullable().describe("country of the open port, e.g. 'Algeria'"),
+  open_zone: z.enum(ZONE_CODES).nullable().describe("zone code of the open position (see ZONES glossary)"),
+  direction: z.string().nullable().describe("where she wants to go, as written, e.g. 'Black Sea or Turkey'"),
+  dest_zones: z.array(z.enum(ZONE_CODES)).nullable().describe("zone codes for the desired direction, e.g. Black Sea/Turkey → ['B.SEA','E.MED']"),
 });
 
-const BatchSchema = z.object({
+export const BatchSchema = z.object({
   results: z.array(z.object({
     index: z.number().int().describe("0-based index of the email this result is for"),
     category: z.enum(["cargo", "vessel", "mixed", "irrelevant"])

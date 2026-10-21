@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { hardNavigate } from "@/lib/auth/hard-navigate";
 import { EmailNotVerifiedError, login } from "@/sdk/auth";
 import {
   Form,
@@ -124,7 +125,7 @@ export default function LoginPage() {
       }
 
       toast.success("Welcome back! Dropping anchor in your dashboard...");
-      router.push("/dashboard");
+      hardNavigate("/dashboard");
     } catch (error) {
       console.error("Login error:", error);
 
@@ -164,7 +165,7 @@ export default function LoginPage() {
       });
       if (error) throw error;
       toast.success("Welcome back! Dropping anchor in your dashboard...");
-      router.push("/dashboard");
+      hardNavigate("/dashboard");
     } catch {
       toast.error("That code didn't match. Try again.");
     } finally {

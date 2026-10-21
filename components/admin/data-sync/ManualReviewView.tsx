@@ -26,6 +26,7 @@ import {
 } from "@/app/(admin)/admin/data-sync/actions";
 import { StagedEditDrawer } from "./StagedEditDrawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { exactPortMatch } from "@/lib/ports/port-search";
 import { Badge, Btn, Card, Seg, C, btn } from "./ui";
 
 type Status = "pending" | "mapped" | "ignored";
@@ -363,6 +364,8 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
     })();
     return () => { c = true; };
   }, []);
+  // live answer to "is this a port we know?" before saving (owner, 19 Oct 2026); the server still resolves aliases
+  const openPortMatch = useMemo(() => exactPortMatch(portOptions, openPort), [portOptions, openPort]);
   const [saving, setSaving] = useState(false);
   const [matches, setMatches] = useState<MatchView[] | null | "loading">(null);
   const [sendingTeaser, setSendingTeaser] = useState(false);
@@ -497,10 +500,20 @@ function VesselModal({ row, onClose, onDone }: { row: VesselQueueRow; onClose: (
         </div>
         <div>
           <label style={lab}>Open port {row.open_country && <span style={{ color: C.ink3, fontWeight: 400 }}>({row.open_country})</span>}</label>
-          <input value={openPort} onChange={(e) => setOpenPort(e.target.value)} placeholder="e.g. Mostaganem" style={field} list="dsq-ports" />
+          <input value={openPort} onChange={(e) => setOpenPort(e.target.value)}
+            // a typed LOCODE becomes the port's name, which is what the server resolves
+            onBlur={() => { const m = exactPortMatch(portOptions, openPort); if (m && m.name !== openPort.trim()) setOpenPort(m.name); }}
+            placeholder="Search: e.g. Mostaganem or DZMOS" style={field} list="dsq-ports" aria-describedby="dsq-open-port-status" />
           <datalist id="dsq-ports">
             {portOptions.map((p) => <option key={p.locode} value={p.name}>{p.locode}</option>)}
           </datalist>
+          {openPort.trim() && portOptions.length > 0 && (
+            <div id="dsq-open-port-status" role="status" style={{ fontSize: 11, marginTop: 3, color: openPortMatch ? C.green : C.amber }}>
+              {openPortMatch
+                ? `✓ ${openPortMatch.name} · ${openPortMatch.locode} — saved as this port`
+                : "Not an exact port name in the database. Pick one from the list; otherwise the server tries known aliases and, failing that, keeps the text and queues it for port review."}
+            </div>
+          )}
         </div>
         <div>
           <label style={lab}>Open date <span style={{ color: C.ink3, fontWeight: 400 }}>(availability — key match factor)</span></label>

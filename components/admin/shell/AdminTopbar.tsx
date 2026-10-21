@@ -6,14 +6,14 @@
 // identity with its Super/Sub badge · "Back to platform" · Sign out.
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { hardNavigate } from "@/lib/auth/hard-navigate";
 import { logout } from "@/sdk/auth";
 import type { AdminTier } from "@/lib/admin/sections";
 
 export function AdminTopbar({ name, tier, children }: { name: string; tier: AdminTier; children?: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const [signingOut, setSigningOut] = React.useState(false);
 
@@ -22,8 +22,7 @@ export function AdminTopbar({ name, tier, children }: { name: string; tier: Admi
     setSigningOut(true);
     try {
       await logout(getSupabaseBrowserClient());
-      router.push("/auth/login");
-      router.refresh();
+      hardNavigate("/auth/login");
     } catch {
       toast.error("Couldn't sign out — please try again.");
       setSigningOut(false);
