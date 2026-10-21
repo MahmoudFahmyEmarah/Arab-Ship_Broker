@@ -82,7 +82,7 @@ begin
     'portLocode',port_code,'terminalId',terminal,'publisherId',publisher,'name','TP Terminal','scope','terminal',
     'versionNo',1,'currency','USD','effectiveFrom','2026-01-01','roundingMode','half_up','decimalPlaces',2,'primarySourceId',source1));
   perform public.pda_replace_tariff_rules(maker, tv, jsonb_build_array(
-    jsonb_build_object('code','cargo_handling','label','Cargo handling','basis','per_cargo_mt','rate',1.5,'unit','MT','priority',10,
+    jsonb_build_object('code','cargo_handling','label','Cargo handling','basis','per_cargo_mt','rate',1.5,'unit','cargo_mt','priority',10,
                        'sourceId',source1,'sourcePage','7','sourceExcerpt','Cargo handling per tonne')));
   perform public.pda_submit_tariff_version(maker, tv);
   perform public.pda_publish_tariff_version(checker, tv);
