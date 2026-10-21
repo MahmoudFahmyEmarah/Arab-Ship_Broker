@@ -235,8 +235,9 @@ async function signIn(browser: Browser, baseURL: string, seed: PdaSeed, width: n
   const page = await context.newPage();
   // the vessel position check-in modal can open at any moment for a member with an open position (it did mid-flow in
   // run pdaag-ad36da805bae and blocked every click for 10 minutes): dismiss it whenever it appears
+  // (pdaag-9430dabdfa8d: the modal re-opens; a second click waited forever) — bounded, no wait-after, never throws
   await page.addLocatorHandler(page.getByRole("dialog", { name: "Vessel position check-in" }), async (dialog) => {
-    await dialog.getByRole("button", { name: "Remind me later" }).click();
+    await dialog.getByRole("button", { name: "Remind me later" }).click({ timeout: 10_000, noWaitAfter: true }).catch(() => undefined);
   });
   await page.goto("/auth/login");
   const emailInput = page.locator('input[name="email"]');

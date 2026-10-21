@@ -17,6 +17,7 @@ export default defineConfig({
   expect: { timeout: 90_000 },
   use: {
     baseURL: process.env.E2E_BASE_URL ?? managedBaseURL,
+    actionTimeout: 30_000, // no single action may hang a run (pdaag-9430dabdfa8d: a handler's click waited 12 min)
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "off",
