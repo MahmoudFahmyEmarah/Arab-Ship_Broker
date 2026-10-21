@@ -9,6 +9,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isPdaTariffPackRef, isoDayOrToday } from "@/lib/pda/tariff-packs";
 import { isPdaTariffPackTab } from "@/lib/pda/tariff-pack-record";
 import { getPdaTariffPack } from "@/sdk/app/pda";
+import { logPdaLoadFailure } from "@/lib/pda/load-failure";
 
 export const metadata = { title: "Tariff pack · Arab ShipBroker" };
 
@@ -29,7 +30,8 @@ export default async function TariffPackPage({ params, searchParams }: { params:
   if (isPdaTariffPackRef(ref)) {
     try {
       record = await getPdaTariffPack(supabase, ref, on);
-    } catch {
+    } catch (error) {
+      logPdaLoadFailure("tariff pack record", error);
       failed = true;
     }
   }

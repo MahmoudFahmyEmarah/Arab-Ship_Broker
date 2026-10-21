@@ -10,6 +10,7 @@ import { loadViewerContext } from "@/lib/portal/data";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaPortCensus, listPdaPortsWorkspace } from "@/sdk/app/pda";
+import { logPdaLoadFailure } from "@/lib/pda/load-failure";
 
 export const metadata = { title: "Ports Map · Arab ShipBroker" };
 
@@ -27,7 +28,8 @@ export default async function PortsMapPage({ searchParams }: { searchParams: Pro
   try {
     const [workspace, census] = await Promise.all([listPdaPortsWorkspace(supabase, on), getPdaPortCensus(supabase)]);
     loaded = { workspace, census };
-  } catch {
+  } catch (error) {
+    logPdaLoadFailure("map", error);
     loaded = null;
   }
   if (!loaded) return <RecordMissing eyebrow="Ports Map" title="The map could not be loaded" text="Try again in a moment." back={BACK} />;

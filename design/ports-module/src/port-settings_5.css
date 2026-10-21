@@ -1,0 +1,570 @@
+/* da-calculator/pda-estimator.css - the single PDA Estimator page.
+   Merges hub + map + directory + brief + estimator into one flow.
+   All values from ASB DS tokens; 11px type floor. */
+
+.pe-shell{display:flex;height:100vh;overflow:hidden;background:var(--asb-gray-50)}
+.pe-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+
+/* ── header + jump rail (portal pattern - scrolls, never gates) ── */
+/* The page head is one line, not a block: the title, the call it is about and
+   the two actions share a row so the deal and the ports both fit a screen. */
+.pe-head{background:var(--asb-white);border-bottom:var(--bd);padding:8px 20px}
+.pe-head__top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pe-head .page-title{font-size:15px;line-height:1.2}
+.pe-head .eyebrow{display:inline}
+.pe-head__act{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.pe-jump{display:inline-flex;gap:3px;background:var(--asb-gray-50);border-radius:var(--r-chip);padding:3px}
+.pe-jump__b{font:600 12px/1 var(--asb-font);padding:7px 11px;border:none;background:none;color:var(--asb-gray-500);border-radius:3px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.pe-jump__b:hover{color:var(--asb-navy)}
+.pe-jump__b.is-on{background:var(--asb-white);color:var(--asb-navy);box-shadow:var(--sh-card)}
+.pe-body{flex:1;min-height:0;overflow-y:auto;padding:11px 20px 60px;position:relative}
+.pe-anchor{margin-top:12px;padding-top:11px;border-top:var(--bd)}
+.pe-slim{display:flex;gap:9px;align-items:flex-start;background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);padding:13px 15px;font-size:12.5px;line-height:1.5;color:var(--asb-gray-700)}
+.pe-slim b{color:var(--asb-navy)}
+.pe-slim>.ti{font-size:16px;color:var(--asb-gray-400);flex:none;margin-top:1px}
+
+/* ── DS extensions (only what the bundle does not ship) ─────────── */
+.asb-badge--neutral{background:var(--asb-gray-50);color:var(--asb-gray-700)}
+.pe-link{padding:4px 6px;font-size:var(--fs-body);color:var(--asb-blue);border:0;background:none;box-shadow:none;min-height:28px}
+.pe-link:hover{background:var(--asb-blue-light);box-shadow:none;transform:none}
+.pe-dot{width:7px;height:7px;border-radius:2px;flex:none;display:inline-block}
+.pe-muted{font-size:var(--fs-label);color:var(--asb-gray-500)}
+
+/* filter rail - the DS FilterBar plus the two controls it takes as children.
+   Input forwards className to the inner <input>, so the flex constraint has to
+   sit on the .asb-search WRAPPER - that is the actual flex child of the bar. */
+.asb-filter-bar{margin-bottom:12px}
+.asb-filter-bar .asb-search{flex:1 1 210px;min-width:0;max-width:300px}
+.asb-filter-bar .asb-search .asb-input{width:100%;max-width:none;flex:1 1 auto}
+.pe-selw{flex:0 1 170px;min-width:0;width:auto}
+
+/* ── map ──────────────────────────────────────────────────────── */
+.pe-map{height:clamp(320px,46vh,520px);border:var(--bd);border-radius:var(--r-card);overflow:hidden;position:relative;background:#0b1a2e}
+.pe-map__host{position:absolute;inset:0}
+.pe-map__legend{position:absolute;left:10px;bottom:10px;z-index:500;background:rgba(255,255,255,.94);border-radius:var(--r-card);padding:7px 9px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:calc(100% - 20px);box-shadow:var(--sh-card)}
+.pe-map__lk{display:inline-flex;align-items:center;gap:5px;font-size:var(--fs-label);color:var(--asb-navy)}
+.pe-map__hint{position:absolute;right:10px;top:10px;z-index:500;background:rgba(13,37,69,.88);color:#fff;border-radius:var(--r-card);padding:6px 10px;font-size:var(--fs-label);letter-spacing:0.02em}
+
+/* ── port cards ───────────────────────────────────────────────── */
+.pe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:10px;margin-top:12px}
+.pe-card{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);padding:11px 13px 12px;cursor:pointer;text-align:left;font-family:inherit;display:flex;flex-direction:column;gap:7px;transition:border-color var(--t-fast),box-shadow var(--t-fast)}
+.pe-card:hover{border-color:var(--asb-blue);box-shadow:var(--sh-card)}
+.pe-card.is-on{border-color:var(--asb-blue);box-shadow:0 0 0 2px rgba(24,95,165,.14)}
+.pe-card__hd{display:flex;align-items:flex-start;gap:8px}
+.pe-card__n{flex:1;min-width:0}
+.pe-card__name{font-size:14px;font-weight:600;color:var(--asb-navy);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-card__sub{font-size:11px;color:var(--asb-gray-700);letter-spacing:0.04em;text-transform:uppercase;margin-top:1px}
+.pe-card__row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--asb-gray-700)}
+.pe-card__da{font-size:14px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums}
+.pe-card__foot{display:flex;align-items:center;gap:7px;flex-wrap:wrap;border-top:1px solid var(--ccx-line2,#EEF1F5);padding-top:7px;margin-top:auto}
+.pe-empty{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);padding:34px 20px;text-align:center;color:var(--asb-gray-500);font-size:13px}
+.pe-empty b{display:block;color:var(--asb-navy);font-size:14px;margin-bottom:4px}
+
+/* ── section shell ────────────────────────────────────────────── */
+.pe-sec{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);margin-bottom:11px;overflow:hidden}
+.pe-sec__hd{display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid var(--ccx-line2,#EEF1F5)}
+.pe-sec__t{font-size:13px;font-weight:600;color:var(--asb-navy);flex:0 0 auto;white-space:nowrap}
+.pe-sec__h{font-size:11px;color:var(--asb-gray-500);letter-spacing:0.04em;text-transform:uppercase}
+.pe-sec__bd{padding:12px 13px}
+.pe-sec__ic{color:var(--asb-blue);display:flex;flex:none}
+
+/* ── port brief ───────────────────────────────────────────────── */
+.pe-hero{background:var(--asb-navy);color:#fff;border-radius:var(--r-card);padding:15px 17px 16px;margin-bottom:11px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.pe-hero__n{flex:1;min-width:200px}
+.pe-hero__name{font-size:23px;font-weight:600;letter-spacing:-0.01em;line-height:1.15}
+.pe-hero__sub{font-size:12px;color:rgba(255,255,255,.72);margin-top:3px;letter-spacing:0.04em;text-transform:uppercase}
+.pe-hero__tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.pe-hero__tag{font-size:11px;font-weight:600;letter-spacing:0.03em;border-radius:3px;padding:3px 7px;background:rgba(255,255,255,.12);color:#fff}
+.pe-hero__da{text-align:right}
+.pe-hero__da .k{font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:rgba(255,255,255,.66)}
+.pe-hero__da .v{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15;margin-top:2px}
+.pe-hero__da .h{font-size:11px;color:rgba(255,255,255,.6);margin-top:2px}
+.pe-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:1px;background:var(--asb-gray-200)}
+.pe-fact .k{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--asb-gray-500);line-height:1.2}
+.pe-fact .v{font-size:13.5px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums;margin-top:1px}
+.pe-fact .v small{font-size:11px;font-weight:500;color:var(--asb-gray-700)}
+.pe-lim{display:flex;flex-direction:column;gap:7px}
+.pe-lim__r{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--asb-gray-700);line-height:1.5}
+.pe-lim__r b{color:var(--asb-navy)}
+.pe-lim__r .ti{color:var(--asb-gray-500);font-size:14px;margin-top:1px;flex:none}
+.pe-prov{display:flex;flex-direction:column;gap:1px;background:var(--asb-gray-200)}
+.pe-prov__r{background:var(--asb-white);padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pe-prov__rk{width:22px;height:22px;border-radius:99px;background:var(--asb-gray-50);color:var(--asb-gray-700);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.pe-prov__r:first-child .pe-prov__rk{background:var(--asb-blue-light);color:var(--asb-blue)}
+.pe-prov__n{flex:1;min-width:130px}
+.pe-prov__nm{font-size:13px;font-weight:600;color:var(--asb-navy);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pe-prov__hq{font-size:11px;color:var(--asb-gray-700);margin-top:1px}
+.pe-terms{display:flex;flex-wrap:wrap;gap:6px}
+.pe-term{background:var(--asb-gray-50);border-radius:var(--r-card);padding:8px 11px;min-width:126px;flex:1 1 126px}
+.pe-term__n{font-size:12.5px;font-weight:600;color:var(--asb-navy)}
+.pe-term__d{font-size:11px;color:var(--asb-gray-700);margin-top:2px;line-height:1.4}
+
+/* ── attach + estimate ───────────────────────────────────────── */
+.pe-attach{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pe-pick{display:flex;flex-direction:column;gap:6px;max-height:288px;overflow-y:auto;padding-right:2px}
+.pe-pk{display:flex;align-items:center;gap:9px;background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);padding:8px 10px;cursor:pointer;text-align:left;font-family:inherit;transition:border-color var(--t-fast)}
+.pe-pk:hover:not(:disabled){border-color:var(--asb-blue)}
+.pe-pk:disabled{opacity:.45;cursor:not-allowed}
+.pe-pk.is-on{border-color:var(--asb-blue);background:var(--asb-blue-light)}
+.pe-pk__box{width:16px;height:16px;border-radius:3px;border:1px solid var(--asb-gray-400);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;background:var(--asb-white)}
+.pe-pk.is-on .pe-pk__box{background:var(--asb-blue);border-color:var(--asb-blue)}
+.pe-pk__n{flex:1;min-width:0}
+.pe-pk__nm{font-size:12.5px;font-weight:600;color:var(--asb-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-pk__m{font-size:11px;color:var(--asb-gray-700);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-cap{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--asb-gray-700);background:var(--asb-gray-50);border-radius:var(--r-card);padding:7px 10px;margin-top:9px}
+.pe-cap b{color:var(--asb-navy)}
+.pe-cap.is-full{background:var(--asb-amber-bg);color:var(--asb-admin-fg,#7A5B10)}
+
+/* The voyage cost step is read, not filled in, so it is set at roughly 40% of
+   the height it was: tighter rows, one line per call, and the per-call cards
+   carrying their day field on the same line as the name. */
+.pe-case{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);margin-bottom:5px;overflow:hidden}
+/* Two calls, two halves: load left, discharge right, so the pair is read
+   against each other rather than scrolled through one after the other. */
+.pe-cases{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;align-items:start}
+.pe-cases>.pe-case{margin-bottom:0;min-width:0}
+@media (max-width:1100px){.pe-cases{grid-template-columns:minmax(0,1fr)}}
+.pe-case__hd{display:flex;align-items:center;gap:9px;padding:5px 10px;flex-wrap:wrap;border-bottom:1px solid var(--ccx-line2,#EEF1F5)}
+.pe-case__n{flex:1;min-width:150px}
+.pe-case__nm{font-size:12.5px;font-weight:600;color:var(--asb-navy);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pe-case__m{font-size:11px;color:var(--asb-gray-700);margin-top:0}
+.pe-case__tot{text-align:right}
+.pe-case__tot .v{font-size:15px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums;line-height:1.15}
+.pe-case__tot .k{font-size:11px;color:var(--asb-gray-500);letter-spacing:0.05em;text-transform:uppercase}
+.pe-case__x{background:none;border:none;color:var(--asb-gray-500);cursor:pointer;padding:6px;border-radius:3px;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center}
+.pe-case__x:hover{color:var(--asb-red);background:var(--asb-red-bg)}
+.pe-case__bd{padding:5px 10px}
+.pe-days{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px;color:var(--asb-gray-700);margin-bottom:4px}
+.pe-num{width:56px;font:600 12px/1.2 var(--asb-font);color:var(--asb-navy);border:var(--bd);border-radius:var(--r-input);padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums}
+.pe-num:focus{outline:none;border:var(--bd-focus)}
+
+.pe-note{display:flex;gap:8px;align-items:flex-start;font-size:11px;line-height:1.45;color:var(--asb-gray-700);background:var(--asb-gray-50);border-radius:var(--r-card);padding:6px 9px}
+.pe-note.is-warn{background:var(--asb-admin-bg,#FBF2DF);color:var(--asb-admin-fg,#7A5B10);border:0.5px solid var(--asb-admin-divider,#E6D8B0)}
+.pe-note b{color:inherit}
+.pe-note .ti{font-size:14px;margin-top:1px;flex:none}
+
+.pe-cta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);padding:11px 13px;margin-top:11px}
+.pe-cta__t{flex:1;min-width:170px;font-size:12.5px;color:var(--asb-gray-700);line-height:1.45}
+.pe-cta__t b{display:block;color:var(--asb-navy);font-size:13.5px;margin-bottom:2px}
+
+/* ── third-party amendments on the calculated PDA ─────────────── */
+.pe-role{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--asb-white);border:var(--bd);border-left:3px solid var(--asb-blue);border-radius:var(--r-card);padding:10px 13px;margin-bottom:11px}
+.pe-role.is-agent{border-left-color:var(--asb-grain);background:var(--asb-grain-bg)}
+.pe-role>.ti{font-size:16px;color:var(--asb-blue);flex:none}
+.pe-role.is-agent>.ti{color:var(--asb-grain)}
+.pe-role__t{flex:1;min-width:180px;font-size:12.5px;line-height:1.45;color:var(--asb-gray-700)}
+.pe-role__t b{color:var(--asb-navy)}
+.pe-amend{border:0.5px solid var(--asb-amber);background:var(--asb-amber-bg);border-radius:var(--r-card);margin-bottom:10px;overflow:hidden}
+.pe-amend__hd{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px}
+.pe-amend__hd>.ti{font-size:14px;color:var(--asb-amber);flex:none}
+.pe-amend__t{font-size:12.5px;color:var(--asb-admin-fg,#7A5B10)}
+.pe-amend__t b{color:var(--asb-navy)}
+.pe-amend__d{display:flex;align-items:baseline;gap:6px;font-size:13px;color:var(--asb-gray-700);font-variant-numeric:tabular-nums;margin-left:auto}
+.pe-amend__d b{font-size:15px;color:var(--asb-navy)}
+.pe-amend__d em{font-style:normal;font-weight:600;font-size:12px}
+.pe-amend__d em.is-up{color:var(--asb-red)}
+.pe-amend__d em.is-down{color:var(--asb-green)}
+.pe-amend__list{display:flex;flex-direction:column;gap:1px;background:var(--asb-gray-200)}
+.pe-amend__r{background:var(--asb-white);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.pe-amend__n{flex:1;min-width:170px}
+.pe-amend__lbl{font-size:13px;font-weight:600;color:var(--asb-navy)}
+.pe-amend__diff{font-size:12px;color:var(--asb-gray-700);margin-top:2px}
+.pe-amend__diff s{color:var(--asb-red)}
+.pe-amend__diff b{color:var(--asb-green)}
+.pe-amend__note{font-size:12px;color:var(--asb-gray-700);font-style:italic;margin-top:3px;line-height:1.45}
+.pe-amend__by{font-size:11px;color:var(--asb-gray-500);margin-top:3px}
+.pe-amend__act{display:flex;gap:6px;flex-wrap:wrap}
+
+@media (max-width:900px){
+  .pe-shell{height:auto;overflow:visible}
+  .pe-main{min-height:0}
+  .pe-body{overflow-y:visible;padding:12px 13px 90px}
+  .pe-head{padding:11px 13px 12px}
+  .pe-attach{grid-template-columns:1fr}
+  .pe-hero{padding:13px 14px 14px}
+  .pe-hero__name{font-size:20px}
+  .pe-hero__da{text-align:left}
+  .pe-head__act{width:100%;margin-left:0}
+  .pe-jump{flex:1}
+  .pe-jump__b{flex:1}
+}
+@media (max-width:640px){
+  .pe-grid{grid-template-columns:1fr}
+  .pe-map{height:300px}
+}
+
+/* ── layout-only helpers (no DS equivalent) ───────────────────── */
+.pe-frow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pe-more{margin-top:10px;text-align:center}
+.pe-cmp__scroll{overflow-x:auto}
+/* .asb-table sits inside .pe-sec cards, so it drops its own frame there */
+.pe-sec .asb-table{border:0;border-radius:0;box-shadow:none}
+/* The voyage table is a summary, so its rows are tight. */
+.pe-lines td,.pe-lines th{vertical-align:middle;padding-top:5px;padding-bottom:5px;font-size:12px}
+.pe-lines td:last-child{width:1%;white-space:nowrap}
+.pe-lines tr.is-tot td{font-weight:600;color:var(--asb-navy);background:var(--asb-gray-50)}
+.pe-lines tr.is-low td{background:var(--asb-green-bg)}
+.pe-lines tr.is-amended td{background:var(--asb-blue-light)}
+
+/* ── step titles (numbered, but purely typographic - nothing gates) ── */
+/* A step's head. The fold control is the title itself, and a folded step keeps a
+   one-line summary so nothing is lost by tidying it away. No numbers: titles
+   carry the order, so the steps can be shuffled without renumbering. */
+.pe-secttl{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-size:14px;font-weight:600;color:var(--asb-navy);margin:0 0 7px}
+.pe-secttl.is-folded{margin-bottom:11px;padding-bottom:8px;border-bottom:var(--bd)}
+.pe-secttl__f{font:inherit;font-size:14px;font-weight:600;color:var(--asb-navy);background:none;border:0;padding:0;cursor:pointer;display:flex;align-items:center;gap:6px}
+.pe-secttl__f .ti{font-size:14px;color:var(--asb-gray-500)}
+.pe-secttl__s{font-size:12px;font-weight:400;color:var(--asb-gray-700);flex:1 1 200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The cost step leads with its answer: one card per call, load on the left.
+   The money sits beside the port, not under it: the port names the call, the
+   figure answers it, and the card is one line shorter for it. */
+.pe-pdas{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:9px;margin-bottom:11px}
+.pe-pda{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);padding:9px 12px 10px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;column-gap:10px}
+.pe-pda__r{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--asb-blue);grid-column:1/-1}
+.pe-pda__p{font-size:13px;font-weight:600;color:var(--asb-navy);margin-top:1px;grid-column:1;min-width:0}
+.pe-pda__v{font-size:19px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums;line-height:1.15;grid-column:2;grid-row:2;text-align:right;white-space:nowrap}
+.pe-pda__v.is-gap{font-size:14px;color:var(--asb-amber)}
+.pe-pda__d{font-size:11px;color:var(--asb-gray-500);margin-top:1px;grid-column:1/-1}
+/* Voyage port cost: the screen split in two, load left and discharge right,
+   each call on ONE line - role, port, days, figure. */
+.pe-split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.pe-half{min-width:0;display:flex;align-items:baseline;gap:8px;padding:7px 11px;border:var(--bd);border-radius:var(--r-card);background:var(--asb-white);white-space:nowrap}
+.pe-half__r{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--asb-blue);flex:none}
+.pe-half__p{font-size:13px;font-weight:600;color:var(--asb-navy);min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pe-half__d{font-size:11.5px;color:var(--asb-gray-500);flex:none;margin-left:auto}
+.pe-half__v{font-size:14px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums;flex:none}
+.pe-half__v.is-gap{font-size:12px;font-weight:400;color:var(--asb-amber)}
+.pe-split__tot{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:9px;padding-top:9px;border-top:1px solid var(--asb-gray-200)}
+.pe-split__tot .k{font-size:12.5px;color:var(--asb-gray-700);margin-right:auto}
+.pe-split__tot .d{font-size:11.5px;color:var(--asb-gray-500)}
+.pe-split__tot .v{font-size:18px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums}
+.pe-split__tot .v.is-gap{font-size:13px;font-weight:400;color:var(--asb-amber)}
+.pe-split__tot .m{font-size:11.5px;color:var(--asb-gray-500)}
+@media (max-width:900px){.pe-split{grid-template-columns:minmax(0,1fr)}}
+.pe-secttl__n{width:20px;height:20px;border-radius:var(--r-round);background:var(--asb-navy);color:#fff;font-size:var(--fs-label);font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.pe-secttl__h{font-size:var(--fs-body);font-weight:400;color:var(--asb-gray-700);flex:1 1 200px;min-width:0}
+.pe-secttl--sub{font-size:13.5px;margin-top:16px}
+
+/* ── the deal: two records side by side ─────────────────────────── */
+.pe-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+.pe-facts--flush{margin:10px -13px -12px}
+/* typeahead pick */
+.pe-sec--pick{overflow:visible}
+.pe-ta{position:relative}
+.pe-ta__hint{font-size:11.5px;color:var(--asb-gray-500);margin-top:7px;line-height:1.45}
+.pe-sug{margin-top:6px;background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);max-height:252px;overflow-y:auto;padding:4px}
+.pe-sug__o{display:block;width:100%;text-align:left;background:none;border:0;border-radius:4px;padding:7px 9px;cursor:pointer;font-family:inherit}
+.pe-sug__o.is-cur{background:var(--asb-blue-light)}
+.pe-sug__none{padding:9px;font-size:12px;color:var(--asb-gray-500)}
+/* The selection sits ON the title line: the chosen cargo or ship is what the
+   panel is about, so it is not repeated as a banner underneath. That returns the
+   whole row of height the banner used to take. */
+.pe-chosen{display:flex;align-items:center;gap:10px;background:var(--asb-blue-light);border:1px solid var(--asb-blue);border-radius:var(--r-card);padding:8px 10px}
+/* The pill wraps. It does not depend on a clamp that needs display:-webkit-box
+   to engage: that silently computed to flow-root here, so overflow:hidden simply
+   cut the route and the laycan off one line. The head has the room, so the pill
+   takes what it needs and the title keeps its own width. */
+.pe-chosen--inline{padding:3px 4px 3px 9px;gap:6px;border-radius:6px;margin-left:auto;min-width:0;flex:0 1 auto;max-width:74%}
+.pe-chosen--inline .pe-chosen__n{font-size:11.5px;line-height:1.35;min-width:0;white-space:normal;overflow:visible}
+/* The meta line carries its own nowrap and ellipsis for the search list, where
+   one line per option is right. Inside the head it must wrap with the pill. */
+.pe-chosen--inline .pe-pk__m,.pe-chosen--inline .pe-pk__nm{white-space:normal;overflow:visible;text-overflow:clip}
+.pe-chosen--inline .pe-chosen__n b,.pe-chosen--inline .pe-chosen__n strong{font-size:12px}
+.pe-chosen--inline .pe-chosen__n div{display:inline;margin-left:6px;color:var(--asb-gray-700)}
+.pe-chosen--inline .pe-chosen__x{width:19px;height:19px;font-size:11px}
+/* Nothing in a fact cell is clipped: these carry the controls that let a broker
+   supply a missing fundamental, so the cell grows to its content and the value
+   wraps rather than losing a word. Compaction comes from type and padding. */
+/* No cap on the facts. A capped scroll region always shows a sliver of the next
+   cell at rest, which reads as a broken cell rather than as more to scroll, and
+   these cells carry the controls for supplying a missing fundamental. Height is
+   bought with type and padding instead. */
+.pe-sec--sel .pe-sec__bd{padding:0}
+/* The affordance sits ON the value line. As a block sibling it made its own line
+   box, so half the cells were 64px against the others' 44px, and it was that
+   unevenness, not padding, that made the panel tall. */
+/* The affordance rides on the LABEL line, which has the free width: the value
+   plus the button do not fit one line (130px + 62px against 152px), so putting
+   it after the value always wrapped and made the whole grid row tall. */
+.pe-fact{background:var(--asb-white);padding:4px 9px;min-height:44px;box-sizing:border-box;line-height:1.3;position:relative}
+.pe-fact .k{padding-right:68px}
+.pe-fact .v{display:inline}
+.pe-fact .pe-tolink{position:absolute;top:3px;right:9px;margin:0;font-size:11px;line-height:1.2;padding:0;border:0;background:none}
+.pe-fact .v{font-size:13.5px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums;margin-top:1px}
+.pe-fact .v small,.pe-fact .v a,.pe-fact .v button{font-size:11px}
+/* Half the height for the facts: two rows of compact cells rather than tall
+   ones, so the deal and the ports fit one screen together. */
+.pe-sec--sel .pe-facts--flush{margin:0}
+/* Wider fact columns so a value and its qualifier sit on one line: the uneven
+   two-line cells were what made the panel tall. */
+.pe-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:1px;background:var(--asb-gray-200)}
+.pe-fact{background:var(--asb-white);padding:5px 9px}
+.pe-chosen__n{flex:1;min-width:0}
+.pe-chosen__x{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:0;border-radius:4px;background:none;color:var(--asb-gray-500);cursor:pointer;font-size:13px}
+.pe-chosen__x:hover{background:rgba(13,37,69,.08);color:var(--asb-navy)}
+/* A text fact holds one line: a long value (a laycan window, a terms string)
+   truncates with its full text on hover rather than making the cell tall. */
+.pe-fact--txt{font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+/* missing fundamentals - flagged, and taken by hand */
+.pe-fact--gap{background:#FDF3F2;box-shadow:inset 0 0 0 1px var(--asb-red,#C0392B)}
+.pe-fact--gap .k{color:var(--asb-red,#C0392B)}
+.pe-fact--gap .k .ti{font-size:11px;vertical-align:0}
+.pe-fact__in{display:flex;align-items:baseline;gap:4px;margin-top:3px;min-width:0}
+.pe-fact__in small{font-size:11px;color:var(--asb-gray-500)}
+.pe-num--sm{flex:1 1 auto;width:100%;min-width:0;padding:3px 6px;font-size:13px}
+.pe-fact__in small{flex:none}
+.pe-fact--gap .pe-num--sm{border-color:var(--asb-red,#C0392B);background:var(--asb-white)}
+.pe-fact__need{font-size:11px;line-height:1.3;color:var(--asb-red,#C0392B);margin-top:4px}
+.pe-fact--set .v .pe-set{color:var(--asb-blue);font-weight:500}
+.pe-fact--ask{background:var(--asb-blue-light);box-shadow:inset 0 0 0 1px var(--asb-blue)}
+.pe-ask{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--asb-navy);margin-top:6px}
+.pe-ask__b{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.pe-ask__x{font-size:11px;padding:3px 7px;min-height:24px;white-space:nowrap}
+.pe-ask__c{padding:1px 3px;font-size:11px;min-height:0;margin-top:2px}
+.pe-tolink{padding:1px 3px;font-size:11px;min-height:0;margin-top:3px}
+.pe-fact--set .v .pe-set--rec{color:var(--asb-green)}
+.pe-slim--warn{border-color:var(--asb-red,#C0392B);background:#FDF3F2;color:var(--asb-navy)}
+.pe-slim--warn .ti{color:var(--asb-red,#C0392B)}
+/* The fit panel takes the left half of the deal section. Its notes are full
+   sentences, so half the width means they wrap and the panel is taller than the
+   full-width stack it replaced: that is the cost of the narrower measure, and it
+   is why the outcome now sits beside it rather than under it.
+   The verdict sits ABOVE its note rather than beside it. Inline badges are
+   resolved per row, so three findings began at three different indents, and a
+   shared badge column would have cost 142px of a 315px measure. Stacked, every
+   note starts at the same edge and gets the full width. */
+#pe-deal{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;align-items:start}
+#pe-deal>*{grid-column:1/-1;min-width:0}
+#pe-deal>.pe-sec--half{grid-column:1/2;margin-top:0}
+
+.pe-sec--half{min-width:0}
+/* The fit panel and the outcome are one row of equal height: the findings
+   scroll inside their own panel rather than making the row as tall as the
+   longest note, which is what pushed the ports section off the screen. */
+/* No cap. Matching the card beside it hid 146px of findings, so a broker read
+   "3 checks" and could see one. A finding a broker never sees is worse than an
+   uneven row, and these are the checks that say whether the ship fits at all. */
+#pe-deal>.pe-sec--half{align-self:start}
+.pe-sec--half{min-width:0;display:flex;flex-direction:column}
+.pe-sec--half .pe-sec__bd{flex:1;min-height:0;overflow-y:auto}
+.pe-checks{display:flex;flex-direction:column;gap:6px}
+/* A finding is its verdict, with the reason on demand. */
+.pe-check{display:flex;flex-direction:column;gap:4px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--asb-gray-700);padding:6px 9px;background:var(--asb-gray-50);border:0;border-radius:7px;min-width:0;width:100%;text-align:left;font-family:inherit;cursor:pointer}
+.pe-check:hover{background:var(--asb-gray-100)}
+.pe-check__hd{display:flex;align-items:center;gap:7px;width:100%}
+.pe-check__hd .ti{margin-left:auto;font-size:12px;color:var(--asb-gray-500)}
+.pe-check__n{text-wrap:pretty;min-width:0}
+.pe-check>.asb-badge{flex:none}
+.pe-check>span{text-wrap:pretty;min-width:0}
+@media (max-width:900px){#pe-deal{grid-template-columns:minmax(0,1fr)}#pe-deal>.pe-sec--half{grid-column:1/-1}}
+/* Fit verdicts: a fixed row of equal cards under the deal title. The reason is
+   a tooltip, not an expander, so reading one never moves the row. With the
+   verdicts out of the left column the pickers own the row. */
+.pe-fit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:11px}
+.pe-fit__c{position:relative;display:flex;align-items:center;gap:6px;min-width:0;height:34px;padding:0 9px;border:1px solid var(--asb-gray-200,#E4E8EE);border-radius:var(--r-card);background:var(--asb-white,#fff);cursor:default;outline:none}
+.pe-fit__c:hover,.pe-fit__c:focus-visible,.pe-fit__c.is-open{border-color:var(--asb-gray-400,#C2C9D2)}
+.pe-fit__c>.asb-badge{flex:none;min-width:0}
+.pe-fit__i{margin-left:auto;flex:none;font-size:13px;color:var(--asb-gray-500,#8B95A3)}
+.pe-fit__tip{position:absolute;left:0;top:calc(100% + 5px);z-index:30;width:max(100%,240px);max-width:320px;padding:7px 9px;border-radius:var(--r-card);background:var(--asb-navy,#0D2B45);color:#fff;font-size:11.5px;line-height:1.42;text-wrap:pretty;opacity:0;visibility:hidden;transition:opacity var(--t-fast,120ms)}
+.pe-fit__c:hover .pe-fit__tip,.pe-fit__c:focus-visible .pe-fit__tip,.pe-fit__c.is-open .pe-fit__tip{opacity:1;visibility:visible}
+@media (max-width:900px){.pe-fit{grid-template-columns:minmax(0,1fr)}}
+
+/* A page hosted inside another page: no navigation, no top bar, no page band.
+   It renders only its own content, so a port record shown inside an estimate leg
+   is the record itself rather than a second description of the same port. */
+/* A hosted record's own way back: the page's top bar is hidden inside a tab, so
+   this is the only thing that points at where you came from. */
+.pd-embedbar{display:flex;align-items:center;gap:12px;padding:8px 18px;border-bottom:var(--bd);background:var(--asb-white);flex-wrap:wrap}
+.pd-embedbar__t{font-size:11.5px;color:var(--asb-gray-500);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pd-embedbar__t b{color:var(--asb-navy);font-weight:600}
+.pd-embedbar__k{margin-left:auto;font-size:11px;color:var(--asb-gray-400);white-space:nowrap}
+.pd-shell.is-embed,.ap-shell.is-embed{display:block;height:auto;min-height:0}
+.pd-shell.is-embed .pd-main,.ap-shell.is-embed .ap-main{margin:0;width:auto}
+.pd-shell.is-embed .pd-scroll,.ap-shell.is-embed .ap-scroll{height:auto;overflow:visible}
+.pd-shell.is-embed .pdr-wrap{padding:14px 18px 30px}
+.pd-shell.is-embed .pd-band{border-radius:0}
+.ap-shell.is-embed .ap-band{padding-top:12px}
+.pd-shell.is-embed .px-wrap{padding-bottom:30px}
+
+/* The estimator holds the module: the estimate, the ports and the agents are
+   tabs on one page, and a record opens over the top of whichever you are in. */
+.pe-tabs{display:flex;gap:2px;padding:0 24px;border-bottom:var(--bd);background:var(--asb-white)}
+.pe-tabs__b{font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border:0;border-bottom:2px solid transparent;background:none;color:var(--asb-gray-500);cursor:pointer;display:flex;align-items:center;gap:7px}
+.pe-tabs__b:hover{color:var(--asb-navy)}
+.pe-tabs__b.is-on{color:var(--asb-navy);border-bottom-color:var(--asb-blue)}
+.pe-tabs__c{font-size:11px;font-weight:700;color:var(--asb-gray-500);background:var(--asb-gray-100);padding:1px 6px;border-radius:99px}
+.pe-tabs__b.is-on .pe-tabs__c{background:var(--asb-blue-light);color:var(--asb-blue)}
+.pe-ctx{display:flex;align-items:center;gap:10px;padding:8px 24px;background:var(--asb-gray-50);border-bottom:var(--bd);font-size:11.5px;color:var(--asb-gray-700);flex-wrap:wrap}
+.pe-ctx b{color:var(--asb-navy)}
+.pe-ctx__k{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--asb-faint)}
+.pe-ctx__none{color:var(--asb-gray-500)}
+.pe-host{border:0;width:100%;display:block;background:var(--asb-gray-50);flex:1 1 auto;min-height:0}
+/* The section jumps belong to the Estimate tab, under the tab row, so they can
+   never be mistaken for the module tabs. Two controls both reading "Ports" is
+   what happens when a page-level head keeps controls for one tab. */
+.pe-jump--sub{padding:7px 24px;border-bottom:var(--bd);background:var(--asb-white)}
+@media (max-width:900px){.pe-jump--sub{padding-left:14px;padding-right:14px}}
+
+/* A record over the estimate. It is a slide-over because the estimate is still
+   the thing being worked on. */
+.pe-rec{position:fixed;top:0;right:0;bottom:0;width:min(940px,94vw);background:var(--asb-white);border-left:var(--bd);box-shadow:-10px 0 34px rgba(13,37,69,.18);z-index:60;display:flex;flex-direction:column}
+.pe-rec__hd{display:flex;align-items:center;gap:11px;padding:11px 16px;border-bottom:var(--bd);flex-shrink:0}
+.pe-rec__t{font-size:13.5px;font-weight:600;color:var(--asb-navy)}
+.pe-rec__s{font-size:11px;color:var(--asb-gray-500)}
+.pe-rec__a{margin-left:auto;display:flex;gap:7px;align-items:center}
+.pe-rec__x{font:inherit;font-size:17px;line-height:1;border:0;background:none;color:var(--asb-gray-500);cursor:pointer;padding:2px 6px}
+.pe-rec__f{flex:1;border:0;width:100%;background:var(--asb-gray-50)}
+.pe-recscrim{position:fixed;inset:0;background:rgba(13,37,69,.3);z-index:59}
+@media (max-width:900px){.pe-tabs,.pe-ctx{padding-left:14px;padding-right:14px}}
+/* Load and discharge sit side by side, load on the left, because a voyage reads
+   left to right. A third or fourth call wraps onto the next row. An open port
+   brief takes the full width, since it is a document rather than a field. */
+/* ── voyage legs ────────────────────────────────────────────────── */
+/* The legs are the taller half of the page, so their condition switches read as
+   one compact row of chips rather than a two-row block. */
+.pe-leg__call .asb-chip,.pe-leg__call button:not(.asb-btn){font-size:11px;padding:3px 7px}
+.pe-addports{padding-top:8px}
+/* Conditions, collapsed to what is on. */
+.pe-call__conds{align-items:center;gap:9px}
+.pe-conds__t{font:inherit;font-size:11px;font-weight:600;color:var(--asb-blue);background:none;border:0;padding:0;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.pe-conds__s{font-size:11px;color:var(--asb-gray-500);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-legsfoot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:9px;font-size:11.5px;color:var(--asb-gray-500)}
+.pe-legsfoot .asb-btn:last-child{margin-left:auto}
+.pe-legs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}
+.pe-leg{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);overflow:visible;min-width:0}
+.pe-leg.is-open{border-color:var(--asb-blue);grid-column:1/-1}
+@media (max-width:1080px){.pe-legs{grid-template-columns:minmax(0,1fr)}}
+.pe-leg__hd{display:flex;align-items:center;gap:10px;padding:10px 12px;flex-wrap:wrap}
+.pe-leg__n{flex:1;min-width:140px}
+.pe-leg__brief{padding:0 12px 12px;border-top:1px solid var(--ccx-line2,#EEF1F5);margin-top:2px;padding-top:12px}
+.pe-addports{margin-top:6px}
+/* borderless filter line: names with carets, one hairline under the row */
+.pe-bar{display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:2px 0 9px;border-bottom:1px solid var(--asb-gray-200);margin-bottom:10px}
+.pe-bar__t{display:flex;align-items:center;gap:5px;background:none;border:0;padding:3px 0;font:inherit;font-size:13px;color:var(--asb-gray-700);cursor:pointer}
+.pe-bar__t:hover{color:var(--asb-navy)}
+.pe-bar__t.is-set{color:var(--asb-navy);font-weight:600}
+.pe-bar__t .ti{font-size:13px;color:var(--asb-gray-400)}
+.pe-bar__t--act{color:var(--asb-blue);font-weight:600}
+.pe-bar__t--act .ti{color:var(--asb-blue)}
+.pe-bar__sep{width:1px;height:15px;background:var(--asb-gray-200)}
+.pe-bar__q{flex:1 1 150px;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--asb-gray-200);padding-bottom:2px}
+.pe-bar__q:focus-within{border-bottom-color:var(--asb-blue)}
+.pe-bar__q input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:13px;color:var(--asb-navy)}
+.pe-bar__q .ti{color:var(--asb-gray-400);font-size:13px}
+.pe-bar__n{font-size:12.5px;color:var(--asb-gray-700);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pe-bar__n b{color:var(--asb-navy)}
+.pe-hold{position:relative;display:inline-flex}
+.pe-menu{position:absolute;z-index:40;top:calc(100% + 6px);left:0;min-width:190px;max-height:248px;overflow-y:auto;overflow-x:hidden;background:var(--asb-white);border:var(--bd);border-radius:6px;box-shadow:0 10px 28px rgba(13,37,69,.16);padding:4px}
+.pe-menu--up{top:auto;bottom:calc(100% + 6px)}
+.pe-menu__o{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;border-radius:4px;padding:6px 8px;font:inherit;font-size:12.5px;color:var(--asb-navy);cursor:pointer;text-align:left}
+.pe-menu__o:hover{background:var(--asb-gray-50)}
+.pe-menu__o.is-on{background:var(--asb-blue-light);font-weight:600}
+.pe-menu__b{width:14px;height:14px;border-radius:3px;border:1px solid var(--asb-gray-400);flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
+.pe-menu__o.is-on .pe-menu__b{background:var(--asb-blue);border-color:var(--asb-blue)}
+
+/* an unpriceable port must never read as a cheap one */
+.pe-lines tr.is-unpriced td{background:var(--asb-amber-bg)}
+.pe-case__tot--none{font-size:13px;font-weight:600;color:var(--asb-amber)}
+.pe-partial{margin-left:5px;font-size:var(--fs-label);font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--asb-amber)}
+
+/* The deal reports its own outcome, at the point of the click. It lives in a
+   half-width column now, so it is a stacked card rather than a bar: the route
+   across the top, then the figure, then the action. At 343px the figure and the
+   button will not share a row without squeezing the button, so they do not
+   pretend to. A hairline separator and a right-aligned figure only mean
+   something when items share a row, so neither is used here. The card takes its
+   natural height: matching the taller panel beside it only produced a void. */
+.pe-outcome{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 10px;margin-top:11px;padding:12px 14px;background:var(--asb-white);border:var(--bd);border-left:3px solid var(--asb-green);border-radius:var(--r-card);align-content:start}
+.pe-outcome>.ti{font-size:16px;color:var(--asb-green);grid-column:1;grid-row:1}
+.pe-outcome__t{grid-column:2;grid-row:1;min-width:0;font-size:12.5px;line-height:1.5;color:var(--asb-gray-700)}
+.pe-outcome__t b{display:block;color:var(--asb-navy);font-size:13.5px}
+.pe-outcome__v{grid-column:1/-1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding-top:9px;border-top:1px solid var(--asb-gray-100)}
+.pe-outcome__v .v{font-size:19px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums;line-height:1.15}
+.pe-outcome__v .k{font-size:var(--fs-label);color:var(--asb-gray-500);letter-spacing:0.04em;text-transform:uppercase}
+.pe-outcome>.asb-btn{grid-column:1/-1;justify-self:start}
+/* The page's foot: role statement and conclusion, half each. */
+.pe-foot2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;align-items:stretch;margin-top:11px}
+.pe-foot2>*{min-width:0;margin-top:0}
+.pe-foot2 .pe-role{margin-bottom:0}
+@media (max-width:900px){.pe-foot2{grid-template-columns:minmax(0,1fr)}}
+/* Half the foot, so the conclusion keeps its stacked shape: title, then the
+   figure and the way out on one line beneath. */
+@media (min-width:900px){.pe-foot2>.pe-outcome>.pe-outcome__v{grid-column:2}.pe-foot2>.pe-outcome>.asb-btn{grid-column:2;justify-self:start}}
+
+/* per-call facts collected on the Ports step */
+.pe-leg__call{border-top:1px solid var(--ccx-line2,#EEF1F5);padding:9px 12px 11px;background:var(--asb-gray-50);border-radius:0 0 var(--r-card) var(--r-card)}
+.pe-call{display:flex;flex-direction:column;gap:8px}
+.pe-call__row{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+/* Load/discharge call fields read centred: the label sits over its own value
+   rather than off to the left of it. */
+.pe-call__f{display:flex;flex-direction:column;gap:3px;align-items:center;text-align:center}
+.pe-call__f .pe-num,.pe-call__f input,.pe-call__f select{text-align:center}
+.pe-call__k{font-size:var(--fs-label);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--asb-gray-500)}
+.pe-call__why{flex:1 1 180px;min-width:0;align-self:center}
+.pe-call__k .pe-dev{margin-left:4px;font-size:12px;vertical-align:-1px}
+.pe-dev--review{color:var(--asb-amber,#B26A00)}
+.pe-dev--out{color:var(--asb-red,#C0392B)}
+.pe-call__f--dev .pe-num{border-color:currentColor}
+.pe-call__f--dev.pe-tipwrap{color:var(--asb-navy)}
+.pe-tipwrap{position:relative}
+.pe-tip{left:0;width:340px;max-width:340px}
+.pe-tip--up{top:auto;bottom:calc(100% + 6px)}
+.pe-tipwrap:hover .pe-tip,.pe-tipwrap:focus-within .pe-tip{opacity:1}
+.pe-reset{margin-left:6px;min-height:0;padding:1px 4px;font-size:11.5px}
+
+/* berthing notes */
+.pe-bn__by{display:block;font-size:var(--fs-label);color:var(--asb-gray-500);margin-top:3px}
+.pe-bn__add{display:flex;gap:8px;align-items:flex-end;margin-top:10px;flex-wrap:wrap}
+.pe-bn__add .asb-input{flex:1 1 240px;min-width:0;resize:vertical}
+
+/* A call handed over from another surface. */
+.pe-arrival{border:0.5px solid var(--asb-blue);background:var(--asb-blue-light,#E6F1FB);border-radius:8px;padding:10px 13px;margin-bottom:14px}
+.pe-arrival__hd{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--asb-navy)}
+.pe-arrival__hd b{flex:1;min-width:0}
+.pe-arrival__x{background:none;border:none;font-size:16px;line-height:1;color:var(--asb-gray-500);cursor:pointer;padding:0 2px}
+.pe-arrival__facts{display:flex;flex-wrap:wrap;gap:14px;margin-top:7px;font-size:12px;color:var(--asb-navy)}
+.pe-arrival__facts em{display:block;font-style:normal;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--asb-gray-500);font-weight:600}
+.pe-arrival__note{font-size:11px;color:var(--asb-gray-700);margin-top:8px;line-height:1.55}
+@media (max-width:700px){.pe-arrival__facts{gap:10px 16px}}
+
+/* ── Setup tab ── */
+.pe-set{display:flex;flex-direction:column;gap:14px;max-width:920px}
+.pe-set-card{border:0.5px solid var(--asb-line,var(--asb-gray-200));border-radius:10px;background:var(--asb-white);overflow:hidden}
+.pe-set-card__hd{padding:12px 16px;border-bottom:0.5px solid var(--asb-line,var(--asb-gray-200));background:var(--asb-gray-50)}
+.pe-set-card__hd b{display:block;font-size:13.5px;color:var(--asb-navy)}
+.pe-set-card__hd span{display:block;font-size:11.5px;color:var(--asb-gray-700);line-height:1.55;margin-top:3px;text-wrap:pretty}
+.pe-set-pref{display:flex;align-items:center;gap:18px;padding:11px 16px;border-bottom:0.5px dashed var(--asb-gray-200)}
+.pe-set-pref:last-child{border-bottom:none}
+.pe-set-pref__tx{flex:1;min-width:0}
+.pe-set-pref__tx b{display:block;font-size:12.5px;font-weight:600;color:var(--asb-navy)}
+.pe-set-pref__tx span{display:block;font-size:11px;color:var(--asb-gray-500);margin-top:2px;line-height:1.5}
+.pe-set-seg{display:flex;gap:2px;flex-shrink:0}
+.pe-set-seg__b{font:inherit;font-size:11.5px;font-weight:500;color:var(--asb-gray-700);background:var(--asb-white);border:0.5px solid var(--asb-gray-200);padding:5px 11px;cursor:pointer}
+.pe-set-seg__b:first-child{border-radius:5px 0 0 5px}
+.pe-set-seg__b:last-child{border-radius:0 5px 5px 0}
+.pe-set-seg__b.is-on{background:var(--asb-navy);border-color:var(--asb-navy);color:#fff;font-weight:600}
+.pe-set-role{padding:12px 16px}
+.pe-set-rows{padding:4px 0}
+.pe-set-row{display:flex;align-items:center;gap:12px;padding:10px 16px;text-decoration:none;border-bottom:0.5px dashed var(--asb-gray-200)}
+.pe-set-row:last-child{border-bottom:none}
+.pe-set-row:hover{background:var(--asb-gray-50)}
+.pe-set-row__ic{width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--asb-blue-light,#E8F1FB);color:var(--asb-blue)}
+.pe-set-row__tx{flex:1;min-width:0}
+.pe-set-row__tx b{display:block;font-size:12.5px;color:var(--asb-navy)}
+.pe-set-row__tx span{display:block;font-size:11px;color:var(--asb-gray-700);line-height:1.5;margin-top:2px;text-wrap:pretty}
+.pe-set-row__go{color:var(--asb-gray-400);flex-shrink:0;display:flex}
+/* Compact row height, the broker's own preference. */
+.pe-shell.is-compact .pe-sec__bd{padding-top:8px;padding-bottom:8px}
+.pe-shell.is-compact .pe-set-pref,.pe-shell.is-compact .pe-set-row{padding-top:7px;padding-bottom:7px}
+@media (max-width:700px){.pe-set-pref{flex-direction:column;align-items:flex-start;gap:8px}.pe-set-seg{width:100%}.pe-set-seg__b{flex:1}}
+
+/* "Local currency beside the dollar figure - Hide": the tariff currency column
+   goes, the dollar figure and every provenance badge stay. */
+.pe-shell.is-usd-only .pe-lines--groups th:nth-child(2),.pe-shell.is-usd-only .pe-lines--groups td:nth-child(2){display:none}
+.pe-shell.is-usd-only .pe-lines--detail th:nth-child(3),.pe-shell.is-usd-only .pe-lines--detail td:nth-child(3){display:none}
+.pe-shell.is-usd-only .pe-loc{display:none}
+/* "Row height - Compact" reaches the estimate itself, not only the setup rows. */
+.pe-shell.is-compact .pe-lines td,.pe-shell.is-compact .pe-lines th{padding-top:4px;padding-bottom:4px}
+.pe-shell.is-compact .pe-case{padding-top:8px;padding-bottom:8px}
+.pe-shell.is-compact .pe-half{padding-top:6px;padding-bottom:6px}
+.pe-shell.is-compact .pe-note{margin-top:6px}

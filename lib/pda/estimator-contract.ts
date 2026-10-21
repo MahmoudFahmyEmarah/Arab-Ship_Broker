@@ -1,6 +1,17 @@
 import type { CargoView, VesselView } from "@/lib/portal/types";
 
 export type PdaEstimatorTab = "estimate" | "ports" | "agents" | "setup";
+export const PDA_ESTIMATOR_TABS: readonly PdaEstimatorTab[] = ["estimate", "ports", "agents", "setup"];
+
+/**
+ * The canonical `?tab=` contract (C2ALL-164 P1-1): every link that names a tab uses `/dashboard/ports-da?tab=<id>`;
+ * the page honours a known id on first render and keeps the URL in step with every switch. An unknown or missing
+ * value is null — the caller falls back to the member's start tab, never to a guess.
+ */
+export function parsePdaTab(raw: unknown): PdaEstimatorTab | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === "string" && (PDA_ESTIMATOR_TABS as readonly string[]).includes(value) ? (value as PdaEstimatorTab) : null;
+}
 export type PdaEstimatorDensity = "compact" | "comfortable";
 export type PdaAllocation = "vessel" | "charterer";
 

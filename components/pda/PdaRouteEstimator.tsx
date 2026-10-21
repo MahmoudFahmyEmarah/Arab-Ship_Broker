@@ -47,6 +47,8 @@ interface Props {
   bootstrap: PdaEstimatorBootstrap;
   terminals: PdaTerminalItem[];
   preferences: PdaPreferences;
+  /** the validated `?tab=` of the request (parsePdaTab); null when absent or unknown */
+  initialTab?: PdaEstimatorTab | null;
 }
 
 const TABS: Array<{ id: PdaEstimatorTab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
@@ -143,12 +145,21 @@ function routeLeg(input: {
   };
 }
 
-export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPreferences }: Props) {
+export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPreferences, initialTab = null }: Props) {
   const initialCargo = bootstrap.catalog.cargos.find((item) => item.id === bootstrap.initial.cargoId) ?? null;
   const hasHandoff = Boolean(bootstrap.initial.from || bootstrap.initial.vesselId || bootstrap.initial.cargoId
     || bootstrap.initial.loadPortLocode || bootstrap.initial.dischargePortLocode);
   const [preferences, setPreferences] = React.useState<PdaPreferences>(initialPreferences);
-  const [activeTab, setActiveTab] = React.useState<PdaEstimatorTab>(() => initialPdaTab(initialPreferences, hasHandoff));
+  const [activeTab, setActiveTab] = React.useState<PdaEstimatorTab>(() => initialPdaTab(initialPreferences, hasHandoff, initialTab));
+  // the canonical ?tab= contract (C2ALL-164 P1-1): every switch keeps the URL in step, so a reload or a shared link
+  // opens the same tab; replaceState leaves the history alone
+  const selectTab = React.useCallback((id: PdaEstimatorTab) => {
+    setActiveTab(id);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", id);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
   // the head's Verification panel (design): honest empty state until verification requests exist
   const [verifyOpen, setVerifyOpen] = React.useState(false);
   // the member's saved row height wins over the bootstrap default; it never changes a figure
@@ -208,12 +219,12 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
   const openPortAgents = (locode: string) => {
     if (!locode) return;
     setAgentsFocus(locode);
-    setActiveTab("agents");
+    selectTab("agents");
   };
   const openPortRecord = (locode: string) => {
     if (!locode) return;
     setPortsFocus(locode);
-    setActiveTab("ports");
+    selectTab("ports");
   };
   const partTokens = React.useRef({ load: 0, discharge: 0, frame: 0 });
   const requestSequence = React.useRef(0);
@@ -587,7 +598,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
           else if (event.key === "End") next = TABS.length - 1;
           else return;
           event.preventDefault();
-          setActiveTab(TABS[next]!.id);
+          selectTab(TABS[next]!.id);
           document.getElementById(`pda-tab-${TABS[next]!.id}`)?.focus();
         }}
       >
@@ -601,7 +612,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
             aria-selected={activeTab === id}
             aria-controls="pda-tabpanel"
             tabIndex={activeTab === id ? 0 : -1}
-            onClick={() => setActiveTab(id)}
+            onClick={() => selectTab(id)}
           >
             <Icon size={14} aria-hidden="true" />{label}
           </button>
@@ -619,7 +630,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       ) : activeTab === "agents" ? (
         <PdaAgentPortal mode="member" initialPort={agentsFocus} />
       ) : activeTab === "setup" ? (
-        <div className="pe-body"><PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} onOpenAgents={() => setActiveTab("agents")} /></div>
+        <div className="pe-body"><PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => selectTab("ports")} onOpenAgents={() => selectTab("agents")} /></div>
       ) : (
         <div className="pf">
           <section className={`pf-deal ${selected ? "is-selected" : ""}`} aria-label="Estimate records">

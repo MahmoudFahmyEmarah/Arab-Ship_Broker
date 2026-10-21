@@ -10,6 +10,7 @@ import { loadViewerContext } from "@/lib/portal/data";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaPortCensus, listPdaPortsWorkspace } from "@/sdk/app/pda";
+import { logPdaLoadFailure } from "@/lib/pda/load-failure";
 
 export const metadata = { title: "Port Directory · Arab ShipBroker" };
 
@@ -34,7 +35,8 @@ export default async function PortDirectoryPage({ searchParams }: { searchParams
   try {
     const [census, workspace] = await Promise.all([getPdaPortCensus(supabase), listPdaPortsWorkspace(supabase, on)]);
     loaded = { census, workspace };
-  } catch {
+  } catch (error) {
+    logPdaLoadFailure("directory", error);
     loaded = null;
   }
   if (!loaded) return <RecordMissing eyebrow="Port Directory" title="The directory could not be loaded" text="Try again in a moment." back={BACK} />;

@@ -8,6 +8,7 @@ import { loadViewerContext } from "@/lib/portal/data";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { listPdaTariffPacks } from "@/sdk/app/pda";
+import { logPdaLoadFailure } from "@/lib/pda/load-failure";
 
 export const metadata = { title: "Tariff Layouts · Arab ShipBroker" };
 
@@ -22,7 +23,8 @@ export default async function TariffLayoutsPage({ searchParams }: { searchParams
   let packs: PdaTariffPack[] | null = null;
   try {
     packs = await listPdaTariffPacks(supabase, on);
-  } catch {
+  } catch (error) {
+    logPdaLoadFailure("tariff layouts", error);
     packs = null;
   }
   if (!packs) return <RecordMissing eyebrow="Tariff Layouts" title="The tariff library could not be loaded" text="Try again in a moment." back={{ href: `/dashboard/ports-da/tariff-packs?on=${on}`, label: "Back to Tariff Packs" }} />;

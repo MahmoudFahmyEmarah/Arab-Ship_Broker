@@ -11,6 +11,7 @@ import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPdaPortCensus, listPdaPortsWorkspace, listPdaTariffPacks } from "@/sdk/app/pda";
 import { loadPdaEstimatorPageData, type PdaEstimatorPageData } from "../bootstrap.server";
+import { logPdaLoadFailure } from "@/lib/pda/load-failure";
 
 export const metadata = { title: "Ports Module · Arab ShipBroker" };
 
@@ -35,7 +36,8 @@ export default async function PortsHubPage({ searchParams }: { searchParams: Pro
       loadPdaEstimatorPageData(supabase, {}, on),
     ]);
     loaded = { census, workspace, packs, estimator };
-  } catch {
+  } catch (error) {
+    logPdaLoadFailure("hub", error);
     loaded = null;
   }
   if (!loaded) return <RecordMissing eyebrow="Ports Module" title="The Ports Module could not be loaded" text="Try again in a moment." back={BACK} />;

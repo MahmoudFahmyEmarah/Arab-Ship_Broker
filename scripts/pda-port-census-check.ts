@@ -19,13 +19,25 @@ const suite = read("supabase/tests/pda/port_touch_census.sql");
 const sdk = read("sdk/app/pda.ts");
 
 // 1 · migration: a member read behind the estimator gate; what the boards show; small cohorts suppressed; no id
-ok(/security definer set search_path to ''/.test(migration) && /fn_app_user_id\(\) is null then raise exception 'PDA_AUTH/.test(migration) && /not public\.fn_pda_member_entitled\(\) then raise exception 'PDA_TIER/.test(migration),
+ok(/security definer set search_path to ''/.test(migration) && migration.includes("v_actor uuid := public.fn_app_user_id();") && /if v_actor is null then raise exception 'PDA_AUTH/.test(migration) && /not public\.fn_pda_member_entitled\(\) then raise exception 'PDA_TIER/.test(migration),
   "definer, empty search_path, PDA_AUTH + PDA_TIER gates");
-ok(/c\.status in \('IN', 'PARTIAL'\) and c\.review_status = 'APPROVED'/.test(migration) && /a\.status = 'OPEN' and a\.review_status = 'APPROVED'/.test(migration),
-  "only live, approved cargo and open, approved vessel availability count (what the boards already show)");
+ok(/c\.status in \('IN', 'PARTIAL'\) and c\.review_status = 'APPROVED'/.test(migration) && /a\.status = 'OPEN' and a\.review_status = 'APPROVED'/.test(migration)
+  && migration.includes("(c.refreshed_at >= v_ctx.fresh_after or (v_ctx.laycan_exception and c.laycan_to is not null and c.laycan_to >= current_date))")
+  && migration.includes("(a.refreshed_at >= v_ctx.fresh_after or (v_ctx.laycan_exception and a.open_date is not null and a.open_date >= current_date))")
+  && !/fn_market_fresh_ok\(/.test(migration.replace(/--[^\n]*/g, ""))
+  && migration.includes("join public.vessels v on v.id = a.vessel_id") && migration.includes("and not v.is_sanctioned")
+  && migration.includes("select * into v_ctx from market_private.market_request_context(v_actor);")
+  && migration.includes("(not coalesce(c.is_spot, false) or c.created_at::date >= v_ctx.cargo_active_from)") && migration.includes("(a.open_date is not null or a.created_at::date >= v_ctx.vessel_active_from)"),
+  "only what the boards show counts: status, the boards' bulk freshness / laycan predicate from the request context (no per-row helper call), the active windows, never a sanctioned vessel (C2ALL-164 P1-2)");
+ok(has(migration, "cargo_agg as (", "count(distinct listing_id) as cargo_entities", "from cargo_touches group by locode", "vessel_agg as (select locode, count(*) as vessels from vessel_touches group by locode)",
+    "left join cargo_agg ca on ca.locode = p.locode", "left join vessel_agg va on va.locode = p.locode") && !/\(select count\(\*\) from cargo_touches t where t\.locode = p\.locode/.test(migration)
+  && has(suite, "--   C9 ", "'C9 ok:", "if ms > 2000 then raise exception"),
+  "one pass per side, grouped per port and hash-joined to the ports (no correlated subquery per port); the suite pins the runtime (C9)");
+ok(has(suite, "now() - interval '400 days'", "CENSUS SANCTIONED VESSEL", "is distinct from (case when lay_exc then 3 else 0 end)", "the census must reuse fn_market_fresh_ok exactly", "laycanException"),
+  "suite C3 proves stale / laycan-ahead cargo, stale / open-ahead availability, the sanctioned exclusion and the predicate equivalence");
 ok(/fn_cl_effective_locode\(c\.load_port_locode, c\.load_ref_locode, c\.load_port_2_locode\)/.test(migration) && /c\.load_port_4_locode/.test(migration) && /c\.disch_port_4_locode/.test(migration)
   && /select distinct listing_id, btrim\(locode\) as locode, role from cargo_slots/.test(migration), "every load/discharge slot touches once per listing");
-ok(/v_min constant int := 3/.test(migration) && /select distinct a\.vessel_id as entity_id/.test(migration) && /count\(distinct t\.listing_id\)/.test(migration)
+ok(/v_min constant int := 3/.test(migration) && /select distinct a\.vessel_id as entity_id/.test(migration) && /count\(distinct listing_id\) as cargo_entities/.test(migration)
   && /pp\.entities between 1 and v_min - 1 as suppressed/.test(migration) && /pp\.vessels between 1 and v_min - 1\) as small_cell/.test(migration)
   && (migration.match(/case when not j\.suppressed and not j\.small_cell then j\.(loads|discharges|vessels) end/g) ?? []).length === 3
   && /'touches',\s+case when not j\.suppressed then j\.total end/.test(migration),

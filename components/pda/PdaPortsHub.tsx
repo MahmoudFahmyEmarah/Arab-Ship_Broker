@@ -15,6 +15,9 @@ import "./ports-module.css";
 export type PdaHubArm = "quick" | "setup";
 export const isPdaHubArm = (v: unknown): v is PdaHubArm => v === "quick" || v === "setup";
 
+/** every hub link carries the selected date, so the tool opens on the day the member is looking at (C2ALL-164 P2-2) */
+const withOn = (href: string, on: string) => `${href}${href.includes("?") ? "&" : "?"}on=${on}`;
+
 const TOOLS = [
   { href: "/dashboard/ports-da", title: "PDA Estimator", desc: "Two calls priced from the tariff that governs each port, then from quotes.", icon: Receipt },
   { href: "/dashboard/ports-da/directory", title: "Port Directory", desc: "Every port in the network, ranked by the live listings that touch it.", icon: List },
@@ -42,8 +45,8 @@ export function PdaPortsHub({ arm, census, packs, cargos, vessels, catalogUnavai
       <div className="pd-topbar">
         <nav className="pd-crumbs" aria-label="Breadcrumb">Arab ShipBroker · <b>Ports Module</b></nav>
         <nav className="pmx-arms pd-topbar__end" aria-label="Hub views">
-          <Link className={`pmx-arms__b${arm === "quick" ? " is-on" : ""}`} href="/dashboard/ports-da/hub?arm=quick" aria-current={arm === "quick" ? "page" : undefined}>Quick DA</Link>
-          <Link className={`pmx-arms__b${arm === "setup" ? " is-on" : ""}`} href="/dashboard/ports-da/hub?arm=setup" aria-current={arm === "setup" ? "page" : undefined}>Setup &amp; directory</Link>
+          <Link className={`pmx-arms__b${arm === "quick" ? " is-on" : ""}`} href={`/dashboard/ports-da/hub?arm=quick&on=${on}`} aria-current={arm === "quick" ? "page" : undefined}>Quick DA</Link>
+          <Link className={`pmx-arms__b${arm === "setup" ? " is-on" : ""}`} href={`/dashboard/ports-da/hub?arm=setup&on=${on}`} aria-current={arm === "setup" ? "page" : undefined}>Setup &amp; directory</Link>
         </nav>
       </div>
 
@@ -75,7 +78,7 @@ export function PdaPortsHub({ arm, census, packs, cargos, vessels, catalogUnavai
               {TOOLS.map((t) => {
                 const Icon = t.icon;
                 return (
-                  <Link key={t.title} className="pm-card" href={t.href}>
+                  <Link key={t.title} className="pm-card" href={withOn(t.href, on)}>
                     <span className="pm-card__ic"><Icon size={22} aria-hidden="true" /></span>
                     <span className="pm-card__body">
                       <span className="pm-card__title">{t.title} <ChevronRight size={14} aria-hidden="true" /></span>

@@ -1,0 +1,217 @@
+/* da-calculator/ports-map.css - the Ports map surface.
+ * Layered on tokens.css + map.css (platform map vocabulary: .map-popup, cluster).
+ * Adds the shell, zone-coloured port pins, zone legend, zoom control, the
+ * port popover extras and the Enlarge slide-over drawer.
+ */
+
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--asb-gray-50); }
+
+.pmap-shell { display: flex; height: 100%; overflow: hidden; }
+.pmap-main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+
+.pmap-head {
+  padding: 10px 20px; border-bottom: var(--bd); background: var(--asb-white);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; z-index: 2;
+}
+.pmap-head__actions { display: inline-flex; align-items: center; gap: 8px; }
+.pmap-count { font-size: var(--fs-body-sm); color: var(--asb-gray-500); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pmap-head .asb-btn .ti { font-size: 14px; }
+
+.pmap-canvas { flex: 1; min-height: 0; position: relative; }
+.pmap-host { position: absolute; inset: 0; background: #AAD3DF; }
+/* DS map ground: OSM raster is keyless but loud - tone it to the system palette.
+   Light = quiet desaturated chart; dark = ECDIS night (--map-ocean / --map-land). */
+.pmap-canvas .leaflet-tile-pane { filter: saturate(.28) brightness(1.06) contrast(.93); }
+.pmap-canvas.is-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(185deg) saturate(.5) brightness(.9) contrast(1.05); }
+.pmap-canvas.is-dark .pmap-host { background: var(--map-ocean); }
+.pmap-canvas.is-dark .port-name { background: rgba(12,25,41,.9); border-color: rgba(255,255,255,.22); color: #E8EEF6; }
+
+/* ── Port pin (dot + floating name label) ───────────────────────────── */
+.port-marker-wrap { position: relative; width: 12px; height: 12px; }
+.port-pin {
+  position: absolute; inset: 0; border-radius: 99px; background: var(--zc, #8B95A3);
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(13, 34, 64, 0.45);
+  transition: transform var(--t-fast);
+}
+.port-marker-wrap:hover .port-pin { transform: scale(1.25); }
+.port-marker-wrap.is-selected .port-pin { outline: 3px solid var(--zc); outline-offset: 1px; }
+.port-pin.is-grounded { box-shadow: 0 0 0 3px rgba(31, 138, 91, 0.35), 0 1px 3px rgba(13, 34, 64, 0.45); }
+.port-name {
+  position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.94); border: 0.5px solid var(--asb-gray-200);
+  border-radius: 3px; padding: 1px 6px; font-size: 11px; font-weight: 600; line-height: 1.5;
+  color: var(--asb-navy); white-space: nowrap; box-shadow: 0 1px 2px rgba(13, 34, 64, 0.12);
+  pointer-events: none;
+}
+.port-marker-wrap.is-selected .port-name { border-color: var(--zc); }
+
+/* Hot targeted-port marker: circle sized by inquiry count + rank + role glyph */
+.port-marker-wrap.is-hot { width: var(--sz, 24px); height: var(--sz, 24px); }
+.port-hot {
+  position: absolute; inset: 0; border-radius: 99px; background: var(--zc, var(--asb-blue));
+  border: 2px solid #fff; box-shadow: 0 2px 7px rgba(13, 34, 64, 0.5);
+  display: flex; align-items: center; justify-content: center; transition: transform var(--t-fast);
+}
+.port-marker-wrap.is-hot:hover .port-hot { transform: scale(1.12); }
+.port-marker-wrap.is-hot.is-selected .port-hot { outline: 3px solid var(--zc); outline-offset: 2px; }
+.port-hot__rank { color: #fff; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35); }
+.port-hot__role {
+  position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 99px;
+  background: #fff; color: var(--asb-navy); border: 1px solid var(--asb-gray-200);
+  font-size: 11px; line-height: 14px; text-align: center; box-shadow: 0 1px 2px rgba(13, 34, 64, 0.3);
+}
+.port-marker-wrap.is-hot .port-name { left: calc(var(--sz, 24px) + 5px); }
+
+/* Cluster bubble */
+.pmap-cluster {
+  width: 34px; height: 34px; border-radius: 99px; background: rgba(13, 34, 64, 0.92);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(13, 34, 64, 0.4);
+}
+
+/* ── Zone legend ─────────────────────────────────────────────────────── */
+/* Layer pills - flush to the top-right corner, square, hairline (DS map chrome) */
+.pmap-pills { position: absolute; top: 0; right: 0; z-index: 500; display: flex; gap: 1px; }
+.pmap-pill { display: flex; background: var(--asb-white); border-left: 1px solid var(--asb-line); border-bottom: 1px solid var(--asb-line); }
+.pmap-pill button {
+  font-family: inherit; font-size: var(--fs-body-sm); font-weight: 500; color: var(--asb-ink-soft);
+  background: none; border: 0; border-left: 1px solid var(--asb-line); padding: 0 12px; height: 30px;
+  cursor: pointer; white-space: nowrap; transition: background var(--t-fast), color var(--t-fast);
+}
+.pmap-pill button:first-child { border-left: 0; }
+.pmap-pill button:hover { background: var(--asb-gray-50); color: var(--asb-navy); }
+.pmap-pill button.is-on { background: var(--asb-navy); color: #fff; font-weight: 600; }
+
+.pmap-legend {
+  position: absolute; top: 0; left: 0; z-index: 500;
+  background: var(--asb-white); border-right: 1px solid var(--asb-line); border-bottom: 1px solid var(--asb-line);
+  padding: 8px 12px 9px; min-width: 168px; max-width: 260px;
+}
+.pmap-legend__title {
+  font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--asb-gray-500);
+  font-weight: 700; margin-bottom: 6px;
+}
+.pmap-legend__row {
+  display: flex; align-items: center; gap: 7px; padding: 3px 0; cursor: pointer;
+  font-size: 11px; color: var(--asb-gray-700); user-select: none;
+}
+.pmap-legend__row:hover { color: var(--asb-navy); }
+.pmap-legend__sw { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+.pmap-legend__count { margin-left: auto; color: var(--asb-gray-400); font-variant-numeric: tabular-nums; font-size: 11px; }
+.pmap-legend__row.is-off { opacity: 0.35; }
+.pmap-legend__row.is-off .pmap-legend__sw { background: var(--asb-gray-400) !important; }
+.pmap-legend__note { margin-top: 7px; padding-top: 7px; border-top: 0.5px solid var(--asb-gray-200); font-size: 11px; color: var(--asb-gray-500); line-height: 1.6; }
+.pmap-legend__hot { margin-top: 8px; padding-top: 8px; border-top: 0.5px solid var(--asb-gray-200); }
+.pmap-heatbar { height: 8px; border-radius: 99px; background: linear-gradient(90deg, hsl(210,55%,55%), hsl(140,58%,50%), hsl(45,82%,52%), hsl(8,85%,47%)); }
+.pmap-heatbar__lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--asb-gray-500); margin-top: 3px; }
+.pmap-zone-label { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; text-align: center; white-space: nowrap; opacity: 0.72; text-shadow: 0 1px 3px rgba(255,255,255,0.85), 0 0 2px rgba(255,255,255,0.9); pointer-events: none; }
+.asb-map.is-dark .pmap-zone-label { text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+
+/* ── Zoom control ────────────────────────────────────────────────────── */
+.pmap-zoom { position: absolute; right: 0; bottom: 21px; z-index: 500; display: flex; flex-direction: column; }
+.pmap-zoom button {
+  width: 36px; height: 36px; background: var(--asb-white); border: 0;
+  border-left: 1px solid var(--asb-line); border-top: 1px solid var(--asb-line);
+  cursor: pointer; font-size: 17px; line-height: 1; color: var(--asb-navy);
+  display: flex; align-items: center; justify-content: center; transition: background var(--t-fast), color var(--t-fast);
+}
+.pmap-zoom button:hover { background: var(--asb-navy); color: #fff; }
+
+/* Scale ruler + attribution - flush, hairline, DS 11px label floor */
+.pmap-canvas .leaflet-control-scale { margin: 0; }
+.pmap-canvas .leaflet-bottom.leaflet-left { bottom: 0; left: 0; }
+.pmap-canvas .leaflet-control-scale-line {
+  background: var(--asb-white); border: 0; border-top: 1px solid var(--asb-line); border-right: 1px solid var(--asb-line);
+  border-radius: 0; padding: 3px 9px 2px; font: 500 11px/1.3 var(--asb-font); color: var(--asb-gray-700);
+  font-variant-numeric: tabular-nums; box-shadow: none;
+}
+.pmap-canvas .leaflet-control-attribution {
+  background: rgba(255,255,255,.86); border-top: 1px solid var(--asb-line); border-left: 1px solid var(--asb-line);
+  border-radius: 0; font-size: 11px; color: var(--asb-gray-500); padding: 2px 7px; margin: 0;
+}
+.pmap-canvas .leaflet-control-attribution a { color: var(--asb-gray-700); }
+
+/* ── Port popover extras (inside .map-popup) ─────────────────────────── */
+.pmap-pop__srcrow { display: flex; align-items: center; gap: 6px; margin: 2px 0 8px; }
+.pmap-src {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px;
+}
+.pmap-src.is-grounded { background: var(--asb-green-bg); color: var(--asb-green); }
+.pmap-src.is-estimated { background: var(--asb-amber-bg); color: var(--asb-amber); }
+.pmap-src .dot { width: 5px; height: 5px; border-radius: 99px; background: currentColor; }
+.pmap-pop__da { font-size: 15px; font-weight: 700; color: var(--asb-navy); font-variant-numeric: tabular-nums; }
+.pmap-rank { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px; background: #FDECEC; color: #C0392B; }
+.pmap-role { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; background: var(--asb-gray-100, #EEF1F5); color: var(--asb-gray-700); }
+.pmap-cong { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+.pmap-cong .dot { width: 6px; height: 6px; border-radius: 99px; background: currentColor; }
+.map-popup__btn--enlarge {
+  width: 100%; background: var(--asb-navy) !important; color: #fff !important; border-color: var(--asb-navy) !important;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;
+}
+.map-popup__btn--enlarge:hover { background: var(--asb-navy-deep) !important; }
+
+/* ── Enlarge slide-over drawer ───────────────────────────────────────── */
+.pmap-drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 460px; max-width: 94%;
+  background: var(--asb-white); border-left: var(--bd); z-index: 1200;
+  box-shadow: -14px 0 44px -22px rgba(13, 34, 64, 0.55);
+  display: flex; flex-direction: column; transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pmap-drawer.is-open { transform: none; }
+.pmap-drawer__head { padding: 16px 18px 14px; color: #fff; position: relative; }
+.pmap-drawer__ey { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.8; font-weight: 700; }
+.pmap-drawer__title { font-size: 20px; font-weight: 700; margin-top: 3px; line-height: 1.1; }
+.pmap-drawer__sub { font-size: 11.5px; opacity: 0.9; margin-top: 4px; }
+.pmap-drawer__x { position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.18); color: #fff; width: 26px; height: 26px; border-radius: 6px; cursor: pointer; font-size: 16px; line-height: 1; }
+.pmap-drawer__x:hover { background: rgba(255,255,255,0.32); }
+.pmap-drawer__body { flex: 1; overflow-y: auto; padding: 0; }
+
+.pmap-sec { padding: 14px 18px; border-bottom: var(--bd); }
+.pmap-sec__h { font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--asb-gray-500); font-weight: 700; margin-bottom: 9px; }
+
+/* Mini constellation teaser */
+.pmap-orbit { position: relative; height: 168px; margin: 2px auto 4px; }
+.pmap-orbit__ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 1px dashed var(--asb-gray-400); border-radius: 99px; }
+.pmap-orbit__core {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 58px; height: 58px; border-radius: 99px; background: var(--asb-navy); color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  box-shadow: 0 4px 14px -4px rgba(13, 34, 64, 0.6); z-index: 2;
+}
+.pmap-orbit__core b { font-size: 11px; line-height: 1.1; }
+.pmap-orbit__core span { font-size: 11px; opacity: 0.75; letter-spacing: 0.06em; }
+.pmap-node {
+  position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 5px;
+  background: var(--asb-white); border: 0.5px solid var(--asb-gray-200); border-radius: 99px;
+  padding: 3px 9px 3px 6px; font-size: 11px; font-weight: 600; color: var(--asb-navy);
+  box-shadow: 0 2px 8px -3px rgba(13, 34, 64, 0.35); white-space: nowrap; cursor: pointer; z-index: 3;
+}
+.pmap-node:hover { border-color: var(--asb-blue); }
+.pmap-node .ti, .pmap-node svg { font-size: 12px; }
+.pmap-node--v .ti, .pmap-node--v svg { color: var(--asb-blue); }
+.pmap-node--c .ti, .pmap-node--c svg { color: var(--asb-green); }
+.pmap-node__conn { position: absolute; top: 50%; left: 50%; height: 1px; transform-origin: left center; background: var(--asb-gray-400); z-index: 1; }
+.pmap-orbit__note { text-align: center; font-size: 11px; color: var(--asb-gray-500); margin-top: 2px; }
+
+/* Specs grid */
+.pmap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.pmap-kv .k { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--asb-gray-500); font-weight: 600; }
+.pmap-kv .v { font-size: 13px; font-weight: 600; color: var(--asb-navy); font-variant-numeric: tabular-nums; margin-top: 1px; }
+.pmap-kv .v small { font-size: 11px; color: var(--asb-gray-500); font-weight: 500; }
+
+.pmap-da-row { display: flex; align-items: baseline; gap: 8px; }
+.pmap-da-row b { font-size: 20px; color: var(--asb-navy); font-variant-numeric: tabular-nums; }
+.pmap-da-row span { font-size: 11px; color: var(--asb-gray-500); }
+.pmap-line { font-size: 12px; color: var(--asb-gray-700); line-height: 1.55; }
+
+.pmap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pmap-chip { font-size: 11px; padding: 3px 9px; border-radius: 99px; background: var(--asb-gray-50); border: 0.5px solid var(--asb-gray-200); color: var(--asb-gray-700); }
+.pmap-agent { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; color: var(--asb-navy); }
+.pmap-agent .ti, .pmap-agent svg { color: var(--asb-gray-400); font-size: 14px; }
+
+.pmap-drawer__foot { padding: 12px 18px; border-top: var(--bd); background: var(--asb-gray-50); display: flex; gap: 8px; }
+.pmap-drawer__foot .asb-btn { flex: 1; justify-content: center; }
+.pmap-note { font-size: 11px; color: var(--asb-gray-500); padding: 8px 18px; line-height: 1.5; }

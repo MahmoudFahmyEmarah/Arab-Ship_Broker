@@ -108,7 +108,7 @@ export function PdaSetupWorkspace({
       <div className="pe-set-card">
         <div className="pe-set-card__hd">
           <h2 className="pe-set-card__t">Ports Module and reference</h2>
-          <span>The module's own pages: the hub with Quick DA, the directory and the map ranked by live listings, and the tariff atlas.</span>
+          <span>The module&apos;s own pages: the hub with Quick DA, the directory and the map ranked by live listings, and the tariff atlas.</span>
         </div>
         <div className="pe-set-rows">
           {[

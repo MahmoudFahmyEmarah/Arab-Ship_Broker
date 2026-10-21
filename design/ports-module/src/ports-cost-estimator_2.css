@@ -1,0 +1,434 @@
+/* da-calculator/da-plus.css - enlarged Ports DA Calculator.
+ * Layered on tokens.css + voyage-estimator.css. Reuses ve-* vocabulary; adds
+ * the app frame, multi-port columns, editable-rate overrides, saved-estimate
+ * bar, compare drawer and the printable Export DA proforma.
+ */
+
+/* Fill the two gaps in the platform gray ramp (tokens.css defines 50/100/200/
+ * 400/500/700). Ports Module pages reference 300 & 600; interpolate them so
+ * every page - CSS and inline styles - resolves consistently. */
+:root {
+  --asb-gray-400: #C9D0DB;   /* between 200 #DDE2EA and 400 #B6BFCC */
+  --asb-gray-700: #6B7585;   /* between 500 #8B95A3 and 700 #4B5566 */
+}
+
+/* ── App frame (static platform chrome) ─────────────────────────────── */
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--asb-gray-50); }
+.pda-shell { display: flex; height: 100%; overflow: hidden; }
+
+.asb-sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--asb-white);
+  border-right: var(--bd);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.asb-sidebar__brand {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px;
+  border-bottom: var(--bd);
+}
+.asb-sidebar__brand img { width: 22px; height: 22px; }
+.asb-sidebar__nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: 10px; }
+/* DS quiet chrome: the nav scrolls, but no native scrollbar furniture in the rail */
+.asb-sidebar, .asb-sidebar * { scrollbar-width: thin; scrollbar-color: var(--asb-gray-200) transparent; }
+.asb-sidebar::-webkit-scrollbar, .asb-sidebar *::-webkit-scrollbar { width: 6px; height: 0; }
+.asb-sidebar *::-webkit-scrollbar-track { background: transparent; }
+.asb-sidebar *::-webkit-scrollbar-thumb { background: var(--asb-gray-200); border-radius: 99px; }
+.asb-sidebar:hover *::-webkit-scrollbar-thumb { background: var(--asb-gray-400); }
+.pda-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+/* Nav item as an anchor/button (mirrors .nav-item from tokens) */
+.asb-sidebar .nav-item { width: 100%; text-align: left; background: none; border: none; cursor: pointer; font-family: inherit; }
+.asb-sidebar .nav-group__hd { display: flex; align-items: center; gap: 9px; font-weight: 600; }
+.asb-sidebar .nav-group__kids { display: flex; flex-direction: column; }
+.asb-sidebar .nav-item.is-nested { padding-left: 30px; }
+.asb-sidebar .nav-group__kids .nav-item.is-active { border-left-color: var(--asb-blue); }
+
+/* ── Header actions ─────────────────────────────────────────────────── */
+.pda-head {
+  padding: 10px 20px;
+  border-bottom: var(--bd);
+  background: var(--asb-white);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.pda-head__actions { display: inline-flex; align-items: center; gap: 8px; }
+.asb-btn .ic { width: 13px; height: 13px; display: inline-block; }
+
+/* ── Saved-estimate bar ─────────────────────────────────────────────── */
+.pda-estbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 20px;
+  background: var(--asb-gray-50);
+  border-bottom: var(--bd);
+  overflow-x: auto;
+}
+.pda-estbar__label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--asb-gray-500); font-weight: 600; flex-shrink: 0;
+}
+.pda-est-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 13px 8px 15px;
+  background: var(--asb-white);
+  border: var(--bd);
+  border-radius: 99px;
+  font-size: 14px; font-weight: 500; color: var(--asb-gray-700);
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: border-color var(--t-fast), color var(--t-fast);
+}
+.pda-est-chip:hover { border-color: var(--asb-blue); color: var(--asb-navy); }
+.pda-est-chip.is-active { border-color: var(--asb-blue); background: var(--asb-blue-light); color: var(--asb-blue); }
+.pda-est-chip.is-dirty .pda-est-chip__dot { background: var(--asb-amber); }
+.pda-est-chip__dot { width: 6px; height: 6px; border-radius: 99px; background: var(--asb-gray-400); flex-shrink: 0; }
+.pda-est-chip__total { font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.85; }
+.pda-est-chip__x { border: none; background: none; color: inherit; opacity: 0.5; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 0 0 2px; }
+.pda-est-chip__x:hover { opacity: 1; }
+.pda-est-new {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 8px 15px; border: 0.5px dashed var(--asb-gray-400); background: none;
+  border-radius: 99px; font-size: 14px; font-weight: 600; color: var(--asb-blue);
+  cursor: pointer; flex-shrink: 0; font-family: inherit;
+}
+.pda-est-new:hover { background: var(--asb-blue-light); border-color: var(--asb-blue); }
+.pda-estbar__cmp { margin-left: auto; flex-shrink: 0; }
+
+/* ── Toolbar / selector ─────────────────────────────────────────────── */
+.pda-toolbar {
+  display: flex; align-items: flex-start; gap: 4px 14px; flex-wrap: wrap;
+  padding: 4px 20px 5px;
+  background: var(--asb-white);
+  border-bottom: var(--bd);
+}
+/* labels sit INLINE with their control - removes a stacked line per field */
+.pda-tool { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 2px 6px; flex: 1 1 210px; min-width: 0; max-width: 300px; min-height: 28px; }
+.pda-tool > .pda-select, .pda-tool > .pda-name-input, .pda-tool > .pda-inp { flex: 1 1 90px; min-width: 0; }
+.pda-vessel-meta, .pda-cargo-meta { flex-basis: 100%; }
+.pda-tool__label {
+  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--asb-gray-500); font-weight: 500; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 0 1 auto; min-width: 0;
+}
+.pda-name-input {
+  border: 0.5px solid transparent; background: none;
+  font-family: inherit; font-size: 14px; font-weight: 600; color: var(--asb-navy);
+  padding: 1px 5px; border-radius: 4px; min-width: 0; width: 100%;
+}
+.pda-name-input:hover { border-color: var(--asb-gray-200); }
+.pda-name-input:focus { outline: none; border-color: var(--asb-blue); background: var(--asb-white); }
+
+.pda-select {
+  position: relative; border: 0.5px solid var(--asb-blue);
+  border-radius: 4px; background: var(--asb-white); min-width: 0; width: 100%;
+}
+.pda-select select {
+  width: 100%; appearance: none; background: transparent; border: none;
+  padding: 3px 24px 3px 8px; font-family: inherit; font-size: 13px;
+  color: var(--asb-navy); font-weight: 500; cursor: pointer;
+}
+.pda-select select:focus { outline: none; }
+.pda-select__caret { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--asb-blue); pointer-events: none; }
+
+.pda-prefill {
+  display: inline-flex; align-items: center; gap: 7px; margin-left: auto;
+  padding: 6px 11px; background: var(--asb-blue-light); border: 0.5px solid var(--asb-blue);
+  border-radius: 6px; font-size: 11px; color: var(--asb-blue); font-weight: 500;
+}
+.pda-prefill__x { border: none; background: none; color: inherit; cursor: pointer; opacity: 0.6; font-size: 14px; line-height: 1; }
+.pda-prefill__x:hover { opacity: 1; }
+
+/* ── Body scroll region ─────────────────────────────────────────────── */
+.pda-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 20px 140px; }
+
+/* ── Port columns ───────────────────────────────────────────────────── */
+.pda-cols { display: grid; gap: 12px; align-items: start; }
+.pda-cols--1 { grid-template-columns: minmax(0, 760px); }
+.pda-cols--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pda-cols--multi { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+@media (max-width: 900px) { .pda-cols--2, .pda-cols--multi { grid-template-columns: 1fr; } }
+
+.pda-card {
+  background: var(--asb-white); border: var(--bd); border-radius: 8px; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.pda-card__head {
+  padding: 10px 14px; border-bottom: var(--bd);
+  display: flex; align-items: center; gap: 10px;
+}
+.pda-card--load  .pda-card__head { background: #E6F1FB; }
+.pda-card--disch .pda-card__head { background: #EAF3DE; }
+.pda-card--call  .pda-card__head { background: var(--asb-gray-50); }
+.pda-role {
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700;
+  padding: 3px 8px; border-radius: 3px; flex-shrink: 0;
+}
+.pda-card--load  .pda-role { background: #0C447C; color: #fff; }
+.pda-card--disch .pda-role { background: #27500A; color: #fff; }
+.pda-card--call  .pda-role { background: var(--asb-gray-500); color: #fff; }
+.pda-card__portsel { flex: 1; min-width: 0; }
+.pda-card__portsel select {
+  width: 100%; appearance: none; border: none; background: transparent;
+  font-family: inherit; font-size: 14px; font-weight: 600; color: var(--asb-navy);
+  cursor: pointer; padding: 2px 18px 2px 2px;
+}
+.pda-card__portsel select:focus { outline: none; }
+.pda-card__meta { font-size: 11px; color: var(--asb-gray-700); margin-top: 1px; }
+.pda-card__del { border: none; background: none; cursor: pointer; color: var(--asb-gray-400); font-size: 15px; line-height: 1; padding: 4px; flex-shrink: 0; }
+.pda-card__del:hover { color: var(--asb-red); }
+
+/* Grounded / estimated badge */
+.pda-src {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 3px;
+}
+.pda-src.is-grounded { background: var(--asb-green-bg); color: var(--asb-green); }
+.pda-src.is-estimated { background: var(--asb-amber-bg); color: var(--asb-amber); }
+.pda-src .dot { width: 5px; height: 5px; border-radius: 99px; background: currentColor; }
+
+/* Inputs strip inside a card */
+.pda-inputs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+  padding: 10px 14px; border-bottom: var(--bd); background: var(--asb-gray-50);
+}
+.pda-inputs .pda-field--wide { grid-column: 1 / -1; }
+.pda-field { display: flex; flex-direction: column; gap: 3px; }
+.pda-field__label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--asb-gray-500); font-weight: 500; }
+.pda-inp {
+  width: 100%; box-sizing: border-box; border: 0.5px solid var(--asb-gray-200);
+  border-radius: 4px; background: var(--asb-white); padding: 6px 8px; height: 34px;
+  font-family: inherit; font-size: 14px; color: var(--asb-navy);
+}
+.pda-inp:focus { outline: none; border-color: var(--asb-blue); }
+.pda-inp--num { font-variant-numeric: tabular-nums; text-align: right; }
+.pda-seg { display: inline-flex; border: 0.5px solid var(--asb-gray-200); border-radius: 4px; overflow: hidden; background: var(--asb-white); }
+.pda-seg__btn {
+  flex: 1; background: none; border: none; border-right: 0.5px solid var(--asb-gray-200);
+  font-family: inherit; font-size: 11px; color: var(--asb-gray-500); font-weight: 500;
+  padding: 6px 8px; cursor: pointer; white-space: nowrap;
+}
+.pda-seg__btn:last-child { border-right: none; }
+.pda-seg__btn:hover { color: var(--asb-navy); }
+.pda-seg__btn.is-active { background: var(--asb-navy); color: #fff; }
+
+/* ── Line-item table ────────────────────────────────────────────────── */
+.pda-li { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pda-li thead th {
+  background: var(--asb-navy); color: #fff; font-weight: 500;
+  padding: 7px 10px; text-align: left; text-transform: uppercase;
+  letter-spacing: 0.05em; font-size: 11.5px; border-right: 0.5px solid rgba(255,255,255,0.1);
+}
+.pda-li th.num, .pda-li td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pda-li td.num { font-size: 16px; }
+.pda-li th.act, .pda-li td.act { width: 30px; text-align: center; }
+.pda-li tbody td { padding: 6px 10px; border-bottom: 0.5px solid var(--asb-gray-200); vertical-align: middle; }
+.pda-li tbody tr:nth-child(even) td { background: var(--asb-gray-50); }
+.pda-li__label { font-weight: 500; color: var(--asb-ink); }
+.pda-li__basis { font-size: 12px; color: var(--asb-gray-500); margin-top: 1px; }
+.pda-li tr.is-excluded td { color: var(--asb-gray-400); }
+.pda-li tr.is-excluded .pda-li__label { font-weight: 400; }
+
+/* Amount cell: auto (green) vs override (amber, editable) */
+.pda-amt {
+  cursor: text; color: var(--asb-green); border-bottom: 1px dashed transparent;
+  padding: 1px 2px; border-radius: 2px;
+}
+.pda-amt:hover { border-bottom-color: var(--asb-green); background: rgba(39,80,10,0.05); }
+.pda-amt.is-override { color: var(--asb-amber); font-weight: 600; }
+.pda-amt.is-usd { color: var(--asb-gray-700); cursor: default; }
+.pda-amt-input {
+  width: 100px; background: var(--asb-amber-bg); border: 0.5px solid #EF9F27; color: var(--asb-amber);
+  font-family: inherit; font-size: 14px; text-align: right; padding: 3px 5px; border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.pda-amt-input:focus { outline: none; background: #fff; }
+.pda-reset { border: none; background: none; cursor: pointer; color: var(--asb-amber); font-size: 12px; line-height: 1; padding: 2px; }
+.pda-reset:hover { color: var(--asb-red); }
+.pda-reset.is-hidden { visibility: hidden; }
+
+/* Subtotals */
+.pda-li tr.pda-li__sub td {
+  background: var(--asb-gray-100) !important; border-top: 0.5px solid var(--asb-navy);
+  color: var(--asb-navy); font-weight: 600;
+}
+.pda-li tr.pda-li__total td {
+  background: var(--asb-gray-100) !important; border-top: 1.5px solid var(--asb-navy);
+  border-bottom: none; color: var(--asb-navy); font-weight: 700; font-size: 15px;
+}
+.pda-li tr.pda-li__total td.num { font-size: 17px; }
+.pda-card__foot { padding: 8px 14px; font-size: 11px; color: var(--asb-gray-500); line-height: 1.5; border-top: var(--bd); }
+
+/* Add-port card */
+.pda-add {
+  border: 0.5px dashed var(--asb-gray-400); border-radius: 8px; background: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 160px; cursor: pointer; color: var(--asb-blue); font-family: inherit;
+  font-size: 13px; font-weight: 600;
+}
+.pda-add:hover { background: var(--asb-blue-light); border-color: var(--asb-blue); }
+.pda-add__plus { font-size: 24px; line-height: 1; font-weight: 400; }
+
+/* ── Grand total strip (sticky footer) ──────────────────────────────── */
+.pda-grand {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: 20px;
+  padding: 12px 20px; background: var(--asb-navy); color: #fff;
+  border-top: 1px solid var(--asb-navy-deep);
+}
+.pda-grand__block { display: flex; flex-direction: column; gap: 2px; }
+.pda-grand__k { font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(255,255,255,0.6); font-weight: 600; }
+.pda-grand__v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; line-height: 1; }
+.pda-grand__v small { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.6); margin-left: 5px; }
+.pda-grand__ports { display: flex; gap: 16px; flex-wrap: wrap; margin-left: 8px; }
+.pda-grand__port { font-size: 11px; color: rgba(255,255,255,0.75); font-variant-numeric: tabular-nums; }
+.pda-grand__port b { color: #fff; font-weight: 600; }
+.pda-grand__cur { display: flex; gap: 10px; margin-left: auto; align-items: center; }
+.pda-grand__curchip {
+  font-size: 11px; color: rgba(255,255,255,0.8); font-variant-numeric: tabular-nums;
+  padding: 3px 8px; border: 0.5px solid rgba(255,255,255,0.25); border-radius: 99px;
+}
+
+/* ── Compare drawer ─────────────────────────────────────────────────── */
+.pda-overlay { position: fixed; inset: 0; background: rgba(13,34,64,0.42); z-index: 60; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; overflow-y: auto; }
+.pda-modal { background: var(--asb-white); border-radius: 10px; width: 100%; max-width: 960px; box-shadow: 0 24px 60px -20px rgba(13,34,64,0.5); overflow: hidden; }
+.pda-modal__head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: var(--bd); }
+.pda-modal__title { font-size: 15px; font-weight: 600; color: var(--asb-navy); }
+.pda-modal__sub { font-size: 11px; color: var(--asb-gray-500); margin-top: 2px; }
+.pda-modal__x { border: none; background: none; font-size: 20px; color: var(--asb-gray-500); cursor: pointer; line-height: 1; }
+.pda-modal__x:hover { color: var(--asb-navy); }
+.pda-modal__body { padding: 16px 18px; }
+
+.pda-cmp { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pda-cmp th, .pda-cmp td { padding: 9px 12px; text-align: right; border-bottom: 0.5px solid var(--asb-gray-200); font-variant-numeric: tabular-nums; }
+.pda-cmp th:first-child, .pda-cmp td:first-child { text-align: left; font-variant-numeric: normal; }
+.pda-cmp thead th { background: var(--asb-gray-50); color: var(--asb-navy); font-weight: 600; border-bottom: 1px solid var(--asb-navy); }
+.pda-cmp thead th .sub { display: block; font-size: 11px; font-weight: 400; color: var(--asb-gray-500); }
+.pda-cmp tr.is-total td { border-top: 1.5px solid var(--asb-navy); font-weight: 700; color: var(--asb-navy); font-size: 13px; background: var(--asb-gray-50); }
+.pda-cmp .best { color: var(--asb-green); font-weight: 600; }
+.pda-cmp .worst { color: var(--asb-red); }
+.pda-cmp .delta { font-size: 11px; color: var(--asb-gray-500); display: block; }
+.pda-cmp-empty { text-align: center; color: var(--asb-gray-500); font-size: 12px; padding: 30px; }
+.pda-cmp-pick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+
+/* ── Export proforma document ───────────────────────────────────────── */
+.pda-doc { background: var(--asb-white); color: var(--asb-ink); }
+.pda-doc__sheet { max-width: 760px; margin: 0 auto; padding: 34px 40px; }
+.pda-doc__top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid var(--asb-navy); padding-bottom: 14px; margin-bottom: 16px; }
+.pda-doc__brand { display: flex; align-items: center; gap: 10px; }
+.pda-doc__brand img { width: 34px; height: 34px; }
+.pda-doc__brand h2 { margin: 0; font-size: 16px; color: var(--asb-navy); }
+.pda-doc__brand .sub { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--asb-gray-500); }
+.pda-doc__title { text-align: right; }
+.pda-doc__title h1 { margin: 0; font-size: 20px; color: var(--asb-navy); letter-spacing: 0.02em; }
+.pda-doc__title .meta { font-size: 11px; color: var(--asb-gray-500); margin-top: 3px; }
+.pda-doc__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-bottom: 18px; font-size: 12px; }
+.pda-doc__grid .k { color: var(--asb-gray-500); }
+.pda-doc__grid .row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 0.5px solid var(--asb-gray-100); }
+.pda-doc__grid .row b { font-weight: 600; color: var(--asb-navy); }
+.pda-doc__port { margin-bottom: 16px; }
+.pda-doc__porthd { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--asb-navy); padding: 6px 0; border-bottom: 1px solid var(--asb-navy); margin-bottom: 4px; }
+.pda-doc table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.pda-doc table td { padding: 5px 4px; border-bottom: 0.5px solid var(--asb-gray-100); }
+.pda-doc table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pda-doc table tr.sub td { border-top: 0.5px solid var(--asb-gray-400); font-weight: 600; }
+.pda-doc__grandrow { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 12px 14px; background: var(--asb-navy); color: #fff; border-radius: 6px; font-size: 15px; font-weight: 700; }
+.pda-doc__grandrow .v { font-variant-numeric: tabular-nums; }
+.pda-doc__note { margin-top: 16px; font-size: 11px; color: var(--asb-gray-500); line-height: 1.6; border-top: 0.5px solid var(--asb-gray-200); padding-top: 10px; }
+.pda-doc__modal { max-width: 840px; }
+.pda-doc__scroll { max-height: 70vh; overflow-y: auto; }
+
+/* Print: show only the proforma */
+@media print {
+  .pda-shell, .pda-overlay > .pda-modal > .pda-modal__head { display: none !important; }
+  .pda-print-root { display: block !important; }
+}
+.pda-print-root { display: none; }
+
+/* small helper */
+.pda-muted { color: var(--asb-gray-500); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Additions for the assembled page (title block, toolbar fields, compare
+   picker, empty state, print refinements). Layered on the vocabulary above.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Header title block */
+.pda-head__title { min-width: 0; }
+.pda-head__title .page-title { font-size: 19px; line-height: 1.15; }
+.pda-head__title .eyebrow { margin-top: 3px; }
+
+/* Toolbar fields */
+.pda-tool--qty { flex: 0 1 150px; }
+.pda-tool--qty .pda-inp { width: 100%; }
+.pda-vessel-meta {
+  display: flex; gap: 9px; flex-wrap: wrap;
+  font-size: 11px; color: var(--asb-gray-500);
+  font-variant-numeric: tabular-nums; margin-top: 0;
+}
+.pda-vessel-meta b { color: var(--asb-gray-700); font-weight: 600; }
+.pda-toolbar .ve-seg { background: var(--asb-white); }
+.pda-toolbar .ve-seg__btn { font-size: 12px; padding: 3px 10px; }
+
+/* Cargo picker - commodity tag + laycan/terms meta + one-click route */
+.pda-tool--cargo { flex: 1 1 240px; max-width: 320px; }
+.pda-tool--cargo .pda-select { min-width: 0; }
+.pda-cargo-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 11px; color: var(--asb-gray-500);
+  font-variant-numeric: tabular-nums; margin-top: 0;
+}
+.pda-cargo-meta b { color: var(--asb-gray-700); font-weight: 600; }
+.pda-cargo-meta__tag {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--asb-blue); background: var(--asb-blue-light); padding: 2px 7px; border-radius: 99px;
+}
+.pda-cargo-route {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: inherit; font-size: 12px; font-weight: 600; color: var(--asb-blue);
+  background: none; border: 0.5px solid var(--asb-blue); border-radius: 99px;
+  padding: 2px 9px; cursor: pointer; transition: background var(--t-fast);
+}
+.pda-cargo-route:hover { background: var(--asb-blue-light); }
+.pda-cargo-route.is-set { color: var(--asb-green); border-color: transparent; background: var(--asb-green-bg); cursor: default; }
+
+/* Header + estimate-bar action buttons */
+.pda-head__actions .asb-btn,
+.pda-estbar__cmp .asb-btn { font-size: var(--fs-body); }
+.pda-estbar__cmp .asb-btn { padding: 5px 12px; }
+.asb-btn .ic { width: 13px; height: 13px; display: inline-block; flex-shrink: 0; }
+.asb-btn.primary .ic, .asb-btn.navy .ic { color: #fff; }
+.asb-btn.navy { background: var(--asb-navy); border-color: var(--asb-navy); color: #fff; }
+.asb-btn.navy:hover { background: var(--asb-navy-deep); border-color: var(--asb-navy-deep); }
+
+/* Compare picker chips */
+.pda-cmp-opt {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 7px 12px; border: 0.5px solid var(--asb-gray-200); border-radius: 99px;
+  font-size: 11px; font-weight: 500; color: var(--asb-gray-700);
+  background: var(--asb-white); font-family: inherit;
+}
+.pda-cmp-opt:hover { border-color: var(--asb-blue); }
+.pda-cmp-opt.is-on { border-color: var(--asb-blue); background: var(--asb-blue-light); color: var(--asb-blue); }
+.pda-cmp-opt .box {
+  width: 13px; height: 13px; border-radius: 3px; border: 1px solid currentColor;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; line-height: 1; flex-shrink: 0;
+}
+.pda-cmp-opt__tot { font-variant-numeric: tabular-nums; opacity: 0.75; }
+
+/* Compare row group headers + role rows */
+.pda-cmp tr.is-group td { background: var(--asb-gray-50); font-weight: 600; color: var(--asb-navy); }
+.pda-cmp td .cmp-list { font-size: 11px; color: var(--asb-gray-500); font-variant-numeric: normal; }
+
+/* Empty / hint states */
+.pda-empty { padding: 44px 20px; text-align: center; color: var(--asb-gray-500); font-size: 13px; line-height: 1.6; }
+
+/* Print: show only the proforma, hide the app + the interactive modal */
+@media print {
+  .pda-overlay { display: none !important; }
+  @page { margin: 14mm; }
+}

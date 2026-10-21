@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PdaAgency } from "@/lib/pda/agents";
 import { isPdaPortLocode, type PdaPortRecordInput } from "@/lib/pda/port-record";
 import { listPdaPortAgents, listPdaPortsWorkspace, listPdaTariffPacks } from "@/sdk/app/pda";
+import { logPdaLoadFailure } from "@/lib/pda/load-failure";
 
 export type PortRecordLoad = { kind: "ok"; input: PdaPortRecordInput } | { kind: "missing" } | { kind: "failed" };
 
@@ -20,11 +21,13 @@ export async function loadPortRecordInput(supabase: SupabaseClient, locode: stri
     let agents: PdaAgency[] | null;
     try {
       agents = await listPdaPortAgents(supabase, locode);
-    } catch {
+    } catch (error) {
+      logPdaLoadFailure("port record (step 1)", error);
       agents = null;
     }
     return { kind: "ok", input: { port, packs, agents, on } };
-  } catch {
+  } catch (error) {
+    logPdaLoadFailure("port record (step 2)", error);
     return { kind: "failed" };
   }
 }
