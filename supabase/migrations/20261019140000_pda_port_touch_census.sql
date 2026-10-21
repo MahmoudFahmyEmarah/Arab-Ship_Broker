@@ -4,10 +4,12 @@
 -- How many live listings touch each port today: a cargo "touches" its load and discharge ports (the effective port
 -- and any alternate slot), an open vessel touches the port it opens at. The census counts ONLY what a member can
 -- already see on the market boards — live, approved cargo (status IN or PARTIAL) and open, approved vessel
--- availability — so it reveals nothing the boards do not. A port touched by fewer than 3 listings is SUPPRESSED (the
--- cohort rule of the bunker reads, O2B-003): its counts are null and `suppressed` is true, so a figure never points at
--- one or two listings. Zero is not sensitive and is reported. Ports are the active, verified ones; no internal id
--- leaves the database.
+-- availability — so it reveals nothing the boards do not. The cohort rule (the bunker reads' k = 3, O2B-003) counts
+-- DISTINCT listings and vessels, never touches: a port with 1 or 2 of them is SUPPRESSED — every count null,
+-- `suppressed` true. A reported port whose breakdown (loads / discharges / vessels) has any cell of 1 or 2 keeps its
+-- total and withholds ALL three cells, because hiding one cell alone leaves it to subtraction. Suppressed ports are
+-- ordered by name among the untouched ones, never by the count they withhold. Zero is not sensitive and is reported.
+-- Ports are the active, verified ones; no internal id leaves the database.
 --
 --   get_port_touch_census()   member read (estimator gate): {asOf, minimumCohort, ports:[{locode,name,country,zone,
 --                             latitude,longitude,touches,loads,discharges,vessels,suppressed}]}, most touched first

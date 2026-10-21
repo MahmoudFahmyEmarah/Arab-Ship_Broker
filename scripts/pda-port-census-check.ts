@@ -36,8 +36,9 @@ ok(/where p\.is_active and p\.is_verified/.test(migration) && !/'id',|'[a-zA-Z]+
 ok(/revoke all on function public\.get_port_touch_census\(\) from public, anon;\ngrant execute on function public\.get_port_touch_census\(\) to authenticated, service_role;/.test(migration)
   && /drop function if exists public\.get_port_touch_census\(\);/.test(down) && !/\\(gset|if|echo|endif)\b/.test(migration + down), "grants; plain-SQL DOWN drops the function");
 ok(["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"].every((k) => suite.includes(`--   ${k} `) && suite.includes(`'${k} ok:`)) && /rollback;\s*$/.test(suite) && suite.includes("ALL ASSERTIONS PASSED")
-  && has(suite, "o3 > o7", "(vessel_e, p6", "row5->'vessels' <> 'null'::jsonb", "set local role anon;", "permission denied for function", "(row8->>'vessels')::int <> 0"),
-  "suite C1–C8 (breakdown withheld, distinct vessels, name order among suppressed, a zero port, anon refused as a role), rolled back");
+  && has(suite, "o3 > o7", "(vessel_e, p6", "row5->'vessels' is distinct from 'null'::jsonb", "row9->'loads' is distinct from 'null'::jsonb", "row10->'touches' is distinct from 'null'::jsonb",
+    "set local role anon;", "permission denied for function", "(row8->>'vessels')::int is distinct from 0") && !suite.includes(" <> "),
+  "suite C1–C8 (breakdown withheld for a vessels AND a loads cell, distinct vessels AND listings, name order among suppressed, a zero port, anon refused as a role), NULL-safe asserts, rolled back");
 ok(/rpc\("get_port_touch_census"\)/.test(sdk) && /parsePdaPortCensus\(data\)/.test(sdk), "the SDK calls the governed RPC and parses the payload");
 
 // 2 · pure model
@@ -84,6 +85,8 @@ ok(map.includes("sizes?: Readonly<Record<string, number>>") && map.includes("con
   "map: pins take a size per port and redraw when sizes change; the basemap and pin style are untouched (owner ruling)");
 ok(mapPage.includes("pinSize(") && mapPage.includes("No pack yet · ask the attending agent") && mapPage.includes("Not held") && mapPage.includes("/dashboard/ports-da/ports/${port.locode}?on=${on}") && !/<input|<textarea/.test(mapPage),
   "map page: sizes by touches, the design's fallbacks, links to the record and settings, nothing typed");
+ok(hub.includes('touchRole(p) === "touched" ? "breakdown withheld" : null].filter(Boolean).join(" · ")') && !hub.includes("{p.touches}× · {")
+  && migration.includes("withholds ALL three cells") && migration.includes("ordered by name among the untouched ones"), "the hub row never dangles a separator and names a withheld breakdown; the migration header states the whole rule");
 ok(hub.includes("export const isPdaHubArm") && hub.includes("rankedPorts(census).filter((p) => p.rank != null).slice(0, 8)") && hub.includes("/dashboard/ports-da/tariff-packs/${k.packRef}?on=${on}") && hub.includes('<nav className="pmx-arms pd-topbar__end"'),
   "hub: two arms, most touched ports (ranked, max 8), tariff coverage linking to pack records");
 ok(hub.includes("touched {totalTouches(census)} time{totalTouches(census) === 1 ? \"\" : \"s\"} by live listings · reported counts only") && !/live listing\{totalTouches/.test(hub),

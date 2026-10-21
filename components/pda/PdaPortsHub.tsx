@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronRight, FileText, List, Map as MapIcon, Receipt, Settings2, ShieldCheck, UserRound } from "lucide-react";
 
 import type { PdaEstimatorCargoOption, PdaEstimatorVesselOption } from "@/lib/pda/estimator-contract";
-import { rankedPorts, targetedCount, totalTouches, type PdaPortCensus } from "@/lib/pda/port-census";
+import { rankedPorts, targetedCount, totalTouches, touchRole, type PdaPortCensus } from "@/lib/pda/port-census";
 import type { PdaTariffPack } from "@/lib/pda/tariff-packs";
 
 import { PdaQuickDa } from "./PdaQuickDa";
@@ -94,11 +94,11 @@ export function PdaPortsHub({ arm, census, packs, cargos, vessels, catalogUnavai
                     <Link className="pm-more" href={`/dashboard/ports-da/directory?on=${on}`}>Open directory →</Link>
                   </div>
                   <div className="pd-panel__body pd-panel__body--rows">
-                    {ranked.length === 0 ? <p className="pd-line ap-none">No port is touched by three or more live listings today.</p> : ranked.map((p) => (
+                    {ranked.length === 0 ? <p className="pd-line ap-none">No port is touched by three or more live listings or open vessels today.</p> : ranked.map((p) => (
                       <Link key={p.locode} className="pm-row" href={`/dashboard/ports-da/ports/${p.locode}?on=${on}`}>
                         <span className="pm-rank">{p.rank}</span>
                         <span className="pm-row__name">{p.name}</span>
-                        <span className="pm-row__meta">{p.touches}× · {p.loads ? `${p.loads} load` : ""}{p.loads && p.discharges ? " · " : ""}{p.discharges ? `${p.discharges} disch` : ""}{p.vessels ? ` · ${p.vessels} open` : ""}</span>
+                        <span className="pm-row__meta">{[`${p.touches}×`, p.loads ? `${p.loads} load` : null, p.discharges ? `${p.discharges} disch` : null, p.vessels ? `${p.vessels} open` : null, touchRole(p) === "touched" ? "breakdown withheld" : null].filter(Boolean).join(" · ")}</span>
                       </Link>
                     ))}
                   </div>

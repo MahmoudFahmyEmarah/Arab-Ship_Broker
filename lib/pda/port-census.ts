@@ -71,7 +71,7 @@ export function touchRole(p: PdaPortTouch): "load" | "discharge" | "both" | "ves
 }
 
 export const TOUCH_ROLE_LABEL: Record<ReturnType<typeof touchRole>, string> = {
-  load: "loads here", discharge: "discharges here", both: "loads and discharges", vessels: "vessels open here", none: "no live listing", suppressed: "fewer than 3 listings",
+  load: "loads here", discharge: "discharges here", both: "loads and discharges", vessels: "vessels open here", none: "no live listing", suppressed: "fewer than 3 listings or vessels",
   touched: "live listings touch it (breakdown withheld)",
 };
 
