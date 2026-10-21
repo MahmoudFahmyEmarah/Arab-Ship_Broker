@@ -120,6 +120,8 @@ export function PdaPortsWorkspace({ initialSelected = null }: { initialSelected?
 
   return (
     <section className="pda-ports" aria-labelledby="pda-ports-title">
+      {/* while the record is open the rest of the tab is inert: no focus, no clicks, hidden from assistive tech */}
+      <div inert={selectedPort ? true : undefined}>
       {band}
       <div className="px-wrap">
         <p className="px-lede">
@@ -198,6 +200,7 @@ export function PdaPortsWorkspace({ initialSelected = null }: { initialSelected?
           shape (bundled or itemised) is not derived yet, and every other arm is honestly empty until someone fills it.
         </p>
       </div>
+      </div>
 
       {selectedPort ? <PortDetail port={selectedPort} onClose={() => setSelected(null)} /> : null}
     </section>
@@ -209,7 +212,7 @@ function PortRow({ port, selected, onSelect }: { port: PdaWorkspacePort; selecte
   return (
     <tr className={selected ? "is-selected" : undefined} onClick={() => onSelect(port.locode)}>
       <th scope="row">
-        <button type="button" className="px-port" onClick={(event) => { event.stopPropagation(); onSelect(port.locode); }} aria-pressed={selected}>
+        <button type="button" className="px-port" data-locode={port.locode} onClick={(event) => { event.stopPropagation(); onSelect(port.locode); }} aria-pressed={selected}>
           <span className="n">{port.name}</span>
           <span className="code">{port.locode}</span>
         </button>
@@ -244,11 +247,13 @@ function PortDetail({ port, onClose }: { port: PdaWorkspacePort; onClose: () => 
   const panel = React.useRef<HTMLElement>(null);
   const closeButton = React.useRef<HTMLButtonElement>(null);
   const close = React.useRef(onClose);
-  React.useEffect(() => { close.current = onClose; });
+  const current = React.useRef(port.locode);
+  React.useEffect(() => { close.current = onClose; current.current = port.locode; });
   // a modal record: focus moves to the close button on open, Tab stays inside, Escape closes, and focus returns to
-  // the row that opened it when the panel unmounts
+  // the row that opened it when the panel unmounts (or to that port's row button when the panel opened pre-selected)
   React.useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const active = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    const opener = active && !panel.current?.contains(active) ? active : null;
     closeButton.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); close.current(); return; }
@@ -261,7 +266,11 @@ function PortDetail({ port, onClose }: { port: PdaWorkspacePort; onClose: () => 
       else if (!event.shiftKey && (document.activeElement === last || !panel.current.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     };
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); opener?.focus(); };
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      const target = opener && opener.isConnected ? opener : document.querySelector<HTMLElement>(`.px-port[data-locode="${current.current}"]`);
+      target?.focus();
+    };
   }, []);
   return (
     <>

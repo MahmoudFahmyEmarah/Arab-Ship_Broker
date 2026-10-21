@@ -59,6 +59,9 @@ ok(isPdaPortRecordTab("costs") && !isPdaPortRecordTab("admin"), "only the five r
 ok(portPacks(packs, "EGALY").length === 2 && portPacks(packs, "EGDAM").length === 1 && portPacks(packs, "NLRTM").length === 0, "the packs that price a port");
 ok(packRefFor(packs, "EGALY", port.tariffs[0]!) === "0123456789abcdef" && packRefFor(packs, "EGALY", port.tariffs[1]!) === "fedcba9876543210", "each edition resolves to the pack that lists its port + terminal");
 ok(packRefFor(packs, "EGALY", { ...port.tariffs[1]!, terminalName: "Terminal B" }) === null, "an edition no pack lists resolves to no link, never to another pack");
+const twin: PdaTariffPack = { ...packs[0]!, packRef: "aaaaaaaaaaaaaaaa", authority: "Another Authority" };
+ok(packRefFor([...packs, twin], "EGALY", port.tariffs[0]!) === "0123456789abcdef" && packRefFor([...packs, { ...twin, authority: packs[0]!.authority }], "EGALY", port.tariffs[0]!) === null,
+  "d: two documents with one label are told apart by the publisher; still ambiguous links nowhere");
 const rows = portAgents(agents, "EGALY");
 ok(rows !== null && rows.length === 1 && rows[0]!.name === "Zeta Agency" && rows[0]!.services.join("|") === "Agency|Towage" && portAgents(null, "EGALY") === null,
   "attending agents are those listed at the port, with their services; an unreadable registry is null, not empty");
@@ -80,9 +83,13 @@ ok(/catch \{\n\s*agents = null;/.test(read("app/(dashboard)/dashboard/ports-da/p
 ok(!/\b(id|Id)\b\s*[:=]\s*(port|pack|agency|a|e)\./.test(view), "no internal id is rendered");
 
 // 3 · B2O-050 P1-3: the slide-over is a real modal
-ok(workspace.includes('aria-modal="true"') && workspace.includes('event.key === "Escape"') && workspace.includes("closeButton.current?.focus()") && workspace.includes("opener?.focus()")
+ok(workspace.includes('aria-modal="true"') && workspace.includes('event.key === "Escape"') && workspace.includes("closeButton.current?.focus()") && workspace.includes("target?.focus()")
   && workspace.includes('event.key !== "Tab"') && workspace.includes('href={`/dashboard/ports-da/ports/${port.locode}`}'),
-  "P1-3: focus moves in on open, Tab is trapped, Escape closes, focus returns to the opener, and the record page is one link away");
+  "P1-3: focus moves in on open, Tab is trapped, Escape closes, focus returns, and the record page is one link away");
+ok(workspace.includes("<div inert={selectedPort ? true : undefined}>") && workspace.includes('.px-port[data-locode="${current.current}"]') && workspace.includes("data-locode={port.locode}"),
+  "a/b: the rest of the tab is inert while the record is open; focus falls back to the port's own row button when the panel opened pre-selected");
+ok(shell.includes("–<span className=\"asb-sr-only\"> Not recorded yet</span>"), "c: an empty table cell says it is not recorded");
+ok(view.includes('cols={["Document", "Edition", "Issuing body", "Scope", "Lines extracted"]}') && view.includes("sourceTitle"), "e: the Sources tab names the document and the edition separately");
 
 // 4 · B2O-050 P2-6..9
 ok(portal.includes('? "expired" : "awaiting response"') && portal.includes("Date.parse(request.expiresAt) < Date.now()"), "P2-6: an expired request reads as expired");

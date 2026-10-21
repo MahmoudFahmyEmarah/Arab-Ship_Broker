@@ -35,13 +35,16 @@ export type Row = [string, string | null];
 /** The packs whose in-force edition prices this port (any terminal). */
 export const portPacks = (packs: readonly PdaTariffPack[], locode: string) => packs.filter((k) => k.ports.some((p) => p.locode === locode));
 
-/** The pack reference behind one tariff edition, or null when no pack lists that port/terminal pairing. */
+/** The pack behind one tariff edition: port + terminal + edition label, then the publisher when two documents share a
+ *  label. Still ambiguous → null: a record never links to a pack it merely resembles. */
 export function packRefFor(packs: readonly PdaTariffPack[], locode: string, tariff: PdaWorkspaceTariff): string | null {
-  const pack = packs.find((k) => k.ports.some((p) => p.locode === locode && p.terminal === tariff.terminalName && (!p.edition || p.edition === tariff.editionLabel)));
-  return pack?.packRef ?? null;
+  const candidates = packs.filter((k) => k.ports.some((p) => p.locode === locode && p.terminal === tariff.terminalName && (!p.edition || p.edition === tariff.editionLabel)));
+  if (candidates.length === 1) return candidates[0]!.packRef;
+  const byPublisher = candidates.filter((k) => tariff.publisherName != null && k.authority === tariff.publisherName);
+  return byPublisher.length === 1 ? byPublisher[0]!.packRef : null;
 }
 
-export interface PdaPortAgentRow { name: string; website: string | null; services: string[] }
+export interface PdaPortAgentRow { agencyId: string; name: string; website: string | null; services: string[] }
 
 /** The agencies listed at this port, with the services each quotes there. */
 export function portAgents(agents: readonly PdaAgency[] | null, locode: string): PdaPortAgentRow[] | null {
@@ -49,7 +52,7 @@ export function portAgents(agents: readonly PdaAgency[] | null, locode: string):
   return agents
     .map((a) => ({ a, at: a.ports.find((p) => p.portLocode === locode) }))
     .filter((x): x is { a: PdaAgency; at: NonNullable<ReturnType<PdaAgency["ports"]["find"]>> } => !!x.at)
-    .map(({ a, at }) => ({ name: a.displayName, website: a.website, services: at.services.map((s) => PDA_SERVICE_LABELS[s]) }))
+    .map(({ a, at }) => ({ agencyId: a.agencyId, name: a.displayName, website: a.website, services: at.services.map((s) => PDA_SERVICE_LABELS[s]) }))
     .sort((x, y) => x.name.localeCompare(y.name));
 }
 

@@ -30,7 +30,7 @@ export function PdaPortSettings({ input, arm }: { input: PdaPortRecordInput; arm
           </div>
           <div className="ps-top__a">
             <Link className="asb-btn" href={`${base}?on=${on}`}>Port record</Link>
-            <Link className="asb-btn asb-btn--primary" href="/dashboard/ports-da">Back to the estimate</Link>
+            <Link className="asb-btn is-primary" href="/dashboard/ports-da">Back to the estimate</Link>
           </div>
         </div>
 
@@ -50,21 +50,23 @@ export function PdaPortSettings({ input, arm }: { input: PdaPortRecordInput; arm
           ) : current.sections.map((sec) => (
             <section key={sec.id} className="ps-card" aria-labelledby={`ps-${sec.id}`}>
               <div className="ps-card__hd"><h2 id={`ps-${sec.id}`} className="ps-card__t">{sec.label}</h2><span className="ps-card__h">Published values</span></div>
-              {sec.slots.map((slot) => {
-                const v = settingValue(slot, input);
-                return (
-                  <div key={slot.path} className="ps-slot">
-                    <div className="ps-slot__k">
-                      <div className="ps-slot__l">{slot.label}</div>
-                      {slot.help ? <div className="ps-slot__h">{slot.help}</div> : null}
+              <dl className="ps-slots">
+                {sec.slots.map((slot) => {
+                  const v = settingValue(slot, input);
+                  return (
+                    <div key={slot.path} className="ps-slot">
+                      <dt className="ps-slot__k">
+                        <div className="ps-slot__l">{slot.label}</div>
+                        {slot.help ? <div className="ps-slot__h">{slot.help}</div> : null}
+                      </dt>
+                      <dd className="ps-slot__v">
+                        {v.value ? <span className="ps-val">{v.value}{slot.unit ? <span className="ps-unit"> {slot.unit}</span> : null}</span> : <span className="ps-val ps-val--none">Not recorded yet</span>}
+                        {v.source ? <span className="asb-badge asb-badge--neutral">{v.source === "registry" ? "Agency registry" : "Tariff"}</span> : null}
+                      </dd>
                     </div>
-                    <div className="ps-slot__v">
-                      {v.value ? <span className="ps-val">{v.value}{slot.unit ? <span className="ps-unit"> {slot.unit}</span> : null}</span> : <span className="ps-val ps-val--none">Not recorded yet</span>}
-                      {v.source ? <span className="asb-badge asb-badge--neutral">{v.source === "registry" ? "Agency registry" : "Tariff"}</span> : null}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </dl>
             </section>
           ))}
 
@@ -84,29 +86,34 @@ function TariffArm({ input }: { input: PdaPortRecordInput }) {
   const here = tariffArmPacks(port, packs);
   if (!here.length) {
     return (
-      <div className="ps-card">
-        <div className="ps-slot">
-          <div className="ps-slot__k"><div className="ps-slot__l">No tariff pack resolves for {port.name}</div><div className="ps-slot__h">No published tariff is in force at this port on {on}; every service needs a manual quote in the estimate.</div></div>
-          <div className="ps-slot__v"><span className="ps-val ps-val--none">Not recorded yet</span></div>
-        </div>
-      </div>
+      <section className="ps-card" aria-labelledby="ps-tariff">
+        <div className="ps-card__hd"><h2 id="ps-tariff" className="ps-card__t">The tariffs that price this port</h2><span className="ps-card__h">None in force</span></div>
+        <dl className="ps-slots">
+          <div className="ps-slot">
+            <dt className="ps-slot__k"><div className="ps-slot__l">No tariff pack resolves for {port.name}</div><div className="ps-slot__h">No published tariff is in force at this port on {on}; every service needs a manual quote in the estimate.</div></dt>
+            <dd className="ps-slot__v"><span className="ps-val ps-val--none">Not recorded yet</span></dd>
+          </div>
+        </dl>
+      </section>
     );
   }
   return (
-    <div className="ps-card">
-      <div className="ps-card__hd"><h2 className="ps-card__t">The tariffs that price this port</h2><span className="ps-card__h">Each held on its own record</span></div>
-      {tariffArmRows(port, packs).map(([k, v]) => (
-        <div key={k} className="ps-slot">
-          <div className="ps-slot__k"><div className="ps-slot__l">{k}</div></div>
-          <div className="ps-slot__v">{v ? <span className="ps-val">{v}</span> : <span className="ps-val ps-val--none">Not recorded yet</span>}</div>
-        </div>
-      ))}
-      {here.map((k) => (
-        <div key={k.packRef} className="ps-slot">
-          <div className="ps-slot__k"><div className="ps-slot__l">{k.authority}</div><div className="ps-slot__h">{k.detail}</div></div>
-          <div className="ps-slot__v"><Link className="asb-btn" href={`/dashboard/ports-da/tariff-packs/${k.packRef}?on=${on}`}>Open the pack record</Link></div>
-        </div>
-      ))}
-    </div>
+    <section className="ps-card" aria-labelledby="ps-tariff">
+      <div className="ps-card__hd"><h2 id="ps-tariff" className="ps-card__t">The tariffs that price this port</h2><span className="ps-card__h">Each held on its own record</span></div>
+      <dl className="ps-slots">
+        {tariffArmRows(port, packs).map(([k, v]) => (
+          <div key={k} className="ps-slot">
+            <dt className="ps-slot__k"><div className="ps-slot__l">{k}</div></dt>
+            <dd className="ps-slot__v">{v ? <span className="ps-val">{v}</span> : <span className="ps-val ps-val--none">Not recorded yet</span>}</dd>
+          </div>
+        ))}
+        {here.map((k) => (
+          <div key={k.packRef} className="ps-slot">
+            <dt className="ps-slot__k"><div className="ps-slot__l">{k.authority}</div><div className="ps-slot__h">{k.detail}</div></dt>
+            <dd className="ps-slot__v"><Link className="asb-btn" href={`/dashboard/ports-da/tariff-packs/${k.packRef}?on=${on}`}>Open the pack record</Link></dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

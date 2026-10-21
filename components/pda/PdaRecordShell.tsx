@@ -142,7 +142,7 @@ export function Table({ caption, cols, num = [], rows, wide }: { caption: string
         <caption className="asb-sr-only">{caption}</caption>
         <thead><tr>{cols.map((c, i) => <th key={c} scope="col" className={num.includes(i) ? "num" : undefined}>{c}</th>)}</tr></thead>
         <tbody>
-          {rows.map((r, ri) => <tr key={ri}>{r.map((cell, ci) => <td key={ci} className={num.includes(ci) ? "num" : undefined}>{cell ?? <span className="pp-val is-empty">-</span>}</td>)}</tr>)}
+          {rows.map((r, ri) => <tr key={ri}>{r.map((cell, ci) => <td key={ci} className={num.includes(ci) ? "num" : undefined}>{cell ?? <span className="pp-val is-empty">–<span className="asb-sr-only"> Not recorded yet</span></span>}</td>)}</tr>)}
         </tbody>
       </table>
     </div>

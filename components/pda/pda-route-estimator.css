@@ -1759,3 +1759,7 @@
 .pm-scope .ps-top__n { margin: 0; }
 .pm-scope a.ps-arms__b { text-decoration: none; }
 .pm-scope .ps-card__t { margin: 0; }
+
+/* B2O-054: settings slots are a definition list; the inert wrapper is layout-neutral */
+.pm-scope dl.ps-slots { margin: 0; }
+.pm-scope .ps-slot dt, .pm-scope .ps-slot dd { margin: 0; }

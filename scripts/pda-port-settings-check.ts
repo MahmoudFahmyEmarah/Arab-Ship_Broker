@@ -43,7 +43,8 @@ ok(paths.length === 16 && new Set(paths).size === 16 && ["stay.rule", "stay.fixe
 const slot = (path: string) => PDA_SETTING_ARMS.flatMap((a) => a.sections.flatMap((s) => s.slots)).find((x) => x.path === path)!;
 ok(settingValue(slot("agentId"), input).value === "Zeta Agency" && settingValue(slot("agentId"), input).source === "registry", "the proposed agent comes from the agency registry");
 ok(settingValue(slot("agentId"), { ...input, agents: null }).value === null && settingValue(slot("agentId"), { ...input, agents: [] }).value === null, "no registry, or no agency listed, is an empty slot");
-ok(settingValue(slot("working.overtime"), input).source === "tariff" && settingValue(slot("working.overtime"), { ...input, port: { ...port, tariffs: [] } }).value === null, "working-pattern slots point at the tariff only when it prices cargo handling");
+ok(settingValue(slot("working.overtime"), input).value === null && settingValue(slot("shifts.included"), input).value === null && settingValue(slot("shifts.included"), input).source === null,
+  "S3: a cargo-handling line answers neither overtime nor the shifts included; both stay unrecorded (P1-S1)");
 ok(["stay.rule", "stay.fixedDays", "overstay.perDayUSD", "verify.requireBasis"].every((p) => settingValue(slot(p), input).value === null), "stay, trigger and access rules are not recorded anywhere yet");
 const rows = tariffArmRows(port, packs);
 ok(rows.find((r) => r[0] === "Priced by")?.[1] === "APA" && rows.find((r) => r[0] === "Charge lines")?.[1]?.startsWith("4 in all · 2 of 9") && rows.find((r) => r[0] === "Amendments")?.[1] === null,
@@ -56,6 +57,9 @@ ok(page.includes("isPdaSettingArm(query.arm)") && page.includes("isoDayOrToday("
   "the settings page is gated, validates arm and date, and never falls back to another port");
 ok(recordPage.includes("loadPortRecordInput(") && page.includes("loadPortRecordInput(") && loader.includes('return { kind: "missing" }') && loader.includes("agents = null"), "both per-port pages share one loader with honest missing/failed states");
 ok(record.includes("/settings?on=${on}") && view.includes("Port record"), "the record links to its settings and the settings link back");
-ok(!/\b(id|Id)\b\s*[:=]\s*(port|pack|k|a)\./.test(view), "no internal id is rendered");
+ok(!view.includes("agencyId") && !/\.(agencyId|orgId|userId|ownerId|sourceId|versionId|terminalId|setId)\b/.test(view) && !/\b(port|pack|k|p)\.id\b/.test(view),
+  "S2: no identifier of a record is rendered (the fixture's agencyId never reaches the page; arm and section keys are design names)");
+ok(view.includes('<dl className="ps-slots">') && view.includes('<dt className="ps-slot__k">') && view.includes('<dd className="ps-slot__v">') && view.includes('id="ps-tariff"') && !/asb-btn--primary/.test(view),
+  "S4/S5: slots are a definition list, the tariff arm always has a heading, the app's button class is used");
 
 console.log(`\nPDA port settings: ${n} checks passed`);

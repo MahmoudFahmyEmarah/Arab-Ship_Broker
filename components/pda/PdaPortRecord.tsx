@@ -8,6 +8,7 @@ import {
   PDA_PORT_RECORD_TABS,
   identityRows,
   marketRows,
+  packRefFor,
   pdaInputRows,
   portAgents,
   portPacks,
@@ -133,7 +134,7 @@ function sectionsFor(tab: PdaPortRecordTab, input: PdaPortRecordInput): PdaRecor
           : rows.length ? (
             <Table caption="Attending agents" cols={["Agency", "HQ", "Verified", "Scope", "Contact"]}
               rows={rows.map((a) => [
-                <span key="n" className="pp-val">{a.name}</span>, null, "Invited by Arab ShipBroker", a.services.join(" · ") || null,
+                <Link key="n" className="pp-val" href={`/dashboard/ports-da/agents/${a.agencyId}?on=${on}`}>{a.name}</Link>, null, "Invited by Arab ShipBroker", a.services.join(" · ") || null,
                 a.website ? <a key="w" href={a.website} rel="noopener noreferrer" target="_blank">website</a> : null,
               ])} />
           ) : <Empty what="No agency is listed at this port yet." />,
@@ -145,8 +146,12 @@ function sectionsFor(tab: PdaPortRecordTab, input: PdaPortRecordInput): PdaRecor
     {
       n: "12", id: "documents", title: "Source documents", src: "Arab ShipBroker",
       body: port.tariffs.length ? (
-        <Table caption="Source documents" cols={["Document", "Issuing body", "Scope", "Lines extracted"]} num={[3]}
-          rows={port.tariffs.map((t) => [<span key="d" className="pp-val">{t.editionLabel}</span>, t.publisherName, t.terminalName ?? "Port-wide", String(t.ruleCount)])} />
+        <Table caption="Source documents" cols={["Document", "Edition", "Issuing body", "Scope", "Lines extracted"]} num={[4]}
+          rows={port.tariffs.map((t) => {
+            const ref = packRefFor(packs, port.locode, t);
+            const title = packs.find((k) => k.packRef === ref)?.sourceTitle ?? null;
+            return [title ? <span key="d" className="pp-val">{title}</span> : null, t.editionLabel, t.publisherName, t.terminalName ?? "Port-wide", String(t.ruleCount)];
+          })} />
       ) : <Empty what="No source document is registered for this port." />,
     },
     {

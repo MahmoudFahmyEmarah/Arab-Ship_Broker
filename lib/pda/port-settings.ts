@@ -38,10 +38,10 @@ export const PDA_SETTING_ARMS: readonly PdaSettingArm[] = [
         { path: "working.gangsPerHatch", label: "Gangs per hatch", unit: "gangs" },
         { path: "working.shiftsPerDay", label: "Shifts per day", unit: "shifts" },
         { path: "working.shiftHours", label: "Hours per shift", unit: "hours" },
-        { path: "working.overtime", label: "Overtime and weekend rule", help: "Priced by the port tariff, priced in the stevedore's quote, or not worked." },
+        { path: "working.overtime", label: "Overtime and weekend rule", help: "Priced by the port tariff, priced in the stevedore's quote, or not worked. A cargo-handling line on the pack record does not state it; only a rule that names overtime does." },
       ] },
       { id: "shifts", label: "Berth shifting", slots: [
-        { path: "shifts.included", label: "Shifts inside the berthing charge", unit: "shifts", help: "Each further shift is priced by the tariff's own shifting line where it has one. Where it has none the estimate says so." },
+        { path: "shifts.included", label: "Shifts inside the berthing charge", unit: "shifts", help: "Each further shift is priced by the tariff's own shifting line where it has one. Where it has none the estimate says so. A cargo-handling line does not state the shifts included." },
       ] },
     ],
   },
@@ -75,11 +75,8 @@ export function settingValue(slot: PdaSettingSlot, input: PdaPortRecordInput): P
     if (rows === null) return { value: null, source: null };
     return rows.length ? { value: rows.map((r) => r.name).join(" · "), source: "registry" } : { value: null, source: null };
   }
-  if (slot.path === "working.overtime" || slot.path === "shifts.included") {
-    // only a tariff can answer these, and only by having a line for them; the lines are read on the pack record
-    const priced = pricedServices(input.port);
-    return priced.includes("cargo_handling") ? { value: "See the tariff's cargo-handling lines on the pack record", source: "tariff" } : { value: null, source: null };
-  }
+  // every other slot (stay, triggers, working pattern, access rules) has no store yet; a tariff's cargo-handling line
+  // does not answer shifts or overtime, so nothing here is ever shown as answered without a rule that states it
   return { value: null, source: null };
 }
 
