@@ -8,6 +8,7 @@ import type {
   PdaRouteTransitsInput,
 } from "./route-types";
 import { PDA_ROUTE_SERVICE_OPTIONS } from "./route-types";
+import { isAgencyQuoteLeg } from "./quote-acceptance";
 import type { PdaCalculationResult, PdaRequest, PdaWarning } from "./types";
 
 const DAY_MS = 86_400_000;
@@ -84,7 +85,8 @@ function displayedTotal(
   else if (warning?.code === "TARIFF_GAP") reason = "TARIFF_GAP";
   else if (warning?.code === "MISSING_INPUT") reason = "MISSING_TARIFF_INPUT";
   else if (warning?.code === "NO_APPLICABLE_RULES") reason = "NO_APPLICABLE_RULES";
-  else if (result.coverage === "manual_required" || result.tariffVersionId == null || !result.lines.length) {
+  // an accepted agency quote prices its port without a tariff; it is sourced for the services its lines name
+  else if (!isAgencyQuoteLeg(result) && (result.coverage === "manual_required" || result.tariffVersionId == null || !result.lines.length)) {
     reason = result.tariffVersionId ? "NO_GOVERNED_SOURCE" : "NO_PUBLISHED_TARIFF";
   } else if (missingServices.length) {
     reason = "REQUESTED_SERVICE_NOT_SOURCED";

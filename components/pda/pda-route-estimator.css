@@ -1320,3 +1320,305 @@
   outline: 2px solid var(--ds-blue);
   outline-offset: 2px;
 }
+
+/* ── Agents workspace, phase 1 (O2ALL-009): the directory of ASB-invited port agencies ───────────────────────── */
+.pda-agents {
+  display: grid;
+  gap: 12px;
+}
+
+.pda-agents__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pda-agents__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pda-agents__item {
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  padding: 10px 12px;
+}
+
+.pda-agents__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--ds-navy);
+  font-size: 13px;
+}
+
+.pda-agents__icon {
+  display: inline-flex;
+  color: var(--ds-blue);
+}
+
+.pda-agents__site {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ds-blue);
+  font-size: 12px;
+}
+
+.pda-agents__ports {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pda-agents__ports li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  border-top: 1px solid var(--ds-line);
+  padding-top: 4px;
+  font-size: 12px;
+}
+
+.pda-agents__port {
+  color: var(--ds-navy);
+  font-weight: 600;
+}
+
+.pda-agents__port em,
+.pda-agents__services {
+  color: var(--ds-muted);
+  font-style: normal;
+  font-weight: 400;
+}
+
+/* ── Agents phase 2 (O2ALL-009): quote requests on a saved estimate and the agency inbox ──────────────────────── */
+.pda-quotes,
+.pda-agency {
+  display: grid;
+  gap: 10px;
+  flex-basis: 100%;
+}
+
+.pda-quotes__request,
+.pda-quotes__new {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-small);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.pda-quotes__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pda-quotes__head span,
+.pda-agency__meta,
+.pda-agency__note,
+.pda-agency__services {
+  color: var(--ds-muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.pda-quotes__agencies {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pda-quotes__agencies li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  border-top: 1px solid var(--ds-line);
+  padding-top: 4px;
+}
+
+.pda-quotes__choose {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.pda-quotes__choose legend {
+  margin-bottom: 4px;
+  color: var(--ds-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pda-quotes__note,
+.pda-agency__wide {
+  display: grid;
+  gap: 4px;
+}
+
+.pda-quotes__reveal {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.pda-agency__card {
+  display: grid;
+  gap: 8px;
+}
+
+.pda-agency__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pda-agency__head h2 {
+  margin: 0;
+  color: var(--ds-navy);
+  font-size: 14px;
+}
+
+.pda-agency__head em {
+  color: var(--ds-muted);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.pda-agency__status {
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-blue-soft);
+  color: var(--ds-blue);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+
+.pda-agency__status.is-quoted {
+  background: var(--ds-green-soft);
+  color: var(--ds-green);
+}
+
+.pda-agency__status.is-declined,
+.pda-agency__status.is-withdrawn,
+.pda-agency__status.is-expired {
+  background: var(--ds-canvas);
+  color: var(--ds-muted);
+}
+
+.pda-agency__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.pda-agency__facts dt {
+  color: var(--ds-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pda-agency__facts dd {
+  margin: 0;
+  color: var(--ds-navy);
+}
+
+.pda-agency__form {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--ds-line);
+  padding-top: 8px;
+}
+
+.pda-agency__form h3 {
+  margin: 0;
+  color: var(--ds-navy);
+  font-size: 13px;
+}
+
+.pda-agency__lines {
+  display: grid;
+  gap: 6px;
+}
+
+.pda-agency__line {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.pda-agency__terms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pda-agency__terms label {
+  display: grid;
+  gap: 4px;
+}
+
+.pda-agency__wide {
+  grid-column: 1 / -1;
+}
+
+.pda-agency__decline {
+  flex: 1 1 220px;
+}
+
+@container (max-width: 760px) {
+  .pda-agency__line {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* Agents phase 3: a quote beside the member's estimate, and the accept confirmation */
+.pda-quotes__compare {
+  flex-basis: 100%;
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.pda-quotes__confirm {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--ds-blue);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-blue-soft);
+  padding: 8px 10px;
+}
+
+.pda-quotes__confirm p {
+  margin: 0;
+  color: var(--ds-navy);
+  font-size: 12px;
+}

@@ -48,6 +48,19 @@ requests and responses, change sets and a review desk for agent-submitted port d
 | **A6** | **Agent-submitted tariff data** | Never; through the existing maker/checker pipeline as `authority = agent` sources, desk-reviewed | **Through the pipeline**, never published directly (matches the reference "nothing publishes directly") |
 | **A7** | **Commercial terms** | Free listing; paid listing / featured agents; per-request fee | Owner's call — the build is the same either way |
 
+## 3a. As built (19 Oct 2026; each phase its own wave, B2ALL-057)
+
+- **Phase 1 (Wave 9)** — `20261018130000`: registry (`pda_agencies`, `pda_port_agents`, append-only events), owner console
+  `/admin/port-agents`, member directory in the Agents tab and on each port card.
+- **Phase 2 (Wave 10)** — `20261019100000`: quote requests from the latest saved set to agencies listed at one port,
+  masked snapshot (A5; company only on reveal), agency staff answer in `/dashboard/agency` (A1 c; no PDA tier, the
+  database decides staff), append-only quotes with revisions, reasoned declines, withdraw, notifications.
+- **Phase 3 (Wave 11)** — `20261019110000`: each quote beside the member's estimate for that port; accepting saves a new
+  version (A4) with the quoted port priced from the quote (basis `agency_quote`, checked line by line in the database),
+  the rest recomputed; one acceptance per request; the agency is notified.
+- Not built: the desk recording an emailed quote for an agency not yet onboarded (A3 fallback), quote documents as
+  evidence files, A6, A7. Beta mode locks `/dashboard/agency` for non-admins like every other dashboard page.
+
 ## 4. Proposed first release (A1 = b), if approved
 
 Governed like the rest of the PDA module: RPC-only access, no browser stores, immutable records, service-only writes.

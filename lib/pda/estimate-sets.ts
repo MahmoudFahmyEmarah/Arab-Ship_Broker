@@ -46,6 +46,8 @@ export interface PdaSavedLine {
   lineNo: number;
   ruleCode: string | null;
   label: string;
+  /** the pricing basis; 'agency_quote' for a line of an accepted agency quote (Agents phase 3) */
+  basis: string | null;
   /** null only if the record is damaged: an unknown amount is never shown as zero (B2O-044 P1-2) */
   amount: number | null;
   convertedAmount: number | null;
@@ -175,6 +177,7 @@ function parseLeg(raw: unknown): PdaSavedLeg {
         convertedAmount: num(l.convertedAmount),
         explanation: String(l.explanation ?? ""),
         manual: l.manual === true,
+        basis: str(l.basis),
         manualReason: str(l.manualReason),
         enteredBy: str(l.enteredBy),
         // evidence by title/page/sheet/excerpt only — never the source id (C2O-120)

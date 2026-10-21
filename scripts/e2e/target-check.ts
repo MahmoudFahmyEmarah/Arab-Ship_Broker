@@ -214,6 +214,7 @@ const boundContracts = [
   "e2e/fixture-room.helpers.ts",
   "e2e/global-setup.ts",
   "e2e/market-tbn-privacy.spec.ts",
+  "e2e/pda-agents.spec.ts",
   "e2e/pda-estimator-alignment.spec.ts",
   "e2e/rules-governance.spec.ts",
   "scripts/e2e/real-auth-check.ts",
