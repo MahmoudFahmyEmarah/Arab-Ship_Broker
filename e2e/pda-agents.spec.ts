@@ -140,7 +140,7 @@ async function signIn(browser: Browser, baseURL: string, email: string) {
   // (pdaag-9430dabdfa8d: the modal re-opens; a second click waited forever) — bounded, no wait-after, never throws
   await page.addLocatorHandler(page.getByRole("dialog", { name: "Vessel position check-in" }), async (dialog) => {
     await dialog.getByRole("button", { name: "Remind me later" }).click({ timeout: 10_000, noWaitAfter: true })
-      .catch(() => page.keyboard.press("Escape").catch(() => undefined)); // the component also closes on Escape
+      .catch(() => page.locator(".asb-checkin-backdrop").first().dispatchEvent("mousedown").catch(() => undefined)); // it closes on backdrop mousedown; it has no Escape handler
   });
   await page.goto("/auth/login");
   await expect(page.locator('input[name="email"]')).toBeVisible({ timeout: 90_000 });
