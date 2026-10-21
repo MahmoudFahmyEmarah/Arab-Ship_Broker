@@ -25,6 +25,8 @@ D="$T/wiped/$RUN"; mkdir -p "$D"; rm -rf "$T/wiped"; L=$(logdir "$D" "x")
 [ "$L" = "$D" ] && [ -d "$L" ] && pass "logdir re-created the removed directory" || { echo "FAIL logdir re-create [$L]"; exit 1; }
 L2=$(logdir "/proc/nonexistent-cannot-create/x" "pda-agents-run-$RUN" 2>/dev/null)
 [ -d "$L2" ] && [[ "$L2" == */pda-agents-run-$RUN.* ]] && pass "logdir fell back to a temporary directory named after the stem" && rmdir "$L2" || { echo "FAIL logdir fallback [$L2]"; exit 1; }
+L3=$(TMPDIR=/proc/nonexistent logdir "/proc/nonexistent-cannot-create/x" "x" 2>/dev/null)
+[ "$L3" = "." ] && pass "logdir never answers with an empty string (the current directory is the last resort)" || { echo "FAIL logdir last resort [$L3]"; exit 1; }
 out=$(keep "/proc/nonexistent/x.log" "text" 2>&1); st=$?
 [ $st = 0 ] && [ -z "$out" ] && pass "keep on an unwritable path: status 0, nothing printed" || { echo "FAIL keep [$st] [$out]"; exit 1; }
 keep "$T/kept.log" "line"; [ "$(cat "$T/kept.log")" = "line" ] && pass "keep on a writable path writes the text" || { echo "FAIL keep write"; exit 1; }
