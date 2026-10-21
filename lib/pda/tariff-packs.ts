@@ -90,3 +90,11 @@ export function summarisePdaTariffPacks(packs: readonly PdaTariffPack[]) {
   const resolver = resolvePdaTariffPorts(packs);
   return { packs: packs.length, portsResolved: resolver.length, portsWithSeveral: resolver.filter((r) => packCount(r) > 1).length };
 }
+
+/** The ?on= day: a real calendar date, else today (an impossible date such as 2026-02-31 falls back instead of failing the page). */
+export function isoDayOrToday(value: string | undefined): string {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return today;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value ? today : value;
+}

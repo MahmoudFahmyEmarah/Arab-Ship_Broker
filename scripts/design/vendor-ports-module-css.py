@@ -3,7 +3,7 @@
 Reads the stylesheets extracted from `tmp/Arab ShipBroker Portal - Standalone (7).html` and prefixes every selector with
 `.pm-scope`, so the design's classes apply only inside the Ports-module pages and never collide with the portal.
 :root/html/body become `.pm-scope` itself; @media/@supports/@container blocks are prefixed inside; @keyframes and
-@font-face are copied as they are. The design's token file and icon font are NOT vendored: the app already provides those tokens
+@font-face is never copied (the app serves Inter itself). The design's token file and icon font are NOT vendored: the app already provides those tokens
 (app/design-tokens.css). The design-system base and da-plus are vendored first, scoped like the rest. Re-run to regenerate; never hand-edit
 the output.
 
@@ -95,7 +95,11 @@ def scope(css: str) -> str:
             out.append(prelude + ";")
         elif prelude.startswith(("@media", "@supports", "@container", "@layer")):
             out.append(prelude + " {\n" + scope(body) + "\n}")
-        elif prelude.startswith(("@keyframes", "@-webkit-keyframes", "@font-face", "@page")):
+        elif prelude.startswith("@font-face"):
+            # never vendored: @font-face cannot be scoped, the app already serves Inter, and the bundle's asset-id
+            # url()s do not exist here (they would break the global family and the Next CSS build)
+            continue
+        elif prelude.startswith(("@keyframes", "@-webkit-keyframes", "@page")):
             out.append(prelude + " {" + body + "}")
         else:
             sels = ", ".join(prefix_selector(s) for s in prelude.split(","))

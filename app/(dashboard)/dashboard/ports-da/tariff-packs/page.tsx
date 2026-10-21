@@ -6,11 +6,9 @@ import { loadViewerContext } from "@/lib/portal/data";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { listPdaTariffPacks } from "@/sdk/app/pda";
-import type { PdaTariffPack } from "@/lib/pda/tariff-packs";
+import { isoDayOrToday, type PdaTariffPack } from "@/lib/pda/tariff-packs";
 
 export const metadata = { title: "Tariff Packs · Arab ShipBroker" };
-
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function TariffPacksPage({ searchParams }: { searchParams: Promise<{ on?: string }> }) {
   const supabase = await getSupabaseServerClient();
@@ -19,8 +17,7 @@ export default async function TariffPacksPage({ searchParams }: { searchParams: 
   const { tier } = await loadViewerContext();
   if (isCalculatorLocked(tier)) return <CalculatorLocked title="Tariff Packs" />;
 
-  const requested = (await searchParams).on;
-  const on = requested && ISO_DAY.test(requested) && !Number.isNaN(Date.parse(requested)) ? requested : new Date().toISOString().slice(0, 10);
+  const on = isoDayOrToday((await searchParams).on);
   let packs: PdaTariffPack[] = [];
   let error: string | undefined;
   try {

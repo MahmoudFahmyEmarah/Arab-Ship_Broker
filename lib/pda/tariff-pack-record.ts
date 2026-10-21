@@ -29,6 +29,9 @@ export interface PdaTariffPackEdition {
   port: string;
   portName: string;
   terminal: string | null;
+  /** the set's scope ('port_call', 'terminal', 'pilotage' …) and name: several sets can share a port, terminal and document */
+  scope: string | null;
+  setName: string | null;
   edition: string;
   version: number;
   currency: string;
@@ -118,6 +121,8 @@ export function parsePdaTariffPackRecord(raw: unknown): PdaTariffPackRecord | nu
         port: String(e.port ?? ""),
         portName: String(e.portName ?? e.port ?? ""),
         terminal: str(e.terminal),
+        scope: str(e.scope),
+        setName: str(e.setName),
         edition: String(e.edition ?? ""),
         version: numOrNull(e.version) ?? 0,
         currency: String(e.currency ?? ""),
@@ -173,7 +178,7 @@ export function lineFigure(line: PdaTariffPackLine, currency: string): string {
   if (line.basis === "percentage" && line.rate != null) return `${line.rate} %`;
   if (line.rate != null) return money(line.rate, line.unit, currency);
   if (line.amount != null) return money(line.amount, line.unit, currency);
-  if (line.basis.startsWith("tiered") || line.basis === "progressive") return "By band";
+  if (line.basis.startsWith("tiered") || line.basis === "progressive") return "Bands not shown yet";
   return "—";
 }
 

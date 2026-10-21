@@ -6,13 +6,11 @@ import { CalculatorLocked } from "@/components/portal/calculators";
 import { loadViewerContext } from "@/lib/portal/data";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { isPdaTariffPackRef } from "@/lib/pda/tariff-packs";
+import { isPdaTariffPackRef, isoDayOrToday } from "@/lib/pda/tariff-packs";
 import { isPdaTariffPackTab } from "@/lib/pda/tariff-pack-record";
 import { getPdaTariffPack } from "@/sdk/app/pda";
 
 export const metadata = { title: "Tariff pack · Arab ShipBroker" };
-
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function TariffPackPage({ params, searchParams }: { params: Promise<{ ref: string }>; searchParams: Promise<{ on?: string; tab?: string }> }) {
   const supabase = await getSupabaseServerClient();
@@ -23,7 +21,7 @@ export default async function TariffPackPage({ params, searchParams }: { params:
 
   const { ref } = await params;
   const query = await searchParams;
-  const on = query.on && ISO_DAY.test(query.on) && !Number.isNaN(Date.parse(query.on)) ? query.on : new Date().toISOString().slice(0, 10);
+  const on = isoDayOrToday(query.on);
   const tab = isPdaTariffPackTab(query.tab) ? query.tab : "pack";
 
   let record = null;

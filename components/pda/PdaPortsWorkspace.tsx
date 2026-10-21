@@ -241,10 +241,32 @@ function PortRow({ port, selected, onSelect }: { port: PdaWorkspacePort; selecte
 function PortDetail({ port, onClose }: { port: PdaWorkspacePort; onClose: () => void }) {
   const priced = pricedServices(port);
   const missing = PDA_ROUTE_SERVICE_CODES.filter((service) => !priced.includes(service));
+  const panel = React.useRef<HTMLElement>(null);
+  const closeButton = React.useRef<HTMLButtonElement>(null);
+  const close = React.useRef(onClose);
+  React.useEffect(() => { close.current = onClose; });
+  // a modal record: focus moves to the close button on open, Tab stays inside, Escape closes, and focus returns to
+  // the row that opened it when the panel unmounts
+  React.useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButton.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); close.current(); return; }
+      if (event.key !== "Tab" || !panel.current) return;
+      const focusable = panel.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !panel.current.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); opener?.focus(); };
+  }, []);
   return (
     <>
     <div className="pe-recscrim" onClick={onClose} aria-hidden="true"></div>
-    <aside className="pe-rec" role="dialog" aria-modal="false" aria-labelledby="pda-port-detail-title">
+    <aside ref={panel} className="pe-rec" role="dialog" aria-modal="true" aria-labelledby="pda-port-detail-title">
       <div className="pe-rec__hd">
         <div>
           <h3 id="pda-port-detail-title" className="pe-rec__t">{port.name}</h3>
@@ -252,7 +274,7 @@ function PortDetail({ port, onClose }: { port: PdaWorkspacePort; onClose: () => 
         </div>
         <div className="pe-rec__a">
           <Link className="asb-btn is-primary pe-rec__go" href={`/dashboard/ports-da/ports/${port.locode}`}><FileText size={13} aria-hidden="true" /> Open the port record</Link>
-          <button type="button" className="pe-rec__x" onClick={onClose} aria-label="Close the record"><X size={16} aria-hidden="true" /></button>
+          <button ref={closeButton} type="button" className="pe-rec__x" onClick={onClose} aria-label="Close the record"><X size={16} aria-hidden="true" /></button>
         </div>
       </div>
       <div className="pe-rec__body">

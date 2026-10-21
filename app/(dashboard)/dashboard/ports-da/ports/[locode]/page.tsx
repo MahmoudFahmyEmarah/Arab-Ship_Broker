@@ -5,6 +5,7 @@ import { RecordMissing } from "@/components/pda/PdaRecordShell";
 import { CalculatorLocked } from "@/components/portal/calculators";
 import type { PdaAgency } from "@/lib/pda/agents";
 import { isPdaPortLocode, isPdaPortRecordTab } from "@/lib/pda/port-record";
+import { isoDayOrToday } from "@/lib/pda/tariff-packs";
 import { loadViewerContext } from "@/lib/portal/data";
 import { isCalculatorLocked } from "@/lib/portal/tier-gate";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -12,7 +13,6 @@ import { listPdaPortAgents, listPdaPortsWorkspace, listPdaTariffPacks } from "@/
 
 export const metadata = { title: "Port record · Arab ShipBroker" };
 
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const BACK = { href: "/dashboard/ports-da?tab=ports", label: "Back to Ports" };
 
 export default async function PortRecordPage({ params, searchParams }: { params: Promise<{ locode: string }>; searchParams: Promise<{ on?: string; tab?: string }> }) {
@@ -24,7 +24,7 @@ export default async function PortRecordPage({ params, searchParams }: { params:
 
   const locode = (await params).locode.toUpperCase();
   const query = await searchParams;
-  const on = query.on && ISO_DAY.test(query.on) && !Number.isNaN(Date.parse(query.on)) ? query.on : new Date().toISOString().slice(0, 10);
+  const on = isoDayOrToday(query.on);
   const tab = isPdaPortRecordTab(query.tab) ? query.tab : "particulars";
 
   // an unknown code is said out loud, never answered with another port's record

@@ -3,7 +3,7 @@
 --
 -- A tariff belongs to the authority that issued it, not to a country: one PACK per published source document, with
 -- every port whose tariff in force on the date cites it. Read through the member's own session (estimator gate),
--- published versions only. No internal id leaves the database: a pack is addressed by an opaque reference (the first
+-- published versions only, at active + verified ports and terminals (the Ports tab's own rule). No internal id leaves the database: a pack is addressed by an opaque reference (the first
 -- 16 hex of sha256 of its source id), and the record carries labels, figures and citations, never row ids.
 --
 --   fn_pda_tariff_pack_ref(source)       the opaque reference of a pack (private helper)
@@ -34,6 +34,8 @@ begin
     from public.port_tariff_sets s
     join public.port_tariff_versions v on v.tariff_set_id = s.id and v.status = 'published'
     where s.is_active
+      and exists (select 1 from public.ports gp where gp.locode = s.port_locode and gp.is_active and gp.is_verified)
+      and (s.terminal_id is null or exists (select 1 from public.port_terminals gt where gt.id = s.terminal_id and gt.is_active and gt.is_verified))
       and v.effective_from <= p_on and (v.effective_to is null or v.effective_to >= p_on)
     order by s.id, v.effective_from desc, v.version_no desc
   ),
@@ -83,7 +85,10 @@ begin
     from (select distinct on (s.id) v.primary_source_id
             from public.port_tariff_sets s
             join public.port_tariff_versions v on v.tariff_set_id = s.id and v.status = 'published'
-           where s.is_active and v.effective_from <= p_on and (v.effective_to is null or v.effective_to >= p_on)
+           where s.is_active
+             and exists (select 1 from public.ports gp where gp.locode = s.port_locode and gp.is_active and gp.is_verified)
+             and (s.terminal_id is null or exists (select 1 from public.port_terminals gt where gt.id = s.terminal_id and gt.is_active and gt.is_verified))
+             and v.effective_from <= p_on and (v.effective_to is null or v.effective_to >= p_on)
            order by s.id, v.effective_from desc, v.version_no desc) e
    where public.fn_pda_tariff_pack_ref(e.primary_source_id) = p_ref
    limit 1;
@@ -91,11 +96,14 @@ begin
 
   with in_force as (
     select distinct on (s.id)
-      s.id as set_id, s.port_locode, s.terminal_id, v.id as version_id, v.version_no, v.edition_label, v.currency, v.primary_source_id,
+      s.id as set_id, s.port_locode, s.terminal_id, s.scope, s.name as set_name, v.id as version_id, v.version_no, v.edition_label, v.currency, v.primary_source_id,
       v.effective_from, v.effective_to, v.published_at, v.rounding_mode, v.decimal_places, (v.supersedes_id is not null) as supersedes
     from public.port_tariff_sets s
     join public.port_tariff_versions v on v.tariff_set_id = s.id and v.status = 'published'
-    where s.is_active and v.effective_from <= p_on and (v.effective_to is null or v.effective_to >= p_on)
+    where s.is_active
+      and exists (select 1 from public.ports gp where gp.locode = s.port_locode and gp.is_active and gp.is_verified)
+      and (s.terminal_id is null or exists (select 1 from public.port_terminals gt where gt.id = s.terminal_id and gt.is_active and gt.is_verified))
+      and v.effective_from <= p_on and (v.effective_to is null or v.effective_to >= p_on)
     order by s.id, v.effective_from desc, v.version_no desc
   ),
   effective as (select * from in_force where primary_source_id = v_source)
@@ -109,7 +117,7 @@ begin
                                  'effectiveTo', src.effective_to, 'language', src.language, 'registeredAt', src.registered_at,
                                  'currentness', src.currentness_note),
     'editions', (select coalesce(jsonb_agg(jsonb_build_object(
-        'port', e.port_locode, 'portName', p.trade_name, 'terminal', t.name, 'edition', e.edition_label, 'version', e.version_no,
+        'port', e.port_locode, 'portName', p.trade_name, 'terminal', t.name, 'scope', e.scope, 'setName', e.set_name, 'edition', e.edition_label, 'version', e.version_no,
         'currency', e.currency, 'effectiveFrom', e.effective_from, 'effectiveTo', e.effective_to, 'publishedAt', e.published_at,
         'rounding', e.rounding_mode, 'decimals', e.decimal_places, 'supersedes', e.supersedes,
         'lines', (select coalesce(jsonb_agg(jsonb_build_object(

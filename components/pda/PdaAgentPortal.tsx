@@ -61,9 +61,9 @@ export function PdaAgentPortal({ mode, initialPort = null, agency: agencyFromPag
             </div>
           ) : null}
           {views.length > 1 ? (
-            <div className="ap-viewtog" role="tablist" aria-label="Agent Portal views">
+            <div className="ap-viewtog" role="group" aria-label="Agent Portal views">
               {views.map((v) => (
-                <button key={v.id} type="button" role="tab" aria-selected={view === v.id} className={view === v.id ? "is-on" : undefined} onClick={() => setView(v.id)}>
+                <button key={v.id} type="button" aria-pressed={view === v.id} className={view === v.id ? "is-on" : undefined} onClick={() => setView(v.id)}>
                   {v.icon} {v.label}
                 </button>
               ))}
@@ -130,7 +130,7 @@ function RequestView({ initialPort }: { initialPort: string | null }) {
                           <td>{agency.displayName}{quote?.enteredVia === "desk" ? <span className="ap-cmp__sub">recorded by Arab ShipBroker</span> : null}</td>
                           <td className="num">{quote ? money(quote.total, quote.currency) : "-"}</td>
                           <td>{quote ? day(quote.validUntil) : "-"}</td>
-                          <td>{quote?.accepted ? "accepted" : agency.status === "quoted" ? `quoted${quote && quote.revision > 1 ? ` · rev ${quote.revision}` : ""}` : agency.status === "declined" ? "declined" : request.status === "withdrawn" ? "withdrawn" : "awaiting response"}</td>
+                          <td>{quote?.accepted ? "accepted" : agency.status === "quoted" ? `quoted${quote && quote.revision > 1 ? ` · rev ${quote.revision}` : ""}` : agency.status === "declined" ? "declined" : request.status === "withdrawn" ? "withdrawn" : request.status === "open" && Date.parse(request.expiresAt) < Date.now() ? "expired" : "awaiting response"}</td>
                         </tr>
                       );
                     }))}
@@ -171,9 +171,9 @@ function AgencyView({ agency, awaiting, onAwaiting }: { agency: PdaMyAgency; awa
         <span className="ap-badge is-ok">Listed by Arab ShipBroker</span>
         <span className="ap-idbar__note">Arab ShipBroker invites and lists agencies. Vessels, cargoes and ports shown here resolve to platform records; the member&apos;s identity stays hidden unless they share it.</span>
       </div>
-      <div className="ap-tabs" role="tablist" aria-label="Agency workspace">
+      <div className="ap-tabs" role="group" aria-label="Agency workspace">
         {tabs.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`ap-tab${tab === t.id ? " is-on" : ""}`} onClick={() => setTab(t.id)}>
+          <button key={t.id} type="button" aria-pressed={tab === t.id} className={`ap-tab${tab === t.id ? " is-on" : ""}`} onClick={() => setTab(t.id)}>
             {t.label}{t.n ? <span className="ap-tab__n">{t.n}</span> : null}
           </button>
         ))}
@@ -183,19 +183,19 @@ function AgencyView({ agency, awaiting, onAwaiting }: { agency: PdaMyAgency; awa
           <div className="ap-panel">
             <div className="ap-panel__hd">Contacts &amp; coverage <span className="ap-scope">Agency page</span></div>
             <div className="ap-panel__bd">
-              <div className="ap-field"><label>Agency</label><div className="ap-ro">{agency.displayName}</div></div>
-              <div className="ap-field"><label>Website</label><div className="ap-ro">{agency.website ? <a href={agency.website} target="_blank" rel="noreferrer noopener">{agency.website} <ExternalLink size={12} aria-hidden="true" /></a> : <span className="ap-none">Not recorded yet</span>}</div></div>
-              <div className="ap-field"><label>Ops desk phone</label><div className="ap-ro"><span className="ap-none">Not recorded yet</span></div></div>
-              <div className="ap-field"><label>Ops email</label><div className="ap-ro"><span className="ap-none">Not recorded yet</span></div></div>
+              <div className="ap-field"><span className="ap-field__k">Agency</span><div className="ap-ro">{agency.displayName}</div></div>
+              <div className="ap-field"><span className="ap-field__k">Website</span><div className="ap-ro">{agency.website ? <a href={agency.website} target="_blank" rel="noreferrer noopener">{agency.website} <ExternalLink size={12} aria-hidden="true" /></a> : <span className="ap-none">Not recorded yet</span>}</div></div>
+              <div className="ap-field"><span className="ap-field__k">Ops desk phone</span><div className="ap-ro"><span className="ap-none">Not recorded yet</span></div></div>
+              <div className="ap-field"><span className="ap-field__k">Ops email</span><div className="ap-ro"><span className="ap-none">Not recorded yet</span></div></div>
               <div className="ap-field">
-                <label>Coverage - ports served <span className="ap-db">from the port registry</span></label>
+                <span className="ap-field__k">Coverage - ports served <span className="ap-db">from the port registry</span></span>
                 <div className="ap-coverage">
                   {agency.ports.length ? agency.ports.map((p) => (
                     <span key={p.portLocode} className="ap-portchip" title={p.services.map((s) => PDA_SERVICE_LABELS[s]).join(", ")}>{p.portLocode} · {p.portName}</span>
                   )) : <span className="ap-none">No port listed yet</span>}
                 </div>
               </div>
-              <div className="ap-field"><label>Published agency fee</label><div className="ap-ro"><span className="ap-none">Not recorded yet</span></div></div>
+              <div className="ap-field"><span className="ap-field__k">Published agency fee</span><div className="ap-ro"><span className="ap-none">Not recorded yet</span></div></div>
             </div>
             <div className="ap-panel__ft"><span className="ap-dirty">Held by Arab ShipBroker</span><span></span></div>
           </div>

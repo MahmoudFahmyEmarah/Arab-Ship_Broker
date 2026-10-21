@@ -51,7 +51,7 @@ export function PdaSetupWorkspace({
     <section className="pe-set" aria-labelledby="pda-setup-title">
       <div className="pe-set-card">
         <div className="pe-set-card__hd">
-          <b id="pda-setup-title">What you see</b>
+          <h2 id="pda-setup-title" className="pe-set-card__t">What you see</h2>
           <span>Your own preference, saved to your account. It never changes a figure, and it never hides where a figure came from.</span>
         </div>
 
@@ -84,7 +84,7 @@ export function PdaSetupWorkspace({
 
       <div className="pe-set-card">
         <div className="pe-set-card__hd">
-          <b>Port database and tariffs</b>
+          <h2 className="pe-set-card__t">Port database and tariffs</h2>
           <span>The records behind every figure in the estimate. The Ports and Agents tabs above open the same pages.</span>
         </div>
         <div className="pe-set-rows">

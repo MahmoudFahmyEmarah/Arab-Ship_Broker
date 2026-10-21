@@ -97,7 +97,7 @@ function sectionsFor(tab: PdaTariffPackTab, record: Record_, totals: ReturnType<
         note: "Pick a port, get the packs that price it. One port can resolve to several packs when terminals are separately concessioned.",
         body: (
           <Table caption="Ports this pack governs" cols={["Port", "UN/LOCODE", "Terminal", "Edition", "Charge lines"]} num={[4]}
-            rows={record.editions.map((e) => [<span key="p" className="pp-val">{e.portName}</span>, e.port, e.terminal ?? "Port-wide", e.edition, String(e.lines.length)])} />
+            rows={record.editions.map((e) => [<span key="p" className="pp-val">{e.portName}</span>, e.port, e.terminal ?? "Port-wide", e.setName ? `${e.edition} (${e.setName})` : e.edition, String(e.lines.length)])} />
         ),
       },
       {
@@ -133,15 +133,15 @@ function sectionsFor(tab: PdaTariffPackTab, record: Record_, totals: ReturnType<
         body: (
           <>
             {record.editions.map((e) => (
-              <div key={`${e.port}-${e.terminal ?? ""}`} className="pdr-blk">
+              <div key={`${e.port}-${e.terminal ?? ""}-${e.scope ?? ""}-${e.setName ?? ""}-${e.edition}`} className="pdr-blk">
                 <div className="pdr-blk__hd">
-                  <span className="pdr-blk__t">{e.portName}{e.terminal ? ` · ${e.terminal}` : " · port-wide"}</span>
+                  <span className="pdr-blk__t">{e.portName}{e.terminal ? ` · ${e.terminal}` : " · port-wide"}{e.setName ? ` · ${e.setName}` : ""}</span>
                   <span className="pdr-blk__hint">{e.edition} · {e.currency} · from {day(e.effectiveFrom) ?? "-"}{e.effectiveTo ? ` to ${day(e.effectiveTo)}` : ""}</span>
                 </div>
                 <Table wide caption={`Charge lines, ${e.portName}${e.terminal ? ` ${e.terminal}` : ""}`}
                   cols={["Charge line", "Basis", "Rate", "Minimum", "Maximum", "Tax", "Applies to", "Tariff item", "Status"]} num={[2, 3, 4, 5]}
                   rows={e.lines.map((l) => [
-                    <span key="l" className="pp-val" title={l.excerpt ?? undefined}>{l.label}</span>,
+                    <span key="l" className="pp-val">{l.label}{l.excerpt ? <small className="pp-excerpt">{l.excerpt}</small> : null}</span>,
                     PDA_BASIS_LABELS[l.basis] ?? l.basis,
                     lineFigure(l, e.currency),
                     l.minimum != null ? `${e.currency} ${l.minimum}` : null,

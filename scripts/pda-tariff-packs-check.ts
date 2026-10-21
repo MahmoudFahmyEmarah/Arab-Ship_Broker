@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { isPdaTariffPackRef, packCount, parsePdaTariffPacks, resolvePdaTariffPorts, summarisePdaTariffPacks } from "../lib/pda/tariff-packs";
+import { isPdaTariffPackRef, isoDayOrToday, packCount, parsePdaTariffPacks, resolvePdaTariffPorts, summarisePdaTariffPacks } from "../lib/pda/tariff-packs";
 import { isPdaTariffPackTab, lineFigure, packHandover, packTotals, parsePdaTariffPackRecord } from "../lib/pda/tariff-pack-record";
 
 let n = 0;
@@ -23,6 +23,8 @@ const recordView = read("components/pda/PdaTariffPackRecord.tsx");
 const shell = read("components/pda/PdaRecordShell.tsx");
 const indexPage = read("app/(dashboard)/dashboard/ports-da/tariff-packs/page.tsx");
 const recordPage = read("app/(dashboard)/dashboard/ports-da/tariff-packs/[ref]/page.tsx");
+const vendored = read("components/pda/ports-module.css");
+const generator = read("scripts/design/vendor-ports-module-css.py");
 
 // 1 · migration: member reads behind the estimator gate, private helper, no id or URI out
 for (const fn of ["list_pda_tariff_packs", "get_pda_tariff_pack"]) {
@@ -85,7 +87,7 @@ ok(isPdaTariffPackTab("charges") && !isPdaTariffPackTab("admin"), "only the five
 ok(/rpc\("list_pda_tariff_packs", \{ p_on: on \}\)/.test(sdk) && /rpc\("get_pda_tariff_pack", \{ p_ref: packRef, p_on: on \}\)/.test(sdk)
   && /startsWith\("PDA_VALIDATION"\)\) return null/.test(sdk), "the SDK calls both RPCs; an unknown pack reads as null");
 for (const [name, page] of [["index", indexPage], ["record", recordPage]] as const) {
-  ok(/if \(!user\) redirect\("\/auth\/login"\)/.test(page) && /isCalculatorLocked\(tier\)/.test(page) && /ISO_DAY\.test/.test(page), `${name} page: signed-in, tier-gated, date validated`);
+  ok(/if \(!user\) redirect\("\/auth\/login"\)/.test(page) && /isCalculatorLocked\(tier\)/.test(page) && /isoDayOrToday\(/.test(page), `${name} page: signed-in, tier-gated, date validated`);
 }
 ok(/isPdaTariffPackRef\(ref\)/.test(recordPage) && /Rather than fall back to another authority's tariff/.test(recordPage), "the record page refuses a bad reference and never falls back");
 ok(/Not recorded yet/.test(index) && /0 of \{pack\.lines\}/.test(index) && /none recorded/.test(index), "index: shape, verification and findings say they are not recorded");
@@ -93,5 +95,19 @@ ok(/export const NR = "Not recorded yet"/.test(shell) && /Published record/.test
   "record: read-only published view on the shared RecordShell with honest empty slots");
 ok(!/\b(id|Id)\b\s*[:=]\s*(record|pack|e|l)\./.test(index + recordView), "no internal id is rendered");
 ok(!/<main\b/.test(index + recordView + shell + recordPage), "no nested <main> landmark");
+
+// B2O-050 corrections
+ok((migration.match(/gp\.is_active and gp\.is_verified/g) ?? []).length === 3 && (migration.match(/gt\.is_active and gt\.is_verified/g) ?? []).length === 3,
+  "P1-1: every pick (list, record resolver, record editions) keeps only active + verified ports and terminals");
+ok(["K6", "K7"].every((k) => suite.includes(`--   ${k} `)) && suite.includes("K6 ok") && suite.includes("K7 ok") && suite.includes("has_function_privilege('service_role', 'public.list_pda_tariff_packs(date)', 'execute')"),
+  "suite: K6 governance, K7 draft/in-review/inactive-set, K5 service_role on the list read");
+ok(!/@font-face/.test(vendored) && /prelude\.startswith\("@font-face"\):(\n\s*#[^\n]*)+\n\s*continue/.test(generator),
+  "P1-2: the generator drops @font-face and the vendored CSS carries none");
+ok(/'scope', e\.scope, 'setName', e\.set_name/.test(migration) && /\$\{e\.scope \?\? ""\}-\$\{e\.setName \?\? ""\}-\$\{e\.edition\}/.test(recordView), "P2-2: editions carry scope + set name and are keyed on them");
+ok(recordView.includes('className="pp-excerpt"') && !/title=\{l\.excerpt/.test(recordView), "P2-5: excerpts are visible text, not tooltips");
+ok(!/"By band"/.test(read("lib/pda/tariff-pack-record.ts")) && read("lib/pda/tariff-pack-record.ts").includes('"Bands not shown yet"'), "P2-4: tiered lines say the bands are not shown yet");
+ok(isoDayOrToday("2026-06-01") === "2026-06-01" && isoDayOrToday("2026-02-31") === new Date().toISOString().slice(0, 10) && isoDayOrToday("nope") === isoDayOrToday(undefined)
+  && [indexPage, recordPage].every((page) => page.includes("isoDayOrToday(") && !page.includes("ISO_DAY")), "P2-10: an impossible date falls back to today on both pages");
+ok(!/K2  a superseding edition[^\n]*\n[^\n]*and back on a date before/.test(suite), "P2-1: K2's claim no longer promises a superseded version comes back");
 
 console.log(`\nPDA tariff packs: ${n} checks passed`);

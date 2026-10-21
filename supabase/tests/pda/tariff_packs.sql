@@ -1,13 +1,16 @@
 -- PDA · Tariff Packs library and pack record (20261019130000, design B2ALL-061). BEGIN … ROLLBACK; run as the database owner.
 --   K1  one pack per source document cited by a tariff in force: the port and its terminal edition, exact charge-line
 --       counts per port and in total, authority, official first; the reference is 16 hex and stable
---   K2  a superseding edition that cites a new document moves the port to the new pack; the old pack is gone that day
---       and back on a date before the new edition starts
+--   K2  a superseding edition that cites a new document moves the port to the new pack; the old pack keeps only the
+--       editions still published (publish marks the overlapped version superseded, and superseded is never read)
 --   K3  the record: editions with their lines (code, basis, figures, services, page, excerpt); no source URI, no
 --       storage path, no internal id key or value anywhere
 --   K4  an unknown, malformed or not-in-force reference is PDA_VALIDATION (no existence oracle)
 --   K5  gates: signed out → PDA_AUTH; T2 → PDA_TIER; null date → PDA_VALIDATION; grants authenticated + service_role
 --       only; the reference helper is not callable by members
+--   K6  governance: an inactive terminal drops its edition from the pack; an unverified port drops every pack at it
+--       (the Ports tab's rule); both come back when restored
+--   K7  a draft or in-review version and an inactive set are never read
 begin;
 
 do $$
@@ -32,6 +35,7 @@ declare
   ed jsonb;
   e text;
   bad text;
+  v3 uuid;
 begin
   insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
                           raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
@@ -182,17 +186,85 @@ begin
   if (rec->'editions'->0->>'supersedes')::boolean is not true or (rec->'editions'->0->>'version')::int <> 2 then
     raise exception 'K2: the new edition must show it supersedes: %', rec; end if;
 
+  -- K6 · governance (on 2026-08-01: ref2 = port-wide v2, ref1 = the terminal edition)
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{}', true);
+  update public.port_terminals set is_active = false where id = terminal;
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  packs := public.list_pda_tariff_packs('2026-08-01');
+  if exists (select 1 from jsonb_array_elements(packs) x where x->>'packRef' = ref1) then
+    raise exception 'K6: an inactive terminal must drop its edition, and with it the pack it alone cited'; end if;
+  begin perform public.get_pda_tariff_pack(ref1, '2026-08-01'); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'K6: the record of a pack with no governed edition must be PDA_VALIDATION, got %', e; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{}', true);
+  update public.port_terminals set is_active = true where id = terminal;
+  update public.ports set is_verified = false where locode = port_code;
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  packs := public.list_pda_tariff_packs('2026-08-01');
+  if exists (select 1 from jsonb_array_elements(packs) x where x->>'packRef' in (ref1, ref2)) then
+    raise exception 'K6: an unverified port must drop every pack at it'; end if;
+  begin perform public.get_pda_tariff_pack(ref2, '2026-08-01'); e := null;
+  exception when others then e := split_part(sqlerrm, ':', 1); end;
+  if e is distinct from 'PDA_VALIDATION' then raise exception 'K6: a pack at an unverified port must be PDA_VALIDATION, got %', e; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{}', true);
+  update public.ports set is_verified = true where locode = port_code;
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  packs := public.list_pda_tariff_packs('2026-08-01');
+  if (select count(*) from jsonb_array_elements(packs) x where x->>'packRef' in (ref1, ref2)) <> 2 then
+    raise exception 'K6: both packs must be back once the port and terminal are restored'; end if;
+  raise notice 'K6 ok: an inactive terminal and an unverified port are never read; restored, both packs return';
+
+  -- K7 · a draft, an in-review version and an inactive set are never read (v3 of the port-wide set cites source2 from 2026-09-01)
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{}', true);
+  v3 := public.pda_create_tariff_draft(maker, jsonb_build_object(
+    'tariffSetId',(select tariff_set_id from public.port_tariff_versions where id = v1),
+    'portLocode',port_code,'publisherId',publisher,'name','TP Port Call','scope','port_call','versionNo',3,'currency','USD',
+    'effectiveFrom','2026-09-01','roundingMode','half_up','decimalPlaces',2,'primarySourceId',source2));
+  perform public.pda_replace_tariff_rules(maker, v3, jsonb_build_array(
+    jsonb_build_object('code','port_dues','label','Port dues','basis','per_gt','rate',0.14,'priority',10,'sourceId',source2,'sourcePage','3','sourceExcerpt','Draft rate'),
+    jsonb_build_object('code','mooring','label','Mooring','basis','per_call','amount',50,'priority',20,'sourceId',source2,'sourcePage','3','sourceExcerpt','Draft mooring')));
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  select x into k from jsonb_array_elements(public.list_pda_tariff_packs('2026-09-15')) x where x->>'packRef' = ref2;
+  if k is null or (k->>'lines')::int <> 1 then raise exception 'K7: a draft version must not be read (v2 still prices the port): %', k; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{}', true);
+  perform public.pda_submit_tariff_version(maker, v3);
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  select x into k from jsonb_array_elements(public.list_pda_tariff_packs('2026-09-15')) x where x->>'packRef' = ref2;
+  if k is null or (k->>'lines')::int <> 1 then raise exception 'K7: an in-review version must not be read: %', k; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{}', true);
+  update public.port_tariff_sets set is_active = false where id = (select tariff_set_id from public.port_tariff_versions where id = tv);
+  perform set_config('request.jwt.claim.sub', member::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',member,'app_metadata',jsonb_build_object('role','cargo_owner'))::text, true);
+  if exists (select 1 from jsonb_array_elements(public.list_pda_tariff_packs('2026-08-01')) x where x->>'packRef' = ref1) then
+    raise exception 'K7: an inactive set must not be read'; end if;
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{}', true);
+  update public.port_tariff_sets set is_active = true where id = (select tariff_set_id from public.port_tariff_versions where id = tv);
+  raise notice 'K7 ok: draft, in-review and inactive-set editions are never read';
+
   -- K5 · grants
   if has_function_privilege('anon', 'public.list_pda_tariff_packs(date)', 'execute')
      or has_function_privilege('anon', 'public.get_pda_tariff_pack(text, date)', 'execute')
      or not has_function_privilege('authenticated', 'public.list_pda_tariff_packs(date)', 'execute')
      or not has_function_privilege('authenticated', 'public.get_pda_tariff_pack(text, date)', 'execute')
      or not has_function_privilege('service_role', 'public.get_pda_tariff_pack(text, date)', 'execute')
+     or not has_function_privilege('service_role', 'public.list_pda_tariff_packs(date)', 'execute')
      or has_function_privilege('authenticated', 'public.fn_pda_tariff_pack_ref(uuid)', 'execute')
      or has_function_privilege('anon', 'public.fn_pda_tariff_pack_ref(uuid)', 'execute') then
     raise exception 'K5: grants must be authenticated + service_role on the reads, nobody on the helper'; end if;
 
-  raise notice 'K1–K5 ok: one pack per cited document, superseding moves the port, record without ids or URIs, opaque refs, gated';
+  raise notice 'K1–K7 ok: one pack per cited document, superseding moves the port, record without ids or URIs, opaque refs, gated, governed';
 end $$;
 
 do $m$ begin raise notice 'PDA TARIFF PACKS: ALL ASSERTIONS PASSED'; end $m$;
