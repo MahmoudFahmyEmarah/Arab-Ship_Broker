@@ -17,9 +17,9 @@ CERT="$(cygpath -w "$CA_FILE" 2>/dev/null || echo "$CA_FILE")"
 
 # psqlq [psql args…]   — read-write (the runner, after its gates)
 # psqlro [psql args…]  — every statement in a READ ONLY transaction (default_transaction_read_only=on)
-psqlq(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root.crt:ro" -e PGURL --entrypoint sh "$IMG" \
+psqlq(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root.crt:ro" -e PGURL -e PGCONNECT_TIMEOUT=30 --entrypoint sh "$IMG" \
            -c 'psql "$PGURL" -X -q -At -v ON_ERROR_STOP=1 "$@"' sh "$@"; }
-psqlro(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root.crt:ro" -e PGURL -e PGOPTIONS="-c default_transaction_read_only=on" \
+psqlro(){ MSYS_NO_PATHCONV=1 docker run --rm -i -v "$CERT:/root/.postgresql/root.crt:ro" -e PGURL -e PGCONNECT_TIMEOUT=30 -e PGOPTIONS="-c default_transaction_read_only=on" \
             --entrypoint sh "$IMG" -c 'psql "$PGURL" -X -q -At -v ON_ERROR_STOP=1 "$@"' sh "$@"; }
 redact(){ sed 's/postgres[a-z]*:\/\/[^ ]*/<db-url>/g'; }
 

@@ -84,7 +84,7 @@ diff -q <(tr -d '\r' < supabase/tests/e2e/staging-released-manifest.txt) "$LOG/b
 [ "$SCHEMA_MD5" = "$R_SCHEMA" ] || { echo "REFUSED: schema fingerprint $SCHEMA_MD5 is not the reviewed ${R_SCHEMA}"; exit 2; }
 [ "$DATA_MD5" = "$R_DATA" ] || { echo "REFUSED: data fingerprint $DATA_MD5 is not the reviewed ${R_DATA}"; exit 2; }
 [ -n "$(psqlro -c "select 1 from public.notification_dispatch_config where id = 1 and dispatch_url is null")" ] || { echo "REFUSED: staging has an email dispatch URL"; exit 2; }
-BASE_SCHEMA=$SCHEMA_MD5; BASE_DATA=$DATA_MD5
+BASE_SCHEMA=$SCHEMA_MD5; BASE_DATA=$DATA_MD5; BASE_MANIFEST=$(tr -d '\r' < supabase/tests/e2e/staging-released-manifest.txt)
 echo "  ok   gates: receipt GO (one use), audited clean checkout, manifest, invariants, schema $BASE_SCHEMA, data $BASE_DATA = reviewed"
 
 # spend the receipt BEFORE any write, then the grace period, then everything again
@@ -100,7 +100,7 @@ fail(){ echo "  FAIL $*"; FAILED=1; }
 
 # The trap's own rule: every database step runs whatever happened to the log directory, and a log is written only
 # when it can be (keep is best effort; logdir gives the trap a writable directory or a fresh temporary one).
-. scripts/e2e/run-log-helpers.sh
+. scripts/e2e/run-log-helpers.sh || { echo "REFUSED: scripts/e2e/run-log-helpers.sh is missing"; exit 2; }
 
 finish(){
   echo "== teardown, rollback, verification ($(date +%H:%M:%S))"
@@ -114,7 +114,7 @@ finish(){
   keep "$LOG/teardown.log" "$td"
   if [ "$tdok" = "TEARDOWN OK $RUN" ]; then
     echo "  ok   teardown: every row of $RUN removed (incl. Auth sessions, refresh tokens, identities, MFA), guards re-enabled, zero residue proved"
-  else fail "teardown: $(printf '%s' "$tderr" | tr '\n' ' ' | redact | cut -c1-300)"; fi
+  else fail "teardown: last line '${tdok:-<none>}'; $(printf '%s' "$tderr" | tr '\n' ' ' | redact | cut -c1-300)"; fi
   local i m marker dn
   for (( i=${#APPLIED[@]}-1; i>=0; i-- )); do
     m="${APPLIED[$i]}"
@@ -127,13 +127,13 @@ finish(){
       20261018110000_*) marker="set local asb.pda_prefs_down = 'discard-preferences';";;
       *) marker="";;
     esac
-    if dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } | psqlq -1 -f - 2>&1); then keep "$LOG/down-$m.log" "$dn"; echo "  ok   DOWN $m"
-    else keep "$LOG/down-$m.log" "$dn"; fail "DOWN $m: $(printf '%s\n' "$dn" | grep -m1 ERROR | redact)"; fi
+    if dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } 2>&1 | psqlq -1 -f - 2>&1); then keep "$LOG/down-$m.log" "$dn"; echo "  ok   DOWN $m"
+    else keep "$LOG/down-$m.log" "$dn"; fail "DOWN $m: $(printf '%s\n' "$dn" | grep -m1 -i error || printf '%s\n' "$dn" | head -1 | redact)"; fi
   done
   psqlq -c "update public.app_settings set value = '$BETA'::jsonb where key = 'beta_mode'" > /dev/null 2>&1 && echo "  ok   beta_mode restored to $BETA" || fail "beta_mode not restored"
   if measure "$LOG/after"; then
-    # the baseline is the pinned manifest and the fingerprints held in memory, so a lost before/ directory cannot pass or fail this
-    diff -q <(tr -d '\r' < supabase/tests/e2e/staging-released-manifest.txt) "$LOG/after/manifest.txt" > /dev/null && echo "  ok   migration history = pinned manifest" || fail "migration history differs from the pinned manifest"
+    # the baseline is the pinned manifest and the fingerprints, all held in memory since the gate: nothing on disk can change it
+    diff -q <(printf '%s\n' "$BASE_MANIFEST") "$LOG/after/manifest.txt" > /dev/null && echo "  ok   migration history = pinned manifest" || fail "migration history differs from the pinned manifest"
     [ "$(tail -1 "$LOG/after/invariants.txt")" = "PREFLIGHT INVARIANTS OK" ] && echo "  ok   invariants hold again (no run or 15:27 shape, guards on, email off, beta true)" \
       || { fail "invariants after the run:"; sed 's/^/        /' "$LOG/after/invariants.txt"; }
     if [ "$SCHEMA_MD5" = "$BASE_SCHEMA" ]; then echo "  ok   schema fingerprint = baseline ($BASE_SCHEMA, $(wc -l < "$LOG/after/schema.txt") catalog lines)"
@@ -152,7 +152,7 @@ for m in 20261018100000_pda_ports_workspace 20261018110000_pda_member_preference
   if [ -n "$(psqlro -c "select 1 from supabase_migrations.schema_migrations where version = '${m%%_*}'")" ]; then
     fail "migration $m is already recorded on staging; this run applies only unreleased PDA migrations"; exit 1
   fi
-  ap=$(psqlq -1 -f - < "supabase/migrations/$m.sql" 2>&1) || { keep "$LOG/apply-$m.log" "$ap"; fail "apply $m: $(printf '%s\n' "$ap" | grep -m1 ERROR | redact)"; exit 1; }
+  ap=$(psqlq -1 -f - < "supabase/migrations/$m.sql" 2>&1) || { keep "$LOG/apply-$m.log" "$ap"; fail "apply $m: $(printf '%s\n' "$ap" | grep -m1 -i error || printf '%s\n' "$ap" | head -1 | redact)"; exit 1; }
   keep "$LOG/apply-$m.log" "$ap"; APPLIED+=("$m"); echo "  ok   applied $m"
 done
 

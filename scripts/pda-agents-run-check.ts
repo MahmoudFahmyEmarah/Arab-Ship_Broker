@@ -149,19 +149,27 @@ const recover = read("scripts/e2e/pda-agents-recover.sh");
 const helpers = read("scripts/e2e/run-log-helpers.sh");
 const helpersTest = read("scripts/e2e/run-log-helpers-test.sh");
 const trap = runner.slice(runner.indexOf("finish(){"), runner.indexOf("trap finish EXIT"));
-ok(runner.includes('LOG="tmp/pda-agents-run/$RUN"') && !runner.includes("test-results/pda-agents-run") && pwConfig.includes('outputDir: "test-results/pda-agents"')
-  && !/outputDir:.*tmp\//.test(pwConfig),
-  "the runner logs under tmp/pda-agents-run/<run>; Playwright has its own explicit outputDir (test-results/pda-agents), which it empties");
-ok(has(trap, 'LOG=$(logdir "$LOG" "pda-agents-run-$RUN")') && before(runner, ". scripts/e2e/run-log-helpers.sh", "finish(){")
+const outputDir = /outputDir:\s*"([^"]+)"/.exec(pwConfig)?.[1] ?? "";
+ok(runner.includes('LOG="tmp/pda-agents-run/$RUN"') && !/LOG="?test-results\//.test(runner) && outputDir === "test-results/pda-agents" && !"tmp/pda-agents-run".startsWith(outputDir)
+  && !"tmp/pda-agents-recover".startsWith(outputDir),
+  "the runner logs under tmp/pda-agents-run/<run>; Playwright has its own explicit outputDir (test-results/pda-agents), which it empties, and no log lives under it");
+ok(has(trap, 'LOG=$(logdir "$LOG" "pda-agents-run-$RUN")') && before(runner, ". scripts/e2e/run-log-helpers.sh", "finish(){") && runner.includes('. scripts/e2e/run-log-helpers.sh || { echo "REFUSED')
+  && before(trap, 'LOG=$(logdir', 'measure "$LOG/after"')
   && has(helpers, 'logdir(){ mkdir -p "$1" 2>/dev/null && [ -w "$1" ]', "mktemp -d", 'keep(){ { printf', '; } 2>/dev/null || true; }')
   && has(helpersTest, ". scripts/e2e/run-log-helpers.sh", "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", "logdir re-created the removed directory", "keep on an unwritable path"),
   "the trap first takes a writable log directory (the run's, or a fresh temporary one); keep/logdir are shared, sourced and behaviour-tested");
-ok(!/>\s*"\$LOG\//.test(trap) && has(trap, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", '[ "$tdok" = "TEARDOWN OK $RUN" ]', 'keep "$LOG/teardown.log" "$td"',
-    'dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } | psqlq -1 -f - 2>&1)', 'keep "$LOG/down-$m.log" "$dn"'),
-  "no database step in the trap runs through a file redirect: teardown and DOWN output are captured in memory, then kept if they can be");
-ok(has(trap, "staging-released-manifest.txt", '[ "$SCHEMA_MD5" = "$BASE_SCHEMA" ]', '[ "$DATA_MD5" = "$BASE_DATA" ]', '[ -f "$LOG/before/schema.txt" ] &&', '[ -f "$LOG/before/data.txt" ] &&')
-  && !trap.includes('diff -q "$LOG/before/manifest.txt"'),
-  "the trap's baseline is the pinned manifest and the fingerprints held in memory; a lost before/ directory can neither pass nor fail it");
+// every redirect target inside the trap, whatever the variable is called: only the null device and file descriptors are allowed
+const redirectTargets = (text: string) => (text.match(/(?:^|\s)\d?>{1,2}\s*(?:"[^"]*"|\S+)/gm) ?? []).map((r) => r.replace(/^\s*\d?>{1,2}\s*/, "").replace(/[;)]+$/, ""));
+const allowedTarget = (t: string) => ["/dev/null", '"/dev/null"', "&1", "&2", "&3", "&-"].includes(t);
+const trapTargets = redirectTargets(trap);
+ok(trapTargets.length >= 6 && trapTargets.every(allowedTarget) && !/\btee\b/.test(trap)
+  && has(trap, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", '[ "$tdok" = "TEARDOWN OK $RUN" ]', 'keep "$LOG/teardown.log" "$td"', "last line '${tdok:-<none>}'",
+    'dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } 2>&1 | psqlq -1 -f - 2>&1)', 'keep "$LOG/down-$m.log" "$dn"', "grep -m1 -i error ||"),
+  `no step in the trap runs through a file redirect (targets: ${[...new Set(trapTargets)].join(" ")}); teardown and DOWN output are captured in memory, then kept if they can be`);
+ok(before(runner, "BASE_MANIFEST=$(tr -d '\\r' < supabase/tests/e2e/staging-released-manifest.txt)", "trap finish EXIT")
+  && has(trap, `diff -q <(printf '%s\\n' "$BASE_MANIFEST") "$LOG/after/manifest.txt"`, '[ "$SCHEMA_MD5" = "$BASE_SCHEMA" ]', '[ "$DATA_MD5" = "$BASE_DATA" ]', '[ -f "$LOG/before/schema.txt" ] &&', '[ -f "$LOG/before/data.txt" ] &&')
+  && !trap.includes("staging-released-manifest.txt") && !trap.includes('diff -q "$LOG/before/manifest.txt"'),
+  "the trap's baseline (manifest and both fingerprints) is held in memory since the gate; neither a lost before/ directory nor a changed file on disk can pass or fail it");
 ok(has(runner, 'ap=$(psqlq -1 -f - < "supabase/migrations/$m.sql" 2>&1) ||', 'keep "$LOG/apply-$m.log" "$ap"', 'bl=$(npx next build --webpack 2>&1) ||', 'keep "$LOG/build.log" "$bl"',
     'pl=$(npx playwright test --config=playwright.pda.config.ts e2e/pda-agents.spec.ts 2>&1); PW=$?', 'keep "$LOG/playwright.log" "$pl"'),
   "apply, build and browser output are captured in memory and kept best effort; a lost log never stops a step the trap would then have to undo");
@@ -174,6 +182,13 @@ ok(has(recover, "20261019120000_pda_desk_quotes 20261019110000_pda_quote_accepta
     "to_regclass('public.pda_estimate_sets')", "to_regclass('public.pda_member_preferences')", "list_pda_ports_workspace(date)", "not present; nothing to roll back",
     "history-exported:$RUN", "registry-exported:$RUN", "discard-preferences") && recover.includes('present=$(psqlro -c "$probe"'),
   "recovery rolls back newest-first with the same markers as the trap, each DOWN only where a read-only probe finds the migration's objects");
+ok(before(recover, ". scripts/e2e/run-log-helpers.sh || { echo \"REFUSED", "# 1 · teardown") && recover.includes('mkdir -p "$LOG" || { echo "REFUSED')
+  && has(recover, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", 'keep "$LOG/teardown.log" "$td"', "last line '${tdok:-<none>}'", 'keep "$LOG/down-$m.log" "$dn"', "grep -m1 -i error ||")
+  && redirectTargets(recover.slice(recover.indexOf("# 1 · teardown"))).every(allowedTarget)
+  && has(recover, 'present=$(psqlro -c "$probe" 2>&1) ||', "probe for $m failed", "probe for $m answered neither t nor f", 'f) echo "  ..   $m not present')
+  && recover.includes("like '%v_org uuid := p_owner_org_id%', false)"),
+  "recovery captures teardown and DOWN output in memory (no file redirect after its gates); a probe that errors or answers oddly is a FAIL, never \"not present\"; the lineage probe reads the function body");
+ok((target.match(/-e PGCONNECT_TIMEOUT=30 /g) ?? []).length === 2, "both staging psql wrappers carry a connect timeout, so a dead host cannot hang a trap");
 ok(has(recover, "set value = 'true'::jsonb where key = 'beta_mode'", 'measure "$LOG/after"', "staging-released-manifest.txt", "PREFLIGHT INVARIANTS OK",
     '[ "$SCHEMA_MD5" = "$R_SCHEMA" ]', '[ "$DATA_MD5" = "$R_DATA" ]', "RECOVERY OK", "RECOVERY INCOMPLETE"),
   "recovery restores beta and proves the pinned manifest, the invariants and the receipt's exact schema and data fingerprints");

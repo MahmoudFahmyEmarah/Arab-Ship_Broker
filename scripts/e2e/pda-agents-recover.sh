@@ -9,23 +9,28 @@
 #   2. the DOWNs of the chain newest-first, each with its history-export marker, only where the migration is present
 #   3. beta_mode restored to true
 #   4. the four read-only measurements, compared with the receipt's pinned SCHEMA/DATA, the pinned manifest and the invariants
-# Fails closed: any step that fails leaves the rest to a human. Secrets are never printed.
+# Fails closed: any step that fails leaves the rest to a human; a probe that errors is a failure, never "not present".
+# Output is captured in memory and kept best effort (run-log-helpers.sh): no database step runs through a file redirect.
+# Secrets are never printed.
 set -uo pipefail
 RUN="${1:?run id}"; [[ "$RUN" =~ ^pdaag-[0-9a-f]{12}$ ]] || { echo "REFUSED: malformed run id"; exit 2; }
 [ "${2:-}" = "--i-hold-the-staging-window" ] || { echo "REFUSED: run only inside an announced STAGING EXCLUSIVE window"; exit 2; }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT" || exit 2
 . scripts/e2e/staging-target.sh
+. scripts/e2e/run-log-helpers.sh || { echo "REFUSED: scripts/e2e/run-log-helpers.sh is missing"; exit 2; }
 RECEIPT="${ASB_STAGING_RECEIPT:-$HOME/.asb-staging-receipt}"
 R_SCHEMA=$(tr -d '\r' < "$RECEIPT" | sed -n 's/^SCHEMA=//p'); R_DATA=$(tr -d '\r' < "$RECEIPT" | sed -n 's/^DATA=//p')
 [[ "$R_SCHEMA" =~ ^[0-9a-f]{32}$ && "$R_DATA" =~ ^[0-9a-f]{32}$ ]] || { echo "REFUSED: no receipt fingerprints to compare with"; exit 2; }
-LOG="tmp/pda-agents-recover/$RUN-$(date +%H%M%S)"; mkdir -p "$LOG"
+LOG="tmp/pda-agents-recover/$RUN-$(date +%H%M%S)"; mkdir -p "$LOG" || { echo "REFUSED: cannot create $LOG"; exit 2; }
 FAILED=0; fail(){ echo "  FAIL $*"; FAILED=1; }
 echo "== recovery of $RUN ($(date +%H:%M:%S)) → $LOG"
 
-# 1 · teardown
-if out=$(psqlq -v run="$RUN" -f - < supabase/tests/e2e/pda-agents-teardown.sql 2>"$LOG/teardown.err") && [ "$(echo "$out" | tail -1)" = "TEARDOWN OK $RUN" ]; then
+# 1 · teardown (stdout and stderr captured in memory, stderr lines marked; judged on the last stdout line)
+td=$( { psqlq -v run="$RUN" -f - < supabase/tests/e2e/pda-agents-teardown.sql 2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )
+tdok=$(printf '%s\n' "$td" | grep -v '^STDERR ' | tail -1); keep "$LOG/teardown.log" "$td"
+if [ "$tdok" = "TEARDOWN OK $RUN" ]; then
   echo "  ok   teardown: every row of $RUN removed, guards re-enabled, zero residue proved"
-else fail "teardown: $(tr '\n' ' ' < "$LOG/teardown.err" | redact | cut -c1-300)"; exit 1; fi
+else fail "teardown: last line '${tdok:-<none>}'; $(printf '%s\n' "$td" | sed -n 's/^STDERR //p' | tr '\n' ' ' | redact | cut -c1-300)"; exit 1; fi
 
 # 2 · DOWNs newest first, only where the object is present
 for m in 20261019120000_pda_desk_quotes 20261019110000_pda_quote_acceptance 20261019100000_pda_quote_requests 20261018140000_pda_estimate_set_org_lineage \
@@ -34,16 +39,20 @@ for m in 20261019120000_pda_desk_quotes 20261019110000_pda_quote_acceptance 2026
     20261019120000_*) marker="set local asb.pda_desk_quotes_down = 'history-exported:$RUN';"; probe="select exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'pda_agency_quotes' and column_name = 'entered_via')";;
     20261019110000_*) marker="set local asb.pda_acceptances_down = 'history-exported:$RUN';"; probe="select to_regclass('public.pda_quote_acceptances') is not null";;
     20261019100000_*) marker="set local asb.pda_quotes_down = 'history-exported:$RUN';"; probe="select to_regclass('public.pda_quote_requests') is not null";;
-    20261018140000_*) marker=""; probe="select to_regprocedure('public.pda_save_estimate_set(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid)') is not null";;
+    20261018140000_*) marker=""; probe="select coalesce(pg_get_functiondef(to_regprocedure('public.pda_save_estimate_set(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid)')) like '%v_org uuid := p_owner_org_id%', false)";;
     20261018130000_*) marker="set local asb.pda_agencies_down = 'registry-exported:$RUN';"; probe="select to_regclass('public.pda_agencies') is not null";;
     20261018120000_*) marker="set local asb.pda_sets_down = 'history-exported:$RUN';"; probe="select to_regclass('public.pda_estimate_sets') is not null";;
     20261018110000_*) marker="set local asb.pda_prefs_down = 'discard-preferences';"; probe="select to_regclass('public.pda_member_preferences') is not null";;
     20261018100000_*) marker=""; probe="select to_regprocedure('public.list_pda_ports_workspace(date)') is not null";;
   esac
-  present=$(psqlro -c "$probe" 2>/dev/null)
-  if [ "$present" != "t" ]; then echo "  ..   $m not present; nothing to roll back"; continue; fi
-  if { echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } | psqlq -1 -f - > "$LOG/down-$m.log" 2>&1; then echo "  ok   DOWN $m"
-  else fail "DOWN $m: $(grep -m1 ERROR "$LOG/down-$m.log" | redact)"; exit 1; fi
+  present=$(psqlro -c "$probe" 2>&1) || { fail "probe for $m failed: $(printf '%s' "$present" | tr '\n' ' ' | redact | cut -c1-200)"; exit 1; }
+  case "$present" in
+    t) ;;
+    f) echo "  ..   $m not present; nothing to roll back"; continue;;
+    *) fail "probe for $m answered neither t nor f"; exit 1;;
+  esac
+  if dn=$({ echo "$marker"; cat "supabase/rollback/${m}_down.sql"; } 2>&1 | psqlq -1 -f - 2>&1); then keep "$LOG/down-$m.log" "$dn"; echo "  ok   DOWN $m"
+  else keep "$LOG/down-$m.log" "$dn"; fail "DOWN $m: $(printf '%s\n' "$dn" | grep -m1 -i error || printf '%s\n' "$dn" | head -1 | redact)"; exit 1; fi
 done
 
 # 3 · beta
