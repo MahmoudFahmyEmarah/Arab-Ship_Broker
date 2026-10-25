@@ -79,7 +79,10 @@ ok(meta.find((m) => m.k === "Charge lines")?.v === "5" && meta.find((m) => m.k =
 ok(/PdaRecordShell/.test(view) && !/<input|<textarea|onClick/.test(view) && /Not recorded yet|NR/.test(view + shell), "the record is a read-only published view on the shared shell");
 ok(/isPdaPortLocode\(locode\)/.test(page) && /Rather than fall back to another port/.test(page) && /isCalculatorLocked\(tier\)/.test(page) && /redirect\("\/auth\/login"\)/.test(page) && page.includes("isoDayOrToday("),
   "the page is gated, validates the code and the date, and never falls back to another port");
-ok(/catch \{\n\s*agents = null;/.test(read("app/(dashboard)/dashboard/ports-da/ports/[locode]/load.ts")) && page.includes("loadPortRecordInput("), "an unreadable agency registry (pre-Wave 9) leaves the section honest instead of failing the page");
+// C2ALL-167 P2: the fallback is logged server-side (lib/pda/load-failure.ts) before the section goes empty — pin the logged shape, not the bare catch
+ok(/catch \(error\) \{\r?\n\s*logPdaLoadFailure\("port record \(step 1\)", error\);\r?\n\s*agents = null;/.test(read("app/(dashboard)/dashboard/ports-da/ports/[locode]/load.ts"))
+  && /import \{ logPdaLoadFailure \} from "@\/lib\/pda\/load-failure";/.test(read("app/(dashboard)/dashboard/ports-da/ports/[locode]/load.ts")) && page.includes("loadPortRecordInput("),
+  "an unreadable agency registry (pre-Wave 9) leaves the section honest instead of failing the page, and the reason is logged server-side");
 ok(!/\b(id|Id)\b\s*[:=]\s*(port|pack|agency|a|e)\./.test(view), "no internal id is rendered");
 
 // 3 · B2O-050 P1-3: the slide-over is a real modal
