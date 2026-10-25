@@ -14,7 +14,7 @@
 --   I3a the post-Wave-9 target (staging caught up to production's 193, B2O-091): every Wave 8 / Agents object exists
 --   I3b none of the Wave 10 design objects exists yet (the runner applies them unrecorded)
 --   I4  every named guard trigger is present and enabled
---   I5  email dispatch is off, and beta_mode is exactly the pinned post-Wave-7 value
+--   I5  email dispatch is off, and beta_mode is exactly the pinned staging value (unchanged since Wave 7)
 begin transaction read only;
 do $pf$
 declare
@@ -98,7 +98,7 @@ begin
    where s.nspname in ('public', 'market_private', 'fixture_private') and not t.tgisinternal and t.tgenabled = 'D';
   acc := acc || case when n = 0 then 'ok   ' else 'FAIL ' end || 'I4 named guards missing/disabled, or any application trigger disabled: ' || n || E'\n'; bad := bad + (n <> 0)::int;
 
-  -- I5 · email off, beta pinned (post-Wave-7 staging: beta_mode true, restored at 15:45 on 19 Oct)
+  -- I5 · email off, beta pinned (staging beta_mode true since 15:45 on 19 Oct; the catch-up does not change it)
   select (select count(*) from public.notification_dispatch_config where id = 1 and dispatch_url is not null)
        + (select count(*) from public.app_settings where key = 'beta_mode' and value <> 'true'::jsonb)
        + (1 - (select count(*) from public.app_settings where key = 'beta_mode'))

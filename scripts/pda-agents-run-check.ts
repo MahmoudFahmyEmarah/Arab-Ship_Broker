@@ -222,6 +222,14 @@ ok(before(catchupCode, 'echo "$R_NONCE" >> "$LEDGER"', "sleep 60") && before(cat
 ok(has(catchupCode, 'grep -qE \'^FAIL I3a Wave 8 / Agents objects present .*: 0$\'', '"PREFLIGHT INVARIANTS FAILED (1)"', '"PREFLIGHT INVARIANTS OK"',
     'diff -q <(printf \'%s\\n\' "$POST_MANIFEST") "$LOG/after/manifest.txt"', '[ "$shape" = "$(proof_fresh "$v")" ] || die'),
   "pre-state = first 185 with only I3a failing at 0; each pending version must read fresh before it is applied; post-state = the pinned 193 with every invariant ok");
+ok(has(catchupCode, 'state_ok "$LOG/precheck" ||', 'state_ok "$LOG/before" ||', 'BEFORE_SCHEMA=$SCHEMA_MD5; BEFORE_DATA=$DATA_MD5',
+    '[ "$SCHEMA_MD5" = "$BEFORE_SCHEMA" ] && [ "$DATA_MD5" = "$BEFORE_DATA" ] || die')
+  && before(catchupCode, '[ "$SCHEMA_MD5" = "$R_SCHEMA" ] || die', 'echo "$R_NONCE" >> "$LEDGER"')
+  && !catchupCode.includes('[ "$RECORDED" != 185 ] ||'),
+  "a resumed state gets RECEIPT FIELDS from --precheck, every window run compares the receipt, and the grace check equals the run's own first measurement");
+ok(has(catchupCode, 'ALLOWED_DATA="public.pda_member_preferences', "supabase_migrations.schema_migrations\"", '[ -z "$OUTSIDE" ] || die')
+  && catchupCode.includes("sed -n 's/^[<>] data"),
+  "data may change only in the nine new tables and the migration history; anything else stops the run");
 ok(before(recoverCode, ". scripts/e2e/run-log-helpers.sh || { echo \"REFUSED", "td=$(") && recoverCode.includes('mkdir -p "$LOG" || { echo "REFUSED')
   && has(recoverCode, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", 'keep "$LOG/teardown.log" "$td"', "last line '${tdok:-<none>}'", 'keep "$LOG/down-$m.log" "$dn"', "grep -m1 -i error ||", "head -1; } | redact)")
   && redirectTargets(recoverCode.slice(recoverCode.indexOf("td=$("))).every(allowedTarget)

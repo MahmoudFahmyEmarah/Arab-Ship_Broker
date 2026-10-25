@@ -14,7 +14,13 @@
 # Forward change, no rollback trap: the rollback path is the read-only pg_dump of staging taken before the first write
 # (location and size go in the log). Each migration is applied AND recorded in ONE transaction, so a version can never
 # be applied but unrecorded; a failure stops the run and a re-run continues from staging's own history (a contiguous
-# recorded prefix of the eight is accepted, anything else is refused).
+# recorded prefix of the eight is accepted, anything else is refused). A resumed run needs a fresh receipt: --precheck
+# prints its RECEIPT FIELDS for a valid prefix too, and every window run checks the receipt against what it finds.
+#
+# The backup dump covers public, market_private, fixture_private and supabase_migrations: everything these eight
+# migrations create, alter or record (they touch no auth, storage or vault object). Recorded rows carry version and
+# name only (staging has no CLI link), so `statements` stays NULL and a digest of staging's schema_migrations differs
+# from production's; every gate compares versions.
 #
 # Pre-state = the pinned manifest's first 185 versions, and the preflight invariants all ok except I3a, which must read
 # "0" (no Wave 8 / Agents object yet). Post-state = the pinned 193 manifest and every invariant ok (I3a = 16 of 16,
@@ -71,7 +77,8 @@ if [ "$MODE" = --standin ]; then
     psqlro -c "select version from supabase_migrations.schema_migrations order by version" > "$out/manifest.txt" 2> "$out/manifest.err" || return 1
     # a local stand-in carries auth.users only, so the hosted-only invariants (I1 Auth/orphans, I2, I4, I5) cannot run
     # here; the I3a/I3b block is taken VERBATIM from the preflight file and wrapped in the same output format
-    { echo "begin transaction read only;"; echo "do \$pf\$ declare n bigint; bad int := 0; acc text := ''; r record; begin";
+    { echo "begin transaction read only;"; echo "do \$pf\$";
+      sed -n '/^declare$/,/^begin$/p' supabase/tests/e2e/pda-agents-preflight.sql;
       sed -n '/^  -- I3a ·/,/^  -- I4 ·/p' supabase/tests/e2e/pda-agents-preflight.sql | sed '$d';
       echo "perform set_config('e2e.preflight', acc || case when bad = 0 then 'PREFLIGHT INVARIANTS OK' else 'PREFLIGHT INVARIANTS FAILED (' || bad || ')' end, false); end \$pf\$;";
       echo "select current_setting('e2e.preflight');"; echo "commit;"; } | psqlro -f - > "$out/invariants.txt" 2> "$out/invariants.err" || return 1
@@ -108,24 +115,48 @@ for e in "${CHAIN[@]}"; do
 done
 say "  ok   the eight migration files are byte-identical to production's (sha256 pinned)"
 
-# pre-state: the first 185 pinned versions, every invariant ok except I3a = 0 (no Wave 8 / Agents object yet)
-pre_state_ok(){ # $1 = measurement dir
-  diff -q <(printf '%s\n' "$PRE_MANIFEST") "$1/manifest.txt" > /dev/null || return 1
-  [ "$(grep -c '^FAIL ' "$1/invariants.txt")" = 1 ] || return 1
-  grep -qE '^FAIL I3a Wave 8 / Agents objects present .*: 0$' "$1/invariants.txt" || return 1
-  [ "$(tail -1 "$1/invariants.txt")" = "PREFLIGHT INVARIANTS FAILED (1)" ] || return 1
+# the accepted states: the pinned first 185 plus a contiguous recorded prefix of the chain (none to all eight), every
+# chain version's shape matching its recorded status (want if recorded, fresh if not); invariants all ok except I3a
+# while fewer than eight are recorded (I3a = 0 at exactly 185), every invariant ok at 193. Sets STATE_RECORDED, or
+# STATE_WHY on refusal.
+state_ok(){ # $1 = measurement dir
+  local d="$1" r i=185 e m v shape
+  r=$(grep -c . "$d/manifest.txt")
+  [ "$r" -ge 185 ] && [ "$r" -le 193 ] || { STATE_WHY="history length $r is outside 185..193"; return 1; }
+  diff -q <(printf '%s\n' "$POST_MANIFEST" | head -"$r") "$d/manifest.txt" > /dev/null || { STATE_WHY="the recorded history ($r versions) is not a prefix of the pinned 193"; return 1; }
+  for e in "${CHAIN[@]}"; do
+    m="${e%% *}"; v="${m%%_*}"; i=$(( i + 1 ))
+    shape=$(psqlro -c "$(proof_q "$v")" 2>&1)
+    if [ "$i" -le "$r" ]; then
+      [ "$shape" = "$(proof_want "$v")" ] || { STATE_WHY="$v is recorded but its shape is '$(printf '%s' "$shape" | redact | head -c 200)' (want $(proof_want "$v"))"; return 1; }
+    else
+      [ "$shape" = "$(proof_fresh "$v")" ] || { STATE_WHY="$v is not recorded but its shape is '$(printf '%s' "$shape" | redact | head -c 200)' (fresh is $(proof_fresh "$v"))"; return 1; }
+    fi
+  done
+  if [ "$r" = 193 ]; then
+    [ "$(tail -1 "$d/invariants.txt")" = "PREFLIGHT INVARIANTS OK" ] || { STATE_WHY="all eight recorded but the invariants are not all ok"; return 1; }
+  else
+    [ "$(grep -c '^FAIL ' "$d/invariants.txt")" = 1 ] && grep -qE '^FAIL I3a Wave 8 / Agents objects present .*: [0-9]+$' "$d/invariants.txt" \
+      && [ "$(tail -1 "$d/invariants.txt")" = "PREFLIGHT INVARIANTS FAILED (1)" ] || { STATE_WHY="an invariant other than I3a fails"; return 1; }
+    if [ "$r" = 185 ]; then
+      grep -qE '^FAIL I3a Wave 8 / Agents objects present .*: 0$' "$d/invariants.txt" || { STATE_WHY="185 recorded but Wave 8 / Agents objects already exist"; return 1; }
+    fi
+  fi
+  STATE_RECORDED=$r
 }
 
 # ── --precheck: read-only, prints what the peer reviews and pins in the receipt
 if [ "$MODE" = --precheck ]; then
   measure "$LOG/precheck" || die "a read-only measurement failed: $(cat "$LOG"/precheck/*.err 2>/dev/null | redact | tr '\n' ' ' | cut -c1-300)"
   sed 's/^/  /' "$LOG/precheck/invariants.txt"
-  if pre_state_ok "$LOG/precheck"; then
+  state_ok "$LOG/precheck" || die "the target is not in the catch-up pre-state or a resumable state: $STATE_WHY (see the invariants above and $LOG/precheck/manifest.txt)"
+  if [ "$STATE_RECORDED" = 185 ]; then
     say "  ok   pre-state: history = the pinned first 185; every invariant ok except I3a = 0"
-    say "RECEIPT FIELDS: SHA=$(git rev-parse HEAD) SCHEMA=$SCHEMA_MD5 DATA=$DATA_MD5"
-    say "== PRECHECK OK (read-only; nothing written)"; exit 0
+  else
+    say "  ok   resumable state: the pinned first 185 + $(( STATE_RECORDED - 185 )) of the eight recorded, every chain shape matches its recorded status"
   fi
-  die "the target is not in the catch-up pre-state (see the invariants above and $LOG/precheck/manifest.txt)"
+  say "RECEIPT FIELDS: SHA=$(git rev-parse HEAD) SCHEMA=$SCHEMA_MD5 DATA=$DATA_MD5"
+  say "== PRECHECK OK (read-only; nothing written)"; exit 0
 fi
 
 # ── 1 · window gates (staging only): receipt, audited checkout, peer mail, health, measurements = receipt, grace
@@ -159,22 +190,16 @@ fi
 
 # ── 2 · the state as found (read-only)
 measure "$LOG/before" || die "a read-only measurement failed: $(cat "$LOG"/before/*.err 2>/dev/null | redact | tr '\n' ' ' | cut -c1-300)"
-RECORDED=$(grep -c . "$LOG/before/manifest.txt")
+state_ok "$LOG/before" || die "not the catch-up pre-state or a resumable state: $STATE_WHY (see $LOG/before/)"
+RECORDED=$STATE_RECORDED; BEFORE_SCHEMA=$SCHEMA_MD5; BEFORE_DATA=$DATA_MD5
 say "  ..   as found: $RECORDED recorded versions; schema $SCHEMA_MD5; data $DATA_MD5"
-if [ "$RECORDED" = 185 ]; then
-  pre_state_ok "$LOG/before" || die "185 versions recorded but not the catch-up pre-state (see $LOG/before/)"
-  if [ "$MODE" = --i-hold-the-staging-window ]; then
-    [ "$SCHEMA_MD5" = "$R_SCHEMA" ] || die "schema fingerprint $SCHEMA_MD5 is not the reviewed $R_SCHEMA"
-    [ "$DATA_MD5" = "$R_DATA" ] || die "data fingerprint $DATA_MD5 is not the reviewed $R_DATA"
-  fi
-  say "  ok   pre-state = the pinned first 185, invariants as expected"
-else
-  # a resumed run: the recorded history must be the pinned first 185 plus a contiguous prefix of the chain
-  diff -q <(printf '%s\n' "$POST_MANIFEST" | head -"$RECORDED") "$LOG/before/manifest.txt" > /dev/null || die "the recorded history ($RECORDED versions) is not a prefix of the pinned 193"
-  [ "$RECORDED" -gt 185 ] && [ "$RECORDED" -le 193 ] || die "unexpected history length $RECORDED"
-  say "  ..   resuming: $(( RECORDED - 185 )) of the eight already recorded"
-  [ "$MODE" = --i-hold-the-staging-window ] && say "  ..   resumed run: the receipt's fingerprints were the pre-state's; the recorded prefix is proved by shape below"
+if [ "$MODE" = --i-hold-the-staging-window ]; then
+  # every window run, first or resumed, starts from exactly the state the peer reviewed
+  [ "$SCHEMA_MD5" = "$R_SCHEMA" ] || die "schema fingerprint $SCHEMA_MD5 is not the reviewed $R_SCHEMA"
+  [ "$DATA_MD5" = "$R_DATA" ] || die "data fingerprint $DATA_MD5 is not the reviewed $R_DATA"
 fi
+if [ "$RECORDED" = 185 ]; then say "  ok   pre-state = the pinned first 185, invariants as expected"
+else say "  ..   resuming: $(( RECORDED - 185 )) of the eight already recorded, each with its wanted shape"; fi
 
 if [ "$MODE" = --i-hold-the-staging-window ]; then
   echo "$R_NONCE" >> "$LEDGER" || die "could not spend the receipt"
@@ -183,7 +208,7 @@ if [ "$MODE" = --i-hold-the-staging-window ]; then
   receipt; peer_mail "during the grace period"
   [ "$(git rev-parse HEAD)" = "$R_SHA" ] && [ -z "$(git status --porcelain --untracked-files=no)" ] || die "the checkout changed during the grace period"
   measure "$LOG/grace" && [ "$(grep -c . "$LOG/grace/manifest.txt")" = "$RECORDED" ] || die "staging changed during the grace period"
-  [ "$RECORDED" != 185 ] || { [ "$SCHEMA_MD5" = "$R_SCHEMA" ] && [ "$DATA_MD5" = "$R_DATA" ]; } || die "staging changed during the grace period"
+  [ "$SCHEMA_MD5" = "$BEFORE_SCHEMA" ] && [ "$DATA_MD5" = "$BEFORE_DATA" ] || die "staging changed during the grace period (fingerprints differ from the run's own first measurement)"
 
   # ── 3 · the rollback path: a read-only dump of staging, outside the repository
   BK_DIR=/c/Users/mahmo/asb-backups; BK="$BK_DIR/staging-$(date +%Y%m%d-%H%M%S)-catchup193.dump"
@@ -204,16 +229,16 @@ for e in "${CHAIN[@]}"; do
   [[ "$recorded" =~ ^[01]$ ]] || die "could not read whether $v is recorded (got '$(printf '%s' "$recorded" | redact | head -c 200)')"
   shape=$(psqlro -c "$(proof_q "$v")" 2>&1)
   if [ "$recorded" = 1 ]; then
-    [ "$shape" = "$(proof_want "$v")" ] || die "$v is recorded but its shape is '$shape' (want $(proof_want "$v"))"
+    [ "$shape" = "$(proof_want "$v")" ] || die "$v is recorded but its shape is '$(printf '%s' "$shape" | redact | head -c 200)' (want $(proof_want "$v"))"
     say "  ..   $m already recorded, shape $shape"; continue
   fi
-  [ "$shape" = "$(proof_fresh "$v")" ] || die "$v is not recorded but its shape is '$shape' (fresh is $(proof_fresh "$v")); not the expected state — paste this to Opus B"
+  [ "$shape" = "$(proof_fresh "$v")" ] || die "$v is not recorded but its shape is '$(printf '%s' "$shape" | redact | head -c 200)' (fresh is $(proof_fresh "$v")); not the expected state — paste this to Opus B"
   name="${m#*_}"
   out=$( { cat "supabase/migrations/$m.sql"; printf '\ninsert into supabase_migrations.schema_migrations (version, name) values (%s, %s);\n' "'$v'" "'$name'"; } | psqlq -1 -f - 2>&1 ) \
-    || { keep "$LOG/apply-$m.log" "$out"; die "apply $m: $({ printf '%s\n' "$out" | grep -m1 -i error || printf '%s\n' "$out" | head -1; } | redact) (rolled back: nothing of $m was written)"; }
+    || { keep "$LOG/apply-$m.log" "$out"; die "apply $m: $({ printf '%s\n' "$out" | grep -m1 -i error || printf '%s\n' "$out" | head -1; } | redact) (psql reported failure, so the transaction should have rolled back; if the acknowledgement was lost after a commit, a re-run reads the recorded history and shapes and continues or stops)"; }
   keep "$LOG/apply-$m.log" "$out"
   shape=$(psqlro -c "$(proof_q "$v")" 2>&1)
-  [ "$shape" = "$(proof_want "$v")" ] || die "$m applied and recorded but its shape reads '$shape' (want $(proof_want "$v"))"
+  [ "$shape" = "$(proof_want "$v")" ] || die "$m applied and recorded but its shape reads '$(printf '%s' "$shape" | redact | head -c 200)' (want $(proof_want "$v"))"
   say "  ok   applied and recorded $m (shape $shape)"
 done
 
@@ -223,9 +248,15 @@ diff -q <(printf '%s\n' "$POST_MANIFEST") "$LOG/after/manifest.txt" > /dev/null 
 sed 's/^/  /' "$LOG/after/invariants.txt"
 [ "$(tail -1 "$LOG/after/invariants.txt")" = "PREFLIGHT INVARIANTS OK" ] || die "invariants after the catch-up are not all ok"
 say "  ok   history = the pinned 193; every invariant ok (I3a 16 of 16, I3b 0)"
-if [ -f "$LOG/before/data.txt" ]; then
-  say "  ..   data tables whose row digest changed (expected: supabase_migrations.schema_migrations and only the tables these migrations seed):"
-  diff "$LOG/before/data.txt" "$LOG/after/data.txt" | sed -n 's/^> data \([^ ]*\) .*/        \1/p' | sort -u | while read -r t; do say "$t"; done
-fi
+# the eight contain no top-level DML: data may change only in the nine tables they create and in the migration history
+ALLOWED_DATA="public.pda_member_preferences public.pda_estimate_sets public.pda_agencies public.pda_port_agents public.pda_agency_events
+  public.pda_quote_requests public.pda_quote_request_recipients public.pda_agency_quotes public.pda_quote_acceptances supabase_migrations.schema_migrations"
+say "  ..   data tables whose row digest changed (allowed: the nine new tables and supabase_migrations.schema_migrations):"
+OUTSIDE=""
+for t in $(diff "$LOG/before/data.txt" "$LOG/after/data.txt" | sed -n 's/^[<>] data \([^ ]*\) .*/\1/p' | sort -u); do
+  say "        $t"
+  case " $(echo $ALLOWED_DATA) " in *" $t "*) ;; *) OUTSIDE="$OUTSIDE $t";; esac
+done
+[ -z "$OUTSIDE" ] || die "data changed outside the allowed tables:$OUTSIDE (the catch-up is applied; compare with the backup dump before anything else)"
 say "NEW BASELINE: SCHEMA=$SCHEMA_MD5 DATA=$DATA_MD5 (manifest 193)"
 say "== CATCH-UP OK ($TARGET, $(date +%H:%M:%S))"
