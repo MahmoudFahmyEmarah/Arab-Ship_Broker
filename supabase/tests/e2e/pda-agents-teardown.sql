@@ -86,17 +86,29 @@ begin
   delete from public.vessels where id = any (v_vessels);
   delete from public.cargo_listings where id = any (v_cargo);
   delete from public.ports where locode = any (v_ports);
+  -- the portal's consent tracker writes page views keyed by the Auth user with no FK (pdaag-0dd272ccebec left 5)
+  delete from public.platform_events where user_id = any (v_users) or user_id = any (v_auth);
   delete from public.profiles where account_id = any (v_users);
   delete from public.organization_members where user_id = any (v_users) or org_id = any (v_orgs);
   delete from public.users where id = any (v_users);
   delete from public.organizations where id = any (v_orgs);
-  delete from auth.mfa_factors where user_id = any (v_auth);
-  delete from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x);
-  delete from auth.sessions where user_id = any (v_auth);
+  -- identities, sessions, refresh tokens, MFA factors and one-time tokens exist on hosted Supabase; a rebuilt local
+  -- stand-in carries auth.users only, so each is deleted only where it exists (and proved zero below the same way)
+  if to_regclass('auth.mfa_factors') is not null then
+    execute 'delete from auth.mfa_factors where user_id = any ($1)' using v_auth;
+  end if;
+  if to_regclass('auth.refresh_tokens') is not null then
+    execute 'delete from auth.refresh_tokens where user_id = any (select x::text from unnest($1::uuid[]) x)' using v_auth;
+  end if;
+  if to_regclass('auth.sessions') is not null then
+    execute 'delete from auth.sessions where user_id = any ($1)' using v_auth;
+  end if;
   if to_regclass('auth.one_time_tokens') is not null then
     execute 'delete from auth.one_time_tokens where user_id = any ($1)' using v_auth;
   end if;
-  delete from auth.identities where user_id = any (v_auth);
+  if to_regclass('auth.identities') is not null then
+    execute 'delete from auth.identities where user_id = any ($1)' using v_auth;
+  end if;
   delete from auth.users where id = any (v_auth);
 
   -- zero residue, or the whole teardown aborts
@@ -108,10 +120,20 @@ begin
        + (select count(*) from public.cargo_listings where ref = 'E2E-' || v_run)
        + (select count(*) from public.pda_estimates where owner_user_id = any (v_users))
        + (select count(*) from public.notifications where recipient_user_id = any (v_users))
-       + (select count(*) from auth.identities where user_id = any (v_auth))
-       + (select count(*) from auth.sessions where user_id = any (v_auth))
-       + (select count(*) from auth.refresh_tokens where user_id = any (select x::text from unnest(v_auth) x))
-       + (select count(*) from auth.mfa_factors where user_id = any (v_auth)) into n;
+       + (select count(*) from public.platform_events where user_id = any (v_users) or user_id = any (v_auth))
+       + (select count(*) from auth.users where id = any (v_auth)) into n;
+  if to_regclass('auth.identities') is not null then
+    execute 'select $1 + (select count(*) from auth.identities where user_id = any ($2))' into n using n, v_auth;
+  end if;
+  if to_regclass('auth.sessions') is not null then
+    execute 'select $1 + (select count(*) from auth.sessions where user_id = any ($2))' into n using n, v_auth;
+  end if;
+  if to_regclass('auth.refresh_tokens') is not null then
+    execute 'select $1 + (select count(*) from auth.refresh_tokens where user_id = any (select x::text from unnest($2::uuid[]) x))' into n using n, v_auth;
+  end if;
+  if to_regclass('auth.mfa_factors') is not null then
+    execute 'select $1 + (select count(*) from auth.mfa_factors where user_id = any ($2))' into n using n, v_auth;
+  end if;
   if n <> 0 then raise exception 'TEARDOWN_RESIDUE: % run-stamped row(s) remain for %', n, v_run; end if;
   if exists (select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace s on s.oid = c.relnamespace
              where s.nspname = 'public' and not t.tgisinternal and t.tgenabled = 'D'

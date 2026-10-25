@@ -232,7 +232,7 @@ export function cleanupFixture(s: FixtureSeed) {
 export async function dismissOverlays(page: Page) {
   const cookie = page.getByRole("dialog", { name: "Cookie consent" });
   if (await cookie.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
-    await cookie.getByRole("button", { name: "Accept all" }).click();
+    await cookie.getByRole("button", { name: "Necessary only" }).click();
     await cookie.waitFor({ state: "hidden", timeout: 5000 }).catch(() => undefined);
   }
   const checkin = page.getByRole("dialog", { name: "Vessel position check-in" });

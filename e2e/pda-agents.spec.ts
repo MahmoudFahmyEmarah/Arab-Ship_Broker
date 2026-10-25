@@ -94,7 +94,7 @@ async function seed(): Promise<Seed> {
     { org_id: memberOrg, user_id: member.id, member_role: "admin", is_current: true, status: "active" },
     { org_id: portalAgency, user_id: staff.id, member_role: "admin", is_current: true, status: "active" },
   ]).select("user_id"));
-  must("profile", await db.from("profiles").insert({ account_id: member.id, profile_type: "broker", display_name: "E2E Agents Member", is_active: true }).select("account_id"));
+  must("profile", await db.from("profiles").insert({ account_id: member.id, profile_type: "cargo", display_name: "E2E Agents Member", is_active: true }).select("account_id"));
   must("ports", await db.from("ports").insert([
     { locode: loadLocode, trade_name: loadPortName, country: "Egypt", zone: "E.MED", port_type: "Sea Port", is_active: true, is_verified: true },
     { locode: dischargeLocode, trade_name: dischargePortName, country: "Saudi Arabia", zone: "R.SEA", port_type: "Sea Port", is_active: true, is_verified: true },
@@ -135,6 +135,13 @@ async function seed(): Promise<Seed> {
 async function signIn(browser: Browser, baseURL: string, email: string) {
   const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
+  // the vessel position check-in modal can open at any moment for a member with an open position (it did mid-flow in
+  // run pdaag-ad36da805bae and blocked every click for 10 minutes): dismiss it whenever it appears
+  // (pdaag-9430dabdfa8d: the modal re-opens; a second click waited forever) — bounded, no wait-after, never throws
+  await page.addLocatorHandler(page.getByRole("dialog", { name: "Vessel position check-in" }), async (dialog) => {
+    await dialog.getByRole("button", { name: "Remind me later" }).click({ timeout: 10_000, noWaitAfter: true })
+      .catch(() => page.locator(".asb-checkin-backdrop").first().dispatchEvent("mousedown").catch(() => undefined)); // it closes on backdrop mousedown; it has no Escape handler
+  });
   await page.goto("/auth/login");
   await expect(page.locator('input[name="email"]')).toBeVisible({ timeout: 90_000 });
   const overlay = page.locator(".asb-loading-overlay");
@@ -149,10 +156,10 @@ async function signIn(browser: Browser, baseURL: string, email: string) {
 
 async function dismissDialogs(page: Page) {
   const cookie = page.getByRole("dialog", { name: "Cookie consent" });
-  if (await cookie.isVisible().catch(() => false)) await cookie.getByRole("button", { name: "Accept all" }).click();
-  const checkin = page.getByRole("dialog", { name: "Vessel position check-in" });
-  await checkin.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined);
-  if (await checkin.isVisible().catch(() => false)) await checkin.getByRole("button", { name: "Remind me later" }).click();
+  if (await cookie.isVisible().catch(() => false)) await cookie.getByRole("button", { name: "Necessary only" }).click();
+  // the vessel check-in modal is dismissed ONLY by the locator handler registered in signIn, which Playwright runs
+  // whenever that modal blocks the next action: a second, explicit click here raced it (pdaag-f9f5fad561fd — the
+  // handler closed the dialog, then the explicit click waited 30 s for a button that was gone). Nothing to do here.
 }
 
 async function pricedRoute(page: Page, s: Seed) {
