@@ -148,8 +148,9 @@ finish(){
 trap finish EXIT
 
 # ── 1 · PDA migrations (unrecorded; rolled back in the trap)
-for m in 20261018100000_pda_ports_workspace 20261018110000_pda_member_preferences 20261018120000_pda_estimate_sets 20261018130000_pda_agencies \
-         20261018140000_pda_estimate_set_org_lineage 20261019100000_pda_quote_requests 20261019110000_pda_quote_acceptance 20261019120000_pda_desk_quotes; do
+# staging carries production's 193 since the catch-up (B2O-091: Waves 8 and 9 applied AND recorded); the unreleased
+# chain this run applies unrecorded and rolls back is the Wave 10 design pair. The guard below refuses a recorded one.
+for m in 20261019130000_pda_tariff_packs 20261019140000_pda_port_touch_census; do
   if [ -n "$(psqlro -c "select 1 from supabase_migrations.schema_migrations where version = '${m%%_*}'")" ]; then
     fail "migration $m is already recorded on staging; this run applies only unreleased PDA migrations"; exit 1
   fi

@@ -36,15 +36,21 @@ ok(!/echo .*\$DBURL|echo .*SERVICE_ROLE_KEY|cat "\$DB_FILE" *$/m.test(runner + p
 // C2O-162 P0-1 · the read-only preflight, before any write
 ok(target.includes('PGOPTIONS="-c default_transaction_read_only=on"') && target.includes("measure(){") && !/\bpsqlq /.test(preflight)
   && /^begin transaction read only;$/m.test(invariants), "the preflight and every gate measurement run read-only");
-ok(manifest.length > 100 && manifest.every((v) => /^\d{14}$/.test(v) && v < "20261018100000") && manifest[manifest.length - 1] === "20261017100000"
+const EIGHT = ["20261018100000", "20261018110000", "20261018120000", "20261018130000", "20261018140000", "20261019100000", "20261019110000", "20261019120000"];
+ok(manifest.length === 193 && manifest.every((v) => /^\d{14}$/.test(v)) && manifest.every((v, i) => i === 0 || manifest[i - 1] < v)
+  && manifest.slice(0, 185).every((v) => v < "20261018100000") && manifest[184] === "20261017100000"
+  && JSON.stringify(manifest.slice(185)) === JSON.stringify(EIGHT)
   && preflight.includes("staging-released-manifest.txt") && runner.includes("staging-released-manifest.txt"),
-  "the recorded migration history must equal the pinned released manifest (every version before Wave 8, ending at Wave 7)");
+  "the recorded migration history must equal the pinned released manifest: the 185 versions up to Wave 7, then Waves 8 and 9 in order (193, production since 25 Oct 2026)");
 ok(has(invariants, "e2e-pda-ag-%@arabshipbroker.test", "E2E Agents Charterers %", "E2E Portal Agency %", "E2E Email Agency %", "E2E AGENTS PORT %",
     "E2E AGENTS VESSEL %", "E2EPDAAG-%", "E2E AGENTS WHEAT %", "auth.sessions", "auth.refresh_tokens", "auth.mfa_factors",
     "notification_deliveries", "notification_digest_batches", "market_private.listing_handles"),
   "the invariants check every 15:27-run identity shape and orphaned Auth, notification and listing descendants");
-ok(has(invariants, "I3 Wave 8 / Agents objects present", "notifications_snapshot_guard", "trg_pda_estimates_immutable", "dispatch_url is not null", "value <> 'true'::jsonb")
-  && invariants.includes("PREFLIGHT INVARIANTS OK"), "the invariants pin the post-Wave-7 target: no Wave 8/Agents object, guards enabled, email off, beta true");
+ok(has(invariants, "I3a Wave 8 / Agents objects present (must be 16 of 16 on the post-Wave-9 target)", "case when n = 16 then", "bad := bad + (n <> 16)::int",
+    "I3b Wave 10 design objects present (must be 0)", "'list_pda_tariff_packs', 'get_pda_tariff_pack', 'fn_pda_tariff_pack_ref', 'get_port_touch_census'",
+    "notifications_snapshot_guard", "trg_pda_estimates_immutable", "dispatch_url is not null", "value <> 'true'::jsonb")
+  && invariants.includes("PREFLIGHT INVARIANTS OK") && !invariants.includes("I3 Wave 8 / Agents objects present (must be 0"),
+  "the invariants pin the post-Wave-9 target: every Wave 8/Agents object present, no Wave 10 design object, guards enabled, email off, beta true");
 ok(before(runner, 'measure "$LOG/before"', "trap finish EXIT") && before(runner, '[ "$SCHEMA_MD5" = "$R_SCHEMA" ]', "trap finish EXIT")
   && before(runner, '[ "$DATA_MD5" = "$R_DATA" ]', "trap finish EXIT") && before(runner, "PREFLIGHT INVARIANTS OK", "trap finish EXIT"),
   "the runner re-measures and must match the reviewed baseline before its trap and before any write");
@@ -186,21 +192,42 @@ ok(has(recoverCode, "--i-hold-the-staging-window", "^pdaag-[0-9a-f]{12}$", ". sc
   && has(recoverCode, "pda-agents-teardown.sql", '"TEARDOWN OK $RUN"') && before(recover, "# 0 · the state as found", "# 1 · teardown") && before(recoverCode, 'measure "$LOG/before"', '"TEARDOWN OK $RUN"')
   && before(recover, '"TEARDOWN OK $RUN"', "# 2 · DOWNs") && recoverCode.includes('redact | cut -c1-300)"; exit 1; fi'),
   "recovery runs only inside a window, for one run id, with a GO/HOLD receipt whose SHA's supabase/ tree is the checkout's; it measures the state as found, then tears down first and stops at the first failure");
-ok((recoverCode.match(/marker="\$\(\[ \$DISCARD = 1 \] && echo "set local asb\./g) ?? []).length === 6 && !/marker="set local/.test(recoverCode)
+ok((recoverCode.match(/marker="\$\(\[ \$DISCARD = 1 \] && echo "set local asb\./g) ?? []).length === 0 && !/marker="set local/.test(recoverCode)
   && has(recoverCode, 'DISCARD=0; case "${3:-}" in "") ;; --discard-remaining) DISCARD=1;;', "re-run with --discard-remaining only if they are declared exported"),
-  "recovery DOWNs carry no history-export marker unless --discard-remaining is given, so remaining non-run rows make them refuse and stop");
-ok(has(recoverCode, "20261019120000_pda_desk_quotes 20261019110000_pda_quote_acceptance 20261019100000_pda_quote_requests 20261018140000_pda_estimate_set_org_lineage",
-    "20261018130000_pda_agencies 20261018120000_pda_estimate_sets 20261018110000_pda_member_preferences 20261018100000_pda_ports_workspace",
-    "column_name = 'entered_via'", "to_regclass('public.pda_quote_acceptances')", "to_regclass('public.pda_quote_requests')", "to_regclass('public.pda_agencies')",
-    "to_regclass('public.pda_estimate_sets')", "to_regclass('public.pda_member_preferences')", "list_pda_ports_workspace(date)", "not present; nothing to roll back",
-    "history-exported:$RUN", "registry-exported:$RUN", "discard-preferences") && recoverCode.includes('present=$(psqlro -c "$probe"'),
-  "recovery rolls back newest-first with the same markers as the trap, each DOWN only where a read-only probe finds the migration's objects");
+  "recovery DOWNs carry no history-export marker (the Wave 10 pair holds no data); --discard-remaining is still parsed and refused rows still stop");
+ok(has(recoverCode, "for m in 20261019140000_pda_port_touch_census 20261019130000_pda_tariff_packs; do",
+    "to_regprocedure('public.get_port_touch_census()') is not null", "to_regprocedure('public.list_pda_tariff_packs(date)') is not null",
+    "not present; nothing to roll back") && recoverCode.includes('present=$(psqlro -c "$probe"')
+  && !/20261018100000_pda_ports_workspace|20261019120000_pda_desk_quotes/.test(recoverCode),
+  "recovery rolls back the Wave 10 design pair newest-first, each DOWN only where a read-only probe finds its objects; the released eight are never touched");
+ok(runnerCode.includes("for m in 20261019130000_pda_tariff_packs 20261019140000_pda_port_touch_census; do")
+  && !/for m in 20261018100000_pda_ports_workspace/.test(runnerCode) && runner.includes("already recorded on staging"),
+  "after the 193 catch-up the browser run applies only the Wave 10 design pair (unrecorded, rolled back); a recorded version is refused");
+
+// ── the staging catch-up 185 -> 193 (B2O-091)
+const catchup = read("scripts/e2e/staging-catchup-193.sh");
+const catchupCode = catchup.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+ok(catchupCode.includes(". scripts/e2e/staging-target.sh") && catchupCode.includes(". scripts/e2e/run-log-helpers.sh")
+  && (catchupCode.match(/^  "202610(18|19)\d{6}_[a-z_]+ [0-9a-f]{64}"$/gm) ?? []).length === 8,
+  "the catch-up binds to the audited staging target and pins the sha256 of all eight migration files");
+ok(before(catchupCode, 'got_sha=$(sha256sum "$f"', 'psqlq -1 -f -') && catchupCode.includes('[ "$got_sha" = "$want_sha" ] || die'),
+  "every file is checked against its pinned sha256 before anything is written");
+ok(catchupCode.includes("insert into supabase_migrations.schema_migrations (version, name) values (%s, %s);") && catchupCode.includes("} | psqlq -1 -f - 2>&1 )")
+  && !/supabase migration repair/.test(catchupCode),
+  "each migration is applied AND recorded in ONE transaction, so a version can never be applied but unrecorded");
+ok(before(catchupCode, 'echo "$R_NONCE" >> "$LEDGER"', "sleep 60") && before(catchupCode, "sleep 60", 'pg_dump "$PGURL"')
+  && before(catchupCode, 'pg_restore --list', '} | psqlq -1 -f - 2>&1 )') && catchupCode.includes('[ "$R_STATUS" = GO ] || die')
+  && has(catchupCode, 'for f in opus-to-codex.md opusb-to-all.md codex-to-opus.md; do', '[ -f "$LEDGER" ] && grep -qx "$R_NONCE" "$LEDGER" && die'),
+  "receipt GO, one use, three mailboxes, grace, then the staging dump (checked to list) BEFORE the first write");
+ok(has(catchupCode, 'grep -qE \'^FAIL I3a Wave 8 / Agents objects present .*: 0$\'', '"PREFLIGHT INVARIANTS FAILED (1)"', '"PREFLIGHT INVARIANTS OK"',
+    'diff -q <(printf \'%s\\n\' "$POST_MANIFEST") "$LOG/after/manifest.txt"', '[ "$shape" = "$(proof_fresh "$v")" ] || die'),
+  "pre-state = first 185 with only I3a failing at 0; each pending version must read fresh before it is applied; post-state = the pinned 193 with every invariant ok");
 ok(before(recoverCode, ". scripts/e2e/run-log-helpers.sh || { echo \"REFUSED", "td=$(") && recoverCode.includes('mkdir -p "$LOG" || { echo "REFUSED')
   && has(recoverCode, "2>&1 1>&3 3>&- | sed 's/^/STDERR /'; } 3>&1 )", 'keep "$LOG/teardown.log" "$td"', "last line '${tdok:-<none>}'", 'keep "$LOG/down-$m.log" "$dn"', "grep -m1 -i error ||", "head -1; } | redact)")
   && redirectTargets(recoverCode.slice(recoverCode.indexOf("td=$("))).every(allowedTarget)
   && has(recoverCode, 'present=$(psqlro -c "$probe" 2>&1) ||', "probe for $m failed", "probe for $m answered neither t nor f", 'f) echo "  ..   $m not present')
-  && recoverCode.includes("like '%v_org uuid := p_owner_org_id%', false)"),
-  "recovery captures teardown and DOWN output in memory (no file redirect after its gates); a probe that errors or answers oddly is a FAIL, never \"not present\"; the lineage probe reads the function body");
+  && catchupCode.includes("like '%v_org uuid := p_owner_org_id%', false)::int"),
+  "recovery captures teardown and DOWN output in memory (no file redirect after its gates); a probe that errors or answers oddly is a FAIL, never \"not present\"; the 140000 lineage proof (now the catch-up's) reads the function body");
 ok((target.match(/-e PGCONNECT_TIMEOUT=30 /g) ?? []).length === 2, "both staging psql wrappers carry a connect timeout, so a dead host cannot hang a trap");
 ok(has(recoverCode, "set value = 'true'::jsonb where key = 'beta_mode'", 'measure "$LOG/after"', "staging-released-manifest.txt", "PREFLIGHT INVARIANTS OK",
     '[ "$SCHEMA_MD5" = "$R_SCHEMA" ]', '[ "$DATA_MD5" = "$R_DATA" ]', "RECOVERY OK", "RECOVERY INCOMPLETE"),
