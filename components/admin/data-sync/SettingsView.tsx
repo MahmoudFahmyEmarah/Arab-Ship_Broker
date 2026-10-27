@@ -26,24 +26,12 @@ import {
   type LlmCredentialMeta, type EmailConfigMeta,
 } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { Badge, Btn, Card, Switch, C, btn } from "./ui";
-import { GROQ_API_BASE_URL, GROQ_STRUCTURED_OUTPUT_MODELS } from "@/lib/sync/llm-provider";
+import { GROQ_API_BASE_URL, LLM_MODEL_SUGGESTIONS, llmDefaultBaseUrl } from "@/lib/sync/llm-provider";
 
 const VENDORS = ["anthropic", "openai", "google", "groq", "mistral", "other"];
-
-// Suggested current text models per vendor (editable — the field stays free-text).
-// Google list reflects the live generativelanguage models endpoint.
-const MODEL_SUGGESTIONS: Record<string, string[]> = {
-  google: [
-    "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-3-pro-preview",
-    "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-pro-latest",
-    "gemini-2.0-flash",
-  ],
-  anthropic: ["claude-sonnet-4-5", "claude-opus-4-1", "claude-3-5-haiku-latest"],
-  openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
-  groq: [...GROQ_STRUCTURED_OUTPUT_MODELS],
-  mistral: ["mistral-large-latest", "mistral-small-latest"],
-  other: [],
-};
+// The model catalogue per vendor lives in lib/sync/llm-provider.ts (shared with the key test and its unit
+// check) so the form, the test and the classifier can never disagree about which ids are current.
+const CUSTOM_MODEL = "__custom__";
 
 export function SettingsView() {
   const [creds, setCreds] = useState<LlmCredentialMeta[] | null>(null);
@@ -71,8 +59,10 @@ export function SettingsView() {
     setBusy(id);
     const r = await testLlmCredential(id);
     setBusy(null);
-    if (r.success) toast.success("Key authenticated with the provider.");
-    else toast.error(r.error);
+    if (!r.success) { toast.error(r.error); return; }
+    // the test proves the key AND the model id; a provider that cannot confirm an id is said so, never implied
+    if (r.data.modelFound === true) toast.success(`Key authenticated and the provider serves ${r.data.model}.`);
+    else toast.success(`Key authenticated; the provider could not confirm the model id ${r.data.model} — a sync will tell.`);
   };
   const remove = async (cr: LlmCredentialMeta) => {
     if (!confirm(`Delete key "${cr.label}"? Its encrypted secret is destroyed too.`)) return;
@@ -180,8 +170,12 @@ function KeyModal({ cred, onClose, onSaved }: {
 }) {
   const [label, setLabel] = useState(cred?.label ?? "");
   const [vendor, setVendor] = useState(cred?.vendor ?? "anthropic");
-  const [model, setModel] = useState(cred?.model ?? "claude-sonnet-4");
+  const [model, setModel] = useState(cred?.model ?? LLM_MODEL_SUGGESTIONS.anthropic[0]);
+  // a stored id outside the catalogue (an old or custom one) opens the free-text field so it is never hidden
+  const [customModel, setCustomModel] = useState(!!cred && !(LLM_MODEL_SUGGESTIONS[cred.vendor] ?? []).includes(cred.model));
   const [baseUrl, setBaseUrl] = useState(cred?.base_url ?? "");
+  const suggestions = LLM_MODEL_SUGGESTIONS[vendor] ?? [];
+  const defaultBaseUrl = llmDefaultBaseUrl(vendor);
   const [secret, setSecret] = useState("");
   const [makeActive, setMakeActive] = useState(cred ? cred.is_active : true);
   const [saving, setSaving] = useState(false);
@@ -217,7 +211,8 @@ function KeyModal({ cred, onClose, onSaved }: {
             <label style={lab}>Vendor</label>
             <select value={vendor} onChange={(e) => {
               const v = e.target.value; setVendor(v);
-              const sug = MODEL_SUGGESTIONS[v]; if (sug && sug.length) setModel(sug[0]);
+              const sug = LLM_MODEL_SUGGESTIONS[v] ?? [];
+              setModel(sug[0] ?? ""); setCustomModel(sug.length === 0);
               if (v === "groq") setBaseUrl(GROQ_API_BASE_URL);
               else if (baseUrl.trim() === GROQ_API_BASE_URL) setBaseUrl("");
             }} className="ds-input">
@@ -226,15 +221,26 @@ function KeyModal({ cred, onClose, onSaved }: {
           </div>
           <div>
             <label style={lab}>Model</label>
-            <input value={model} onChange={(e) => setModel(e.target.value)} list="llm-model-suggestions" className="ds-input" />
-            <datalist id="llm-model-suggestions">
-              {(MODEL_SUGGESTIONS[vendor] ?? []).map((m) => <option key={m} value={m} />)}
-            </datalist>
+            {suggestions.length > 0 && !customModel ? (
+              <select value={suggestions.includes(model) ? model : CUSTOM_MODEL} onChange={(e) => {
+                if (e.target.value === CUSTOM_MODEL) { setCustomModel(true); setModel(""); } else setModel(e.target.value);
+              }} className="ds-input" aria-label="Model">
+                {suggestions.map((m) => <option key={m} value={m}>{m}</option>)}
+                <option value={CUSTOM_MODEL}>Other model id…</option>
+              </select>
+            ) : (
+              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="the exact model id the provider serves" className="ds-input" aria-label="Model id" />
+            )}
+            <span className="ds-rowsub">
+              {customModel && suggestions.length > 0
+                ? <>Any id the provider serves. <button type="button" onClick={() => { setCustomModel(false); setModel(suggestions[0]); }} style={{ background: "none", border: 0, padding: 0, font: "inherit", color: C.ink2, textDecoration: "underline", cursor: "pointer" }}>Back to the suggested models</button></>
+                : "Current models, newest first. After saving, Test checks that the provider serves this id."}
+            </span>
           </div>
         </div>
         <div>
-          <label style={lab}>Base URL <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — Groq is filled automatically)</span></label>
-          <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={vendor === "groq" ? GROQ_API_BASE_URL : "https://api.anthropic.com"} className="ds-input" />
+          <label style={lab}>Base URL <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — empty means the provider default{defaultBaseUrl ? `: ${defaultBaseUrl}` : ""})</span></label>
+          <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={defaultBaseUrl ?? "https://…/v1 (a gateway you host)"} className="ds-input" />
           {vendor === "groq" && <span className="ds-rowsub">OpenAI-compatible Groq endpoint. Choose a suggested model because Data Sync requires structured output.</span>}
         </div>
         <div>

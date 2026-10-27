@@ -13,7 +13,7 @@ import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-sett
 import { getWatermark, setWatermark } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
-import { llmModelsEndpoint, llmProviderFamily } from "@/lib/sync/llm-provider";
+import { LLM_MODEL_SUGGESTIONS, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, modelListedIn } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
 
@@ -134,12 +134,17 @@ export async function deleteLlmCredential(id: string): Promise<Result> {
 
 // Read-only provider ping to confirm a stored key actually authenticates.
 // The plaintext is decrypted server-side (get_llm_secret) and never leaves here.
-export async function testLlmCredential(id: string): Promise<Result<{ status: number }>> {
+/** Proves the stored key authenticates AND that the stored model id exists at the provider — a key that
+ * auths with a model the provider does not serve fails every classification batch with a 404 (27 Oct 2026,
+ * "model: claude-sonnet-4-5"), so "key OK" alone is not a usable answer. `modelFound` is null only when the
+ * provider offers no way to check the id (an OpenAI-compatible gateway without a per-model endpoint or a
+ * readable list); that case stays a success so a working custom gateway is not refused. */
+export async function testLlmCredential(id: string): Promise<Result<{ status: number; model: string; modelFound: boolean | null }>> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid key id." };
   try {
     const { c, who } = await adminCtx();
     const { data: meta, error: mErr } = await c
-      .from("llm_credential").select("vendor, base_url").eq("id", id).maybeSingle();
+      .from("llm_credential").select("vendor, model, base_url").eq("id", id).maybeSingle();
     if (mErr) return { success: false, error: mErr.message };
     if (!meta) return { success: false, error: "Key not found." };
     const { data: secret, error: sErr } = await c.rpc("get_llm_secret", { p_id: id });
@@ -147,6 +152,8 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
     if (!secret) return { success: false, error: "No key stored for this credential." };
 
     const vendor = (meta.vendor as string).toLowerCase();
+    const model = String(meta.model ?? "").trim();
+    if (!model) return { success: false, error: "This key has no model id. Edit the key and choose one." };
     const override = (meta.base_url as string | null)?.replace(/\/$/, "") || null;
     // The decrypted key goes in the request headers — never to a private host
     // or over plain http, even if a stored override says so.
@@ -155,25 +162,34 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
     const family = llmProviderFamily(vendor);
 
     // Each provider gets a cheap, read-only models-list call to prove the key auths.
-    let url: string;
-    let headers: Record<string, string>;
-    if (family === "anthropic") {
-      url = llmModelsEndpoint(vendor, override);
-      headers = { "x-api-key": secret as string, "anthropic-version": "2023-06-01" };
-    } else if (family === "google") {
-      url = llmModelsEndpoint(vendor, override);
-      headers = { "x-goog-api-key": secret as string };
-    } else {
-      url = llmModelsEndpoint(vendor, override);
-      headers = { Authorization: `Bearer ${secret as string}` };
-    }
-
-    const res = await fetch(url, { method: "GET", headers, signal: AbortSignal.timeout(12000) });
-    await logAudit(c, { actor: who, action: "settings.llm.test", targetKind: "settings", targetId: id, summary: res.ok ? `Tested an LLM key — provider accepted it (HTTP ${res.status})` : `Tested an LLM key — provider rejected it (HTTP ${res.status})`, ok: res.ok, detail: { status: res.status, vendor } });
+    const headers: Record<string, string> =
+      family === "anthropic" ? { "x-api-key": secret as string, "anthropic-version": "2023-06-01" }
+      : family === "google" ? { "x-goog-api-key": secret as string }
+      : { Authorization: `Bearer ${secret as string}` };
+    const res = await fetch(llmModelsEndpoint(vendor, override), { method: "GET", headers, signal: AbortSignal.timeout(12000) });
     if (!res.ok) {
+      await logAudit(c, { actor: who, action: "settings.llm.test", targetKind: "settings", targetId: id, summary: `Tested an LLM key — provider rejected it (HTTP ${res.status})`, ok: false, detail: { status: res.status, vendor, model } });
       return { success: false, error: `Provider rejected the key (HTTP ${res.status}).` };
     }
-    return { success: true, data: { status: res.status } };
+
+    // Then the model itself: GET <models>/<id> is definitive for Anthropic and Google (200 / 404); an
+    // OpenAI-compatible gateway may lack that route, so a 404 there falls back to the list we already hold.
+    let modelFound: boolean | null = null;
+    let modelStatus: number | null = null;
+    const mRes = await fetch(llmModelEndpoint(vendor, model, override), { method: "GET", headers, signal: AbortSignal.timeout(12000) });
+    modelStatus = mRes.status;
+    if (mRes.ok) modelFound = true;
+    else if (mRes.status === 404 && family !== "openai-compatible") modelFound = false;
+    else if (mRes.status === 404) modelFound = modelListedIn(await res.json().catch(() => null), family, model);
+    const summary = modelFound === true ? `Tested an LLM key — provider accepted it and serves ${model}`
+      : modelFound === false ? `Tested an LLM key — provider accepted it but has no model ${model}`
+      : `Tested an LLM key — provider accepted it; model ${model} not verifiable (HTTP ${modelStatus})`;
+    await logAudit(c, { actor: who, action: "settings.llm.test", targetKind: "settings", targetId: id, summary, ok: modelFound !== false, detail: { status: res.status, modelStatus, vendor, model, modelFound } });
+    if (modelFound === false) {
+      const suggested = (LLM_MODEL_SUGGESTIONS[vendor] ?? []).join(", ");
+      return { success: false, error: `Key accepted, but the provider has no model "${model}" (HTTP ${modelStatus}). Edit the key and pick an id the provider serves${suggested ? ` — for ${vendor}: ${suggested}` : ""}.` };
+    }
+    return { success: true, data: { status: res.status, model, modelFound } };
   } catch (e) {
     unstable_rethrow(e);
     const msg = e instanceof Error ? e.message : "Test failed.";

@@ -40,3 +40,54 @@ export function llmModelsEndpoint(vendor: string, override?: string | null): str
   if (family === "google") return `${base ?? "https://generativelanguage.googleapis.com"}/v1beta/models`;
   return `${openAiCompatibleBaseUrl(vendor, base) ?? OPENAI_API_BASE_URL}/models`;
 }
+
+/** Read-only per-model endpoint: the credential test proves the MODEL id exists, not only the key.
+ * Every supported family exposes GET <models>/<id> (Anthropic and Google answer 404 for an unknown id). */
+export function llmModelEndpoint(vendor: string, model: string, override?: string | null): string {
+  return `${llmModelsEndpoint(vendor, override)}/${encodeURIComponent(model.trim())}`;
+}
+
+/** Current text models per vendor, newest first; the first entry is the default for a new key and the
+ * form keeps a free-text escape hatch for ids that are not listed yet. The Anthropic ids are the current
+ * generation (claude-opus-5, claude-sonnet-5, claude-haiku-4-5): dated or retired ids such as
+ * claude-sonnet-4-5 answer 404 "model: … not found", which is how the circular classifier failed on
+ * 27 Oct 2026 after the form had filled that id in by itself. */
+export const LLM_MODEL_SUGGESTIONS: Record<string, readonly string[]> = {
+  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+  google: [
+    "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-3-pro-preview",
+    "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-pro-latest",
+    "gemini-2.0-flash",
+  ],
+  groq: [...GROQ_STRUCTURED_OUTPUT_MODELS],
+  mistral: ["mistral-large-latest", "mistral-small-latest"],
+  other: [],
+};
+
+/** The API root a vendor is called at when no base URL is stored — shown in the form so an empty
+ * field reads as "provider default", not as "missing". Unknown vendors have no default. */
+export function llmDefaultBaseUrl(vendor?: string | null): string | undefined {
+  const family = llmProviderFamily(vendor);
+  if (family === "anthropic") return "https://api.anthropic.com";
+  if (family === "google") return "https://generativelanguage.googleapis.com";
+  if (isGroqVendor(vendor)) return GROQ_API_BASE_URL;
+  const normalized = (vendor ?? "").trim().toLowerCase();
+  if (normalized.includes("openai")) return OPENAI_API_BASE_URL;
+  if (normalized.includes("mistral")) return "https://api.mistral.ai/v1";
+  return undefined;
+}
+
+/** Whether a models-list response names the model: OpenAI-compatible and Anthropic lists carry
+ * `data[].id`, Google carries `models[].name` as "models/<id>". Null = the body is not a list we can read. */
+export function modelListedIn(list: unknown, family: LlmProviderFamily, model: string): boolean | null {
+  if (!list || typeof list !== "object") return null;
+  const rows = (list as Record<string, unknown>)[family === "google" ? "models" : "data"];
+  if (!Array.isArray(rows)) return null;
+  const want = model.trim();
+  return rows.some((row) => {
+    if (!row || typeof row !== "object") return false;
+    const raw = (row as Record<string, unknown>)[family === "google" ? "name" : "id"];
+    return typeof raw === "string" && raw.replace(/^models\//u, "") === want;
+  });
+}
