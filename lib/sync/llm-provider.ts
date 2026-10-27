@@ -47,13 +47,16 @@ export function llmModelEndpoint(vendor: string, model: string, override?: strin
   return `${llmModelsEndpoint(vendor, override)}/${encodeURIComponent(model.trim())}`;
 }
 
-/** Current text models per vendor, newest first; the first entry is the default for a new key and the
- * form keeps a free-text escape hatch for ids that are not listed yet. The Anthropic ids are the current
- * generation (claude-opus-5, claude-sonnet-5, claude-haiku-4-5): dated or retired ids such as
+/** Current text models per vendor; the first entry is the default for a new key and the form keeps a
+ * free-text escape hatch for ids that are not listed yet. The Anthropic ids are the current generation
+ * (claude-sonnet-5 first: Data Sync classifies in bulk, so the mid-tier model is the sensible default;
+ * claude-opus-5 for the strongest reads, claude-haiku-4-5 for the cheapest, claude-opus-5-5 the newest —
+ * the key test tells whether the organisation's API can use it). Dated or retired ids such as
  * claude-sonnet-4-5 answer 404 "model: … not found", which is how the circular classifier failed on
- * 27 Oct 2026 after the form had filled that id in by itself. */
+ * 27 Oct 2026 after the form had filled that id in by itself. Every other picker on the platform reads this
+ * table (Platform settings, the legacy-key import), so the ids cannot drift apart again. */
 export const LLM_MODEL_SUGGESTIONS: Record<string, readonly string[]> = {
-  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  anthropic: ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5", "claude-opus-5-5"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
   google: [
     "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-3-pro-preview",

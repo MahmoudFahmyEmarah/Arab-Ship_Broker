@@ -3,6 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import type { MarketVisibilitySettings } from "@/lib/app-settings";
+import { LLM_MODEL_SUGGESTIONS } from "@/lib/sync/llm-provider";
 import { savePlatformSettings, saveMarketVisibility } from "@/app/(admin)/admin/settings/actions";
 import { ComingSoon } from "@/components/portal/ComingSoon";
 // Type-only import: pulling a runtime value from app-settings would drag the
@@ -40,10 +41,12 @@ const MODE_NOTE: Record<PlatformMode, string> = {
 // ── AI provider catalogue (ported from the design) ───────────────────────────
 type Vendor = { label: string; base: string; keyHint: string; keyPrefix: string; models: string[] };
 const VENDORS: Record<string, Vendor> = {
-  anthropic: { label: "Anthropic", base: "https://api.anthropic.com", keyHint: "sk-ant-…", keyPrefix: "sk-ant", models: ["claude-opus-4", "claude-sonnet-4", "claude-3-5-sonnet", "claude-3-5-haiku"] },
-  openai: { label: "OpenAI", base: "https://api.openai.com/v1", keyHint: "sk-…", keyPrefix: "sk-", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1", "o1-mini"] },
-  google: { label: "Google (Gemini)", base: "https://generativelanguage.googleapis.com", keyHint: "AIza…", keyPrefix: "AIza", models: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"] },
-  mistral: { label: "Mistral", base: "https://api.mistral.ai/v1", keyHint: "…", keyPrefix: "", models: ["mistral-large-latest", "mistral-small-latest", "open-mixtral-8x22b"] },
+  // model lists come from the shared catalogue (lib/sync/llm-provider.ts), the same one Data Sync's key form
+  // and its key test use — this picker once carried retired ids (claude-opus-4, claude-sonnet-4, claude-3-5-*)
+  anthropic: { label: "Anthropic", base: "https://api.anthropic.com", keyHint: "sk-ant-…", keyPrefix: "sk-ant", models: [...LLM_MODEL_SUGGESTIONS.anthropic] },
+  openai: { label: "OpenAI", base: "https://api.openai.com/v1", keyHint: "sk-…", keyPrefix: "sk-", models: [...LLM_MODEL_SUGGESTIONS.openai] },
+  google: { label: "Google (Gemini)", base: "https://generativelanguage.googleapis.com", keyHint: "AIza…", keyPrefix: "AIza", models: [...LLM_MODEL_SUGGESTIONS.google] },
+  mistral: { label: "Mistral", base: "https://api.mistral.ai/v1", keyHint: "…", keyPrefix: "", models: [...LLM_MODEL_SUGGESTIONS.mistral] },
   azure: { label: "Azure OpenAI", base: "https://<resource>.openai.azure.com", keyHint: "32-char key", keyPrefix: "", models: ["gpt-4o (deployment)", "gpt-4 (deployment)", "gpt-35-turbo (deployment)"] },
   custom: { label: "Custom / self-hosted", base: "", keyHint: "token", keyPrefix: "", models: ["custom-model"] },
 };

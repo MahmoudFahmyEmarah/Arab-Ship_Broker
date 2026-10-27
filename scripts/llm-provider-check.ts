@@ -39,7 +39,8 @@ assert.deepEqual(GROQ_STRUCTURED_OUTPUT_MODELS, [
 // 27 Oct 2026: the form filled in claude-sonnet-4-5 by itself and every classification batch answered
 // 404 "model not found". The catalogue must carry only current Anthropic ids, newest first, and never
 // a dated or retired one; the key test must probe the model id, not only the key.
-assert.deepEqual(LLM_MODEL_SUGGESTIONS.anthropic, ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]);
+assert.deepEqual(LLM_MODEL_SUGGESTIONS.anthropic, ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5", "claude-opus-5-5"],
+  "the default (first) is the mid-tier model: Data Sync classifies in bulk");
 for (const [vendor, models] of Object.entries(LLM_MODEL_SUGGESTIONS)) {
   for (const m of models) {
     assert.doesNotMatch(m, /claude-(sonnet|opus|haiku)-[0-9](-[0-9])?-\d{8}$/u, `${vendor}: dated Anthropic ids are not suggested (${m})`);

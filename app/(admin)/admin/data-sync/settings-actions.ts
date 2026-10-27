@@ -166,7 +166,8 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
       family === "anthropic" ? { "x-api-key": secret as string, "anthropic-version": "2023-06-01" }
       : family === "google" ? { "x-goog-api-key": secret as string }
       : { Authorization: `Bearer ${secret as string}` };
-    const res = await fetch(llmModelsEndpoint(vendor, override), { method: "GET", headers, signal: AbortSignal.timeout(12000) });
+    // redirect: "manual" — the key must never follow a 30x to another origin (a 3xx reads as a rejection)
+    const res = await fetch(llmModelsEndpoint(vendor, override), { method: "GET", headers, redirect: "manual", signal: AbortSignal.timeout(12000) });
     if (!res.ok) {
       await logAudit(c, { actor: who, action: "settings.llm.test", targetKind: "settings", targetId: id, summary: `Tested an LLM key — provider rejected it (HTTP ${res.status})`, ok: false, detail: { status: res.status, vendor, model } });
       return { success: false, error: `Provider rejected the key (HTTP ${res.status}).` };
@@ -174,13 +175,18 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
 
     // Then the model itself: GET <models>/<id> is definitive for Anthropic and Google (200 / 404); an
     // OpenAI-compatible gateway may lack that route, so a 404 there falls back to the list we already hold.
+    // A timeout or network error on this second call is "not verifiable", never a failed key.
     let modelFound: boolean | null = null;
     let modelStatus: number | null = null;
-    const mRes = await fetch(llmModelEndpoint(vendor, model, override), { method: "GET", headers, signal: AbortSignal.timeout(12000) });
-    modelStatus = mRes.status;
-    if (mRes.ok) modelFound = true;
-    else if (mRes.status === 404 && family !== "openai-compatible") modelFound = false;
-    else if (mRes.status === 404) modelFound = modelListedIn(await res.json().catch(() => null), family, model);
+    try {
+      const mRes = await fetch(llmModelEndpoint(vendor, model, override), { method: "GET", headers, redirect: "manual", signal: AbortSignal.timeout(12000) });
+      modelStatus = mRes.status;
+      if (mRes.ok) modelFound = true;
+      else if (mRes.status === 404 && family !== "openai-compatible") modelFound = false;
+      else if (mRes.status === 404) modelFound = modelListedIn(await res.json().catch(() => null), family, model);
+    } catch {
+      modelFound = null;
+    }
     const summary = modelFound === true ? `Tested an LLM key — provider accepted it and serves ${model}`
       : modelFound === false ? `Tested an LLM key — provider accepted it but has no model ${model}`
       : `Tested an LLM key — provider accepted it; model ${model} not verifiable (HTTP ${modelStatus})`;
@@ -223,7 +229,7 @@ export async function importLegacyAiKey(): Promise<Result<{ imported: boolean }>
       p_id: null,
       p_label: "Imported from platform settings",
       p_vendor: ai.vendor || "anthropic",
-      p_model: ai.model || "claude-sonnet-4",
+      p_model: ai.model || LLM_MODEL_SUGGESTIONS.anthropic[0],
       p_base_url: ai.baseUrl?.trim() || null,
       p_secret: ai.apiKey.trim(),
       p_make_active: true,
