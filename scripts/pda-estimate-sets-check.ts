@@ -106,7 +106,7 @@ async function textOf(bytes: Uint8Array): Promise<string> {
   ok(/const route = \{ \.\.\.\(await prepareRoutePreview\(raw\)\), manualActorLabel: PDA_OWNER_MARKER \};/.test(saveBody) && /computeRouteLeg\(route, "load"\)/.test(saveBody) && /computeRouteFrame\(route\)/.test(saveBody)
     && /loadResult: load\.result/.test(saveBody), "the save recomputes every part on the server from the member's own selection; no figure comes from the page");
   ok(/savePdaEstimateSet\(getSupabaseAdminClient\(\)/.test(saveBody) && /actorId: route\.appUserId/.test(saveBody), "only the service-role save is used, with the signed-in member as the actor");
-  const exportBody = actions.slice(actions.indexOf("export async function exportPdaEstimateSetPdf"));
+  const exportBody = actions.slice(actions.indexOf("export async function exportPdaEstimateSetPdf"), actions.indexOf("export async function loadPdaAgents("));
   ok(/const \{ supabase \} = await viewer\(\);\s*const set = await getPdaEstimateSet\(supabase, setId\);/.test(exportBody) && !/getSupabaseAdminClient/.test(exportBody),
     "the export reads the saved set through the member's own session (the database decides access)");
   ok(/SET_ID\.test\(setId\)/.test(exportBody) && /SET_ID\.test\(supersedesId\)/.test(saveBody), "set ids are validated before any query");

@@ -46,6 +46,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { id: "commodities", label: "Commodities", href: "/admin/commodities", icon: "Layers" },
       { id: "ports", label: "Ports", href: "/admin/ports", icon: "Anchor" },
       { id: "porttariffs", label: "Port tariffs", href: "/admin/port-tariffs", icon: "DocAudit", superOnly: true },
+      { id: "portagents", label: "Port agents", href: "/admin/port-agents", icon: "Anchor", superOnly: true },
       { id: "risk", label: "Risk areas", href: "/admin/risk-areas", icon: "Map" },
       { id: "bunker", label: "Bunker ticker", href: "/admin/bunker", icon: "TrendUp" },
       { id: "voyagedata", label: "Voyage estimator data", href: "/admin/voyage-data", icon: "Map" },

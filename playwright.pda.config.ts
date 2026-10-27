@@ -5,16 +5,19 @@ const managedProbeURL = "http://127.0.0.1:3212";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /pda-estimator-alignment\.spec\.ts/,
+  testMatch: /pda-(estimator-alignment|agents)\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
   workers: 1,
   reporter: [["list"]],
-  timeout: 600_000,
+  // emptied by Playwright at start-up: nothing else may live under it (21 Oct 2026, the runner's logs did)
+  outputDir: "test-results/pda-agents",
+  timeout: 900_000, // hosted staging answers every server action from this machine; run 4 needed more than 10 min of real work
   expect: { timeout: 90_000 },
   use: {
     baseURL: process.env.E2E_BASE_URL ?? managedBaseURL,
+    actionTimeout: 30_000, // no single action may hang a run (pdaag-9430dabdfa8d: a handler's click waited 12 min)
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "off",

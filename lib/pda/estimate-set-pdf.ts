@@ -11,6 +11,7 @@ import { docStamp, type FixtureDocument } from "@/lib/fixture-room/documents";
 import { assemblePdf, loadPdfUnicode } from "@/lib/fixture-room/pdf-unicode";
 import { layoutDocument } from "@/lib/fixture-room/recap-pdf";
 import type { PdaEstimateSetDetail, PdaSavedLeg } from "./estimate-sets";
+import { PDA_AGENCY_QUOTE_BASIS } from "./quote-acceptance";
 
 function money(value: number | null | undefined, currency: string): string {
   if (value == null || !Number.isFinite(value)) return "NOT SOURCED";
@@ -33,7 +34,10 @@ function legSection(title: string, leg: PdaSavedLeg, displayCurrency: string, co
   const rows = leg.lines.map((line) => {
     const evidence = [line.evidence.title, line.evidence.page ? `p. ${line.evidence.page}` : null, line.evidence.sheet ? `sheet ${line.evidence.sheet}` : null]
       .filter(Boolean).join(" · ");
-    const provenance = line.manual
+    // an accepted agency quote's explanation already names the agency, reference, revision and validity
+    const provenance = line.basis === PDA_AGENCY_QUOTE_BASIS
+      ? ""
+      : line.manual
       ? `Manual quote${line.enteredBy ? ` by ${line.enteredBy}` : ""}${line.manualReason ? ` · ${line.manualReason}` : ""}`
       : evidence || "Published tariff";
     return [
@@ -51,7 +55,9 @@ function legSection(title: string, leg: PdaSavedLeg, displayCurrency: string, co
       widths: [3, 7, 2.2, 2.2],
     },
     lines: [
-      leg.editionLabel ? `Published tariff: ${leg.editionLabel}` : "No published tariff in force: every figure here is an attributed quote or NOT SOURCED",
+      leg.lines.length > 0 && leg.lines.every((line) => line.basis === PDA_AGENCY_QUOTE_BASIS)
+        ? "Priced from an accepted agency quote (not a published tariff)"
+        : leg.editionLabel ? `Published tariff: ${leg.editionLabel}` : "No published tariff in force: every figure here is an attributed quote or NOT SOURCED",
       `Coverage: ${leg.coverage.replace(/_/g, " ")}`,
       leg.lines.length === 0
         ? "Port total: NOT SOURCED (no governed line or attributed quote)"
