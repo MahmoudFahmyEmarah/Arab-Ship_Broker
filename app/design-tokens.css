@@ -31,7 +31,7 @@
   --asb-navy: #0D2545;
   --asb-navy-deep: #0D2240;
   --asb-navy-global: #1B3A5C;
-  --asb-blue: #24486B;
+  --asb-blue: #185FA5; /* design value (Portal standalone 7) */
   --asb-blue-light: #E6F1FB;
   --asb-steel-bg: #E7EEF5;
   --asb-steel: #2C5F8A;
@@ -59,12 +59,14 @@
   --ccx-soft: #F2F6FB;
 
   /* ── status: vivid ramp (print ramp kept for dense text) ── */
-  --asb-green: #2E8B57;
-  --asb-green-bg: #DFF0E6;
-  --asb-amber: #A66A0C;
-  --asb-amber-bg: #F8ECD6;
-  --asb-red: #A83A3A;
-  --asb-red-bg: #F5E1E1;
+  --asb-green: #2A9962;
+  --asb-green-bg: #DEF1E2;
+  --asb-amber: #B17311;
+  --asb-amber-bg: #FBF2DF;
+  --asb-red: #C84A4A;
+  --asb-red-bg: #FAE5E5;
+  --asb-purple: #7B61FF; /* design: PDA cards layer */
+  --asb-coral: #F0957B;  /* design: Suez canal layer */
   --asb-green-print: #27500A;
   --asb-green-print-bg: #EAF3DE;
   --asb-amber-print: #854F0B;
@@ -95,9 +97,9 @@
   --map-ocean: #0C1929;
   --map-land: #1A2D3A;
   --map-coast: rgba(255, 255, 255, 0.18);
-  --map-cargo: var(--asb-green-bg);
+  --map-cargo: #EAF3DE; /* the map keeps the palette it renders today (owner, 19 Oct 2026; measured on the Wave 8 build) */
   --map-review: #FBF4E2;
-  --map-alert: var(--asb-red);
+  --map-alert: #A32D2D;
   --map-alert-urgent: var(--asb-red-print);
   --map-tonnage: #7BB8F0;
   --map-route: #24486B;
@@ -112,9 +114,9 @@
   --map-feature: var(--asb-gold-soft);
   --map-label: var(--asb-blue-light);
   --map-base-light: var(--asb-gray-100);
-  --map-in: var(--asb-green);
-  --map-partial: var(--asb-amber);
-  --map-out: var(--asb-red);
+  --map-in: #27500A;
+  --map-partial: #854F0B;
+  --map-out: #A32D2D;
   --map-bar-w: 44px;
   --map-icon: 36px;
   --map-panel-w: 248px;
@@ -199,4 +201,43 @@
   --z-map-panel: 580;
   --z-map-bar: 600;
   --z-map-fullscreen: 9999;
+}
+
+/* The member sidebar (both themes) and the map keep the colours they render today (owner, 19 Oct 2026). These are
+   the values computed on the live Wave 8 build (21 Oct 2026 probe), not this file's older values, which other
+   :root blocks always overrode. The design palette above applies everywhere else. */
+.asb-sidebar,
+.asb-map {
+  --asb-blue: #185FA5;
+  --asb-green: #27500A;
+  --asb-green-bg: #EAF3DE;
+  --asb-amber: #854F0B;
+  --asb-amber-bg: #FAEEDA;
+  --asb-red: #A32D2D;
+  --asb-red-bg: #FCEBEB;
+}
+
+/* Named design shades for the admin console (Portal standalone 7, owner 19 Oct 2026): the design values that have no
+   project token. Only the admin shell reads them (app/(admin)/admin.css, design block). */
+.adm-shell {
+  --adm-d-navy: #111F35;
+  --adm-d-green-hover: #237D50;
+  --adm-d-slate: #5C6573;
+  --adm-d-plum: #6B3F8E;
+  --adm-d-flag: #9C2E1F;
+  --adm-d-red-hover: #A53C3C;
+  --adm-d-amber-hover: #C5821F;
+  --adm-d-gold-line: #C8B188;
+  --adm-d-line-hover: #C8D0DC;
+  --adm-d-hover: #EEF1F6;
+  --adm-d-amber-line: #EF9F27;
+  --adm-d-chip: #F0F2F5;
+  --adm-d-chip-2: #F0F2F6;
+  --adm-d-plum-bg: #F3E5F5;
+  --adm-d-faint: #F7F8FA;
+  --adm-d-red-bg: #FBE7E7;
+  --adm-d-flag-bg: #FFD7D2;
+  --adm-d-amber-ink: #5C2E0B;
+  --adm-d-muted: #8B95A3;
+  --adm-d-line: #DDE2EA;
 }

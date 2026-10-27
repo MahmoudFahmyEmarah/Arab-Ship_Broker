@@ -4,38 +4,38 @@ const ACTION_LABEL: Record<string, string> = {
   submit: "Submitted", approve: "Approved", reject: "Rejected",
   withdraw: "Withdrawn", override: "Admin override", import: "Imported",
 };
-const ACTION_BADGE: Record<string, string> = {
-  submit: "pending", approve: "live", reject: "rejected", withdraw: "expired", override: "amber", import: "tier",
+const ACTION_ICON: Record<string, string> = {
+  submit: "is-amber", approve: "is-cargo", reject: "is-red", withdraw: "is-red", override: "is-amber", import: "is-vessel",
 };
+const when = (iso: string) => iso.slice(0, 16).replace("T", " ") + " UTC";
 
+/** The design's update history (Portal standalone 7 · PageBunker): most recent first, one line per price event,
+ *  with the old → new price, the actor and the audit reason. Quotes are append-only: every change is a new row. */
 export function HistoryTab({ dash }: { dash: AdminBunkerDashboard }) {
-  if (dash.events.length === 0) return <div className="adm-empty">No price activity yet.</div>;
   return (
     <section className="adm-card">
       <div className="adm-card__head">
         <span className="adm-card__title">Update history</span>
-        <span className="adm-card__sub">Latest 200 events. Quotes are append-only: every change is a new row.</span>
+        <span className="adm-card__sub">Most recent first · latest 200 events</span>
       </div>
-      <div className="adm-table">
-        <table>
-          <thead><tr><th>When (UTC)</th><th>Supplier</th><th>Action</th><th>Port</th><th>Product</th><th className="num">Old</th><th className="num">New</th><th>By</th><th>Reason</th></tr></thead>
-          <tbody>
-            {dash.events.map((e, i) => (
-              <tr key={`${e.at}-${i}`} className="no-hover">
-                <td className="mono">{e.at.slice(0, 16).replace("T", " ")}</td>
-                <td>{e.supplierName}</td>
-                <td><span className={`adm-badge ${ACTION_BADGE[e.action] ?? "draft"}`}>{ACTION_LABEL[e.action] ?? e.action}</span></td>
-                <td className="mono">{e.portLocode}</td>
-                <td>{e.productKey}</td>
-                <td className="num">{e.oldPrice != null ? `$${e.oldPrice}` : "—"}</td>
-                <td className="num">{e.newPrice != null ? `$${e.newPrice}` : "—"}</td>
-                <td>{e.actorName ?? "—"}</td>
-                <td>{e.reason ?? ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {dash.events.length === 0 ? <div className="adm-empty">No price activity yet.</div> : (
+        <div className="adm-list">
+          {dash.events.map((e, i) => (
+            <div key={`${e.at}-${i}`} className="adm-list__row">
+              <span className={`adm-list__icon ${ACTION_ICON[e.action] ?? ""}`} aria-hidden="true">$</span>
+              <div className="adm-list__body">
+                <div className="adm-list__title">{e.supplierName}</div>
+                <div className="adm-list__meta">
+                  {ACTION_LABEL[e.action] ?? e.action} · {e.productKey} at {e.portLocode}
+                  {e.oldPrice != null || e.newPrice != null ? ` · ${e.oldPrice != null ? `$${e.oldPrice}` : "—"} → ${e.newPrice != null ? `$${e.newPrice}` : "—"}` : ""}
+                  {e.actorName ? ` · by ${e.actorName}` : ""}{e.reason ? ` · ${e.reason}` : ""}
+                </div>
+              </div>
+              <span className="adm-list__when">{when(e.at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

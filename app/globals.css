@@ -557,12 +557,12 @@ textarea:invalid {
   --asb-ink: #1A1A1A;
   --asb-ink-soft: #3a4250;
   /* status */
-  --asb-green: #27500A;
-  --asb-green-bg: #EAF3DE;
-  --asb-amber: #854F0B;
-  --asb-amber-bg: #FAEEDA;
-  --asb-red: #A32D2D;
-  --asb-red-bg: #FCEBEB;
+  --asb-green: #2A9962;
+  --asb-green-bg: #DEF1E2;
+  --asb-amber: #B17311;
+  --asb-amber-bg: #FBF2DF;
+  --asb-red: #C84A4A;
+  --asb-red-bg: #FAE5E5;
   --asb-purple: #7B61FF;
   --asb-coral: #F0957B;
   /* map */

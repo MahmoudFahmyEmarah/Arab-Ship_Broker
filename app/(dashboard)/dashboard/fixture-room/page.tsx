@@ -32,5 +32,8 @@ export default async function FixtureRoomInboxPage() {
     );
   }
   if (!canCreate && rooms.length === 0) return <FixtureLocked />;
+  // design (Portal standalone 7): the Fixture Room opens on "Start a fixture"; a member with no room yet lands there
+  // directly. With rooms, the inbox lists them (the design has no room list) and "Start a fixture" leads to the builder.
+  if (canCreate && rooms.length === 0 && !viewer.isAdmin) redirect("/dashboard/fixture-room/new");
   return <RoomInbox rooms={rooms} canCreate={canCreate} isAdmin={viewer.isAdmin} />;
 }

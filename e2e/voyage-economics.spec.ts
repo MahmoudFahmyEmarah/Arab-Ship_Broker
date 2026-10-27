@@ -123,56 +123,65 @@ test("admin records an SDR rate, loads toll bands into a draft and publishes it"
   }
 });
 
+// The design keeps secondary inputs in <details> fold-outs; open one by its summary (idempotent) before using it.
+async function openFold(page: import("@playwright/test").Page, summary: string) {
+  await page.locator("details", { has: page.locator("summary", { hasText: summary }) }).first().evaluate((d) => { (d as HTMLDetailsElement).open = true; });
+}
+
 test("member calculator prices a transit from the published bands and saves the vessel facts", async ({ browser, baseURL }) => {
   const { page, context } = await asAdmin(browser, baseURL!);
   try {
     await page.goto("/dashboard/suez-toll");
-    await expect(page.getByText("Suez Canal Transit Cost", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Suez Canal Toll", exact: true })).toBeVisible();
     const select = page.getByRole("combobox", { name: "Vessel", exact: true }); // "SCA vessel category" is a combobox too
     const optionValue = await select.locator("option", { hasText: seed.vesselName }).first().getAttribute("value");
     expect(optionValue).toBeTruthy();
     await select.selectOption(optionValue!);
-    await expect(page.locator(".sz-rail")).toContainText(seed.vesselName);
+    await expect(page.locator(".vs-rail")).toContainText(seed.vesselName);
 
     // Today: the published version in force has no toll bands → unavailable toll, fixed layer priced.
-    await expect(page.locator(".sz-unavailable").first()).toContainText(/SCA toll bands|SCNT is not sourced/);
+    await expect(page.locator(".vs-notice", { hasText: /SCA toll bands|SCNT is not sourced/ }).first()).toBeVisible();
 
     // Manual facts and the date the e2e version is in force.
     await page.locator('input[type="date"]').first().fill(tomorrow);
-    const scnt = page.locator(".sz-fact", { hasText: "SCNT" }).first();
+    const scnt = page.locator(".vs-rail .vs-f", { hasText: /^SCNT/ }).first();
     await scnt.getByRole("button", { name: "Manual" }).click();
     await scnt.getByLabel("SCNT manual value").fill("16070");
-    const gt = page.locator(".sz-fact", { hasText: /^GT/ }).first();
+    const gt = page.locator(".vs-rail .vs-f", { hasText: /^GT/ }).first();
     await gt.getByRole("button", { name: "Manual" }).click();
     await gt.getByLabel("GT manual value").fill("18000");
     await page.getByLabel("SCA vessel category").selectOption("dry_bulk");
-    const cranes = page.locator(".sz-fact", { hasText: "mooring boats" });
-    await cranes.getByRole("button", { name: "no", exact: true }).click();
+    const cranes = page.locator(".vs-more .vs-f", { hasText: "mooring boats" });
+    await cranes.getByRole("button", { name: "No", exact: true }).click();
 
     // Toll = 5,000×8 + 5,000×6 + 6,070×4.5 = 97,315 SDR × 1.36 = 132,348.40 USD.
-    const tollCard = page.locator(".ve-pl-card", { hasText: "1 · Transit toll" });
+    const tollCard = page.locator(".vs-card", { has: page.locator(".vs-h", { hasText: /^Canal authority$/ }) });
     await expect(tollCard).toContainText("SDR 97,315.00");
     await expect(tollCard).toContainText("$132,348.40");
-    const strip = page.locator(".ve-results");
-    await expect(strip).toContainText("$132,348");
-    await expect(page.locator(".ve-pl-card", { hasText: "2 · Fixed accompanying charges" })).toContainText("Mooring services");
-    const flags = page.locator(".ve-pl-card", { hasText: "risk flags" });
-    await expect(flags.locator(".sz-flag.is-applied", { hasText: "Imposed tug" })).toBeVisible();
+    // the toll line itself carries the converted figure; the strip groups it under Canal authority
+    await expect(tollCard.locator(".vs-row--hl")).toContainText("$132,348.40");
+    const canalCell = page.locator(".vs-strip .vs-cell", { hasText: "Canal authority" }).locator(".vs-cell__v");
+    await expect(canalCell).not.toHaveText("—");
+    expect(Number((await canalCell.innerText()).replace(/[^0-9.]/g, ""))).toBeGreaterThanOrEqual(132348.4);
+    await expect(page.locator(".vs-groups")).toContainText("Mooring services");
+    const flags = page.locator(".vs-card", { hasText: "risk flags" });
+    await expect(flags.locator(".vs-flag.is-applied", { hasText: "Imposed tug" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Export estimate" })).toBeEnabled();
     // Searchlight and first transit are unknown → undecided flags; the estimate says so instead of charging or waiving.
-    await expect(flags.locator(".sz-flag.is-undecided").first()).toBeVisible();
-    await expect(page.locator(".sz-status")).toContainText("partial");
+    await expect(flags.locator(".vs-flag.is-undecided").first()).toBeVisible();
+    const status = page.locator(".vs-notice[role=status]");
+    await expect(status).toContainText("partial");
     // The e2e version (copied, surcharge regime unknown) prices base dues only: never trusted, no total (C2O-039 P0-1).
     await expect(tollCard).toContainText("does not model the SCA category surcharges");
-    await expect(page.locator(".sz-status")).toContainText("category surcharge");
+    await expect(status).toContainText("category surcharge");
 
     // Save the facts to the vessel economics profile through the member RPC, then they load as Record.
     await page.getByRole("button", { name: "Save facts to vessel profile" }).click();
-    await expect(page.locator(".sz-save")).toContainText("saved to the economics profile");
+    await expect(page.locator(".vs-save")).toContainText("saved to the economics profile");
     await page.reload();
     await select.selectOption(optionValue!);
-    await expect(page.locator(".sz-fact", { hasText: "SCNT" }).first()).toContainText("16,070");
-    await expect(page.locator(".ve-input-card__head", { hasText: "economics profile" })).toBeVisible();
+    await expect(page.locator(".vs-rail .vs-f", { hasText: /^SCNT/ }).first()).toContainText("16,070");
+    await expect(page.locator(".vs-rail .vs-tag--ok", { hasText: "economics profile" })).toBeVisible();
   } finally {
     await context.close();
   }
@@ -193,12 +202,14 @@ test("voyage estimator prices the seeded pairing and saves an immutable estimate
     await cargoSelect.selectOption({ index: 1 });
 
     // The saved profile from the Suez test feeds the SCNT; speeds come from the profile or defaults.
-    await expect(page.locator(".vy-rail")).toBeVisible();
+    await expect(page.locator(".ve-upper")).toBeVisible();
+    await openFold(page, "Operating profile per state");
     await page.getByLabel("Sea · laden residual").fill("20");
     await page.getByLabel("Sea · laden distillate").fill("1");
     await page.getByLabel("Port · working residual").fill("3");
     await page.getByLabel("Port · working distillate").fill("1");
     // Local routes cover four pairs only; force the laden leg to a manual distance.
+    await openFold(page, "Route, sea margin and canal");
     const ladenLeg = page.locator(".vy-leg", { hasText: "Laden" });
     await ladenLeg.getByRole("checkbox", { name: "Manual" }).check();
     await ladenLeg.getByLabel("NM", { exact: true }).fill("1200");
@@ -211,14 +222,14 @@ test("voyage estimator prices the seeded pairing and saves an immutable estimate
     const strip = page.locator(".ve-results");
     await expect(strip).toContainText("Total voyage days");
     await expect(strip).not.toContainText("$0");
-    await expect(page.locator(".ve-pl-card", { hasText: "Fuel by product" })).toContainText("LSMGO");
-    // hasText is a case-insensitive substring: "Total voyage cost" elsewhere also matches "Voyage costs" — pin the card by its exact title.
-    const costsCard = page.locator(".ve-pl-card", { has: page.locator(".ve-pl-card__title", { hasText: /^Voyage costs$/ }) });
+    // the design folds fuel, port disbursements and other costs into one "Voyage Expenses" card; pin it by its exact title
+    const costsCard = page.locator(".ve-pl-card", { has: page.locator(".ve-pl-card__title", { hasText: /^Voyage Expenses$/ }) });
+    await expect(costsCard).toContainText("LSMGO");
     await expect(costsCard).toContainText("Running cost");
 
     // Statuses are visible: manual leg, fallback fuel (no live index), DAs not entered → unavailable, total incomplete.
-    await expect(page.locator(".vy-table")).toContainText("manual");
-    await expect(page.locator(".ve-pl-card", { hasText: "Fuel by product" })).toContainText("fallback");
+    await expect(page.locator(".ve-legs .ve-table")).toContainText("manual");
+    await expect(costsCard).toContainText("admin fallback price");
     await expect(costsCard).toContainText("not entered — unavailable");
     await page.getByRole("button", { name: "Save estimate" }).click();
     await expect(page.locator(".ve-head")).toContainText("Estimate saved");
@@ -239,21 +250,23 @@ test("the load port DA comes from a saved PDA estimate", async ({ browser, baseU
     const vesselValue = await vesselSelect.locator("option", { hasText: seed.vesselName }).first().getAttribute("value");
     await vesselSelect.selectOption(vesselValue!);
     await page.getByRole("combobox", { name: "Cargo" }).selectOption({ index: 1 });
+    await openFold(page, "Operating profile per state");
     await page.getByLabel("Sea · laden residual").fill("20");
     await page.getByLabel("Sea · laden distillate").fill("1");
+    await openFold(page, "Route, sea margin and canal");
     const ladenLeg = page.locator(".vy-leg", { hasText: "Laden" });
     await ladenLeg.getByRole("checkbox", { name: "Manual" }).check();
     await ladenLeg.getByLabel("NM", { exact: true }).fill("1200");
     await ladenLeg.getByLabel("of which ECA NM").fill("600");
     await ladenLeg.getByLabel("Reason").fill("owner distance table, e2e");
 
-    const picker = page.getByLabel("Load port DA · saved PDA estimate");
+    const picker = page.getByLabel("Saved PDA · load");
     await expect(picker.locator("option", { hasText: `E2E quay ${stamp}` })).toHaveCount(1);
     await picker.selectOption({ label: (await picker.locator("option", { hasText: `E2E quay ${stamp}` }).textContent())!.trim() });
     await expect(page.getByLabel("Load port DA (USD, manual)")).toBeDisabled();
-    const costsCard = page.locator(".ve-pl-card", { has: page.locator(".ve-pl-card__title", { hasText: /^Voyage costs$/ }) });
+    const costsCard = page.locator(".ve-pl-card", { has: page.locator(".ve-pl-card__title", { hasText: /^Voyage Expenses$/ }) });
     // manual_required coverage maps to a manual DA (never trusted), with the estimate's own figure
-    await expect(costsCard.locator(".ve-pl-row", { hasText: "Load port DA" })).toContainText("$18,250.50 · manual");
+    await expect(costsCard.locator(".ve-pl-row", { hasText: "POL PDA" })).toContainText("$18,250.50 · manual");
     await page.getByRole("button", { name: "Save estimate" }).click();
     await expect(page.locator(".ve-head")).toContainText("Estimate saved");
   } finally {
@@ -267,7 +280,9 @@ test("a member without the calculator entitlement is refused both calculator pag
   try {
     await page.goto("/dashboard/suez-toll");
     await expect(page.getByText("Plotting the Course").first()).toBeVisible();
-    await expect(page.getByText("Suez Canal Transit Cost", { exact: true })).toHaveCount(0);
+    // the calculator itself never renders: no Export, no vessel facts rail
+    await expect(page.getByRole("button", { name: "Export estimate" })).toHaveCount(0);
+    await expect(page.locator(".vs-rail")).toHaveCount(0);
     await page.goto("/dashboard/voyage-estimator");
     await expect(page.getByText("Still Charting These Waters").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Save estimate" })).toHaveCount(0);

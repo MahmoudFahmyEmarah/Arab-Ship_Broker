@@ -45,12 +45,12 @@
 
 /* ── Selector bar ── */
 .ve-selector { display: grid; gap: 18px; align-items: end; padding: 10px 20px; background: var(--asb-gray-50); border-bottom: 0.5px solid var(--asb-gray-200); }
-.ve-selector--two { grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr); }
-.ve-selector--one { grid-template-columns: minmax(220px, 480px); }
+.ve-selector--two { grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr); }
+.ve-selector--one { grid-template-columns: minmax(260px, 480px); }
 @media (max-width: 720px) { .ve-selector { grid-template-columns: 1fr; gap: 10px; } }
 .ve-selector__field { min-width: 0; }
 .ve-selector__label { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--asb-gray-500); font-weight: 500; margin-bottom: 4px; }
-.ve-selector__control { position: relative; border: 0.5px solid var(--asb-blue); border-radius: 4px; background: var(--asb-white, #fff); }
+.ve-selector__control { display: block; position: relative; border: 0.5px solid var(--asb-blue); border-radius: 4px; background: var(--asb-white); }
 .ve-selector__control select { width: 100%; appearance: none; background: transparent; border: none; padding: 9px 28px 9px 10px; font-family: inherit; font-size: 13px; color: var(--asb-navy); font-weight: 500; }
 .ve-selector__control select:focus { outline: none; }
 .ve-selector__caret { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--asb-blue); pointer-events: none; }
@@ -181,3 +181,48 @@
 .locked-tier-note { font-size: 13px; color: var(--asb-gray-500); opacity: 0.7; }
 .locked-upgrade-btn { margin-top: 8px; padding: 10px 24px; background: var(--asb-blue); color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
 .locked-upgrade-btn:hover { background: #1570bb; }
+
+/* ── Design (Portal standalone 7 · TabEconomics), owner 19 Oct 2026 ──────────────────────────────── */
+.ve-head__title { margin: 0; }
+.ve-econ { display: flex; flex-direction: column; gap: 10px; }
+.ve-econ__foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; font-size: 11px; color: var(--asb-gray-500); border-top: 0.5px solid var(--asb-gray-200); padding-top: 6px; }
+.ve-pl-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 20px; }
+.ve-table__to { color: var(--asb-gray-500); }
+.ve-table .vy-badge { margin-left: 6px; }
+/* an editable value in a card: the design's blue dashed underline, as a real input */
+.ve-inline {
+  width: 64px; border: 0; border-bottom: 1px dashed var(--asb-blue); background: transparent; border-radius: 0;
+  font: inherit; font-weight: 500; color: var(--asb-blue); text-align: right; padding: 0 2px; font-variant-numeric: tabular-nums;
+}
+.ve-inline:focus { outline: none; border-bottom-style: solid; background: var(--asb-blue-light); }
+.ve-inline::placeholder { color: var(--asb-gray-400); }
+.ve-inline--select { width: auto; max-width: 170px; text-align: left; cursor: pointer; }
+.ve-pl-row .ve-inline { width: 96px; }
+.ve-info-card__v { white-space: nowrap; }
+.ve-info-card__v .ve-inline { width: 48px; }
+.ve-info-card__v .ve-inline--select { width: auto; }
+/* the deeper governed inputs, folded inside the card they belong to */
+.ve-more { margin-top: 8px; border-top: 0.5px solid var(--asb-gray-200); padding-top: 6px; }
+.ve-more > summary { cursor: pointer; list-style: none; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--asb-navy); display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.ve-more > summary::-webkit-details-marker { display: none; }
+.ve-more > summary::before { content: "▸"; font-size: 10px; color: var(--asb-gray-500); transition: transform 120ms; }
+.ve-more[open] > summary::before { transform: rotate(90deg); }
+.ve-more[open] > summary { margin-bottom: 6px; }
+.ve-more--card { background: var(--asb-white); border: 0.5px solid var(--asb-gray-200); border-radius: 4px; padding: 6px 10px; }
+.ve-pl-inputs { display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 2px 0 8px; }
+.ve-pl-inputs .vy-field { flex: 1 1 140px; min-width: 0; }
+.vy-field--wide { flex-basis: 100% !important; }
+.ve-fuel-live { font-size: 9px; font-weight: 500; letter-spacing: 0.04em; }
+.ve-fuel-live__dot { width: 5px; height: 5px; }
+@media (max-width: 720px) { .ve-pl-split { grid-template-columns: 1fr; } }
+.ve-pl-row .ve-linked-src { display: block; }
+.ve-pl-row .vy-badge { display: inline-block; width: auto; margin-left: 6px; vertical-align: middle; }
+
+/* Keyboard focus on the design's controls (O2B-052 P2-7): globals.css removes outlines from buttons and inputs. */
+.ve-page :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--asb-blue);
+  outline-offset: 2px;
+}
+
+/* a figure the legs table cannot source (e.g. ECA share unknown) reads amber, as the page key says */
+.ve-table td.is-amber { color: var(--asb-amber); font-weight: 500; }

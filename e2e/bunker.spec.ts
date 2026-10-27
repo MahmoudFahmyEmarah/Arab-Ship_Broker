@@ -241,13 +241,14 @@ test("admin approves in /admin/bunker; the price goes live", async ({ browser },
   await row.getByRole("button", { name: "Approve" }).click();
   await expect(page.getByRole("status")).toContainText("Quote approved");
   const live = page.getByRole("row").filter({ hasText: s.supplierName });
-  await expect(live).toContainText(`$${PRICE}`);
-  await expect(live).toContainText("Current");
-  await page.getByRole("link", { name: /Suppliers & access/ }).click();
+  await expect(live.first()).toContainText(`$${PRICE}`);
+  // freshness of the approved quote itself: its row in the per-quote detail under Current prices (folded: CSS, not a role)
+  await expect(page.locator("details.adm-card__more tr", { hasText: s.supplierName }).filter({ hasText: `$${PRICE}` }).first()).toContainText("Current");
+  // access and history are sections of the same page now (no tabs)
   await expect(page.getByText("Pilot suppliers: replace the sample details")).toBeVisible();
   await expect(page.getByText("Placeholder details").first()).toBeVisible();
-  await page.getByRole("link", { name: /Update history/ }).click();
-  await expect(page.getByRole("row").filter({ hasText: s.supplierName }).first()).toBeVisible();
+  const history = page.locator(".adm-card", { has: page.locator(".adm-card__title", { hasText: /^Update history$/ }) });
+  await expect(history.locator(".adm-list__row", { hasText: s.supplierName }).first()).toBeVisible();
   await context.close();
 });
 
@@ -368,8 +369,8 @@ test("live and scheduled prices: one schedule per key, headline counts live only
   const admin = await signedIn(browser, base(info.project.use), s.admin.email);
   const liveCount = async () => {
     await gotoStable(admin.page, "/admin/bunker");
-    const stat = admin.page.locator(".adm-stat", { hasText: "Live quotes" });
-    return Number((await stat.locator(".adm-stat__value").innerText()).replace(/\D/g, ""));
+    const stat = admin.page.getByTestId("live-quotes");
+    return Number((await stat.innerText()).match(/^(\d+) live quote/)?.[1] ?? NaN);
   };
   const scheduledRows = () => admin.page.getByRole("region", { name: "Scheduled prices" }).getByRole("row").filter({ hasText: s.supplierName });
 
@@ -395,7 +396,8 @@ test("live and scheduled prices: one schedule per key, headline counts live only
   await row.getByLabel("Cancellation reason").fill("e2e cancel");
   await row.getByRole("button", { name: "Cancel" }).click();
   await expect(admin.page.getByRole("region", { name: "Scheduled prices" })).toHaveCount(0);
-  await expect(admin.page.getByRole("row").filter({ hasText: s.supplierName }).filter({ hasText: `$${PRICE}` }).first()).toContainText("Current");
+  // the per-quote detail under Current prices keeps the freshness label (folded: a CSS locator, not a role)
+  await expect(admin.page.locator("details.adm-card__more tr", { hasText: s.supplierName }).filter({ hasText: `$${PRICE}` }).first()).toContainText("Current");
   expect((await db.from("bunker_quotes").select("status").eq("id", s2).single()).data?.status).toBe("withdrawn");
   await admin.context.close();
 

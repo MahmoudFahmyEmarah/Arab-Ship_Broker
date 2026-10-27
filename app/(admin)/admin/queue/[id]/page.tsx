@@ -128,9 +128,14 @@ function DetailCell({
 
 export default async function QueueItemPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ decide?: string }>;
 }) {
+  // the queue row's Approve / Request changes / Reject opens this page with that decision ready (design: PageReview)
+  const decide = (await searchParams)?.decide;
+  const initialForm = decide === "reject" ? "reject" : decide === "amend" ? "amend" : null;
   await requireAdmin({ section: "review" });
   const { id } = await params;
   const supabase = await getAdminSupabaseClient();
@@ -764,10 +769,13 @@ export default async function QueueItemPage({
           </div>
 
           {isPending ? (
-            <ReviewActions
-              queueItemId={item.id}
-              listingType={item.listing_type}
-            />
+            <div id="decision" className={decide === "approve" ? "adm-decision-focus" : undefined}>
+              <ReviewActions
+                queueItemId={item.id}
+                listingType={item.listing_type}
+                initialForm={initialForm}
+              />
+            </div>
           ) : (
             <div className="dp-card p-5 text-center">
               {item.status === "APPROVED" ? (
