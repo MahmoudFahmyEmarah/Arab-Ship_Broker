@@ -1680,3 +1680,178 @@ a.adm-stat:hover { transform: var(--lift); box-shadow: var(--adm-sh-hover); }
   outline: 2px solid var(--asb-blue);
   outline-offset: 2px;
 }
+
+/* ── Records pages: Port Tariffs and Port Agents ─────────────────────────────────────────────────────
+   Both pages are server-rendered sections (<section class="adm-panel">) holding native forms
+   (<form class="adm-form">), decision rows and version lists. Until 27 Oct 2026 the Port Tariffs page
+   carried these rules inline (hard-coded hexes) and the Port Agents page, built on the same class names,
+   had none — it rendered unstyled on production (owner report). The rules now live here, on the tokens,
+   so every records page looks like the rest of the console. */
+.adm-grid {
+  display: grid;
+  gap: 14px;
+  margin: 14px 0;
+}
+.adm-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.adm-panel {
+  background: var(--asb-white);
+  border: var(--adm-ridge);
+  border-radius: var(--adm-r-card);
+  padding: 14px 16px;
+  box-shadow: var(--adm-sh);
+  margin: 14px 0;
+  min-width: 0;
+}
+.adm-grid > .adm-panel { margin: 0; }
+.adm-panel > h2 {
+  margin: 0 0 10px;
+  font-size: max(11px, var(--fs-label));
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--asb-navy);
+}
+/* colour and size come from the design block's .adm-muted; only the spacing for panel prose is added here */
+.adm-panel .adm-muted { margin: 0 0 10px; line-height: 1.5; }
+.adm-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 10px;
+}
+.adm-form--wide { grid-template-columns: 1fr; }
+.adm-form input:not([type="checkbox"]):not([type="hidden"]),
+.adm-form select,
+.adm-form textarea,
+.adm-review-row input,
+.adm-inline-forms input:not([type="hidden"]),
+.adm-inline-forms select {
+  font-family: inherit;
+  font-size: var(--fs-body-sm);
+  padding: 6px 10px;
+  min-width: 0;
+  border: 1px solid var(--adm-bd-2);
+  border-radius: var(--adm-r);
+  background: var(--asb-white);
+  color: var(--adm-ink);
+  outline: none;
+  transition: border-color var(--adm-t), box-shadow var(--adm-t);
+}
+.adm-form input:focus,
+.adm-form select:focus,
+.adm-form textarea:focus,
+.adm-review-row input:focus,
+.adm-inline-forms input:focus,
+.adm-inline-forms select:focus {
+  border-color: var(--adm-accent-2);
+  box-shadow: var(--adm-ring);
+}
+.adm-form textarea { grid-column: 1 / -1; min-height: 72px; resize: vertical; }
+.adm-form > .adm-checks,
+.adm-form > .adm-inline-forms { grid-column: 1 / -1; }
+.adm-form button,
+.adm-review-row button,
+.adm-version-list button,
+.adm-inline-forms button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border: 1px solid var(--asb-navy);
+  border-radius: var(--adm-r);
+  background: var(--asb-navy);
+  color: var(--asb-white);
+  font-family: inherit;
+  font-size: var(--fs-body-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--adm-t), transform var(--adm-t);
+}
+.adm-form button:hover,
+.adm-review-row button:hover,
+.adm-version-list button:hover,
+.adm-inline-forms button:hover { background: var(--asb-navy-deep); }
+.adm-form button:focus-visible,
+.adm-review-row button:focus-visible,
+.adm-version-list button:focus-visible,
+.adm-inline-forms button:focus-visible { outline: 2px solid var(--asb-blue); outline-offset: 2px; }
+/* secondary actions on existing records (version lists, registry rows): the quiet button */
+.adm-version-list button,
+.adm-inline-forms button {
+  background: var(--asb-white);
+  color: var(--adm-ink);
+  border-color: var(--adm-bd-2);
+}
+.adm-version-list button:hover,
+.adm-inline-forms button:hover { background: var(--asb-gray-50); }
+.adm-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--adm-bd-2);
+  border-radius: var(--adm-r);
+}
+.adm-checks legend {
+  padding: 0 4px;
+  font-size: max(11px, var(--fs-label));
+  font-weight: 600;
+  color: var(--adm-ink-soft);
+}
+.adm-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-body-sm);
+  color: var(--adm-ink);
+  cursor: pointer;
+}
+.adm-review-row,
+.adm-version-list article {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--adm-bd);
+}
+.adm-review-row:first-child,
+.adm-version-list article:first-child { border-top: none; padding-top: 0; }
+.adm-review-row p { margin: 5px 0; font-size: var(--fs-body-sm); color: var(--adm-ink); }
+.adm-review-row small,
+.adm-version-list article span,
+.adm-version-list code { font-size: max(11px, var(--fs-label)); color: var(--adm-muted); }
+.adm-review-row form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
+.adm-version-list { display: flex; flex-direction: column; }
+.adm-version-list article > div:first-child { display: grid; gap: 3px; min-width: 0; flex: 1 1 320px; }
+.adm-version-list article strong { font-size: var(--fs-body-sm); color: var(--adm-ink); }
+.adm-version-list article form { margin: 0; }
+.adm-inline-forms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.adm-inline-forms form { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
+.adm-alert {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--adm-bd-2);
+  border-radius: var(--adm-r);
+  background: var(--asb-white);
+  font-size: var(--fs-body-sm);
+  color: var(--adm-ink);
+}
+.adm-alert--success { background: var(--asb-green-bg); border-color: var(--asb-green); color: var(--asb-green-print); }
+.adm-alert--error { background: var(--asb-red-bg); border-color: var(--asb-red); color: var(--asb-red-print); }
+@media (max-width: 900px) {
+  .adm-grid--2,
+  .adm-form { grid-template-columns: 1fr; }
+  .adm-review-row,
+  .adm-version-list article { flex-direction: column; }
+}
