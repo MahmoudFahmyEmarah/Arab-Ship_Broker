@@ -60,8 +60,6 @@ const TIER_ROWS: [string, number, number, number, number][] = [
   ["Partner dashboard", 0, 0, 0, 1],
 ];
 
-type TestStatus = "untested" | "testing" | "ok" | "error";
-
 function Toggle({ on, onClick, disabled }: { on: boolean; onClick: () => void; disabled?: boolean }) {
   return (
     <button
@@ -183,10 +181,6 @@ export function PlatformSettings({
   const [vis, setVis] = React.useState<MarketVisibilitySettings>(initialVisibility);
   const [visBaseline, setVisBaseline] = React.useState<MarketVisibilitySettings>(initialVisibility);
 
-  // Transient AI-test UI (not persisted).
-  const [showKey, setShowKey] = React.useState(false);
-  const [status, setStatus] = React.useState<TestStatus>("untested");
-  const [msg, setMsg] = React.useState("");
   const V = VENDORS[ai.vendor] ?? VENDORS.anthropic;
 
   // Baseline = last-saved snapshot. Reset reverts to it; dirty compares to it.
@@ -209,31 +203,6 @@ export function PlatformSettings({
     JSON.stringify(design) !== JSON.stringify(baseline.design) ||
     JSON.stringify(settings) !== JSON.stringify(baseline.settings);
 
-  function testKey() {
-    const key = ai.apiKey.trim();
-    setStatus("testing");
-    setMsg("");
-    setTimeout(() => {
-      if (!key) {
-        setStatus("error");
-        setMsg("No API key provided.");
-        return;
-      }
-      if (ai.vendor !== "custom" && V.keyPrefix && !key.startsWith(V.keyPrefix)) {
-        setStatus("error");
-        setMsg(`Key doesn't look like a ${V.label} key (expected ${V.keyHint}).`);
-        return;
-      }
-      if (key.length < 12) {
-        setStatus("error");
-        setMsg("Key looks too short — check it was copied in full.");
-        return;
-      }
-      const ms = (0.4 + Math.random() * 0.9).toFixed(2);
-      setStatus("ok");
-      setMsg(`Connected · ${ai.model} responded in ${ms}s.`);
-    }, 850);
-  }
 
   // Toggle a design tile, never allowing the last one to switch off.
   function toggleDesign(which: ComingSoonVariant) {
@@ -259,8 +228,6 @@ export function PlatformSettings({
     setFields(baseline.settings.cardFields);
     setAppearance(baseline.settings.appearance ?? { sidebar: "classic" });
     setVis(visBaseline);
-    setStatus("untested");
-    setMsg("");
     setError(null);
     setSaved(false);
   }
@@ -422,8 +389,6 @@ export function PlatformSettings({
                 onChange={(e) => {
                   const v = e.target.value;
                   setAi((a) => ({ ...a, vendor: v, model: (VENDORS[v] ?? VENDORS.anthropic).models[0] }));
-                  setStatus("untested");
-                  setMsg("");
                 }}
               >
                 {Object.entries(VENDORS).map(([k, v]) => (
@@ -442,8 +407,6 @@ export function PlatformSettings({
                 onChange={(e) => {
                   const m = e.target.value;
                   setAi((a) => ({ ...a, model: m }));
-                  setStatus("untested");
-                  setMsg("");
                 }}
               >
                 {V.models.map((m) => (
@@ -470,46 +433,10 @@ export function PlatformSettings({
             </div>
             <div className="adm-field" style={{ gridColumn: "1 / -1" }}>
               <span className="adm-field__label">API key</span>
-              <div className="adn-key-row">
-                <input
-                  className="adm-input adn-key-input"
-                  type={showKey ? "text" : "password"}
-                  placeholder={V.keyHint}
-                  value={ai.apiKey}
-                  disabled={!canEdit}
-                  onChange={(e) => {
-                    const apiKey = e.target.value;
-                    setAi((a) => ({ ...a, apiKey }));
-                    setStatus("untested");
-                    setMsg("");
-                  }}
-                />
-                <button
-                  type="button"
-                  className="adm-btn small"
-                  onClick={() => setShowKey((s) => !s)}
-                >
-                  {showKey ? "Hide" : "Show"}
-                </button>
-                <button
-                  type="button"
-                  className="adm-btn primary small adn-test-btn"
-                  onClick={testKey}
-                  disabled={status === "testing" || !canEdit}
-                >
-                  {status === "testing" ? "Testing…" : "Test key"}
-                </button>
-              </div>
-              <div className={`adn-test-result is-${status}`}>
-                {status === "testing" && (
-                  <>
-                    <span className="adn-spin" /> Sending a test request to {V.label}…
-                  </>
-                )}
-                {status === "ok" && <>✓ {msg}</>}
-                {status === "error" && <>✕ {msg}</>}
-                {status === "untested" && <>Run a one-token test call to confirm the key and model respond.</>}
-              </div>
+              <p className="adm-muted" style={{ margin: 0 }}>
+                Provider keys are stored encrypted in Vault and managed in{" "}
+                <a href="/admin/data-sync" className="adm-link">Data Sync → Connections</a>, where Test checks the key and the model with the provider.
+              </p>
             </div>
           </div>
         </div>

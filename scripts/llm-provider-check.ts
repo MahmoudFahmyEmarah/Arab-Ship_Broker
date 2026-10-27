@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   GROQ_API_BASE_URL,
   GROQ_STRUCTURED_OUTPUT_MODELS,
   LLM_MODEL_SUGGESTIONS,
+  catalogueModel,
   isGroqVendor,
   llmDefaultBaseUrl,
   llmModelEndpoint,
@@ -39,8 +41,31 @@ assert.deepEqual(GROQ_STRUCTURED_OUTPUT_MODELS, [
 // 27 Oct 2026: the form filled in claude-sonnet-4-5 by itself and every classification batch answered
 // 404 "model not found". The catalogue must carry only current Anthropic ids, newest first, and never
 // a dated or retired one; the key test must probe the model id, not only the key.
-assert.deepEqual(LLM_MODEL_SUGGESTIONS.anthropic, ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5", "claude-opus-5-5"],
-  "the default (first) is the mid-tier model: Data Sync classifies in bulk");
+assert.deepEqual(LLM_MODEL_SUGGESTIONS.anthropic, ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  "Anthropic's current lineup first (Haiku 5.5 = their pick for high-volume classification), then still-available legacy ids");
+assert.equal(catalogueModel("anthropic", "claude-sonnet-4"), "claude-haiku-5-5", "a retired imported id becomes the default");
+assert.equal(catalogueModel("anthropic", ""), "claude-haiku-5-5");
+assert.equal(catalogueModel("anthropic", "claude-opus-5-5"), "claude-opus-5-5", "a listed id is kept");
+assert.equal(catalogueModel("Anthropic", " claude-sonnet-5-5 "), "claude-sonnet-5-5");
+assert.equal(catalogueModel("other", "my-gateway-model"), "my-gateway-model", "a vendor without a catalogue keeps its id");
+
+// C2O-172 supplement: provider secrets live only in Vault. The legacy Platform settings page must not
+// receive, render, accept or store a plaintext key, nor fake a "Connected" test.
+const src = (f: string) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+const settingsPage = src("app/(admin)/admin/settings/page.tsx");
+const settingsAction = src("app/(admin)/admin/settings/actions.ts");
+const legacyUi = src("components/admin/settings/PlatformSettings.tsx");
+const syncActions = src("app/(admin)/admin/data-sync/settings-actions.ts");
+assert.match(settingsPage, /initialSettings=\{\{ \.\.\.settings, ai: \{ \.\.\.settings\.ai, apiKey: "" \} \}\}/, "the page redacts the key before serialising settings");
+assert.match(settingsAction, /ai: \{ \.\.\.input\.settings\.ai, apiKey: storedKey \}/, "the save action ignores a browser key and keeps the stored one");
+assert.doesNotMatch(settingsAction, /value: input\.settings,/, "input.settings is never written verbatim");
+assert.doesNotMatch(legacyUi, /ai\.apiKey|apiKey \}\)|testKey|responded in/, "no key field and no simulated test on the legacy page");
+assert.match(legacyUi, /href="\/admin\/data-sync"/, "the legacy page points to the Vault-backed editor");
+assert.match(syncActions, /p_model: catalogueModel\(ai\.vendor \|\| "anthropic", ai\.model\)/, "the legacy import maps a retired id onto the catalogue");
+assert.match(syncActions, /redirect: "manual"[\s\S]*redirect: "manual"/, "both key-test probes refuse redirects");
+for (const f of ["lib/app-settings.ts", "components/admin/settings/PlatformSettings.tsx", "app/(admin)/admin/data-sync/settings-actions.ts", "components/admin/data-sync/SettingsView.tsx"]) {
+  assert.doesNotMatch(src(f).replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, ""), /"claude-(sonnet-4|opus-4|3-5-[a-z]+|sonnet-4-5|opus-4-1)"/, `${f}: no retired Anthropic id in code`);
+}
 for (const [vendor, models] of Object.entries(LLM_MODEL_SUGGESTIONS)) {
   for (const m of models) {
     assert.doesNotMatch(m, /claude-(sonnet|opus|haiku)-[0-9](-[0-9])?-\d{8}$/u, `${vendor}: dated Anthropic ids are not suggested (${m})`);

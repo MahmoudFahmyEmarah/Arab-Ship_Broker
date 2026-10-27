@@ -48,15 +48,14 @@ export function llmModelEndpoint(vendor: string, model: string, override?: strin
 }
 
 /** Current text models per vendor; the first entry is the default for a new key and the form keeps a
- * free-text escape hatch for ids that are not listed yet. The Anthropic ids are the current generation
- * (claude-sonnet-5 first: Data Sync classifies in bulk, so the mid-tier model is the sensible default;
- * claude-opus-5 for the strongest reads, claude-haiku-4-5 for the cheapest, claude-opus-5-5 the newest —
- * the key test tells whether the organisation's API can use it). Dated or retired ids such as
- * claude-sonnet-4-5 answer 404 "model: … not found", which is how the circular classifier failed on
- * 27 Oct 2026 after the form had filled that id in by itself. Every other picker on the platform reads this
- * table (Platform settings, the legacy-key import), so the ids cannot drift apart again. */
+ * free-text escape hatch for ids that are not listed yet. Anthropic: the current lineup per the provider's
+ * models overview (27 Oct 2026) — claude-haiku-5-5 first, the model Anthropic recommends for high-volume
+ * classification and extraction (what Data Sync does), then claude-sonnet-5-5 and claude-opus-5-5; then the
+ * still-available legacy claude-sonnet-5 / claude-haiku-4-5. Retired ids such as claude-sonnet-4-5 answer
+ * 404 "model: … not found", which is how the circular classifier failed on 27 Oct 2026. Every picker on the
+ * platform reads this table (Platform settings, the legacy-key import), so the ids cannot drift apart again. */
 export const LLM_MODEL_SUGGESTIONS: Record<string, readonly string[]> = {
-  anthropic: ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5", "claude-opus-5-5"],
+  anthropic: ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-sonnet-5", "claude-haiku-4-5"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
   google: [
     "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-3-pro-preview",
@@ -93,4 +92,14 @@ export function modelListedIn(list: unknown, family: LlmProviderFamily, model: s
     const raw = (row as Record<string, unknown>)[family === "google" ? "name" : "id"];
     return typeof raw === "string" && raw.replace(/^models\//u, "") === want;
   });
+}
+
+/** A stored model id for a vendor, mapped onto the catalogue: an id the catalogue lists is kept; an empty or
+ * unlisted id for a vendor that has a catalogue becomes that vendor's default (so a retired id imported from
+ * old settings never becomes the active classifier model); a vendor without a catalogue keeps what it has. */
+export function catalogueModel(vendor: string, model?: string | null): string {
+  const list = LLM_MODEL_SUGGESTIONS[(vendor ?? "").trim().toLowerCase()] ?? [];
+  const m = (model ?? "").trim();
+  if (list.length === 0) return m;
+  return list.includes(m) ? m : list[0];
 }

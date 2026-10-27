@@ -65,14 +65,22 @@ export async function savePlatformSettings(input: {
   // Store in canonical order / de-duplicated.
   const design = normalizeComingSoonDesign(input.design);
   const now = new Date().toISOString();
-  const { error } = await getSupabaseAdminClient()
+  const db = getSupabaseAdminClient();
+  // Provider secrets are edited only in Data Sync → Connections (Vault). A key sent from the browser is
+  // ignored; the stored legacy value (normally empty after the Vault import) is preserved, never replaced.
+  const { data: storedRow, error: readErr } = await db.from("app_settings").select("value").eq("key", PLATFORM_SETTINGS_KEY).maybeSingle();
+  if (readErr) return { success: false, error: readErr.message };
+  const storedAi = (storedRow?.value as Partial<PlatformSettingsData> | null)?.ai;
+  const storedKey = typeof storedAi?.apiKey === "string" ? storedAi.apiKey : "";
+  const settings: PlatformSettingsData = { ...input.settings, ai: { ...input.settings.ai, apiKey: storedKey } };
+  const { error } = await db
     .from("app_settings")
     .upsert(
       [
         { key: PLATFORM_MODE_KEY, value: input.mode, updated_at: now },
         { key: COMING_SOON_DESIGN_KEY, value: design, updated_at: now },
         { key: BETA_MODE_KEY, value: input.mode === "Beta", updated_at: now },
-        { key: PLATFORM_SETTINGS_KEY, value: input.settings, updated_at: now },
+        { key: PLATFORM_SETTINGS_KEY, value: settings, updated_at: now },
       ],
       { onConflict: "key" },
     );

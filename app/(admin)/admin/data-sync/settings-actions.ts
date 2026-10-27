@@ -13,7 +13,7 @@ import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-sett
 import { getWatermark, setWatermark } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
-import { LLM_MODEL_SUGGESTIONS, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, modelListedIn } from "@/lib/sync/llm-provider";
+import { LLM_MODEL_SUGGESTIONS, catalogueModel, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, modelListedIn } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
 
@@ -229,7 +229,7 @@ export async function importLegacyAiKey(): Promise<Result<{ imported: boolean }>
       p_id: null,
       p_label: "Imported from platform settings",
       p_vendor: ai.vendor || "anthropic",
-      p_model: ai.model || LLM_MODEL_SUGGESTIONS.anthropic[0],
+      p_model: catalogueModel(ai.vendor || "anthropic", ai.model),
       p_base_url: ai.baseUrl?.trim() || null,
       p_secret: ai.apiKey.trim(),
       p_make_active: true,
