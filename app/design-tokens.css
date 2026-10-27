@@ -231,6 +231,9 @@
   --adm-d-line-hover: #C8D0DC;
   --adm-d-hover: #EEF1F6;
   --adm-d-amber-line: #EF9F27;
+  /* legibility (owner, 27 Oct 2026): every admin text/background pair reads at 4.5:1 or better */
+  --adm-d-green-ink: #1D6F45;     /* green text on --asb-green-bg (5.2:1); white on it 6.2:1 */
+  --adm-d-amber-soft: #F5B04A;    /* the warn button's hover under --adm-d-amber-ink (6.1:1) */
   --adm-d-chip: #F0F2F5;
   --adm-d-chip-2: #F0F2F6;
   --adm-d-plum-bg: #F3E5F5;

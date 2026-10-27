@@ -234,7 +234,7 @@ export default async function QueueItemPage({
         </div>
         <div className="mt-4 pt-4 border-t border-asb-gray-100 grid grid-cols-3 max-[768px]:grid-cols-1 gap-4 text-xs text-asb-gray-500">
           <div>
-            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[11px]">
               Submitted
             </span>
             <p className="font-semibold text-asb-ink-soft mt-0.5">
@@ -242,7 +242,7 @@ export default async function QueueItemPage({
             </p>
           </div>
           <div>
-            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[11px]">
               Review reason
             </span>
             <p className="font-semibold text-asb-ink-soft mt-0.5">
@@ -250,7 +250,7 @@ export default async function QueueItemPage({
             </p>
           </div>
           <div>
-            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[11px]">
               Random sample
             </span>
             <p className="font-semibold text-asb-ink-soft mt-0.5">
