@@ -103,3 +103,25 @@ export function catalogueModel(vendor: string, model?: string | null): string {
   if (list.length === 0) return m;
   return list.includes(m) ? m : list[0];
 }
+
+/** The model for the app's direct Anthropic calls (circular parsing, Group Mail polish) when they run on the
+ * ANTHROPIC_API_KEY env instead of a Data Sync credential: quality-sensitive single calls, so the current
+ * Opus. Lives here so every runtime Anthropic id comes from one reviewed table. */
+export const ANTHROPIC_TASK_MODEL = "claude-opus-5-5";
+
+/** The legacy Platform settings save (C2O-176): Vault is the only key path, so a stored plaintext key blocks
+ * the save until it is imported (no read-modify-write can restore it after an import), and otherwise the
+ * stored key is always "" — the browser's value is never used. */
+export function legacyKeyForSave(storedKey: unknown): { ok: true; apiKey: "" } | { ok: false; error: string } {
+  if (typeof storedKey === "string" && storedKey.trim().length > 0) {
+    return { ok: false, error: "A plaintext AI key is still stored in the old settings. Import it into Vault first (Data Sync → Connections → Import), then save again." };
+  }
+  return { ok: true, apiKey: "" };
+}
+
+/** Membership of a model in an OpenAI-compatible gateway's models list: present → true; absent or unreadable
+ * → null (a gateway's list may be paginated or filtered, so absence is not proof — only Anthropic's and
+ * Google's per-model routes give a definitive "not found"). */
+export function openAiCompatibleModelFound(list: unknown, model: string): true | null {
+  return modelListedIn(list, "openai-compatible", model) === true ? true : null;
+}

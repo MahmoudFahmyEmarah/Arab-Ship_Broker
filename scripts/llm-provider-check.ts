@@ -4,7 +4,10 @@ import {
   GROQ_API_BASE_URL,
   GROQ_STRUCTURED_OUTPUT_MODELS,
   LLM_MODEL_SUGGESTIONS,
+  ANTHROPIC_TASK_MODEL,
   catalogueModel,
+  legacyKeyForSave,
+  openAiCompatibleModelFound,
   isGroqVendor,
   llmDefaultBaseUrl,
   llmModelEndpoint,
@@ -57,12 +60,29 @@ const settingsAction = src("app/(admin)/admin/settings/actions.ts");
 const legacyUi = src("components/admin/settings/PlatformSettings.tsx");
 const syncActions = src("app/(admin)/admin/data-sync/settings-actions.ts");
 assert.match(settingsPage, /initialSettings=\{\{ \.\.\.settings, ai: \{ \.\.\.settings\.ai, apiKey: "" \} \}\}/, "the page redacts the key before serialising settings");
-assert.match(settingsAction, /ai: \{ \.\.\.input\.settings\.ai, apiKey: storedKey \}/, "the save action ignores a browser key and keeps the stored one");
+assert.match(settingsAction, /ai: \{ \.\.\.input\.settings\.ai, apiKey: legacy\.apiKey \}/, "the save action never uses the browser key; it writes legacyKeyForSave's value");
 assert.doesNotMatch(settingsAction, /value: input\.settings,/, "input.settings is never written verbatim");
 assert.doesNotMatch(legacyUi, /ai\.apiKey|apiKey \}\)|testKey|responded in/, "no key field and no simulated test on the legacy page");
 assert.match(legacyUi, /href="\/admin\/data-sync"/, "the legacy page points to the Vault-backed editor");
 assert.match(syncActions, /const importModel = catalogueModel\(ai\.vendor \|\| "anthropic", ai\.model\);/, "the legacy import maps a retired id onto the catalogue");
-assert.match(syncActions, /p_make_active: importModel\.length > 0,/, "an import without a model is never made the active key");
+assert.match(syncActions, /p_make_active: false,/, "every legacy import is inactive until Test");
+assert.doesNotMatch(syncActions, /p_make_active: true/, "no import path activates an unverified key");
+// C2O-176 P1, behaviourally: a stored plaintext key blocks the save; otherwise the key written is always ""
+assert.equal(legacyKeyForSave("sk-ant-legacy").ok, false);
+assert.equal(legacyKeyForSave("  ").ok, true);
+assert.deepEqual(legacyKeyForSave(undefined), { ok: true, apiKey: "" });
+assert.deepEqual(legacyKeyForSave(null), { ok: true, apiKey: "" });
+assert.match(settingsAction, /const legacy = legacyKeyForSave\(/, "the save action uses legacyKeyForSave");
+assert.match(settingsAction, /if \(!legacy\.ok\) return \{ success: false, error: legacy\.error \};/, "a stored key refuses the save");
+// C2O-176 P2: a gateway list that lacks the id is "not verifiable", never "not found"
+assert.equal(openAiCompatibleModelFound({ data: [{ id: "gpt-4o" }] }, "gpt-4o"), true);
+assert.equal(openAiCompatibleModelFound({ data: [{ id: "gpt-4o" }] }, "o3-mini"), null);
+assert.equal(openAiCompatibleModelFound({ nope: 1 }, "o3-mini"), null);
+// every runtime Anthropic constructor takes its model from the shared module
+assert.equal(ANTHROPIC_TASK_MODEL, "claude-opus-5-5");
+for (const f of ["lib/circulars/engine.ts", "lib/groupmail/polish.ts", "lib/sync/email/llm.ts"]) {
+  assert.doesNotMatch(src(f).replace(/\/\/.*$/gm, ""), /model:\s*"claude-/, `${f}: no hard-coded Anthropic model id`);
+}
 assert.equal(catalogueModel("custom", ""), "", "no catalogue + no model stays empty (the import then stays inactive)");
 assert.match(syncActions, /redirect: "manual"[\s\S]*redirect: "manual"/, "both key-test probes refuse redirects");
 for (const f of ["lib/app-settings.ts", "components/admin/settings/PlatformSettings.tsx", "app/(admin)/admin/data-sync/settings-actions.ts", "components/admin/data-sync/SettingsView.tsx"]) {

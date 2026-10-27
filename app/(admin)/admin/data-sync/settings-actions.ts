@@ -13,7 +13,7 @@ import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-sett
 import { getWatermark, setWatermark } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
-import { LLM_MODEL_SUGGESTIONS, catalogueModel, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, modelListedIn } from "@/lib/sync/llm-provider";
+import { LLM_MODEL_SUGGESTIONS, catalogueModel, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
 
@@ -183,7 +183,7 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
       modelStatus = mRes.status;
       if (mRes.ok) modelFound = true;
       else if (mRes.status === 404 && family !== "openai-compatible") modelFound = false;
-      else if (mRes.status === 404) modelFound = modelListedIn(await res.json().catch(() => null), family, model);
+      else if (mRes.status === 404) modelFound = openAiCompatibleModelFound(await res.json().catch(() => null), model);
     } catch {
       modelFound = null;
     }
@@ -225,17 +225,17 @@ export async function importLegacyAiKey(): Promise<Result<{ imported: boolean }>
     const ai = settings?.ai;
     if (!ai?.apiKey?.trim()) return { success: true, data: { imported: false } };
 
-    // a vendor without a catalogue and no stored model would import model "" — never make that the active
-    // classifier key (every batch would fail); it is imported inactive, for the owner to edit and Test
+    // every legacy key is imported INACTIVE (C2O-176): the owner checks the model, presses Test, then activates
+    // it — an unverified id never becomes the classifier key. A retired Anthropic id maps to the default.
     const importModel = catalogueModel(ai.vendor || "anthropic", ai.model);
     const { error: saveErr } = await c.rpc("save_llm_credential", {
       p_id: null,
-      p_label: importModel ? "Imported from platform settings" : "Imported from platform settings (choose a model)",
+      p_label: "Imported from platform settings — Test, then activate",
       p_vendor: ai.vendor || "anthropic",
       p_model: importModel || "unset",
       p_base_url: ai.baseUrl?.trim() || null,
       p_secret: ai.apiKey.trim(),
-      p_make_active: importModel.length > 0,
+      p_make_active: false,
     });
     if (saveErr) return { success: false, error: saveErr.message };
 
