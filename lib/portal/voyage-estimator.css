@@ -205,14 +205,14 @@
 .ve-more { margin-top: 8px; border-top: 0.5px solid var(--asb-gray-200); padding-top: 6px; }
 .ve-more > summary { cursor: pointer; list-style: none; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--asb-navy); display: flex; align-items: center; gap: 6px; padding: 2px 0; }
 .ve-more > summary::-webkit-details-marker { display: none; }
-.ve-more > summary::before { content: "▸"; font-size: 10px; color: var(--asb-gray-500); transition: transform 120ms; }
+.ve-more > summary::before { content: "▸"; font-size: 11px; color: var(--asb-gray-500); transition: transform 120ms; }
 .ve-more[open] > summary::before { transform: rotate(90deg); }
 .ve-more[open] > summary { margin-bottom: 6px; }
 .ve-more--card { background: var(--asb-white); border: 0.5px solid var(--asb-gray-200); border-radius: 4px; padding: 6px 10px; }
 .ve-pl-inputs { display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 2px 0 8px; }
 .ve-pl-inputs .vy-field { flex: 1 1 140px; min-width: 0; }
 .vy-field--wide { flex-basis: 100% !important; }
-.ve-fuel-live { font-size: 9px; font-weight: 500; letter-spacing: 0.04em; }
+.ve-fuel-live { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; }
 .ve-fuel-live__dot { width: 5px; height: 5px; }
 @media (max-width: 720px) { .ve-pl-split { grid-template-columns: 1fr; } }
 .ve-pl-row .ve-linked-src { display: block; }
