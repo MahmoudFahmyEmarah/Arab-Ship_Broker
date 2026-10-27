@@ -61,7 +61,9 @@ assert.match(settingsAction, /ai: \{ \.\.\.input\.settings\.ai, apiKey: storedKe
 assert.doesNotMatch(settingsAction, /value: input\.settings,/, "input.settings is never written verbatim");
 assert.doesNotMatch(legacyUi, /ai\.apiKey|apiKey \}\)|testKey|responded in/, "no key field and no simulated test on the legacy page");
 assert.match(legacyUi, /href="\/admin\/data-sync"/, "the legacy page points to the Vault-backed editor");
-assert.match(syncActions, /p_model: catalogueModel\(ai\.vendor \|\| "anthropic", ai\.model\)/, "the legacy import maps a retired id onto the catalogue");
+assert.match(syncActions, /const importModel = catalogueModel\(ai\.vendor \|\| "anthropic", ai\.model\);/, "the legacy import maps a retired id onto the catalogue");
+assert.match(syncActions, /p_make_active: importModel\.length > 0,/, "an import without a model is never made the active key");
+assert.equal(catalogueModel("custom", ""), "", "no catalogue + no model stays empty (the import then stays inactive)");
 assert.match(syncActions, /redirect: "manual"[\s\S]*redirect: "manual"/, "both key-test probes refuse redirects");
 for (const f of ["lib/app-settings.ts", "components/admin/settings/PlatformSettings.tsx", "app/(admin)/admin/data-sync/settings-actions.ts", "components/admin/data-sync/SettingsView.tsx"]) {
   assert.doesNotMatch(src(f).replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, ""), /"claude-(sonnet-4|opus-4|3-5-[a-z]+|sonnet-4-5|opus-4-1)"/, `${f}: no retired Anthropic id in code`);

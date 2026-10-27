@@ -225,14 +225,17 @@ export async function importLegacyAiKey(): Promise<Result<{ imported: boolean }>
     const ai = settings?.ai;
     if (!ai?.apiKey?.trim()) return { success: true, data: { imported: false } };
 
+    // a vendor without a catalogue and no stored model would import model "" — never make that the active
+    // classifier key (every batch would fail); it is imported inactive, for the owner to edit and Test
+    const importModel = catalogueModel(ai.vendor || "anthropic", ai.model);
     const { error: saveErr } = await c.rpc("save_llm_credential", {
       p_id: null,
-      p_label: "Imported from platform settings",
+      p_label: importModel ? "Imported from platform settings" : "Imported from platform settings (choose a model)",
       p_vendor: ai.vendor || "anthropic",
-      p_model: catalogueModel(ai.vendor || "anthropic", ai.model),
+      p_model: importModel || "unset",
       p_base_url: ai.baseUrl?.trim() || null,
       p_secret: ai.apiKey.trim(),
-      p_make_active: true,
+      p_make_active: importModel.length > 0,
     });
     if (saveErr) return { success: false, error: saveErr.message };
 
