@@ -128,9 +128,14 @@ function DetailCell({
 
 export default async function QueueItemPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ decide?: string }>;
 }) {
+  // the queue row's Approve / Request changes / Reject opens this page with that decision ready (design: PageReview)
+  const decide = (await searchParams)?.decide;
+  const initialForm = decide === "reject" ? "reject" : decide === "amend" ? "amend" : null;
   await requireAdmin({ section: "review" });
   const { id } = await params;
   const supabase = await getAdminSupabaseClient();
@@ -229,7 +234,7 @@ export default async function QueueItemPage({
         </div>
         <div className="mt-4 pt-4 border-t border-asb-gray-100 grid grid-cols-3 max-[768px]:grid-cols-1 gap-4 text-xs text-asb-gray-500">
           <div>
-            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[11px]">
               Submitted
             </span>
             <p className="font-semibold text-asb-ink-soft mt-0.5">
@@ -237,7 +242,7 @@ export default async function QueueItemPage({
             </p>
           </div>
           <div>
-            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[11px]">
               Review reason
             </span>
             <p className="font-semibold text-asb-ink-soft mt-0.5">
@@ -245,7 +250,7 @@ export default async function QueueItemPage({
             </p>
           </div>
           <div>
-            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[10px]">
+            <span className="font-semibold text-asb-gray-400 uppercase tracking-wider text-[11px]">
               Random sample
             </span>
             <p className="font-semibold text-asb-ink-soft mt-0.5">
@@ -764,10 +769,13 @@ export default async function QueueItemPage({
           </div>
 
           {isPending ? (
-            <ReviewActions
-              queueItemId={item.id}
-              listingType={item.listing_type}
-            />
+            <div id="decision" className={decide === "approve" ? "adm-decision-focus" : undefined}>
+              <ReviewActions
+                queueItemId={item.id}
+                listingType={item.listing_type}
+                initialForm={initialForm}
+              />
+            </div>
           ) : (
             <div className="dp-card p-5 text-center">
               {item.status === "APPROVED" ? (

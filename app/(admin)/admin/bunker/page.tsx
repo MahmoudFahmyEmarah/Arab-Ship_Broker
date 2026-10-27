@@ -1,23 +1,19 @@
-import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { canAccess } from "@/lib/admin/sections";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { Stat, StatGrid } from "@/components/admin/ui/Stat";
-import { PricesTab } from "@/components/admin/bunker/PricesTab";
-import { SuppliersTab } from "@/components/admin/bunker/SuppliersTab";
+import { CurrentPrices, OverridePrice, PendingApprovals, ScheduledPrices } from "@/components/admin/bunker/PricesTab";
+import { AddSponsor, SponsorAccess } from "@/components/admin/bunker/SuppliersTab";
 import { HistoryTab } from "@/components/admin/bunker/HistoryTab";
+import { SponsorGrid } from "@/components/admin/bunker/SponsorGrid";
 import type { AdminBunkerDashboard } from "@/lib/bunker/admin";
 import type { PortChoice } from "@/lib/ports/port-search";
 
 export const dynamic = "force-dynamic";
 
-const TABS = [
-  { id: "prices", label: "Current prices" },
-  { id: "suppliers", label: "Suppliers & access" },
-  { id: "history", label: "Update history" },
-] as const;
-
+// One page, as the design draws it (Portal standalone 7 · PageBunker): sponsor list → current prices → update
+// history, with "+ Add sponsor" in the head. The approval queue, scheduled prices, the price form (each row's
+// Edit), sponsor access (each card's "Manage access") and the add form follow on the same page.
 export default async function AdminBunkerPage({
   searchParams,
 }: {
@@ -26,13 +22,12 @@ export default async function AdminBunkerPage({
   const admin = await requireAdmin({ section: "bunker" });
   const canEdit = canAccess("bunker", admin.tier, admin.perms) === "edit";
   const params = await searchParams;
-  const tab = TABS.some((t) => t.id === params.tab) ? params.tab! : "prices";
 
   // admin_bunker_dashboard is service-role only and re-checks the actor.
   const { data, error } = await getSupabaseAdminClient().rpc("admin_bunker_dashboard", { p_actor: admin.rowId });
   const dash = data as AdminBunkerDashboard | null;
   // supplier ports are searched from the verified ports, never typed as LOCODEs (owner, 19 Oct 2026)
-  const portChoices: PortChoice[] = tab === "suppliers"
+  const portChoices: PortChoice[] = canEdit
     ? ((await getSupabaseAdminClient().from("ports").select("locode,trade_name,country").eq("is_active", true).eq("is_verified", true).order("trade_name").limit(2000)).data ?? [])
         .map((p) => ({ locode: p.locode, name: p.trade_name, country: p.country }))
     : [];
@@ -40,7 +35,7 @@ export default async function AdminBunkerPage({
   if (error || !dash) {
     return (
       <div className="adm-page">
-        <AdminPageHeader title="Bunker ticker" />
+        <AdminPageHeader title="Bunker ticker management" />
         <div className="adm-empty">
           The Fuel Bar is not available on this database yet{error ? ` (${error.message})` : ""}.
         </div>
@@ -48,42 +43,37 @@ export default async function AdminBunkerPage({
     );
   }
 
-  // Headline counts only prices live now (C2B-011): a scheduled replacement is not live.
-  const live = dash.quotes.filter((q) => q.status === "approved" && (q.liveNow ?? q.validNow));
-  const pending = dash.quotes.filter((q) => q.status === "submitted");
   const sponsors = dash.suppliers.filter((s) => !s.isPlatform);
-  const supplierAlerts = dash.alerts.filter((a) => a.kind !== "pending_approval");
-  const counts: Record<string, number> = { prices: live.length + pending.length, suppliers: sponsors.length, history: dash.events.length };
+  const pending = dash.quotes.filter((q) => q.status === "submitted");
 
   return (
     <div className="adm-page">
       <AdminPageHeader
-        title="Bunker ticker"
-        subtitle="Supplier price tables, the sponsor strip and the platform fuel index that feeds the Voyage estimator."
+        title="Bunker ticker management"
+        subtitle="Sponsor list, manual price overrides and update history"
         warn={pending.length > 0 ? <span>{pending.length} quote{pending.length > 1 ? "s" : ""} from unverified suppliers awaiting approval.</span> : undefined}
-      />
+      >
+        {canEdit && <a className="adm-btn primary" href="#add-sponsor">+ Add sponsor</a>}
+      </AdminPageHeader>
       {params.message && <div className="adm-card" role="status">{params.message}</div>}
       {params.error && <div className="adm-card" role="alert" style={{ borderLeft: "2px solid var(--adm-red)" }}>{params.error}</div>}
 
-      <StatGrid>
-        <Stat label="Live quotes" value={live.length} sub={`${live.filter((q) => q.freshness === "current" && q.validNow).length} current`} accent="green" />
-        <Stat label="Awaiting approval" value={pending.length} accent={pending.length ? "amber" : "default"} />
-        <Stat label="Sponsors" value={sponsors.filter((s) => s.status === "enabled").length} sub={`${sponsors.length} registered`} />
-        <Stat label="Freshness alerts" value={supplierAlerts.length} accent={supplierAlerts.length ? "red" : "default"} />
-      </StatGrid>
+      <PendingApprovals dash={dash} canEdit={canEdit} />
 
-      <nav className="adm-tabs" aria-label="Bunker sections">
-        {TABS.map((t) => (
-          <Link key={t.id} href={`?tab=${t.id}`} className={`adm-tab${tab === t.id ? " is-on" : ""}`}
-                aria-current={tab === t.id ? "page" : undefined}>
-            {t.label} <span className="adm-tab__count">{counts[t.id]}</span>
-          </Link>
-        ))}
-      </nav>
+      <div>
+        <div className="adm-card__head" style={{ marginBottom: 8 }}>
+          <span className="adm-card__title">Sponsor list</span>
+          <span className="adm-card__sub">{sponsors.length} registered</span>
+        </div>
+        <SponsorGrid sponsors={sponsors} alerts={dash.alerts} canEdit={canEdit} />
+      </div>
 
-      {tab === "prices" && <PricesTab dash={dash} canEdit={canEdit} />}
-      {tab === "suppliers" && <SuppliersTab dash={dash} canEdit={canEdit} portChoices={portChoices} />}
-      {tab === "history" && <HistoryTab dash={dash} />}
+      <CurrentPrices dash={dash} canEdit={canEdit} />
+      <ScheduledPrices dash={dash} canEdit={canEdit} />
+      <HistoryTab dash={dash} />
+      {canEdit && <OverridePrice dash={dash} />}
+      <SponsorAccess dash={dash} canEdit={canEdit} portChoices={portChoices} />
+      {canEdit && <AddSponsor portChoices={portChoices} />}
     </div>
   );
 }

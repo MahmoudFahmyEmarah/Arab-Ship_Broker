@@ -150,3 +150,7 @@ export function zonesLabel(codes?: (string | null | undefined)[] | null): string
     .filter((x): x is string => !!x);
   return labels.length ? labels.join(" / ") : null;
 }
+
+/** A zone name safe to place, double-quoted, inside a PostgREST or() filter: letters, digits, spaces and . _ - / & only
+ *  (every zone code, e.g. E.MED, R.SEA.N, A.SEA, passes; quotes, commas and parentheses never do). */
+export const isPlainZoneName = (z: string): boolean => /^[\w .&/-]{1,60}$/.test(z);

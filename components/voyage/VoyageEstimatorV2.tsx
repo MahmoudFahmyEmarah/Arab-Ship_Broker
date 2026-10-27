@@ -1,7 +1,7 @@
 "use client";
 
 // Voyage cost estimator — member page (Voyage Economics, Stream S).
-// Layout follows the approved prototype (result strip, info cards, legs
+// Layout follows the owner's design (Portal standalone 7 · TabEconomics: result strip, info cards, legs
 // table, P&L cards); the arithmetic is lib/voyage/engine.ts (voyage-engine/2)
 // fed by the vessel's operating profile, measured legs with their ECA share,
 // the deal's port times, the Suez estimate (lib/suez/engine.ts) and the Fuel
@@ -353,20 +353,35 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `ASB-voyage-${vessel.imo}-${cargo.refId}.txt`; a.click(); URL.revokeObjectURL(a.href);
   };
 
+  const setVo = (p: Partial<typeof voy>) => setVoy((v) => ({ ...v, ...p }));
+  const consCell = (st: OperatingState, kind: "residual" | "distillate") => form.cons[st][kind] || "—";
+  const c = estimate?.costs ?? null;
+  // nothing priced is unknown, not zero (owner rule): no fuel priced at all reads "—"
+  const fuelUsd = c && estimate && estimate.fuel.pricedMt > 0 ? c.fuel.usd : null;
+  // an incomplete total with nothing computable is unknown too
+  const knownUsd = (v: number | null | undefined) => (c && !c.complete && (v ?? 0) === 0 ? null : v ?? null);
+  const assumed = (...areas: AssumptionArea[]) => (estimate ? assumedBadge(estimate, areas) : null);
+  const legsNeedAttention = !!estimate && estimate.legs.some((l) => l.status === "unavailable" || l.status === "manual" || l.status === "fallback");
+  // opens itself when a leg needs attention and then stays open, so fixing the leg inside it never snaps it shut (O2B-052 P2-5)
+  const [legsOpen, setLegsOpen] = React.useState(false);
+  if (legsNeedAttention && !legsOpen) setLegsOpen(true);
+  const pct = (part: number | null | undefined, whole: number | null | undefined) => (part == null || whole == null || whole <= 0 ? "—" : `${Math.round((part / whole) * 100)}%`);
+
   return (
     <div className="ve-page">
       <div className="ve-shell">
         <BunkerTicker />
+        {/* design (Portal standalone 7, EconShell): title + "Complete voyage P&L"; fuel pills, Save, Export on the right */}
         <div className="ve-head">
           <div className="ve-head__row">
-            <div><div className="ve-head__title">Voyage Cost Estimator</div><div className="ve-head__sub">Days per state, fuel per product, running cost and TCE from the vessel&apos;s operating profile and the deal</div></div>
+            <div><h1 className="ve-head__title">Voyage Cost Estimator</h1><div className="ve-head__sub">Complete voyage P&amp;L</div></div>
             <div className="ve-head-right">
               <span className="vy-muted" title={fuel.status === "trusted" ? `Fuel Bar index average · ${fuel.asOf ?? ""}` : "No live index: admin fallback prices, labelled on every line"}>
                 {estimate ? estimate.fuel.lines.map((f) => <span key={f.productKey} className="vy-pill">{f.productKey} <b>{f.usdMt != null ? `$${f.usdMt}` : "—"}</b>/MT <span className={`vy-badge vy-badge--${BADGE[f.status]}`}>{f.status === "trusted" ? "index" : f.status}</span></span>)
                   : <span className="vy-pill">{fuel.status === "trusted" ? `Fuel Bar index · ${fuel.actualPort ?? fuel.region ?? fuel.scope}` : "no live fuel index · fallback prices"}</span>}
               </span>
               <button className="ve-btn" type="button" onClick={saveEstimate} disabled={!estimate || estimate.status === "invalid" || save.busy}>{save.busy ? "Saving…" : "Save estimate"}</button>
-              <button className="ve-btn" type="button" onClick={exportEstimate} disabled={!estimate}>Export</button>
+              <button className="ve-btn" type="button" onClick={exportEstimate} disabled={!estimate}>Export estimate</button>
             </div>
           </div>
           {save.note && <div className={`ve-note-sub${save.error ? " vy-error" : ""}`}>{save.note}{save.id && !save.error ? <> · <Link href={`/dashboard/voyage-estimator?vessel=${vesselId}&cargo=${cargoId}`} className="sz-link">keep working</Link></> : null}</div>}
@@ -376,46 +391,127 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
 
         {(linkMissing.vessel || linkMissing.cargo) && <div className="vy-unavailable" role="status" data-testid="link-not-found">The linked {linkMissing.vessel && linkMissing.cargo ? "vessel and cargo are" : linkMissing.vessel ? "vessel is" : "cargo is"} not in your list (not yours, or no longer open). Choose them below; nothing was selected for you.</div>}
         <div className="ve-selector ve-selector--two">
-          <label className="ve-selector__field"><span className="ve-selector__label">Vessel</span><span className="ve-selector__control"><select value={vesselId} onChange={(e) => setVesselId(e.target.value)} aria-label="Vessel"><option value="">Select vessel…</option>{vessels.map((v) => <option key={v.id} value={v.id}>{v.name}, IMO {v.imo}{v.openPortLocode ? ` · open ${v.openPortLocode}` : ""}</option>)}</select></span></label>
-          <label className="ve-selector__field"><span className="ve-selector__label">Cargo</span><span className="ve-selector__control"><select value={cargoId} onChange={(e) => setCargoId(e.target.value)} aria-label="Cargo"><option value="">Select cargo…</option>{cargos.map((c) => <option key={c.id} value={c.id}>{c.refId} · {c.commodity} · {c.route.polCode} → {c.route.podCode}</option>)}</select></span></label>
+          <label className="ve-selector__field"><span className="ve-selector__label">Vessel</span><span className="ve-selector__control"><select value={vesselId} onChange={(e) => setVesselId(e.target.value)} aria-label="Vessel"><option value="">Select vessel…</option>{vessels.map((v) => <option key={v.id} value={v.id}>{v.name}, IMO {v.imo}{v.openPortLocode ? ` · open ${v.openPortLocode}` : ""}</option>)}</select><span className="ve-selector__caret" aria-hidden="true">▾</span></span></label>
+          <label className="ve-selector__field"><span className="ve-selector__label">Cargo</span><span className="ve-selector__control"><select value={cargoId} onChange={(e) => setCargoId(e.target.value)} aria-label="Cargo"><option value="">Select cargo…</option>{cargos.map((c) => <option key={c.id} value={c.id}>{c.refId} · {c.commodity} · {c.route.polCode} → {c.route.podCode}</option>)}</select><span className="ve-selector__caret" aria-hidden="true">▾</span></span></label>
         </div>
 
         <div className="ve-content">
           {!vessel || !cargo ? <div className="ve-empty">Select a vessel and a cargo to estimate.</div> : (
-            <div className="vy-layout">
-              <aside className="vy-rail">
-                <div className="ve-input-card">
-                  <div className="ve-input-card__head">Operating profile · {profile?.found ? "economics profile" : "from the listing"}</div>
-                  <div className="ve-input-card__body">
-                    <div className="vy-row2">
-                      <label className="vy-field"><span>Speed laden (kn)</span><input type="number" step="0.1" value={form.speedLaden} onChange={(e) => setForm({ ...form, speedLaden: e.target.value })} placeholder={`${settings.speeds.ladenKn} (default)`} /></label>
-                      <label className="vy-field"><span>Speed ballast (kn)</span><input type="number" step="0.1" value={form.speedBallast} onChange={(e) => setForm({ ...form, speedBallast: e.target.value })} placeholder={`${settings.speeds.ballastKn} (default)`} /></label>
-                    </div>
-                    <table className="vy-cons"><thead><tr><th>State</th><th>Residual MT/d</th><th>Distillate MT/d</th></tr></thead>
-                      <tbody>{OPERATING_STATES.map((s) => <tr key={s}><td>{STATE_LABEL[s]}</td><td><input type="number" step="0.1" min="0" value={form.cons[s].residual} onChange={(e) => setForm({ ...form, cons: { ...form.cons, [s]: { ...form.cons[s], residual: e.target.value } } })} aria-label={`${STATE_LABEL[s]} residual`} /></td><td><input type="number" step="0.1" min="0" value={form.cons[s].distillate} onChange={(e) => setForm({ ...form, cons: { ...form.cons, [s]: { ...form.cons[s], distillate: e.target.value } } })} aria-label={`${STATE_LABEL[s]} distillate`} /></td></tr>)}</tbody></table>
-                    <div className="vy-muted">A state without figures is not priced (it reads “unavailable”); nothing is borrowed from another state.</div>
-                    <div className="vy-row2">
-                      <label className="vy-field"><span>Scrubber fitted (HSFO at sea)</span><select value={form.hasScrubber} onChange={(e) => setForm({ ...form, hasScrubber: e.target.value as Tri })} aria-label="Scrubber fitted"><option value="unknown">unknown (priced as none, stated)</option><option value="yes">yes</option><option value="no">no</option></select></label>
-                      <label className="vy-field"><span>Cost class</span><select value={form.vesselClass} onChange={(e) => setForm({ ...form, vesselClass: e.target.value as VesselClass | "" })}><option value="">— (C assumed)</option><option value="A">A × {settings.classMultipliers.A}</option><option value="B">B × {settings.classMultipliers.B}</option><option value="C">C × {settings.classMultipliers.C}</option></select></label>
-                    </div>
-                    <div className="vy-row2">
-                      <label className="vy-field"><span>SCNT (Suez)</span><input type="number" min="0" value={form.scnt} onChange={(e) => setForm({ ...form, scnt: e.target.value })} placeholder="from certificate" /></label>
-                      <label className="vy-field"><span>GT</span><input type="number" min="0" value={form.gt} onChange={(e) => setForm({ ...form, gt: e.target.value })} /></label>
-                    </div>
-                    {vessel.vesselId && <div className="vy-save"><button type="button" className="ve-btn" onClick={saveProfile} disabled={profileSave.busy}>{profileSave.busy ? "Saving…" : "Save profile to vessel"}</button>{profileSave.note && <div className={`ve-note-sub${profileSave.error ? " vy-error" : ""}`}>{profileSave.note}</div>}</div>}
+            <div className="ve-econ">
+              {estimate && estimate.status !== "trusted" && (
+                <div className={`vy-status vy-status--${estimate.status}`}>
+                  <span className="vy-status__k">{estimate.status}</span>
+                  <span>{statusSummary(estimate)}
+                    {estimate.status === "invalid" && estimate.errors ? <ul className="vy-unavailable-list">{estimate.errors.map((e, i) => <li key={i}>{e}</li>)}</ul> : null}
+                    {estimate.unavailable.length > 0 ? <ul className="vy-unavailable-list">{estimate.unavailable.map((u) => <li key={u.code}>{u.reason}</li>)}</ul> : null}
+                  </span>
+                </div>
+              )}
+
+              {/* Result strip — design: total voyage days · total bunker cost · gross freight · TCE */}
+              <div className="ve-results">
+                <div className="ve-result"><div className="ve-result__k">Total voyage days{assumed("sea", "port", "canal")}</div><div className="ve-result__v ve-result__v--navy">{estimate ? fmtDays(estimate.days.total) : "—"}</div></div>
+                <div className="ve-result"><div className="ve-result__k">Total bunker cost</div><div className={`ve-result__v ${fuelUsd != null ? "ve-result__v--amber" : "is-unavailable"}`}>{fmtUSD(fuelUsd)}</div></div>
+                <div className="ve-result"><div className="ve-result__k">Gross freight</div><div className={`ve-result__v ${estimate?.revenue ? "ve-result__v--green" : "is-unavailable"}`}>{estimate?.revenue ? fmtUSD(estimate.revenue.grossFreightUsd) : "—"}</div></div>
+                <div className="ve-result ve-result--tce"><div className="ve-result__k">{estimate?.revenue ? "TCE estimate" : "Running cost / day"}</div><div className="ve-result__v">{estimate ? (estimate.revenue ? fmtUSD(estimate.revenue.tceUsdDay) : fmtUSD(estimate.opex.usdDay)) : "—"}<span className="ve-result__unit">/day</span></div></div>
+              </div>
+
+              <div className="ve-upper">
+                <div className="ve-info-card">
+                  <div className="ve-info-card__head">Vessel, from {profile?.found ? "economics profile" : "registration"} · {vessel.imo}</div>
+                  <div className="ve-info-card__body">
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Vessel name</span><span className="ve-info-card__v is-auto">{vessel.name}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Type</span><span className="ve-info-card__v is-auto">{vessel.type || "—"}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">DWT (MT)</span><span className="ve-info-card__v is-auto">{vessel.dwt || "—"}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Speed laden / ballast (kn)</span><span className="ve-info-card__v">
+                      <input className="ve-inline" type="number" step="0.1" value={form.speedLaden} onChange={(e) => setForm({ ...form, speedLaden: e.target.value })} placeholder={`${settings.speeds.ladenKn}`} aria-label="Speed laden (kn)" /> / <input className="ve-inline" type="number" step="0.1" value={form.speedBallast} onChange={(e) => setForm({ ...form, speedBallast: e.target.value })} placeholder={`${settings.speeds.ballastKn}`} aria-label="Speed ballast (kn)" /></span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Residual sea laden / ballast (MT/day)</span><span className="ve-info-card__v is-auto">{consCell("sea_laden", "residual")} / {consCell("sea_ballast", "residual")}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Distillate port working / idle (MT/day)</span><span className="ve-info-card__v is-auto">{consCell("port_working", "distillate")} / {consCell("port_idle", "distillate")}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Scrubber fitted</span><span className="ve-info-card__v"><select className="ve-inline ve-inline--select" value={form.hasScrubber} onChange={(e) => setForm({ ...form, hasScrubber: e.target.value as Tri })} aria-label="Scrubber fitted"><option value="unknown">unknown (none, stated)</option><option value="yes">yes</option><option value="no">no</option></select></span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Cost class</span><span className="ve-info-card__v"><select className="ve-inline ve-inline--select" value={form.vesselClass} onChange={(e) => setForm({ ...form, vesselClass: e.target.value as VesselClass | "" })} aria-label="Cost class"><option value="">— (C assumed)</option><option value="A">A × {settings.classMultipliers.A}</option><option value="B">B × {settings.classMultipliers.B}</option><option value="C">C × {settings.classMultipliers.C}</option></select></span></div>
+                    <details className="ve-more">
+                      <summary>Operating profile per state</summary>
+                      <table className="vy-cons"><thead><tr><th>State</th><th>Residual MT/d</th><th>Distillate MT/d</th></tr></thead>
+                        <tbody>{OPERATING_STATES.map((s) => <tr key={s}><td>{STATE_LABEL[s]}</td><td><input type="number" step="0.1" min="0" value={form.cons[s].residual} onChange={(e) => setForm({ ...form, cons: { ...form.cons, [s]: { ...form.cons[s], residual: e.target.value } } })} aria-label={`${STATE_LABEL[s]} residual`} /></td><td><input type="number" step="0.1" min="0" value={form.cons[s].distillate} onChange={(e) => setForm({ ...form, cons: { ...form.cons, [s]: { ...form.cons[s], distillate: e.target.value } } })} aria-label={`${STATE_LABEL[s]} distillate`} /></td></tr>)}</tbody></table>
+                      <div className="vy-muted">A state without figures is not priced (it reads “unavailable”); nothing is borrowed from another state.</div>
+                      <div className="vy-row2">
+                        <label className="vy-field"><span>SCNT (Suez)</span><input type="number" min="0" value={form.scnt} onChange={(e) => setForm({ ...form, scnt: e.target.value })} placeholder="from certificate" /></label>
+                        <label className="vy-field"><span>GT</span><input type="number" min="0" value={form.gt} onChange={(e) => setForm({ ...form, gt: e.target.value })} /></label>
+                      </div>
+                      {vessel.vesselId && <div className="vy-save"><button type="button" className="ve-btn" onClick={saveProfile} disabled={profileSave.busy}>{profileSave.busy ? "Saving…" : "Save profile to vessel"}</button>{profileSave.note && <div className={`ve-note-sub${profileSave.error ? " vy-error" : ""}`}>{profileSave.note}</div>}</div>}
+                    </details>
                   </div>
                 </div>
 
-                <div className="ve-input-card">
-                  <div className="ve-input-card__head">Legs · measured routes with ECA share</div>
-                  <div className="ve-input-card__body">
+                <div className="ve-info-card">
+                  <div className="ve-info-card__head">Cargo, from listing · {cargo.refId}</div>
+                  <div className="ve-info-card__body">
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Cargo</span><span className="ve-info-card__v is-auto">{cargo.commodity}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Quantity (MT)</span><span className="ve-info-card__v is-auto">{qty.toLocaleString("en-US")}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Freight rate ($/MT)</span><span className="ve-info-card__v"><input className="ve-inline" type="number" step="0.01" min="0" value={voy.freight} onChange={(e) => setVo({ freight: e.target.value })} placeholder="—" aria-label="Freight (USD/MT)" /></span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Commission (%)</span><span className="ve-info-card__v"><input className="ve-inline" type="number" step="0.25" min="0" value={voy.commission} onChange={(e) => setVo({ commission: e.target.value })} placeholder="—" aria-label="Commission (%)" /></span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Load rate (MT/day)</span><span className={`ve-info-card__v ${cargo.loadRate != null ? "is-auto" : "is-amber"}`}>{cargo.loadRate != null ? Number(cargo.loadRate).toLocaleString("en-US") : "—"}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Discharge rate (MT/day)</span><span className={`ve-info-card__v ${cargo.dischRate != null ? "is-auto" : "is-amber"}`}>{cargo.dischRate != null ? Number(cargo.dischRate).toLocaleString("en-US") : "—"}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Loading days (auto)</span><span className="ve-info-card__v is-auto">{estimate ? fmtDays(estimate.days.portLoad) : "—"}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Discharging days (auto)</span><span className="ve-info-card__v is-auto">{estimate ? fmtDays(estimate.days.portDisch) : "—"}</span></div>
+                    <div className="ve-info-card__row"><span className="ve-info-card__k">Allowance load / disch (days)</span><span className="ve-info-card__v"><input className="ve-inline" type="number" step="0.1" min="0" value={voy.loadAllowance} onChange={(e) => setVo({ loadAllowance: e.target.value })} aria-label="Load allowance (days)" /> / <input className="ve-inline" type="number" step="0.1" min="0" value={voy.dischAllowance} onChange={(e) => setVo({ dischAllowance: e.target.value })} aria-label="Disch allowance (days)" /></span></div>
+                    <details className="ve-more">
+                      <summary>Port time, waiting and ECA</summary>
+                      <div className="vy-row2">
+                        {ladenStartZones != null ? <span className="vy-leg__meta">Load port {loadInEca ? `inside ${ladenStartZones.join(", ")} ECA` : "outside every ECA"} · from the route geometry</span> : <label className="vy-check"><input type="checkbox" checked={voy.loadInEca} onChange={(e) => setVo({ loadInEca: e.target.checked })} /> Load port inside ECA (your assertion)</label>}
+                        {ladenEndZones != null ? <span className="vy-leg__meta">Discharge port {dischInEca ? `inside ${ladenEndZones.join(", ")} ECA` : "outside every ECA"} · from the route geometry</span> : <label className="vy-check"><input type="checkbox" checked={voy.dischInEca} onChange={(e) => setVo({ dischInEca: e.target.checked })} /> Discharge port inside ECA (your assertion)</label>}
+                      </div>
+                      {form.hasScrubber === "yes" && (
+                        <>
+                          <div className="vy-row2">
+                            <label className="vy-check"><input type="checkbox" checked={voy.loadOpenLoopBan} onChange={(e) => setVo({ loadOpenLoopBan: e.target.checked })} /> Load port bans open-loop washwater</label>
+                            <label className="vy-check"><input type="checkbox" checked={voy.dischOpenLoopBan} onChange={(e) => setVo({ dischOpenLoopBan: e.target.checked })} /> Discharge port bans open-loop washwater</label>
+                          </div>
+                          <div className="vy-row2">
+                            <label className="vy-check"><input type="checkbox" checked={voy.loadEuBerth} onChange={(e) => setVo({ loadEuBerth: e.target.checked })} /> EU berth &gt; 2 h at load</label>
+                            <label className="vy-check"><input type="checkbox" checked={voy.dischEuBerth} onChange={(e) => setVo({ dischEuBerth: e.target.checked })} /> EU berth &gt; 2 h at discharge</label>
+                          </div>
+                        </>
+                      )}
+                      <div className="vy-row2">
+                        <label className="vy-field"><span>Waiting at anchorage (days)</span><input type="number" step="0.5" min="0" value={voy.anchorageDays} onChange={(e) => setVo({ anchorageDays: e.target.value })} /></label>
+                        <label className="vy-check"><input type="checkbox" checked={voy.anchorageInEca} onChange={(e) => setVo({ anchorageInEca: e.target.checked })} /> Anchorage inside ECA</label>
+                      </div>
+                      {ownerOrgs.length > 1 && (
+                        <label className="vy-field"><span>Estimate owned by</span><select value={ownerOrgId} onChange={(e) => setOwnerOrgId(e.target.value)}><option value="">— choose the organisation —</option>{ownerOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+                      )}
+                    </details>
+                  </div>
+                </div>
+
+                <div className="ve-legs">
+                  <table className="ve-table">
+                    <thead><tr><th>Leg</th><th>From → To</th><th className="num">NM</th><th className="num">ECA NM</th><th className="num">Days</th><th className="num">Fuel (MT)</th></tr></thead>
+                    <tbody>
+                      {(estimate?.legs ?? []).map((l, i) => (
+                        <tr key={l.key} className={l.status === "unavailable" ? "is-disabled" : ""}>
+                          <td><strong>{i + 1}</strong>, {l.label}{l.status !== "trusted" && <span className={`vy-badge vy-badge--${BADGE[l.status]}`}>{l.status}</span>}</td>
+                          <td>{l.from ?? "—"}{l.to && l.to !== l.from ? <span className="ve-table__to"> → {l.to}</span> : ""}</td>
+                          <td className={`num ${l.nm != null ? "is-auto" : ""}`}>{l.kind === "sea" || l.kind === "canal" ? fmtNM(l.nm) : "—"}</td>
+                          <td className={`num ${l.kind === "sea" && l.ecaNm == null ? "is-amber" : "is-auto"}`}>{l.kind === "sea" ? (l.ecaNm != null ? fmtNM(l.ecaNm) : "unknown") : "—"}</td>
+                          <td className="num is-auto">{fmtDays(l.days)}{legArea(l.kind) ? assumed(legArea(l.kind)!) : null}</td>
+                          <td className="num is-auto" title={l.burns.map((b) => `${b.productKey} ${fmtMT(b.mt)}`).join(" · ")}>{l.burns.length ? fmtMT(l.burns.reduce((a, b) => a + b.mt, 0)) : "—"}</td>
+                        </tr>
+                      ))}
+                      {estimate && (
+                        <tr className="ve-table__total"><td colSpan={2}><strong>Totals</strong></td><td className="num"><strong>{fmtNM(estimate.legs.reduce((a, l) => a + (l.kind === "sea" || l.kind === "canal" ? l.nm ?? 0 : 0), 0))}</strong></td><td className="num"><strong>{estimate.legs.some((l) => l.kind === "sea" && l.ecaNm == null) ? "—" : fmtNM(estimate.legs.reduce((a, l) => a + (l.kind === "sea" ? l.ecaNm ?? 0 : 0), 0))}</strong></td><td className="num"><strong>{fmtDays(estimate.days.total)}</strong></td><td className="num"><strong>{fmtMT(estimate.fuel.totalMt)}</strong></td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <details className="ve-more ve-more--card" open={legsOpen || undefined}>
+                    <summary>Route, sea margin and canal{legsNeedAttention ? <span className="vy-badge vy-badge--fallback">check</span> : null}</summary>
                     <LegEditor title="Ballast" from={openCode} to={polCode} leg={ballast} auto={ballastAuto} loading={ballastLoading} onChange={setBallast} hidden={!openCode || openCode === polCode} />
                     <LegEditor title="Laden" from={polCode} to={podCode} leg={laden} auto={ladenAuto} loading={ladenLoading} onChange={setLaden} />
                     <div className="vy-row2">
-                      <label className="vy-field"><span>Sea margin (%)</span><input type="number" step="0.5" min="0" value={voy.seaMargin} onChange={(e) => setVoy({ ...voy, seaMargin: e.target.value })} placeholder={estimate ? `${estimate.seaMarginPct} (${estimate.seaMarginBasis})` : "settings"} /></label>
+                      <label className="vy-field"><span>Sea margin (%){assumed("seaMargin")}</span><input type="number" step="0.5" min="0" value={voy.seaMargin} onChange={(e) => setVo({ seaMargin: e.target.value })} placeholder={estimate ? `${estimate.seaMarginPct} (${estimate.seaMarginBasis})` : "settings"} /></label>
                       {measured(laden, ladenAuto, polCode, podCode)
                         ? <div className="vy-field"><span>Suez transit</span><div className="vy-leg__meta">{ladenSuez ? "required" : "not required"} · from the measured route{ballastSuez ? " · ballast leg transits too" : ""}</div></div>
-                        : <label className="vy-field"><span>Suez transit (manual leg: your assertion)</span><select value={voy.suezOverride} onChange={(e) => setVoy({ ...voy, suezOverride: e.target.value as "auto" | "yes" | "no" })}><option value="auto">By zones ({cargo && needsSuez(cargo.route.polZone, cargo.route.podZone) ? "required" : "not required"})</option><option value="yes">Required</option><option value="no">Not required</option></select></label>}
+                        : <label className="vy-field"><span>Suez transit (manual leg: your assertion)</span><select value={voy.suezOverride} onChange={(e) => setVo({ suezOverride: e.target.value as "auto" | "yes" | "no" })}><option value="auto">By zones ({cargo && needsSuez(cargo.route.polZone, cargo.route.podZone) ? "required" : "not required"})</option><option value="yes">Required</option><option value="no">Not required</option></select></label>}
                     </div>
                     {suezRequired && (
                       <div className="vy-leg__meta">
@@ -424,7 +520,7 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
                           : suezEstimate ? <>Suez: {canal?.complete ? <b>{fmtUSD(canal.costUsd)}</b> : <span className="vy-error">unavailable</span>} <span className={`vy-badge vy-badge--${canal ? BADGE[canal.status] : "missing"}`}>{canal?.status}</span> · {suezEstimate.direction} · {suezEstimate.cargoStatus} · transit {suezEstimate.transitDate} · tariff v{suezEstimate.tariffVersion.versionNo} · {suezEstimate.transitDays} + {suezEstimate.anchorageDays} days{canal?.anchorageInEcaSource === "governed" ? ` · anchorage ${canal.anchorageInEca ? "inside" : "outside"} ECA` : ""} · <Link href={`/dashboard/suez-toll?vessel=${vesselId}`} className="sz-link">details →</Link>{!canal?.complete && suezEstimate.unavailable[0] ? <div className="vy-error">{suezEstimate.unavailable[0].reason}</div> : null}</> : null}
                         {ladenSuez && !measured(laden, ladenAuto, polCode, podCode) && (
                           <label className="vy-field"><span>Suez direction (your assertion for a manual leg)</span>
-                            <select value={voy.manualSuezDir} onChange={(e) => setVoy({ ...voy, manualSuezDir: e.target.value as "" | "SB" | "NB" })} data-testid="manual-suez-dir">
+                            <select value={voy.manualSuezDir} onChange={(e) => setVo({ manualSuezDir: e.target.value as "" | "SB" | "NB" })} data-testid="manual-suez-dir">
                               <option value="">Not stated: canal not priced</option><option value="SB">Southbound</option><option value="NB">Northbound</option>
                             </select>
                           </label>
@@ -432,94 +528,97 @@ export function VoyageEstimatorV2({ vessels, cargos, settings, settingsSource, s
                         {suezRequired && (ladenSuez ? !ladenDir : !ballastDir) && <div className="vy-error">The Suez transit direction is not known for this track: the canal is not priced.</div>}
                         <div className="vy-row2">
                           <label className="vy-check" title="Without this declaration the canal figure is the broker's (manual): omitted conditions are never assumed absent">
-                            <input type="checkbox" checked={voy.suezConditionsDeclared} onChange={(e) => setVoy({ ...voy, suezConditionsDeclared: e.target.checked })} data-testid="suez-conditions-declared" />
+                            <input type="checkbox" checked={voy.suezConditionsDeclared} onChange={(e) => setVo({ suezConditionsDeclared: e.target.checked })} data-testid="suez-conditions-declared" />
                             I declare no special Suez conditions (no heavy lift over 250 t, military cargo, floating unit, late arrival, deck protrusion, non-compliant ladder, relieving pilots, waste or barge services)
                           </label>
-                          <label className="vy-field"><span>Arrival draft (ft, this voyage)</span><input type="number" min="0" step="0.1" value={voy.arrivalDraftFt} onChange={(e) => setVoy({ ...voy, arrivalDraftFt: e.target.value })} placeholder="decides escort tugs" /></label>
+                          <label className="vy-field"><span>Arrival draft (ft, this voyage)</span><input type="number" min="0" step="0.1" value={voy.arrivalDraftFt} onChange={(e) => setVo({ arrivalDraftFt: e.target.value })} placeholder="decides escort tugs" /></label>
                         </div>
                         {canal && !canal.complete && (
                           <div className="vy-row2">
-                            <label className="vy-field"><span>Canal cost (manual, USD)</span><input type="number" min="0" value={voy.canalManualUsd} onChange={(e) => setVoy({ ...voy, canalManualUsd: e.target.value })} placeholder="agent proforma" /></label>
-                            <label className="vy-field"><span>Reason · canal cost</span><input value={voy.canalManualReason} onChange={(e) => setVoy({ ...voy, canalManualReason: e.target.value })} placeholder="e.g. agent proforma 5 Oct" /></label>
+                            <label className="vy-field"><span>Canal cost (manual, USD)</span><input type="number" min="0" value={voy.canalManualUsd} onChange={(e) => setVo({ canalManualUsd: e.target.value })} placeholder="agent proforma" /></label>
+                            <label className="vy-field"><span>Reason · canal cost</span><input value={voy.canalManualReason} onChange={(e) => setVo({ canalManualReason: e.target.value })} placeholder="e.g. agent proforma 5 Oct" /></label>
                           </div>
                         )}
                         {ballastCanal && !ballastCanal.complete && (
                           <div className="vy-row2">
-                            <label className="vy-field"><span>Ballast canal cost (manual, USD)</span><input type="number" min="0" value={voy.ballastCanalManualUsd} onChange={(e) => setVoy({ ...voy, ballastCanalManualUsd: e.target.value })} /></label>
-                            <label className="vy-field"><span>Reason · ballast canal cost</span><input value={voy.ballastCanalManualReason} onChange={(e) => setVoy({ ...voy, ballastCanalManualReason: e.target.value })} /></label>
+                            <label className="vy-field"><span>Ballast canal cost (manual, USD)</span><input type="number" min="0" value={voy.ballastCanalManualUsd} onChange={(e) => setVo({ ballastCanalManualUsd: e.target.value })} /></label>
+                            <label className="vy-field"><span>Reason · ballast canal cost</span><input value={voy.ballastCanalManualReason} onChange={(e) => setVo({ ballastCanalManualReason: e.target.value })} /></label>
                           </div>
                         )}
                       </div>
                     )}
-                    {ownerOrgs.length > 1 && (
-                      <label className="vy-field"><span>Estimate owned by</span><select value={ownerOrgId} onChange={(e) => setOwnerOrgId(e.target.value)}><option value="">— choose the organisation —</option>{ownerOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
-                    )}
-                  </div>
+                  </details>
                 </div>
+              </div>
 
-                <div className="ve-input-card">
-                  <div className="ve-input-card__head">Ports, waiting and costs</div>
-                  <div className="ve-input-card__body">
-                    <div className="vy-row3">
-                      <label className="vy-field"><span>Qty (MT)</span><input readOnly value={qty.toLocaleString("en-US")} /></label>
-                      <label className="vy-field"><span>Load rate</span><input readOnly value={cargo.loadRate ?? "—"} /></label>
-                      <label className="vy-field"><span>Disch rate</span><input readOnly value={cargo.dischRate ?? "—"} /></label>
+              {/* Expenses + revenue */}
+              <div className="ve-pl-grid">
+                <div className="ve-pl-card">
+                  <div className="ve-pl-card__title">Voyage Expenses</div>
+                  <div className="ve-pl-split">
+                    <div>
+                      <div className="ve-pl-section">Bunker costs <span className="sz-muted">· {fuelUsd != null && c ? c.fuel.status : "not priced"}</span></div>
+                      {(estimate?.fuel.lines ?? []).map((f) => <div key={f.productKey} className="ve-pl-row"><span>{f.productKey}<small className="sz-muted">{f.status === "trusted" ? `Fuel Bar average${f.pricePort ? ` @ ${f.pricePort}` : ""}${f.priceAsOf ? ` · ${f.priceAsOf}` : ""}` : f.status === "fallback" ? "admin fallback price — no live index for this product" : "unavailable — not in the total"}</small></span><span className={f.status === "trusted" ? "is-auto" : f.status === "fallback" ? "is-fallback" : "is-unavailable"}>{fmtMT(f.mt)} MT × {f.usdMt != null ? `$${f.usdMt}` : "—"} = {fmtUSD(f.usd)}</span></div>)}
+                      <div className="ve-pl-row is-subtotal"><span>Total bunker cost</span><span className={fuelUsd == null ? "is-unavailable" : ""}>{fuelUsd == null ? "not priced" : fmtUSD(fuelUsd)}</span></div>
+                      {estimate && <div className="ve-pl-row"><span className="sz-muted">Residual · ECA · auxiliary</span><span className="sz-muted">{estimate.fuel.residualProduct} · {estimate.fuel.ecaProduct} · {estimate.fuel.distillateProduct}</span></div>}
                     </div>
-                    <div className="vy-row2">
-                      <label className="vy-field"><span>Load allowance (days)</span><input type="number" step="0.1" min="0" value={voy.loadAllowance} onChange={(e) => setVoy({ ...voy, loadAllowance: e.target.value })} /></label>
-                      <label className="vy-field"><span>Disch allowance (days)</span><input type="number" step="0.1" min="0" value={voy.dischAllowance} onChange={(e) => setVoy({ ...voy, dischAllowance: e.target.value })} /></label>
-                    </div>
-                    <div className="vy-row2">
-                      {ladenStartZones != null ? <span className="vy-leg__meta">Load port {loadInEca ? `inside ${ladenStartZones.join(", ")} ECA` : "outside every ECA"} · from the route geometry</span> : <label className="vy-check"><input type="checkbox" checked={voy.loadInEca} onChange={(e) => setVoy({ ...voy, loadInEca: e.target.checked })} /> Load port inside ECA (your assertion)</label>}
-                      {ladenEndZones != null ? <span className="vy-leg__meta">Discharge port {dischInEca ? `inside ${ladenEndZones.join(", ")} ECA` : "outside every ECA"} · from the route geometry</span> : <label className="vy-check"><input type="checkbox" checked={voy.dischInEca} onChange={(e) => setVoy({ ...voy, dischInEca: e.target.checked })} /> Discharge port inside ECA (your assertion)</label>}
-                    </div>
-                    {form.hasScrubber === "yes" && (
-                      <>
-                        <div className="vy-row2">
-                          <label className="vy-check"><input type="checkbox" checked={voy.loadOpenLoopBan} onChange={(e) => setVoy({ ...voy, loadOpenLoopBan: e.target.checked })} /> Load port bans open-loop washwater</label>
-                          <label className="vy-check"><input type="checkbox" checked={voy.dischOpenLoopBan} onChange={(e) => setVoy({ ...voy, dischOpenLoopBan: e.target.checked })} /> Discharge port bans open-loop washwater</label>
-                        </div>
-                        <div className="vy-row2">
-                          <label className="vy-check"><input type="checkbox" checked={voy.loadEuBerth} onChange={(e) => setVoy({ ...voy, loadEuBerth: e.target.checked })} /> EU berth &gt; 2 h at load</label>
-                          <label className="vy-check"><input type="checkbox" checked={voy.dischEuBerth} onChange={(e) => setVoy({ ...voy, dischEuBerth: e.target.checked })} /> EU berth &gt; 2 h at discharge</label>
-                        </div>
-                      </>
-                    )}
-                    <div className="vy-row2">
-                      <label className="vy-field"><span>Waiting at anchorage (days)</span><input type="number" step="0.5" min="0" value={voy.anchorageDays} onChange={(e) => setVoy({ ...voy, anchorageDays: e.target.value })} /></label>
-                      <label className="vy-check"><input type="checkbox" checked={voy.anchorageInEca} onChange={(e) => setVoy({ ...voy, anchorageInEca: e.target.checked })} /> Anchorage inside ECA</label>
-                    </div>
-                    {(pdaOptions.load.length > 0 || pdaOptions.disch.length > 0) && (
-                      <div className="vy-row2">
-                        <PdaPicker label="Load port DA · saved PDA estimate" options={pdaOptions.load} value={voy.pdaLoadEstimate} onChange={(id) => setVoy({ ...voy, pdaLoadEstimate: id })} />
-                        <PdaPicker label="Disch port DA · saved PDA estimate" options={pdaOptions.disch} value={voy.pdaDischEstimate} onChange={(id) => setVoy({ ...voy, pdaDischEstimate: id })} />
+                    <div>
+                      <div className="ve-pl-section">Port disbursements</div>
+                      <div className="ve-pl-row ve-pl-row--linked"><span>POL PDA, {cargo.route.polName || polCode}<small className="ve-linked-src">{voy.pdaLoadEstimate ? "from a saved Ports Cost estimate" : "manual agent figure"}</small></span>{c ? pdaMoney(c.pdaLoad, "not entered — unavailable") : <span>—</span>}</div>
+                      <div className="ve-pl-inputs">
+                        <PdaPicker label="Saved PDA · load" options={pdaOptions.load} value={voy.pdaLoadEstimate} onChange={(id) => setVo({ pdaLoadEstimate: id })} />
+                        <label className="vy-field"><span>or manual (USD)</span><input type="number" min="0" value={voy.pdaLoadEstimate ? "" : voy.pdaLoad} disabled={!!voy.pdaLoadEstimate} onChange={(e) => setVo({ pdaLoad: e.target.value })} placeholder={voy.pdaLoadEstimate ? "from the PDA estimate" : "not entered → unavailable"} aria-label="Load port DA (USD, manual)" /></label>
+                        {voy.pdaLoad.trim() !== "" && !voy.pdaLoadEstimate && <label className="vy-field vy-field--wide"><span>Reason · load DA</span><input value={voy.pdaLoadReason} onChange={(e) => setVo({ pdaLoadReason: e.target.value })} placeholder="e.g. agent proforma 3 Oct" aria-label="Load DA reason" /></label>}
                       </div>
-                    )}
-                    <div className="vy-row2">
-                      <label className="vy-field"><span>Load port DA (USD, manual)</span><input type="number" min="0" value={voy.pdaLoadEstimate ? "" : voy.pdaLoad} disabled={!!voy.pdaLoadEstimate} onChange={(e) => setVoy({ ...voy, pdaLoad: e.target.value })} placeholder={voy.pdaLoadEstimate ? "from the PDA estimate" : "not entered → unavailable"} /></label>
-                      <label className="vy-field"><span>Disch port DA (USD, manual)</span><input type="number" min="0" value={voy.pdaDischEstimate ? "" : voy.pdaDisch} disabled={!!voy.pdaDischEstimate} onChange={(e) => setVoy({ ...voy, pdaDisch: e.target.value })} placeholder={voy.pdaDischEstimate ? "from the PDA estimate" : "not entered → unavailable"} /></label>
-                    </div>
-                    {((voy.pdaLoad.trim() !== "" && !voy.pdaLoadEstimate) || (voy.pdaDisch.trim() !== "" && !voy.pdaDischEstimate)) && (
-                      <div className="vy-row2">
-                        {voy.pdaLoad.trim() !== "" && !voy.pdaLoadEstimate && <label className="vy-field"><span>Reason · load DA</span><input value={voy.pdaLoadReason} onChange={(e) => setVoy({ ...voy, pdaLoadReason: e.target.value })} placeholder="e.g. agent proforma 3 Oct" aria-label="Load DA reason" /></label>}
-                        {voy.pdaDisch.trim() !== "" && !voy.pdaDischEstimate && <label className="vy-field"><span>Reason · disch DA</span><input value={voy.pdaDischReason} onChange={(e) => setVoy({ ...voy, pdaDischReason: e.target.value })} placeholder="e.g. Ports DA calculator figure" aria-label="Discharge DA reason" /></label>}
+                      <div className="ve-pl-row"><span>POD PDA, {cargo.route.podName || podCode}<small className="ve-linked-src">{voy.pdaDischEstimate ? "from a saved Ports Cost estimate" : "manual agent figure"}</small></span>{c ? pdaMoney(c.pdaDisch, "not entered — unavailable") : <span>—</span>}</div>
+                      <div className="ve-pl-inputs">
+                        <PdaPicker label="Saved PDA · discharge" options={pdaOptions.disch} value={voy.pdaDischEstimate} onChange={(id) => setVo({ pdaDischEstimate: id })} />
+                        <label className="vy-field"><span>or manual (USD)</span><input type="number" min="0" value={voy.pdaDischEstimate ? "" : voy.pdaDisch} disabled={!!voy.pdaDischEstimate} onChange={(e) => setVo({ pdaDisch: e.target.value })} placeholder={voy.pdaDischEstimate ? "from the PDA estimate" : "not entered → unavailable"} aria-label="Disch port DA (USD, manual)" /></label>
+                        {voy.pdaDisch.trim() !== "" && !voy.pdaDischEstimate && <label className="vy-field vy-field--wide"><span>Reason · disch DA</span><input value={voy.pdaDischReason} onChange={(e) => setVo({ pdaDischReason: e.target.value })} placeholder="e.g. Ports DA calculator figure" aria-label="Discharge DA reason" /></label>}
                       </div>
-                    )}
-                    <div className="vy-muted">Port DAs: choose a saved PDA estimate for the port (a published tariff reads trusted, a partial one fallback), or enter an agent quote with its reason (labelled manual). <Link href={portsDaHref} className="sz-link">Ports DA →</Link></div>
-                    <div className="vy-row3">
-                      <label className="vy-field"><span>Insurance (USD)</span><input type="number" min="0" value={voy.insurance} onChange={(e) => setVoy({ ...voy, insurance: e.target.value })} /></label>
-                      <label className="vy-field"><span>Stevedoring (USD)</span><input type="number" min="0" value={voy.stevedoring} onChange={(e) => setVoy({ ...voy, stevedoring: e.target.value })} /></label>
-                      <label className="vy-field"><span>Other (USD)</span><input type="number" min="0" value={voy.other} onChange={(e) => setVoy({ ...voy, other: e.target.value })} /></label>
-                    </div>
-                    <div className="vy-row2">
-                      <label className="vy-field"><span>Freight (USD/MT)</span><input type="number" step="0.01" min="0" value={voy.freight} onChange={(e) => setVoy({ ...voy, freight: e.target.value })} /></label>
-                      <label className="vy-field"><span>Commission (%)</span><input type="number" step="0.25" min="0" value={voy.commission} onChange={(e) => setVoy({ ...voy, commission: e.target.value })} /></label>
+                      <div className="ve-pl-row ve-pl-row--linked"><span>Suez Canal transit{suezRequired && <small className="ve-linked-src">from Suez Canal Toll</small>}</span>{c ? (c.canal.required ? pdaMoney(c.canal, "unavailable") : <span className="is-muted">Not applicable</span>) : <span>—</span>}</div>
+                      <div className="vy-muted">Choose a saved Ports Cost estimate per port (a published tariff reads trusted, a partial one fallback), or enter an agent quote with its reason (labelled manual). <Link href={portsDaHref} className="sz-link">Ports Cost Estimator →</Link></div>
+
+                      <div className="ve-pl-section">Other</div>
+                      <div className="ve-pl-row"><span>Insurance / war risk</span><input className="ve-inline" type="number" min="0" value={voy.insurance} onChange={(e) => setVo({ insurance: e.target.value })} placeholder="0" aria-label="Insurance (USD)" /></div>
+                      <div className="ve-pl-row"><span>Stevedoring</span><input className="ve-inline" type="number" min="0" value={voy.stevedoring} onChange={(e) => setVo({ stevedoring: e.target.value })} placeholder="0" aria-label="Stevedoring (USD)" /></div>
+                      <div className="ve-pl-row"><span>Other</span><input className="ve-inline" type="number" min="0" value={voy.other} onChange={(e) => setVo({ other: e.target.value })} placeholder="0" aria-label="Other (USD)" /></div>
                     </div>
                   </div>
+                  <div className="ve-pl-row is-grand"><span>GROSS VOYAGE EXPENSES{c && !c.complete ? <small className="is-unavailable"> computable parts</small> : null}</span><span className={knownUsd(c?.voyageCostsUsd) == null ? "is-unavailable" : ""}>{knownUsd(c?.voyageCostsUsd) == null ? "not computable" : fmtUSD(c?.voyageCostsUsd)}</span></div>
+                  {estimate && c && <div className="ve-pl-row ve-pl-row--linked"><span>Running cost{assumed("running")}<small className="sz-muted">crew ${settings.opex.crewUsdDay} + maintenance ${settings.opex.maintenanceUsdDay} = ${estimate.opex.baseUsdDay}/day × class {estimate.opex.vesselClass} ({estimate.opex.multiplier}) × {fmtDays(estimate.days.total)} days</small></span><span>{fmtUSD(c.opexUsd)}</span></div>}
+                  <div className="ve-pl-row is-subtotal"><span>Total voyage cost incl. running cost</span><span>{fmtUSD(c?.totalUsd)}{c && !c.complete ? <small className="is-unavailable"> incomplete</small> : null}</span></div>
                 </div>
-              </aside>
 
-              <main className="vy-main">{estimate && <Results estimate={estimate} settings={settings} />}</main>
+                <div className="ve-pl-card">
+                  <div className="ve-pl-card__title">Revenue</div>
+                  {estimate?.revenue ? (
+                    <>
+                      <div className="ve-pl-row"><span>Cargo qty × Freight rate</span><span className="is-auto">{qty.toLocaleString("en-US")} MT × ${voy.freight} = {fmtUSD(estimate.revenue.grossFreightUsd)}</span></div>
+                      <div className="ve-pl-row"><span>Less: commission ({voy.commission || 0}%)</span><span className="is-auto">−{fmtUSD(estimate.revenue.commissionUsd)}</span></div>
+                      <div className="ve-pl-row is-grand"><span>NET FREIGHT</span><span>{fmtUSD(estimate.revenue.netFreightUsd)}</span></div>
+                      <div className="ve-spacer" />
+                      <div className="ve-pl-section">Quick analysis</div>
+                      <div className="ve-pl-row"><span>TCE (net − voyage costs) ÷ days</span><span className="is-auto">{fmtUSD(estimate.revenue.tceUsdDay)} / day</span></div>
+                      <div className="ve-pl-row"><span>Net per voyage day</span><span className="is-auto">{estimate.days.total > 0 ? fmtUSD(estimate.revenue.netFreightUsd / estimate.days.total) : "—"}</span></div>
+                      <div className="ve-pl-row"><span>Bunker share of expenses</span><span className="is-auto">{pct(fuelUsd, c?.voyageCostsUsd)}</span></div>
+                      <div className="ve-pl-row"><span>PDA share of expenses</span><span className="is-auto">{c && c.pdaLoad.usd != null && c.pdaDisch.usd != null ? pct(c.pdaLoad.usd + c.pdaDisch.usd, c.voyageCostsUsd) : "—"}</span></div>
+                      <div className="ve-pl-row is-subtotal"><span>Result after running cost</span><span className={estimate.revenue.resultAfterOpexUsd >= 0 ? "is-auto" : "is-amber"}>{fmtUSD(estimate.revenue.resultAfterOpexUsd)}</span></div>
+                    </>
+                  ) : <div className="ve-pl-row"><span className="is-unavailable">Enter a freight rate on the cargo card to see the revenue and TCE.</span><span>—</span></div>}
+                </div>
+              </div>
+
+              {estimate && (estimate.assumptions.length > 0 || estimate.warnings.length > 0) && (
+                <div className="vy-notes">
+                  {estimate.warnings.length > 0 && <><h4>Warnings</h4><ul className="is-warn">{estimate.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></>}
+                  {estimate.assumptions.length > 0 && <><h4>Assumptions</h4><ul>{estimate.assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul></>}
+                </div>
+              )}
+              <div className="ve-econ__foot">
+                <span>Green is retrieved from governed data. Blue underline is editable for this estimate. Amber is a fallback, manual or missing figure, never added silently.</span>
+                <span>Estimate only · {estimate?.algorithmVersion ?? "voyage engine"} · settings {estimate?.settingsSource ?? settingsSource}. Saved estimates are recomputed on the server from governed data and stored immutably with their snapshots.</span>
+              </div>
             </div>
           )}
         </div>
@@ -585,75 +684,18 @@ function statusSummary(e: VoyageEstimate): string {
   return (e.status === "unavailable" ? "The voyage cannot be priced: " : "Priced with gaps: ") + (parts.join(" · ") || "see the notes");
 }
 
-function Results({ estimate, settings }: { estimate: VoyageEstimate; settings: VoyageSettings }) {
-  const c = estimate.costs;
-  const money = (v: { usd: number | null; status: ComponentStatus }, missingText: string) => v.usd == null ? <span className="is-unavailable">{missingText}</span> : <span className={v.status === "trusted" ? "is-auto" : v.status === "manual" ? "is-manual" : "is-fallback"}>{fmtUSD2(v.usd)}{v.status !== "trusted" ? ` · ${v.status}` : ""}</span>;
-  // the "platform assumption" badge on every figure that rests on an unconfirmed constant (B2O-020 P2)
-  // one or several areas: a total that rests on sea, port and canal time names every constant behind it (B2O-028)
-  const assumed = (...areas: AssumptionArea[]) => {
-    const used = areas.flatMap((a) => assumptionsFor(a, estimate.platformAssumptions)).filter((u, i, all) => all.findIndex((x) => x.key === u.key) === i);
-    return used.length ? <span className="vy-badge vy-badge--fallback" title={`Platform assumption, not yet confirmed by the owner: ${used.map((u) => u.label).join("; ")}`}>platform assumption</span> : null;
-  };
-  return (
-    <>
-      <div className={`vy-status vy-status--${estimate.status}`}><span className="vy-status__k">{estimate.status}</span><span>{statusSummary(estimate)}</span></div>
-      {estimate.status === "invalid" && estimate.errors && <div className="vy-unavailable"><b>Fix the input:</b><ul className="vy-unavailable-list">{estimate.errors.map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
-      {estimate.unavailable.length > 0 && <div className="vy-unavailable"><b>Not priced:</b><ul className="vy-unavailable-list">{estimate.unavailable.map((u) => <li key={u.code}>{u.reason}</li>)}</ul></div>}
-      <div className="ve-results">
-        <div className="ve-result"><div className="ve-result__k">Total voyage days{assumed("sea", "port", "canal")}</div><div className="ve-result__v ve-result__v--navy">{fmtDays(estimate.days.total)}</div><div className="ve-note-sub">sea {fmtDays(estimate.days.seaBallast + estimate.days.seaLaden)} · port {fmtDays(estimate.days.portLoad + estimate.days.portDisch)} · canal {fmtDays(estimate.days.canalTransit + estimate.days.canalAnchorage)} · wait {fmtDays(estimate.days.anchorage)} · margin {estimate.seaMarginPct}%</div></div>
-        <div className="ve-result"><div className="ve-result__k">Fuel cost</div><div className="ve-result__v ve-result__v--amber">{fmtUSD(c.fuel.usd)}</div><div className="ve-note-sub">{fmtMT(estimate.fuel.pricedMt)} of {fmtMT(estimate.fuel.totalMt)} MT priced{estimate.fuel.ecaMt > 0 ? ` · ${fmtMT(estimate.fuel.ecaMt)} MT in ECA` : ""} · {c.fuel.status}</div></div>
-        <div className="ve-result"><div className="ve-result__k">Total voyage cost</div><div className="ve-result__v ve-result__v--navy">{fmtUSD(c.totalUsd)}</div><div className="ve-note-sub">{c.complete ? <>voyage costs {fmtUSD(c.voyageCostsUsd)} + running {fmtUSD(c.opexUsd)}</> : <span className="is-unavailable">incomplete: {estimate.unavailable.length} part{estimate.unavailable.length > 1 ? "s" : ""} excluded</span>}</div></div>
-        <div className="ve-result ve-result--tce"><div className="ve-result__k">{estimate.revenue ? "TCE estimate" : "Running cost / day"}</div><div className="ve-result__v">{estimate.revenue ? fmtUSD(estimate.revenue.tceUsdDay) : fmtUSD(estimate.opex.usdDay)}<span className="ve-result__unit">/day</span></div><div className="ve-note-sub">{estimate.revenue ? `net freight ${fmtUSD(estimate.revenue.netFreightUsd)}${c.complete ? "" : " · on an incomplete cost base"}` : `class ${estimate.opex.vesselClass}${estimate.opex.classAssumed ? " (assumed)" : ""} × ${estimate.opex.multiplier}`}</div></div>
-      </div>
+// The "platform assumption" badge on every figure that rests on an unconfirmed constant (B2O-020 P2): one or several
+// areas — a total that rests on sea, port and canal time names every constant behind it (B2O-028).
+function assumedBadge(estimate: VoyageEstimate, areas: AssumptionArea[]) {
+  const used = areas.flatMap((a) => assumptionsFor(a, estimate.platformAssumptions)).filter((u, i, all) => all.findIndex((x) => x.key === u.key) === i);
+  return used.length ? <span className="vy-badge vy-badge--fallback" title={`Platform assumption, not yet confirmed by the owner: ${used.map((u) => u.label).join("; ")}`}>platform assumption</span> : null;
+}
 
-      <div className="ve-pl-card" style={{ marginTop: 16 }}>
-        <div className="ve-pl-card__title">Legs <span className="sz-muted">· sea margin {estimate.seaMarginPct}% — {estimate.seaMarginBasis}</span>{assumed("seaMargin")}</div>
-        <table className="vy-table"><thead><tr><th>Leg</th><th>From → To</th><th className="num">NM</th><th className="num">ECA NM</th><th className="num">Days</th><th>Fuel</th><th>Status</th></tr></thead>
-          <tbody>{estimate.legs.map((l) => <tr key={l.key}><td>{l.label}<small>{l.note}</small></td><td>{l.from ?? "—"}{l.to && l.to !== l.from ? ` → ${l.to}` : ""}</td><td className="num">{l.kind === "sea" || l.kind === "canal" ? fmtNM(l.nm) : "—"}</td><td className="num">{l.ecaShareKnown ? (l.ecaNm ? fmtNM(l.ecaNm) : "0") : "?"}</td><td className="num">{fmtDays(l.days)}{legArea(l.kind) ? assumed(legArea(l.kind)!) : null}</td><td>{l.burns.map((b) => `${b.productKey} ${fmtMT(b.mt)}`).join(" · ") || "—"}</td><td><span className={`vy-badge vy-badge--${BADGE[l.status]}`}>{l.status}</span></td></tr>)}
-            <tr><td><b>Total</b></td><td /><td className="num"><b>{fmtNM(estimate.legs.reduce((a, l) => a + (l.kind === "sea" || l.kind === "canal" ? l.nm ?? 0 : 0), 0))}</b></td><td className="num"><b>{fmtNM(estimate.legs.reduce((a, l) => a + (l.ecaNm ?? 0), 0))}</b></td><td className="num"><b>{fmtDays(estimate.days.total)}</b></td><td><b>{fmtMT(estimate.fuel.totalMt)} MT</b></td><td /></tr></tbody></table>
-      </div>
-
-      <div className="ve-pl-grid">
-        <div className="ve-pl-card">
-          <div className="ve-pl-card__title">Fuel by product <span className="sz-muted">· {c.fuel.status}</span></div>
-          {estimate.fuel.lines.map((f) => <div key={f.productKey} className="ve-pl-row ve-pl-row--linked"><span>{f.productKey} · {fmtMT(f.mt)} MT × {f.usdMt != null ? `$${f.usdMt}/MT` : "no price"}<small className="sz-muted">{f.status === "trusted" ? `Fuel Bar average${f.pricePort ? ` @ ${f.pricePort}` : ""}${f.priceScope ? ` (${f.priceScope})` : ""}${f.priceAsOf ? ` · ${f.priceAsOf}` : ""}` : f.status === "fallback" ? "admin fallback price — no live index for this product" : "unavailable — not in the total"}</small></span><span className={f.status === "trusted" ? "is-auto" : f.status === "fallback" ? "is-fallback" : "is-unavailable"}>{fmtUSD2(f.usd)}</span></div>)}
-          <div className="ve-pl-row is-subtotal"><span>Total fuel</span><span>{fmtUSD2(c.fuel.usd)}</span></div>
-          <div className="ve-pl-row"><span>Residual product</span><span>{estimate.fuel.residualProduct}</span></div>
-          <div className="ve-pl-row"><span>Inside ECA / compliant ports</span><span>{estimate.fuel.ecaProduct}</span></div>
-          <div className="ve-pl-row"><span>Auxiliary distillate</span><span>{estimate.fuel.distillateProduct}</span></div>
-        </div>
-        <div className="ve-pl-card">
-          <div className="ve-pl-card__title">Voyage costs</div>
-          <div className="ve-pl-row"><span>Fuel</span><span>{fmtUSD2(c.fuel.usd)}</span></div>
-          <div className="ve-pl-row ve-pl-row--linked"><span>Suez Canal transit<small className="sz-muted">from the Suez calculator</small></span>{c.canal.required ? money(c.canal, "unavailable") : <span className="is-muted">not required</span>}</div>
-          <div className="ve-pl-row"><span>Load port DA</span>{money(c.pdaLoad, "not entered — unavailable")}</div>
-          <div className="ve-pl-row"><span>Discharge port DA</span>{money(c.pdaDisch, "not entered — unavailable")}</div>
-          <div className="ve-pl-row"><span>Insurance, stevedoring, other</span><span>{fmtUSD2(c.extrasUsd)}</span></div>
-          <div className="ve-pl-row is-subtotal"><span>Voyage costs{c.complete ? "" : " (computable parts)"}</span><span>{fmtUSD2(c.voyageCostsUsd)}</span></div>
-          <div className="ve-pl-row ve-pl-row--linked"><span>Running cost{assumed("running")}<small className="sz-muted">crew ${settings.opex.crewUsdDay} + maintenance ${settings.opex.maintenanceUsdDay} = ${estimate.opex.baseUsdDay}/day × class {estimate.opex.vesselClass} ({estimate.opex.multiplier}) × {fmtDays(estimate.days.total)} days</small></span><span>{fmtUSD2(c.opexUsd)}</span></div>
-          <div className="ve-pl-row is-grand"><span>Total voyage cost</span><span>{fmtUSD2(c.totalUsd)}{c.complete ? "" : <small className="is-unavailable"> incomplete</small>}</span></div>
-        </div>
-        {estimate.revenue && (
-          <div className="ve-pl-card">
-            <div className="ve-pl-card__title">Revenue</div>
-            <div className="ve-pl-row"><span>Gross freight</span><span>{fmtUSD2(estimate.revenue.grossFreightUsd)}</span></div>
-            <div className="ve-pl-row"><span>Less commission</span><span>−{fmtUSD2(estimate.revenue.commissionUsd)}</span></div>
-            <div className="ve-pl-row is-subtotal"><span>Net freight</span><span>{fmtUSD2(estimate.revenue.netFreightUsd)}</span></div>
-            <div className="ve-pl-row"><span>TCE (net − voyage costs) ÷ days</span><span>{fmtUSD2(estimate.revenue.tceUsdDay)} / day</span></div>
-            <div className="ve-pl-row is-grand"><span>Result after running cost</span><span className={estimate.revenue.resultAfterOpexUsd >= 0 ? "is-auto" : "is-amber"}>{fmtUSD2(estimate.revenue.resultAfterOpexUsd)}</span></div>
-          </div>
-        )}
-      </div>
-
-      {(estimate.assumptions.length > 0 || estimate.warnings.length > 0) && (
-        <div className="vy-notes">
-          {estimate.warnings.length > 0 && <><h4>Warnings</h4><ul className="is-warn">{estimate.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></>}
-          {estimate.assumptions.length > 0 && <><h4>Assumptions</h4><ul>{estimate.assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul></>}
-        </div>
-      )}
-      <div className="ve-note-line">Estimate only · {estimate.algorithmVersion} · settings {estimate.settingsSource}. Saved estimates are recomputed on the server from governed data and stored immutably with their snapshots.</div>
-    </>
-  );
+/** A cost that may be governed, fallback, manual or missing — never shown as zero when unknown. */
+function pdaMoney(v: { usd: number | null; status: ComponentStatus }, missingText: string) {
+  return v.usd == null
+    ? <span className="is-unavailable">{missingText}</span>
+    : <span className={v.status === "trusted" ? "is-auto" : v.status === "manual" ? "is-manual" : "is-fallback"}>{fmtUSD2(v.usd)}{v.status !== "trusted" ? ` · ${v.status}` : ""}</span>;
 }
 
 function blankProfile(vessel?: VoyageVesselOption | null): ProfileForm {

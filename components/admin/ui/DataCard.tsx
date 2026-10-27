@@ -11,6 +11,7 @@ export function DataCard({
   title,
   sub,
   group,
+  badge,
   kvs,
   incomplete,
   incompleteLabel = "Incomplete",
@@ -20,6 +21,8 @@ export function DataCard({
   title: React.ReactNode;
   sub?: React.ReactNode;
   group?: GroupChip;
+  /** a status badge at the head's right (e.g. a sponsor's freshness) */
+  badge?: React.ReactNode;
   kvs?: CardKV[];
   incomplete?: boolean;
   incompleteLabel?: string;
@@ -37,6 +40,7 @@ export function DataCard({
           {sub != null && <div className="adm-data-card__sub">{sub}</div>}
         </div>
         {group && <span className={`adm-data-card__group is-${group.variant}`}>{group.label}</span>}
+        {badge}
       </div>
       {kvs && kvs.length > 0 && (
         <div className="adm-data-card__grid">

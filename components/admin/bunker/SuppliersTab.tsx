@@ -70,8 +70,8 @@ function MemberForm({ supplierId }: { supplierId: string }) {
   );
 }
 
-export function SuppliersTab({ dash, canEdit, portChoices }: { dash: AdminBunkerDashboard; canEdit: boolean; portChoices: PortChoice[] }) {
-  const alerts = dash.alerts.filter((a) => a.kind !== "pending_approval");
+/** Sponsor access: the target of each card's "Manage access" (members, contacts, ports, flags). */
+export function SponsorAccess({ dash, canEdit, portChoices }: { dash: AdminBunkerDashboard; canEdit: boolean; portChoices: PortChoice[] }) {
   const placeholders = dash.suppliers.filter(isPlaceholder);
   return (
     <>
@@ -91,25 +91,8 @@ export function SuppliersTab({ dash, canEdit, portChoices }: { dash: AdminBunker
           </ol>
         </section>
       )}
-      {alerts.length > 0 && (
-        <section className="adm-card" style={{ borderLeft: "2px solid var(--adm-amber-bd)" }}>
-          <div className="adm-card__head"><span className="adm-card__title">Freshness alerts</span></div>
-          <ul className="adm-list">
-            {alerts.map((a) => (
-              <li key={a.supplierId} className="adm-list__row">
-                <span className={`adm-badge ${a.kind === "stale" ? "stale" : "rejected"}`}>
-                  {a.kind === "stale" ? "Stale" : a.kind === "expired" ? "Expired" : "No live quote"}
-                </span>
-                <span className="adm-list__title">{a.supplierName}</span>
-                <span className="adm-list__meta">last live quote {ago(a.latestQuoteAt)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {dash.suppliers.map((s) => (
-        <details key={s.id} className="adm-card">
+        <details key={s.id} id={`sponsor-${s.id}`} className="adm-card adm-sponsor-access">
           <summary style={{ cursor: "pointer", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <strong>{s.name}</strong>
             <span className={`adm-badge ${s.status === "enabled" ? "active" : "inactive"}`}>{s.status === "enabled" ? "Enabled" : "Disabled"}</span>
@@ -148,15 +131,19 @@ export function SuppliersTab({ dash, canEdit, portChoices }: { dash: AdminBunker
         </details>
       ))}
 
-      {canEdit && (
-        <section className="adm-card">
-          <div className="adm-card__head">
-            <span className="adm-card__title">Add a supplier</span>
-            <span className="adm-card__sub">First-hand physical suppliers only. Access is by invitation: link a member account after saving.</span>
-          </div>
-          <SupplierForm portChoices={portChoices} />
-        </section>
-      )}
     </>
+  );
+}
+
+/** The header's "+ Add sponsor" lands here. */
+export function AddSponsor({ portChoices }: { portChoices: PortChoice[] }) {
+  return (
+    <section className="adm-card" id="add-sponsor">
+      <div className="adm-card__head">
+        <span className="adm-card__title">Add a sponsor</span>
+        <span className="adm-card__sub">First-hand physical suppliers only. Access is by invitation: link a member account after saving.</span>
+      </div>
+      <SupplierForm portChoices={portChoices} />
+    </section>
   );
 }
