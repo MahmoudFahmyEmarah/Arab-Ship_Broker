@@ -77,7 +77,7 @@ export interface SaveLlmInput {
   makeActive?: boolean;
 }
 
-export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string }>> {
+export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string; notActivated?: string }>> {
   if (!input.label?.trim()) return { success: false, error: "Give the key a label." };
   if (!input.vendor?.trim() || !input.model?.trim()) return { success: false, error: "Vendor and model are required." };
   if (input.id && !UUID_RE.test(input.id)) return { success: false, error: "Invalid key id." };
@@ -93,12 +93,24 @@ export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ i
       p_model: input.model.trim(),
       p_base_url: input.baseUrl?.trim() || null,
       p_secret: input.secret?.trim() || null,
-      p_make_active: input.makeActive ?? false,
+      // activation is never part of the save: the key is saved first, then activated only if the provider
+      // probe passes (C2O-177) — the same gate as the Activate button
+      p_make_active: false,
     });
     if (error) return { success: false, error: error.message };
     await logAudit(c, { actor: who, action: "settings.llm.save", targetKind: "settings", targetId: String(data), summary: `${input.id ? "Updated" : "Added"} LLM key “${input.label.trim()}” (${input.vendor.trim()} · ${input.model.trim()})${input.secret?.trim() ? " — secret rotated" : ""}${input.makeActive ? " — made active" : ""}`, detail: { vendor: input.vendor.trim(), model: input.model.trim(), baseUrl: input.baseUrl?.trim() || null, secretChanged: !!input.secret?.trim(), makeActive: !!input.makeActive } });
+    let notActivated: string | undefined;
+    if (input.makeActive) {
+      const probe = await probeLlmCredential(c, who, String(data));
+      if (!probe.success) notActivated = probe.error;
+      else {
+        const { error: aErr } = await c.rpc("set_active_llm_credential", { p_id: data });
+        if (aErr) notActivated = aErr.message;
+        else await logAudit(c, { actor: who, action: "settings.llm.activate", targetKind: "settings", targetId: String(data), summary: "Switched the active LLM key (after a passing provider test)" });
+      }
+    }
     revalidatePath("/admin/data-sync");
-    return { success: true, data: { id: data as string } };
+    return { success: true, data: { id: data as string, ...(notActivated ? { notActivated } : {}) } };
   } catch (e) {
     return fail(e, "Could not save the key.");
   }
@@ -108,6 +120,9 @@ export async function activateLlmCredential(id: string): Promise<Result> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid key id." };
   try {
     const { c, who } = await adminCtx();
+    // never activate an untested key: the same provider/model probe as Test must pass first (C2O-177)
+    const probe = await probeLlmCredential(c, who, id);
+    if (!probe.success) return { success: false, error: `Not activated — ${probe.error}` };
     const { error } = await c.rpc("set_active_llm_credential", { p_id: id });
     if (error) return { success: false, error: error.message };
     await logAudit(c, { actor: who, action: "settings.llm.activate", targetKind: "settings", targetId: id, summary: "Switched the active LLM key" });
@@ -143,6 +158,21 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid key id." };
   try {
     const { c, who } = await adminCtx();
+    return await probeLlmCredential(c, who, id);
+  } catch (e) {
+    unstable_rethrow(e);
+    const msg = e instanceof Error ? e.message : "Test failed.";
+    return { success: false, error: `Could not reach the provider: ${msg}` };
+  }
+}
+
+type AdminDb = Awaited<ReturnType<typeof adminCtx>>["c"];
+type AdminWho = Awaited<ReturnType<typeof adminCtx>>["who"];
+
+/** The one provider/model check behind Test, Activate and save-with-activate (C2O-177): a key becomes the
+ * classifier key only after this succeeds (modelFound true, or null for a gateway that cannot confirm ids). */
+async function probeLlmCredential(c: AdminDb, who: AdminWho, id: string): Promise<Result<{ status: number; model: string; modelFound: boolean | null }>> {
+  try {
     const { data: meta, error: mErr } = await c
       .from("llm_credential").select("vendor, model, base_url").eq("id", id).maybeSingle();
     if (mErr) return { success: false, error: mErr.message };

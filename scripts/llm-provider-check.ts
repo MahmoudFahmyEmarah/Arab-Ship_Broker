@@ -67,6 +67,14 @@ assert.match(legacyUi, /href="\/admin\/data-sync"/, "the legacy page points to t
 assert.match(syncActions, /const importModel = catalogueModel\(ai\.vendor \|\| "anthropic", ai\.model\);/, "the legacy import maps a retired id onto the catalogue");
 assert.match(syncActions, /p_make_active: false,/, "every legacy import is inactive until Test");
 assert.doesNotMatch(syncActions, /p_make_active: true/, "no import path activates an unverified key");
+// C2O-177: Test, Activate and save-with-activate share one provider/model probe; nothing activates without it
+assert.match(syncActions, /async function probeLlmCredential\(/, "one private probe helper");
+assert.match(syncActions, /export async function testLlmCredential[\s\S]*?return await probeLlmCredential\(c, who, id\);/, "Test runs the probe");
+assert.match(syncActions, /export async function activateLlmCredential[\s\S]*?const probe = await probeLlmCredential\(c, who, id\);\s*if \(!probe\.success\) return \{ success: false, error: `Not activated/, "Activate refuses unless the probe passes");
+assert.equal((syncActions.match(/c\.rpc\("set_active_llm_credential"/g) ?? []).length, 2, "only Activate and save-with-activate call set_active_llm_credential");
+assert.match(syncActions, /if \(input\.makeActive\) \{\s*const probe = await probeLlmCredential\(c, who, String\(data\)\);/, "save-with-activate probes before activating");
+assert.doesNotMatch(syncActions, /p_make_active: input\.makeActive/, "the save RPC never activates by itself");
+assert.match(src("components/admin/data-sync/SettingsView.tsx"), /if \(r\.data\.notActivated\) toast\.warning\(/, "the form says when a saved key was not activated");
 // C2O-176 P1, behaviourally: a stored plaintext key blocks the save; otherwise the key written is always ""
 assert.equal(legacyKeyForSave("sk-ant-legacy").ok, false);
 assert.equal(legacyKeyForSave("  ").ok, true);

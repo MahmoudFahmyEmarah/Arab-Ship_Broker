@@ -195,7 +195,9 @@ function KeyModal({ cred, onClose, onSaved }: {
     });
     setSaving(false);
     if (!r.success) { toast.error(r.error); return; }
-    toast.success(cred ? "Key updated." : "Key added and encrypted.");
+    // activation runs the same provider/model test as the Test button; a failing key is saved but not activated
+    if (r.data.notActivated) toast.warning(`${cred ? "Key updated" : "Key added"}, but NOT made active — ${r.data.notActivated}`);
+    else toast.success(cred ? "Key updated." : "Key added and encrypted.");
     onSaved();
   };
 
