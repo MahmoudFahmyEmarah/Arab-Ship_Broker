@@ -1,0 +1,109 @@
+/* da-calculator/port-particulars.css — the one-page-per-port shell.
+   Sits on top of port-dossier.css (pdr-*) which carries the section/field/table
+   vocabulary. This file adds only the tab bar, the arm strip and status dots. */
+
+/* ── Tab bar ──────────────────────────────────────────────────────────── */
+.pp-tabs { display: flex; align-items: stretch; gap: 2px; padding: 0 24px; background: var(--asb-white); border-bottom: var(--bd); position: sticky; top: 0; z-index: 4; overflow-x: auto; }
+.pp-tab { display: flex; align-items: center; gap: 7px; padding: 10px 14px 9px; border: none; background: none; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--asb-gray-500); border-bottom: 2px solid transparent; white-space: nowrap; }
+.pp-tab:hover { color: var(--asb-navy); background: var(--asb-gray-50); }
+.pp-tab.is-on { color: var(--asb-navy); border-bottom-color: var(--asb-navy); }
+.pp-tab__c { font-size: 10px; font-weight: 700; color: var(--asb-faint); font-variant-numeric: tabular-nums; }
+.pp-tab.is-on .pp-tab__c { color: var(--asb-blue); }
+.pp-tab.is-ghost { color: var(--asb-gray-200); font-weight: 500; cursor: default; }
+.pp-tab.is-ghost:hover { background: none; color: var(--asb-gray-200); }
+
+/* ── Arm strip ────────────────────────────────────────────────────────── */
+.pp-arm { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 12px 0 16px; }
+.pp-arm__tag { font-size: 9.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--asb-blue); background: var(--asb-blue-light); border-radius: 3px; padding: 3px 8px; white-space: nowrap; }
+.pp-arm__tag.is-shared { color: var(--asb-gray-700); background: var(--asb-gray-100); }
+.pp-arm__b { font-size: 12px; color: var(--asb-gray-700); line-height: 1.6; max-width: 82ch; text-wrap: pretty; }
+
+/* ── Status dots (the protocol, visible on every slot) ────────────────── */
+.pp-dot { width: 7px; height: 7px; border-radius: 99px; flex-shrink: 0; display: inline-block; background: var(--asb-gray-200); }
+.pp-dot.is-extracted { background: #6A4FB3; }
+.pp-dot.is-review { background: var(--asb-amber); }
+.pp-dot.is-verified { background: var(--asb-green); }
+.pp-dot.is-disputed { background: #C0392B; }
+.pp-dot.is-superseded { background: var(--asb-gray-400); }
+.pp-dot.is-empty { background: none; border: 1px solid var(--asb-gray-200); }
+
+/* ── Protocol lifecycle strip ─────────────────────────────────────────── */
+.pp-proto { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px; margin-top: 12px; }
+.pp-proto__c { border: 0.5px solid var(--asb-line); border-radius: 8px; padding: 11px 12px; background: var(--asb-white); }
+.pp-proto__h { display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; color: var(--asb-navy); }
+.pp-proto__d { font-size: 10.5px; color: var(--asb-gray-700); line-height: 1.55; margin-top: 5px; text-wrap: pretty; }
+
+/* ── Coverage bar in the record header ────────────────────────────────── */
+.pp-cov { display: flex; height: 5px; border-radius: 99px; overflow: hidden; background: var(--asb-gray-100); margin-top: 6px; }
+.pp-cov i { display: block; height: 100%; }
+.pp-legend2 { display: flex; gap: 14px; flex-wrap: wrap; font-size: 10.5px; color: var(--asb-gray-700); align-items: center; }
+.pp-legend2 span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── Editable cells ───────────────────────────────────────────────────── */
+.pp-val { font-size: 11.5px; color: var(--asb-navy); font-weight: 500; }
+.pp-val em { font-style: normal; color: var(--asb-gray-500); font-size: 10.5px; }
+.pp-val.is-empty { color: var(--asb-gray-200); }
+.pp-fixed { font-size: 11.5px; color: var(--asb-gray-700); font-weight: 500; }
+/* Paid-user record: published values only, plus the one honest line about what
+   is verified, and a challenge action on any value he doubts. */
+.pdr-role { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--asb-blue); background: var(--asb-blue-light); padding: 4px 9px; border-radius: 5px; white-space: nowrap; }
+.pdr-trust { display: flex; align-items: flex-start; gap: 11px; padding: 11px 15px; margin: 0 0 14px; background: var(--asb-white); border: .5px solid var(--asb-line); border-radius: 10px; }
+.pdr-trust__t { font-size: 11.5px; line-height: 1.6; color: var(--asb-gray-700); text-wrap: pretty; flex: 1; }
+.pdr-trust__t b { color: var(--asb-navy); }
+.pdr-ret { display: flex; align-items: center; gap: 12px; padding: 9px 14px; margin: 0 0 12px; background: var(--asb-blue-light); border-radius: 8px; font-size: 11.5px; color: var(--asb-gray-700); }
+.pdr-ret b { color: var(--asb-navy); }
+.pdr-ret button { margin-left: auto; }
+.pdr-f__v { display: flex; align-items: baseline; gap: 8px; justify-content: flex-end; }
+.pdr-chal { font: inherit; font-size: 10px; font-weight: 600; padding: 1px 6px; border: .5px solid var(--asb-gray-200); border-radius: 4px; background: var(--asb-white); color: var(--asb-gray-500); cursor: pointer; opacity: 0; white-space: nowrap; }
+.pdr-f:hover .pdr-chal { opacity: 1; }
+.pdr-chal:hover { border-color: var(--asb-blue); color: var(--asb-blue); }
+.pdr-chal.is-on { opacity: 1; cursor: default; border-color: var(--asb-amber); color: var(--asb-amber); background: var(--asb-amber-bg); }
+.pdr-chal__ask { display: inline-flex; min-width: 210px; }
+.pdr-tbl tr.is-hit td { background: var(--asb-blue-light); }
+/* Paid view: the status vocabulary is stated, not hidden, and the Status cell
+   reads as a labelled state rather than a dropdown he cannot use. */
+.pdr-ctl.is-paid { padding-top: 2px; }
+.pdr-ctl__k { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--asb-faint); }
+.pdr-tbl .pp-state { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+/* Pattern additions used by record-shell: no rail on short tabs, sideways
+   scroll with a pinned first column on wide tables. */
+.pdr-wrap.is-norail { grid-template-columns: minmax(0, 1fr); }
+.pp-scrollx { overflow-x: auto; max-width: 100%; }
+.pp-scrollx .pdr-tbl { min-width: 940px; }
+.pdr-tbl.pp-sticky1 td:first-child, .pdr-tbl.pp-sticky1 th:first-child { position: sticky; left: 0; z-index: 2; background: var(--asb-white); box-shadow: 1px 0 0 var(--asb-gray-100); }
+.pdr-tbl.pp-sticky1 thead th:first-child { z-index: 3; background: var(--asb-gray-50); }
+.pdr-in.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.pp-sel { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--asb-gray-500) 50%), linear-gradient(135deg, var(--asb-gray-500) 50%, transparent 50%); background-position: calc(100% - 13px) 52%, calc(100% - 9px) 52%; background-size: 4px 4px, 4px 4px; background-repeat: no-repeat; padding-right: 24px; cursor: pointer; }
+.pp-sel.is-new { border-color: #6A4FB3; color: #6A4FB3; }
+.pp-colname { font-size: 10.5px; font-weight: 700; padding: 3px 6px; min-width: 74px; }
+.pp-th-act, .pp-td-act { width: 26px; }
+
+/* multi-select chips */
+.pp-multi { display: flex; flex-wrap: wrap; gap: 5px; }
+.pp-opt { font: inherit; font-size: 10.5px; font-weight: 600; color: var(--asb-gray-700); background: var(--asb-white); border: 0.5px solid var(--asb-line); border-radius: 99px; padding: 3px 9px; cursor: pointer; }
+.pp-opt:hover { border-color: var(--asb-blue); color: var(--asb-blue); }
+.pp-opt.is-on { background: var(--asb-navy); border-color: var(--asb-navy); color: #fff; }
+.pp-opt.is-new { border-style: dashed; border-color: #6A4FB3; color: #6A4FB3; }
+.pp-opt.is-on.is-new { background: #6A4FB3; color: #fff; }
+.pp-opt.is-add { display: inline-flex; align-items: center; gap: 4px; color: var(--asb-blue); border-style: dashed; }
+.pp-newopt { max-width: 190px; font-size: 10.5px; padding: 3px 8px; }
+
+/* ── Row & instance actions ───────────────────────────────────────────── */
+.pp-act { display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 10px; font-weight: 600; color: var(--asb-gray-400); background: none; border: none; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
+.pp-act:hover { color: #C0392B; background: #FDECEC; }
+.pp-act.is-undo { color: var(--asb-blue); }
+.pp-act.is-undo:hover { color: var(--asb-navy); background: var(--asb-gray-50); }
+.pp-act.is-locked { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--asb-gray-200); cursor: default; }
+.pp-listrow { display: flex; align-items: center; gap: 6px; border-bottom: none !important; }
+.pp-listrow .pdr-in { flex: 1; }
+
+/* ── Repeating instances ──────────────────────────────────────────────── */
+.pp-inst { border: 0.5px solid var(--asb-line); border-radius: 8px; padding: 0 12px 10px; margin-top: 10px; background: var(--asb-white); }
+.pp-inst__hd { display: flex; align-items: center; gap: 9px; padding: 8px 0 2px; border-bottom: 0.5px solid var(--asb-gray-100); }
+.pp-inst__n { font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--asb-navy); }
+.pp-inst__gone { font-size: 10px; font-weight: 600; color: #C0392B; }
+.pp-inst.is-gone { opacity: 0.55; }
+.pp-inst.is-gone .pdr-f__k { text-decoration: line-through; }
+tr.is-gone { opacity: 0.5; }
+tr.is-gone td { text-decoration: line-through; }
+tr.is-gone .pp-act { text-decoration: none; }

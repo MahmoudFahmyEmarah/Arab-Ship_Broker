@@ -1,0 +1,42 @@
+/* da-calculator/verify-panel.css - the verification slide-over.
+   One panel, reached from a charge line, a port or the whole estimate. */
+.vp-scrim{position:fixed;inset:0;background:rgba(13,37,69,.32);z-index:900}
+.vp{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);background:var(--asb-white);border-left:var(--bd);box-shadow:-8px 0 28px rgba(13,37,69,.14);z-index:901;display:flex;flex-direction:column}
+.vp__hd{padding:12px 15px;border-bottom:var(--bd);display:flex;align-items:flex-start;gap:10px}
+.vp__t{font-size:14px;font-weight:600;color:var(--asb-navy)}
+.vp__s{font-size:11.5px;color:var(--asb-gray-700);margin-top:2px;line-height:1.45}
+.vp__x{border:0;background:none;font-size:19px;line-height:1;color:var(--asb-gray-500);cursor:pointer;padding:2px 5px;margin-left:auto}
+.vp__x:hover{color:var(--asb-navy)}
+.vp__bd{flex:1;min-height:0;overflow-y:auto;padding:13px 15px 30px;display:flex;flex-direction:column;gap:13px}
+.vp-sec{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--asb-gray-500);display:flex;align-items:center;gap:8px}
+.vp-sec:after{content:"";flex:1;height:1px;background:var(--asb-gray-200)}
+.vp-form{display:flex;flex-direction:column;gap:8px}
+.vp-form label{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--asb-gray-500)}
+.vp-ta,.vp-in.asb-input,.vp-in,.vp-sel{width:100%;font:400 12.5px/1.5 var(--asb-font);color:var(--asb-navy);border:var(--bd);border-radius:var(--r-input);padding:8px 9px;background:var(--asb-white)}
+.vp-ta{min-height:78px;resize:vertical}
+.vp-sel{min-height:34px}
+.vp-ta:focus,.vp-in:focus,.vp-sel:focus{outline:none;border-color:var(--asb-blue);box-shadow:0 0 0 2px rgba(24,95,165,.12)}
+.vp-what{background:var(--asb-gray-50);border-radius:var(--r-card);padding:9px 11px;font-size:12px;color:var(--asb-navy);line-height:1.5}
+.vp-what em{font-style:normal;color:var(--asb-gray-700)}
+.vp-act{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+
+.vp-req{border:var(--bd);border-radius:var(--r-card);padding:10px 11px;display:flex;flex-direction:column;gap:5px}
+.vp-req__hd{display:flex;align-items:baseline;gap:8px}
+.vp-req__n{font-size:12.5px;font-weight:600;color:var(--asb-navy);flex:1;min-width:0}
+.vp-req__m{font-size:11px;color:var(--asb-gray-500)}
+.vp-req__ask{font-size:12px;color:var(--asb-gray-700);line-height:1.5}
+.vp-req__re{background:var(--asb-green-bg);border-radius:var(--r-card);padding:8px 10px;font-size:12px;color:var(--asb-navy);line-height:1.5}
+.vp-req__re b{font-weight:600}
+.vp-req__basis{font-size:11px;color:var(--asb-gray-700);margin-top:3px}
+.vp-req__a{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:2px}
+.vp-empty{font-size:12px;color:var(--asb-gray-500);line-height:1.5}
+
+.vp-prof{border:var(--bd);border-radius:var(--r-card);padding:11px 12px;display:flex;flex-direction:column;gap:6px}
+.vp-prof__hd{display:flex;align-items:center;gap:8px}
+.vp-prof__n{font-size:13px;font-weight:600;color:var(--asb-navy)}
+.vp-prof__m{font-size:11.5px;color:var(--asb-gray-700);line-height:1.5}
+.vp-prof__g{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px}
+.vp-prof__k{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--asb-gray-500)}
+.vp-prof__v{font-size:12px;color:var(--asb-navy)}
+/* Density modifier on the DS SegmentedToggle; the component itself is unchanged. */
+.vp-seg-dense .match-toggle__seg{padding:6px 9px;font-size:11px;min-height:30px}

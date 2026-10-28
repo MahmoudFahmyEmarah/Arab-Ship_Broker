@@ -1,3 +1,9 @@
+/* Design fidelity (owner B2ALL-061): the PDA cards are plain white cards. The portal's listing-card status strip,
+   hover lift and pointer (lib/portal/portal.css .asb-card) do not apply inside the estimator. */
+.pda-route .asb-card::before { content: none; }
+.pda-route .asb-card { cursor: auto; }
+.pda-route .asb-card:hover { transform: none; box-shadow: var(--ds-shadow); }
+
 .pda-route {
   min-height: calc(100vh - 48px);
   container-type: inline-size;
@@ -63,6 +69,7 @@
 .pda-selection,
 .pda-workspace,
 .pda-empty-state,
+.pda-history,
 .pda-route__notice,
 .pda-route__deferred {
   margin-right: 20px;
@@ -1229,6 +1236,9 @@
 .pda-history {
   display: grid;
   gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
 }
 
 .pda-history__head {
@@ -1622,3 +1632,173 @@
   color: var(--ds-navy);
   font-size: 12px;
 }
+
+/* Design fidelity (B2ALL-061): the head's title row (inline in the design) and the Verification panel */
+.pm-scope .pe-head__title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0; }
+.pm-scope .pe-head__title .page-title,
+.pm-scope .pe-head__title .eyebrow { margin: 0; }
+.pm-scope .pe-verify {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+  border-radius: 10px;
+  background: var(--asb-gray-50);
+  padding: 10px 14px;
+  color: var(--asb-gray-700);
+  font-size: 12px;
+}
+.pm-scope .pe-verify b { color: var(--asb-navy); font-size: 12.5px; }
+
+/* Design fidelity (B2ALL-061): the Estimate tab body is the design's .pf column; panels not yet converted sit in it
+   without their own side margins, and the deal bar's clear/new controls */
+.pm-scope .pf > .pda-workspace,
+.pm-scope .pf > .pda-history,
+.pm-scope .pf > .pda-route__notice { margin-left: 0; margin-right: 0; }
+.pm-scope .pf > .pda-workspace { margin-top: 0; padding-bottom: 0; }
+.pm-scope .pf-deal__new { flex: 0 0 auto; align-self: center; }
+.pm-scope .pf-ta__x { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); }
+.pm-scope .pf-empty__t { margin: 0; }
+.pm-scope .pf-empty__s { margin-bottom: 0; }
+
+/* Setup rows are buttons here (the design's are links): reset them to the row look; the save status line */
+.pm-scope button.pe-set-row { width: 100%; border: 0; border-bottom: 0.5px dashed var(--asb-gray-200); background: none; font: inherit; text-align: left; cursor: pointer; }
+.pm-scope button.pe-set-row:last-child { border-bottom: none; }
+.pm-scope .pe-set-status { margin: 0; padding: 8px 16px 12px; color: var(--asb-gray-500); font-size: 11.5px; min-height: 1em; }
+
+/* Ports tab (B2ALL-061 step 4): the app's map (style unchanged by owner ruling) fills the design's map frame; the
+   row's port button reads as the design's text; the record slide-over's body; th rows as td rows */
+.pm-scope .px-map .pda-ports__map { height: 100%; border: 0; border-radius: 0; }
+.pm-scope .px-port { display: block; border: 0; background: none; padding: 0; font: inherit; text-align: left; cursor: pointer; }
+.pm-scope .px-port .code { display: block; }
+.pm-scope .px-tbl tbody th { font-size: 12px; font-weight: 400; letter-spacing: normal; text-transform: none; text-align: left; color: var(--asb-gray-700);
+  padding: 8px 10px; background: none; border-bottom: .5px solid var(--asb-gray-100); white-space: normal; }
+.pm-scope .px-tbl tbody tr.is-selected td,
+.pm-scope .px-tbl tbody tr.is-selected th { background: var(--asb-blue-light); }
+.pm-scope .pe-rec__body { flex: 1; overflow-y: auto; padding: 16px 20px 40px; }
+.pm-scope .pe-rec__t { margin: 0; }
+.pm-scope .pe-rec__s { margin: 2px 0 0; }
+.pm-scope .pda-ports__status--error { color: var(--asb-red); }
+
+/* Agent Portal (B2ALL-061 step 5): pieces the design's static mock does not have — read-only values, the real quote
+   form's line rows, error hints, the directory heading — in the design's own terms */
+.pm-scope .ap-ro { font-size: 14px; color: var(--asb-navy); padding: 8px 0; }
+.pm-scope .ap-ro a { color: var(--asb-blue); }
+.pm-scope .ap-none { color: var(--asb-gray-400); font-style: italic; font-size: 13px; }
+.pm-scope .ap-hint--error { color: var(--asb-red); }
+.pm-scope .ap-section-h { margin: 6px 0 0; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--asb-faint); font-weight: 700; }
+.pm-scope .ap-list__bar { display: flex; justify-content: flex-end; }
+.pm-scope .ap-req__port { margin: 0; font-size: 14px; font-weight: 700; color: var(--asb-navy); }
+.pm-scope .ap-req__port em { font-style: normal; font-weight: 500; color: var(--asb-gray-500); font-size: 12px; margin-left: 6px; }
+.pm-scope .ap-quote__t { margin: 6px 0 8px; font-size: 13px; font-weight: 700; color: var(--asb-navy); }
+.pm-scope .ap-quote__lines { display: grid; gap: 6px; }
+.pm-scope .ap-quote__line { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, .8fr) auto; gap: 6px; align-items: center; }
+.pm-scope .ap-quote__terms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.pm-scope .ap-field--wide { grid-column: 1 / -1; }
+.pm-scope .ap-quote__decline { flex: 1; }
+.pm-scope .ap-cmp__scroll { overflow-x: auto; }
+@media (max-width: 720px) {
+  .pm-scope .ap-quote__line, .pm-scope .ap-quote__terms { grid-template-columns: 1fr; }
+}
+
+/* Tariff Packs (design step 6): the design's cards are divs with role=button; here they are list items holding one link,
+   and the kv pairs are a definition list, so reset the semantic elements to the design's boxes. */
+.pm-scope .pd-band--navy { background: linear-gradient(135deg, var(--asb-navy), var(--asb-navy-deep)); padding-bottom: 18px; }
+.pm-scope .pd-band__title { margin: 0; }
+.pm-scope .tp-h { margin-left: 0; margin-right: 0; }
+.pm-scope ul.tp-grid { list-style: none; margin: 0; padding: 0; }
+.pm-scope .tp-card { padding: 0; }
+.pm-scope .tp-card__link { display: flex; flex-direction: column; gap: 10px; padding: 13px 15px 14px; color: inherit; text-decoration: none; height: 100%; border-radius: inherit; }
+.pm-scope .tp-card__link:focus-visible { outline: 2px solid var(--asb-blue); outline-offset: 2px; }
+.pm-scope .tp-card__who { flex: 1; min-width: 0; }
+.pm-scope .tp-card__caret { color: var(--asb-gray-400); flex: none; }
+.pm-scope dl.tp-kv { margin: 0; }
+.pm-scope .tp-kv dd { margin: 0; }
+.pm-scope .tp-tbl th[scope="row"] { text-align: left; font-size: 12px; letter-spacing: 0; text-transform: none; background: none; border-bottom: .5px solid var(--asb-gray-100); padding: 9px 12px; }
+.pm-scope .tp-tbl td.is-empty { color: var(--asb-gray-400); }
+.pm-scope .tp-tbl a { color: inherit; text-decoration: underline; text-decoration-color: var(--asb-gray-200); text-underline-offset: 2px; }
+.pm-scope .tp-tbl a:hover { color: var(--asb-blue); }
+
+/* Tariff Pack record (design step 7): the read-only RecordShell. Tabs and rail items are links, fields and head meta are
+   definition lists, and filled table cells read in ink (the design's gray-200 cell is its empty-slot colour). */
+.pm-scope .pd-topbar__end { margin-left: auto; }
+.pm-scope a.pp-tab, .pm-scope a.pdr-rail__item { text-decoration: none; }
+.pm-scope a.pp-tab { color: var(--asb-gray-500); }
+.pm-scope a.pp-tab.is-on { color: var(--asb-navy); }
+.pm-scope .pp-tab:focus-visible, .pm-scope .pdr-rail__item:focus-visible { outline: 2px solid var(--asb-blue); outline-offset: -2px; }
+.pm-scope h1.pdr-head__title, .pm-scope h2.pdr-sec__h { margin: 0; }
+.pm-scope dl.pdr-head__meta, .pm-scope dl.pdr-fields { margin: 0; }
+.pm-scope .pdr-head__meta dd, .pm-scope .pdr-fields dd { margin: 0; }
+.pm-scope .pdr-tbl--filled td { color: var(--asb-gray-700); }
+.pm-scope .pdr-tbl--filled td .pp-val.is-empty { color: var(--asb-gray-200); }
+.pm-scope .pdr-f__v a { color: var(--asb-blue); }
+.pm-scope .pdr-empty { color: var(--asb-gray-500); }
+.pm-scope .pp-st { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: var(--asb-gray-500); }
+.pm-scope .pdr-proto { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.pm-scope .pdr-proto li { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: var(--asb-gray-700); line-height: 1.6; }
+.pm-scope .pdr-proto b { color: var(--asb-navy); font-weight: 600; margin-right: 4px; }
+.pm-scope .pdr-sec + .pdr-sec { margin-top: 14px; }
+.pm-scope .pdr-missing { max-width: 52ch; margin: 14vh auto; padding: 0 16px; font-size: 13px; line-height: 1.7; color: var(--asb-gray-700); }
+.pm-scope .pdr-missing__ey { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--asb-faint); font-weight: 700; }
+.pm-scope .pdr-missing__t { font-size: 20px; font-weight: 600; color: var(--asb-navy); margin: 6px 0 10px; }
+.pm-scope .pdr-missing a { color: var(--asb-blue); }
+.pm-scope a.pe-set-row { text-decoration: none; color: inherit; }
+
+/* Port record (design step 8): the slide-over's "open the record" action beside its close button */
+.pm-scope .pe-rec__a { display: flex; align-items: center; gap: 8px; }
+.pm-scope a.pe-rec__go { text-decoration: none; white-space: nowrap; }
+
+/* B2O-050 corrections: read-only field keys are spans (a <label> needs a control), Setup card titles are headings,
+   charge-line excerpts are visible text rather than tooltips */
+.pm-scope .ap-field__k { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--asb-gray-500); margin-bottom: 4px; }
+.pm-scope .pe-set-card__hd .pe-set-card__t { display: block; font-size: 13.5px; color: var(--asb-navy); font-weight: 700; margin: 0; }
+.pm-scope .pp-excerpt { display: block; font-size: 11px; font-weight: 400; color: var(--asb-gray-500); margin-top: 2px; max-width: 48ch; white-space: normal; }
+
+/* Port settings (design step 9): the record's top bar carries one sibling link beside the published badge */
+.pm-scope .pd-topbar__end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.pm-scope a.pd-topbar__link { text-decoration: none; white-space: nowrap; }
+.pm-scope .ps-top__n { margin: 0; }
+.pm-scope a.ps-arms__b { text-decoration: none; }
+.pm-scope .ps-card__t { margin: 0; }
+
+/* B2O-054: settings slots are a definition list; the inert wrapper is layout-neutral */
+.pm-scope dl.ps-slots { margin: 0; }
+.pm-scope .ps-slot dt, .pm-scope .ps-slot dd { margin: 0; }
+
+/* Step 11 (directory, map, hub, agent page): classes the design renders inline or that the app's semantics need */
+.pm-scope nav.pd-crumbs { display: block; }
+.pm-scope .pt-ctl { display: flex; gap: 8px; align-items: center; margin-top: 14px; max-width: 520px; }
+.pm-scope .pt-search { position: relative; flex: 1; display: flex; align-items: center; }
+.pm-scope .pt-search > svg { position: absolute; left: 10px; color: var(--asb-gray-500); pointer-events: none; }
+.pm-scope .pt-search .pt-text { width: 100%; padding-left: 30px; }
+.pm-scope .pd-chips a.pd-chip { text-decoration: none; }
+.pm-scope .pd-chip.is-on { background: var(--asb-blue-light); color: var(--asb-blue); }
+.pm-scope .pd-chip--zone { font-variant-numeric: tabular-nums; }
+.pm-scope .pt-wrap { margin: 18px 24px 60px; }
+.pm-scope .pt-lines th a.pt-sort { color: inherit; text-decoration: none; }
+.pm-scope .pt-lines th[scope="row"] { text-align: left; }
+.pm-scope .pt-li__code { font-size: 10.5px; color: var(--asb-gray-400); font-weight: 400; margin-left: 6px; }
+.pm-scope .pt-rank__n { font-weight: 700; color: var(--asb-navy); white-space: nowrap; }
+.pm-scope .pt-rank__few { font-size: 11px; color: var(--asb-amber); font-weight: 600; white-space: nowrap; }
+.pm-scope .pt-tariff { font-size: 11px; color: var(--asb-gray-500); }
+.pm-scope .pt-tariff.is-held { color: var(--asb-green); font-weight: 600; }
+.pm-scope .pt-open { color: var(--asb-gray-400); display: inline-flex; }
+.pm-scope .pt-open:hover { color: var(--asb-blue); }
+.pm-scope .pt-empty { padding: 16px; color: var(--asb-gray-500); font-size: 12px; }
+.pm-scope .pmap-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 0 24px 40px; }
+.pm-scope .pmap-host-wrap .pda-ports__map, .pm-scope .pmap-host-wrap .leaflet-container { min-height: 520px; height: 60vh; border-radius: 10px; }
+.pm-scope .pmap-side { display: flex; flex-direction: column; gap: 12px; }
+.pm-scope .pmap-facts { margin: 10px 0 0; display: grid; gap: 8px; }
+.pm-scope .pmap-facts > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; font-size: 12px; }
+.pm-scope .pmap-facts dt { color: var(--asb-gray-500); font-weight: 600; }
+.pm-scope .pmap-facts dd { margin: 0; color: var(--asb-gray-700); }
+.pm-scope .pmap-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pm-scope .pmap-actions a { text-decoration: none; }
+.pm-scope .pd-panel__body--flush { padding: 0; }
+.pm-scope .pd-charges__port { color: var(--asb-navy); font-weight: 600; font-size: 12.5px; text-decoration: none; }
+.pm-scope .pd-charges__port span { color: var(--asb-gray-400); font-weight: 400; font-size: 10.5px; margin-left: 6px; }
+.pm-scope .pd-charges__empty { padding: 16px; color: var(--asb-gray-500); font-size: 12px; }
+.pm-scope a.pm-card, .pm-scope a.pm-row { text-decoration: none; color: inherit; }
+.pm-scope a.pmx-arms__b { text-decoration: none; }
+.pm-scope .qd-sel select, .pm-scope .qd-f input { width: 100%; }
+.pm-scope .qd-leg__none { color: var(--asb-gray-500); font-size: 11.5px; }
+@media (max-width: 860px) { .pm-scope .pmap-body { grid-template-columns: 1fr; } }

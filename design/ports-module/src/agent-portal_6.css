@@ -1,0 +1,64 @@
+/* da-calculator/ports-responsive.css - shared mobile/tablet layer for the Ports Module.
+ * Loaded LAST on every page. ≤900px: fixed top bar + off-canvas sidebar (state in
+ * port-shell.jsx); wide tables gain horizontal scroll; grids stack. */
+.pm-topbar{display:none}
+.pm-scrim{position:fixed;inset:0;z-index:75;background:var(--scrim,rgba(0,0,0,.45));opacity:0;pointer-events:none;transition:opacity var(--t-base,200ms)}
+.asb-sidebar .pm-close{display:none}
+@media (max-width: 900px){
+body{padding-top:48px}
+.pm-topbar{position:fixed;top:0;left:0;right:0;height:48px;z-index:70;display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--asb-white);border-bottom:var(--bd);box-shadow:var(--sh-card)}
+.pm-topbar__menu{width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--asb-navy);font-size:21px;cursor:pointer;border-radius:4px;flex:none}
+.pm-topbar__brand{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--asb-navy);min-width:0}
+.pm-topbar__brand img{width:20px;height:20px}
+.pm-topbar__page{margin-left:auto;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--asb-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.asb-sidebar{position:fixed;left:0;top:0;bottom:0;z-index:80;width:min(280px,84vw);transform:translateX(-105%);transition:transform var(--t-base,200ms) var(--ease,ease);box-shadow:0 10px 28px rgba(13,37,69,.18);background:var(--asb-white)}
+.asb-sidebar.is-open{transform:none}
+.pm-scrim.is-on{opacity:1;pointer-events:auto}
+.asb-sidebar .pm-close{display:flex;position:absolute;top:10px;right:10px;width:34px;height:34px;align-items:center;justify-content:center;background:none;border:none;color:var(--asb-gray-500);font-size:17px;cursor:pointer;border-radius:4px}
+/* content: stack + breathe */
+.pda-head{flex-wrap:wrap;gap:8px 16px;padding:10px 14px}
+.pda-head__actions{flex-wrap:wrap}
+.pda-estbar,.pda-toolbar{padding-left:14px;padding-right:14px}
+.pd-grid{padding:14px 14px 32px}
+.pd-band{padding:16px 14px}
+.pda-toolbar{flex-wrap:wrap;gap:12px}
+.pda-tool{flex:1 1 240px;min-width:0}
+.pda-tool--cargo .pda-select,.pda-tool .pda-select{min-width:0;width:100%}
+.pt-band-row{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
+.pt-grand__note{margin-left:0;max-width:none;flex-basis:100%}
+/* wide tables → horizontal scroll (same pattern the VE tables already use) */
+.pt-lines,.pda-li{display:block;overflow-x:auto;white-space:nowrap}
+.pt-lines thead,.pt-lines tbody,.pda-li thead,.pda-li tbody{display:table;width:100%;min-width:640px}
+.pmap-drawer{width:100vw;max-width:100vw}
+.pd-kvgrid,.pt-facts,.ct-kv,.pmap-grid{grid-template-columns:1fr 1fr}
+}
+/* ── phone type + density ramp ── */
+@media (max-width: 640px){
+body{font-size:14px}
+.pd-band__title{font-size:21px;line-height:1.1}
+.pd-band__sub{font-size:12px}
+.pda-tool__label{font-size:11px}
+.pda-select select{font-size:14px;padding:8px 26px 8px 9px}
+.pda-li{font-size:12.5px}
+.pda-li td.num{font-size:13.5px}
+.pda-li tr.pda-li__total td{font-size:13px}
+.pda-li tr.pda-li__total td.num{font-size:15px}
+.pda-inp{height:31px;font-size:13px}
+.pt-lines{font-size:12.5px}
+.pt-grand__v{font-size:20px}
+.pt-source__title{font-size:13px}
+.egp-band .pd-band__title{font-size:17px}
+.pda-est-chip{font-size:13px;min-height:44px;padding:8px 14px 8px 16px}
+.pda-est-new{min-height:44px;font-size:13px}
+.pda-estbar{padding-top:10px;padding-bottom:10px}
+.pda-estbar__cmp .asb-btn{min-height:44px;font-size:14px;padding:8px 16px}
+.pda-cargo-meta,.pda-vessel-meta{font-size:11px}
+.asb-btn{font-size:13px;padding:6px 10px}
+.pd-topbar{flex-wrap:wrap;gap:6px}
+.pd-crumbs{font-size:11px}
+}
+@media (max-width: 560px){
+.pd-kvgrid,.pt-facts{grid-template-columns:1fr 1fr}
+.pd-band__title{font-size:23px}
+.ct-grid{grid-template-columns:1fr;padding:12px 14px 8px}
+}

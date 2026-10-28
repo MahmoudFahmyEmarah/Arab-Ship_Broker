@@ -1,6 +1,17 @@
 import type { CargoView, VesselView } from "@/lib/portal/types";
 
 export type PdaEstimatorTab = "estimate" | "ports" | "agents" | "setup";
+export const PDA_ESTIMATOR_TABS: readonly PdaEstimatorTab[] = ["estimate", "ports", "agents", "setup"];
+
+/**
+ * The canonical `?tab=` contract (C2ALL-164 P1-1): every link that names a tab uses `/dashboard/ports-da?tab=<id>`;
+ * the page honours a known id on first render and keeps the URL in step with every switch. An unknown or missing
+ * value is null — the caller falls back to the member's start tab, never to a guess.
+ */
+export function parsePdaTab(raw: unknown): PdaEstimatorTab | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === "string" && (PDA_ESTIMATOR_TABS as readonly string[]).includes(value) ? (value as PdaEstimatorTab) : null;
+}
 export type PdaEstimatorDensity = "compact" | "comfortable";
 export type PdaAllocation = "vessel" | "charterer";
 
@@ -213,7 +224,7 @@ export function buildPdaEstimatorCatalog(input: {
 /** Accepted hand-off sources. Context from either is applied only through the
  *  authorised PDA catalog: a cargo or vessel id that is not the viewer's own is
  *  reported, never promoted to a foreign key; route and quantity are explicit facts. */
-export const PDA_HANDOFF_SOURCES = ["fixture", "voyage"] as const;
+export const PDA_HANDOFF_SOURCES = ["fixture", "voyage", "quick"] as const;
 export type PdaHandoffSource = (typeof PDA_HANDOFF_SOURCES)[number];
 
 export function parsePdaEstimatorHandoff(

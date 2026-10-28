@@ -205,7 +205,7 @@ test("PDA tabs and the agency quote loop", async ({ browser, baseURL }) => {
       await member.page.getByRole("tab", { name: "Ports" }).click();
       await expect(member.page.getByRole("heading", { name: "Ports", exact: true })).toBeVisible({ timeout: 60_000 });
       await member.page.getByRole("tab", { name: "Agents" }).click();
-      await expect(member.page.getByRole("heading", { name: "Port agents" })).toBeVisible({ timeout: 60_000 });
+      await expect(member.page.getByRole("heading", { name: "Agencies at the ports" })).toBeVisible({ timeout: 60_000 });
       await expect(member.page.getByText(`Portal Agency ${seedNow.tag}`)).toBeVisible({ timeout: 60_000 });
       await member.page.getByRole("tab", { name: "Setup" }).click();
       await expect(member.page.getByRole("heading", { name: "What you see" })).toBeVisible({ timeout: 60_000 });
@@ -233,7 +233,8 @@ test("PDA tabs and the agency quote loop", async ({ browser, baseURL }) => {
   try {
     await test.step("the agency answers in its inbox, masked", async () => {
       await staff.page.goto("/dashboard/agency");
-      await expect(staff.page.getByRole("heading", { name: new RegExp(`Portal Agency ${seedNow.tag} · quote requests`) })).toBeVisible({ timeout: 90_000 });
+      await expect(staff.page.getByRole("heading", { name: "Agent Portal" })).toBeVisible({ timeout: 90_000 });
+      await expect(staff.page.getByText(`Portal Agency ${seedNow.tag}`).first()).toBeVisible();
       await expect(staff.page.locator("section.pda-agency")).not.toContainText(seedNow.vesselName);
       const card = staff.page.locator(".pda-agency__card").first();
       await expect(card).toContainText("Member (identity not shared)");
