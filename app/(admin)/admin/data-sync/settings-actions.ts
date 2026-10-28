@@ -86,6 +86,14 @@ export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ i
   if (!safe.ok) return { success: false, error: `Base URL rejected — ${safe.reason}.` };
   try {
     const { c, who } = await adminCtx();
+    // an edit of the ACTIVE key keeps is_active (the RPC's update never touches it), so that edit must pass
+    // the same provider/model probe as activation, or the key is deactivated (B2O-108 P1)
+    let wasActive = false;
+    if (input.id) {
+      const { data: row, error: rErr } = await c.from("llm_credential").select("is_active").eq("id", input.id).maybeSingle();
+      if (rErr) return { success: false, error: rErr.message };
+      wasActive = row?.is_active === true;
+    }
     const { data, error } = await c.rpc("save_llm_credential", {
       p_id: input.id ?? null,
       p_label: input.label.trim(),
@@ -100,10 +108,16 @@ export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ i
     if (error) return { success: false, error: error.message };
     await logAudit(c, { actor: who, action: "settings.llm.save", targetKind: "settings", targetId: String(data), summary: `${input.id ? "Updated" : "Added"} LLM key “${input.label.trim()}” (${input.vendor.trim()} · ${input.model.trim()})${input.secret?.trim() ? " — secret rotated" : ""}${input.makeActive ? " — made active" : ""}`, detail: { vendor: input.vendor.trim(), model: input.model.trim(), baseUrl: input.baseUrl?.trim() || null, secretChanged: !!input.secret?.trim(), makeActive: !!input.makeActive } });
     let notActivated: string | undefined;
-    if (input.makeActive) {
+    if (input.makeActive || wasActive) {
       const probe = await probeLlmCredential(c, who, String(data));
-      if (!probe.success) notActivated = probe.error;
-      else {
+      if (!probe.success && wasActive) {
+        // never leave a failing key active: deactivate it and say so (no key is better than a broken one —
+        // the sync then stops with "No active LLM key" instead of failing every batch)
+        const { error: dErr } = await c.from("llm_credential").update({ is_active: false }).eq("id", String(data));
+        notActivated = dErr ? `${probe.error} — and it could NOT be deactivated (${dErr.message}); deactivate it by hand` : `${probe.error} — the key was DEACTIVATED`;
+        if (!dErr) await logAudit(c, { actor: who, action: "settings.llm.deactivate", targetKind: "settings", targetId: String(data), summary: "Deactivated the active LLM key after an edit failed the provider test", ok: false });
+      } else if (!probe.success) notActivated = probe.error;
+      else if (!wasActive) {
         const { error: aErr } = await c.rpc("set_active_llm_credential", { p_id: data });
         if (aErr) notActivated = aErr.message;
         else await logAudit(c, { actor: who, action: "settings.llm.activate", targetKind: "settings", targetId: String(data), summary: "Switched the active LLM key (after a passing provider test)" });

@@ -72,7 +72,9 @@ assert.match(syncActions, /async function probeLlmCredential\(/, "one private pr
 assert.match(syncActions, /export async function testLlmCredential[\s\S]*?return await probeLlmCredential\(c, who, id\);/, "Test runs the probe");
 assert.match(syncActions, /export async function activateLlmCredential[\s\S]*?const probe = await probeLlmCredential\(c, who, id\);\s*if \(!probe\.success\) return \{ success: false, error: `Not activated/, "Activate refuses unless the probe passes");
 assert.equal((syncActions.match(/c\.rpc\("set_active_llm_credential"/g) ?? []).length, 2, "only Activate and save-with-activate call set_active_llm_credential");
-assert.match(syncActions, /if \(input\.makeActive\) \{\s*const probe = await probeLlmCredential\(c, who, String\(data\)\);/, "save-with-activate probes before activating");
+assert.match(syncActions, /if \(input\.makeActive \|\| wasActive\) \{\s*const probe = await probeLlmCredential\(c, who, String\(data\)\);/, "save-with-activate AND any edit of the active key probe");
+assert.match(syncActions, /wasActive = row\?\.is_active === true;/, "the save knows whether it edits the active key");
+assert.match(syncActions, /if \(!probe\.success && wasActive\) \{[\s\S]*?\.update\(\{ is_active: false \}\)\.eq\("id", String\(data\)\)/, "a failing edit of the active key deactivates it");
 assert.doesNotMatch(syncActions, /p_make_active: input\.makeActive/, "the save RPC never activates by itself");
 assert.match(src("components/admin/data-sync/SettingsView.tsx"), /if \(r\.data\.notActivated\) toast\.warning\(/, "the form says when a saved key was not activated");
 // C2O-176 P1, behaviourally: a stored plaintext key blocks the save; otherwise the key written is always ""
