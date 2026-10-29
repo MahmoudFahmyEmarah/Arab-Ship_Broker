@@ -30,6 +30,9 @@ export interface SaveKeyInput {
   makeActive: boolean;
 }
 
+/** The prefix activateIfVerified uses when the switch's outcome is unknown (an RPC transport error). */
+export const ACTIVATION_UNKNOWN = "the activation could not be recorded";
+
 /** Test, rule, version-bound switch, audit of the real outcome. Null = activated, else the refusal reason. */
 export async function activateIfVerified(d: KeyFlowDeps, id: string): Promise<string | null> {
   const probe = await d.probe(id);
@@ -43,7 +46,7 @@ export async function activateIfVerified(d: KeyFlowDeps, id: string): Promise<st
   try {
     result = await d.activateIfUnchanged(id, probe.data.token);
   } catch (e) {
-    return `the activation could not be recorded (${e instanceof Error ? e.message : String(e)}) — it may or may not be active now: reload the list to see its state, and press Test`;
+    return `${ACTIVATION_UNKNOWN} (${e instanceof Error ? e.message : String(e)}) — it may or may not be active now: reload the list to see its state, and press Test`;
   }
   const refusal = activationRefusal(result);
   if (refusal) return refusal;
@@ -53,7 +56,7 @@ export async function activateIfVerified(d: KeyFlowDeps, id: string): Promise<st
 
 /** Save inactive; when asked, activate only through activateIfVerified. An edit of the active key always takes it
  * out of service first and is logged as such. */
-export async function saveAndMaybeActivate(d: KeyFlowDeps, input: SaveKeyInput): Promise<{ id: string; activated: boolean; notActivated?: string }> {
+export async function saveAndMaybeActivate(d: KeyFlowDeps, input: SaveKeyInput): Promise<{ id: string; activated: boolean; activationUnknown?: boolean; notActivated?: string }> {
   const wasActive = input.id ? await d.isActive(input.id) : false;
   const id = await d.save({ ...input, makeActive: false });
   await d.audit({
@@ -69,8 +72,9 @@ export async function saveAndMaybeActivate(d: KeyFlowDeps, input: SaveKeyInput):
     if (!refused) return { id, activated: true };
     // "now INACTIVE" is only claimed when the activation was refused before the switch ran; an RPC error leaves
     // the state unknown and its own message says so
-    const unknown = refused.startsWith("the activation could not be recorded");
-    return { id, activated: false, notActivated: wasActive && !unknown ? `${refused}. The key is now INACTIVE (it was active before the edit)` : refused };
+    // tri-state (C2O-183 P3): an unknown outcome is reported as unknown, never as "not activated"
+    if (refused.startsWith(ACTIVATION_UNKNOWN)) return { id, activated: false, activationUnknown: true, notActivated: refused };
+    return { id, activated: false, notActivated: wasActive ? `${refused}. The key is now INACTIVE (it was active before the edit)` : refused };
   }
   if (wasActive) {
     return { id, activated: false, notActivated: "the edit took the key out of service — tick \"Make this the active key\" (it is tested first) to use it again" };

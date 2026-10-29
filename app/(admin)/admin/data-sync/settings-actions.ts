@@ -109,7 +109,7 @@ function keyFlowDeps(c: AdminDb, who: AdminWho): KeyFlowDeps {
   };
 }
 
-export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string; activated: boolean; notActivated?: string }>> {
+export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string; activated: boolean; activationUnknown?: boolean; notActivated?: string }>> {
   if (!input.label?.trim()) return { success: false, error: "Give the key a label." };
   if (!input.vendor?.trim() || !input.model?.trim()) return { success: false, error: "Vendor and model are required." };
   if (input.id && !UUID_RE.test(input.id)) return { success: false, error: "Invalid key id." };

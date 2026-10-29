@@ -104,6 +104,11 @@ assert.doesNotMatch(migration, /grant execute on function public\.set_active_llm
 const validate = src("scripts/data-sync-validate.sh");
 assert.match(validate, /supabase\/tests\/data_sync\/llm_conditional_activation_smoke\.sql/, "the SQL contract runs in data-sync-validate");
 assert.match(validate, /supabase\/tests\/data_sync\/llm_activation_race_two_sessions\.sh/, "the two-session races run in data-sync-validate");
+const race = src("supabase/tests/data_sync/llm_activation_race_two_sessions.sh");
+assert.match(race, /GOT=\$\(q "select current_database\(\)" 2>\/dev\/null \|\| true\)\n\[ "\$GOT" = "\$WANT" \] \|\| refuse/, "the race harness verifies the database it actually reached");
+assert.match(race, /\[\[ "\$WANT" =~ \^asb_\[a-z0-9_\]\+\$ \]\] \|\| refuse/, "the declared disposable database must be asb_*");
+assert.ok(race.indexOf("select current_database()") < race.indexOf("update public.llm_credential"), "the target check precedes every write");
+assert.match(src("components/admin/data-sync/SettingsView.tsx"), /if \(r\.data\.activationUnknown\) toast\.warning\(/, "the form reports an unknown activation as unknown");
 assert.match(src("components/admin/data-sync/SettingsView.tsx"), /if \(r\.data\.notActivated\) toast\.warning\(/, "the form says when a saved key was not activated");
 // C2O-176 P1, behaviourally: a stored plaintext key blocks the save; otherwise the key written is always ""
 assert.equal(legacyKeyForSave("sk-ant-legacy").ok, false);

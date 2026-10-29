@@ -13,15 +13,18 @@
 # run without an explicit psql command that targets a scratch asb_* database (never the shared postgres). It puts
 # the previously active key back and deletes its own rows afterwards.
 set -euo pipefail
+# Target safety (C2O-183 P1): the command text proves nothing (a later --dbname can override -d). The caller names
+# the ONE disposable database in LLM_RACE_DISPOSABLE (must start with asb_), and before any write the script asks
+# the server which database the supplied command actually reached; any mismatch refuses.
 PSQL="${1:-}"
-case "$PSQL" in
-  *"-d asb_"[a-z0-9_]*) ;;
-  *) echo "REFUSED: pass the psql command of a scratch asb_* database, e.g."
-     echo "  $0 \"docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_llmrace\""
-     echo "(the races COMMIT; they never run against the shared postgres)"; exit 2;;
-esac
-case "$PSQL" in *"-d postgres"*) echo "REFUSED: -d postgres is the shared database"; exit 2;; esac
+WANT="${LLM_RACE_DISPOSABLE:-}"
+refuse() { echo "REFUSED: $*"; echo "  usage: LLM_RACE_DISPOSABLE=asb_<scratch> $0 \"<psql command for that database>\""; echo "  (the races COMMIT and deactivate every key; they never run against a shared database)"; exit 2; }
+[ -n "$PSQL" ] || refuse "no psql command given"
+[[ "$WANT" =~ ^asb_[a-z0-9_]+$ ]] || refuse "LLM_RACE_DISPOSABLE must name a scratch asb_* database (got '${WANT}')"
 q() { $PSQL -At -v ON_ERROR_STOP=1 -c "$1"; }
+GOT=$(q "select current_database()" 2>/dev/null || true)
+[ "$GOT" = "$WANT" ] || refuse "the command connected to '${GOT:-<nothing>}', not the declared disposable database '$WANT'"
+echo "  ..   target verified: current_database() = $GOT (declared disposable)"
 fail=0
 WAS_ACTIVE=$(q "select coalesce((select id::text from public.llm_credential where is_active), '')")
 

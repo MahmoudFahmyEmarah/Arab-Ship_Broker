@@ -83,9 +83,23 @@ await t("an activation RPC error is a refusal, not a failed save", async () => {
   d.activateIfUnchanged = async () => { calls.push(["activateIfUnchanged"]); throw new Error("connection reset"); };
   const r = await saveAndMaybeActivate(d, input({ makeActive: true, secret: "sk" }));
   assert.equal(r.activated, false);
+  assert.equal(r.activationUnknown, true, "an RPC error is reported as UNKNOWN, not as not-activated");
   assert.match(r.notActivated ?? "", /could not be recorded \(connection reset\) — it may or may not be active now/);
   assert.deepEqual(names(calls), ["save", "audit", "probe", "activateIfUnchanged"], "no activation audit");
   assert.match((await activateIfVerified(d, "k1")) ?? "", /could not be recorded/);
+});
+await t("an RPC error on an edit of the ACTIVE key never claims it is now inactive", async () => {
+  const { d } = fake({ active: true, probe: ok("anthropic", true) });
+  d.activateIfUnchanged = async () => { throw new Error("timeout"); };
+  const r = await saveAndMaybeActivate(d, input({ id: "k1", makeActive: true }));
+  assert.equal(r.activationUnknown, true);
+  assert.doesNotMatch(r.notActivated ?? "", /now INACTIVE/);
+});
+await t("a definite refusal is never reported as unknown", async () => {
+  const { d } = fake({ probe: ok("anthropic", true), rpc: "changed" });
+  const r = await saveAndMaybeActivate(d, input({ makeActive: true, secret: "sk" }));
+  assert.equal(r.activationUnknown, undefined);
+  assert.match(r.notActivated ?? "", /test it again/);
 });
 await t("a new key without the box ticked is saved inactive with no probe", async () => {
   const { d, calls } = fake({ probe: ok("anthropic", true) });
