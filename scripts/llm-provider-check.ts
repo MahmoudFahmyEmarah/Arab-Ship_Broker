@@ -56,7 +56,8 @@ assert.equal(catalogueModel("other", "my-gateway-model"), "my-gateway-model", "a
 
 // C2O-172 supplement: provider secrets live only in Vault. The legacy Platform settings page must not
 // receive, render, accept or store a plaintext key, nor fake a "Connected" test.
-const src = (f: string) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+// EOL-proof: Windows checkouts (core.autocrlf) carry CRLF; every pin below is written with LF line ends
+const src = (f: string) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const settingsPage = src("app/(admin)/admin/settings/page.tsx");
 const settingsAction = src("app/(admin)/admin/settings/actions.ts");
 const legacyUi = src("components/admin/settings/PlatformSettings.tsx");
