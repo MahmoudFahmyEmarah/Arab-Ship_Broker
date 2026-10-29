@@ -7,12 +7,20 @@
 #   R2 · save vs activate: a save of key B lands while B's activation waits on the lock → the activation reads
 #        the new token and answers 'changed'; B stays inactive
 #
-#   supabase/tests/data_sync/llm_activation_race_two_sessions.sh [psql-command]
+#   supabase/tests/data_sync/llm_activation_race_two_sessions.sh "<psql command with -d asb_<scratch>>"
 #
-# The sessions COMMIT (a race cannot be rolled back): run it ONLY against a DISPOSABLE database. It deactivates
-# every key for the test and puts the previously active key back, and deletes its own rows, afterwards.
+# The sessions COMMIT (a race cannot be rolled back) and it deactivates every key for the test, so it REFUSES to
+# run without an explicit psql command that targets a scratch asb_* database (never the shared postgres). It puts
+# the previously active key back and deletes its own rows afterwards.
 set -euo pipefail
-PSQL="${1:-docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres}"
+PSQL="${1:-}"
+case "$PSQL" in
+  *"-d asb_"[a-z0-9_]*) ;;
+  *) echo "REFUSED: pass the psql command of a scratch asb_* database, e.g."
+     echo "  $0 \"docker exec -i supabase_db_arab-ship-broker psql -U postgres -d asb_llmrace\""
+     echo "(the races COMMIT; they never run against the shared postgres)"; exit 2;;
+esac
+case "$PSQL" in *"-d postgres"*) echo "REFUSED: -d postgres is the shared database"; exit 2;; esac
 q() { $PSQL -At -v ON_ERROR_STOP=1 -c "$1"; }
 fail=0
 WAS_ACTIVE=$(q "select coalesce((select id::text from public.llm_credential where is_active), '')")
@@ -90,4 +98,4 @@ else
 fi
 rm -f "$OUT1" "$OUT2"
 
-if [ $fail = 0 ]; then echo "LLM ACTIVATION RACES: ALL PASSED"; else echo "LLM ACTIVATION RACES: FAILED"; exit 1; fi
+if [ $fail = 0 ]; then echo "LLM ACTIVATION RACES: ALL ASSERTIONS PASSED"; else echo "LLM ACTIVATION RACES: FAILED"; exit 1; fi
