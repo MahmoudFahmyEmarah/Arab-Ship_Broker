@@ -5,6 +5,8 @@ import {
   GROQ_STRUCTURED_OUTPUT_MODELS,
   LLM_MODEL_SUGGESTIONS,
   ANTHROPIC_TASK_MODEL,
+  activationRefusal,
+  mayActivate,
   catalogueModel,
   legacyKeyForSave,
   openAiCompatibleModelFound,
@@ -70,12 +72,28 @@ assert.doesNotMatch(syncActions, /p_make_active: true/, "no import path activate
 // C2O-177: Test, Activate and save-with-activate share one provider/model probe; nothing activates without it
 assert.match(syncActions, /async function probeLlmCredential\(/, "one private probe helper");
 assert.match(syncActions, /export async function testLlmCredential[\s\S]*?return await probeLlmCredential\(c, who, id\);/, "Test runs the probe");
-assert.match(syncActions, /export async function activateLlmCredential[\s\S]*?const probe = await probeLlmCredential\(c, who, id\);\s*if \(!probe\.success\) return \{ success: false, error: `Not activated/, "Activate refuses unless the probe passes");
-assert.equal((syncActions.match(/c\.rpc\("set_active_llm_credential"/g) ?? []).length, 2, "only Activate and save-with-activate call set_active_llm_credential");
-assert.match(syncActions, /if \(input\.makeActive \|\| wasActive\) \{\s*const probe = await probeLlmCredential\(c, who, String\(data\)\);/, "save-with-activate AND any edit of the active key probe");
 assert.match(syncActions, /wasActive = row\?\.is_active === true;/, "the save knows whether it edits the active key");
-assert.match(syncActions, /if \(!probe\.success && wasActive\) \{[\s\S]*?\.update\(\{ is_active: false \}\)\.eq\("id", String\(data\)\)/, "a failing edit of the active key deactivates it");
-assert.doesNotMatch(syncActions, /p_make_active: input\.makeActive/, "the save RPC never activates by itself");
+// C2O-178: activation is version-bound and provider-family aware; the old unconditional switch is never called
+assert.equal(mayActivate("anthropic", true), true);
+assert.equal(mayActivate("anthropic", null), false, "Anthropic/Google must confirm the model");
+assert.equal(mayActivate("google", null), false);
+assert.equal(mayActivate("openai-compatible", null), true, "a gateway that cannot confirm ids may activate");
+assert.equal(mayActivate("openai-compatible", false), false);
+assert.equal(activationRefusal("activated"), null);
+assert.match(activationRefusal("changed") ?? "", /test it again/);
+assert.match(activationRefusal("weird") ?? "", /unexpected/);
+assert.equal((syncActions.match(/c\.rpc\("set_active_llm_credential_if_unchanged"/g) ?? []).length, 1, "one conditional activation call site (activateIfVerified)");
+assert.doesNotMatch(syncActions, /c\.rpc\("set_active_llm_credential",/, "the unconditional switch is never called");
+assert.doesNotMatch(syncActions, /\.update\(\{ is_active/, "no direct is_active writes");
+assert.match(syncActions, /p_expected_updated_at: probe\.data\.token/, "activation carries the token the test read");
+assert.match(syncActions, /if \(!mayActivate\(probe\.data\.family, probe\.data\.modelFound\)\)/, "the family rule gates activation");
+assert.equal((syncActions.match(/await activateIfVerified\(c, who, /g) ?? []).length, 2, "Activate and save-with-activate both go through activateIfVerified");
+assert.match(syncActions, /p_make_active: false,\n    \}\);\n    if \(error\) return \{ success: false, error: error\.message \};\n    const id = String\(data\);/, "the save RPC never activates");
+assert.doesNotMatch(syncActions, /made active" : ""/, "the save audit never claims an activation");
+const migration = src("supabase/migrations/20261029100000_llm_credential_conditional_activation.sql");
+assert.match(migration, /is_active = false,\n    updated_at = clock_timestamp\(\);/, "every edit is saved inactive (DB)");
+assert.match(migration, /for update;\n  if not found then return 'not_found'; end if;\n  if p_expected_updated_at is null or v_updated is distinct from p_expected_updated_at then return 'changed'; end if;/, "the switch is locked and token-bound (DB)");
+assert.match(migration, /grant execute on function public\.set_active_llm_credential_if_unchanged\(uuid, timestamptz\) to service_role;/);
 assert.match(src("components/admin/data-sync/SettingsView.tsx"), /if \(r\.data\.notActivated\) toast\.warning\(/, "the form says when a saved key was not activated");
 // C2O-176 P1, behaviourally: a stored plaintext key blocks the save; otherwise the key written is always ""
 assert.equal(legacyKeyForSave("sk-ant-legacy").ok, false);

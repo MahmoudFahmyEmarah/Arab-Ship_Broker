@@ -125,3 +125,18 @@ export function legacyKeyForSave(storedKey: unknown): { ok: true; apiKey: "" } |
 export function openAiCompatibleModelFound(list: unknown, model: string): true | null {
   return modelListedIn(list, "openai-compatible", model) === true ? true : null;
 }
+
+/** Whether a provider test result may make a key the classifier key (C2O-178): Anthropic and Google expose a
+ * per-model route, so only a confirmed model (true) activates; an OpenAI-compatible gateway that authenticated
+ * but cannot confirm ids (null) may activate. A failed or unreadable test never activates. */
+export function mayActivate(family: LlmProviderFamily, modelFound: boolean | null): boolean {
+  return modelFound === true || (modelFound === null && family === "openai-compatible");
+}
+
+/** The answer of set_active_llm_credential_if_unchanged, as the owner reads it. */
+export function activationRefusal(result: string): string | null {
+  if (result === "activated") return null;
+  if (result === "changed") return "the key was edited after it was tested — test it again, then activate";
+  if (result === "not_found") return "the key no longer exists";
+  return `unexpected answer from the database (${result})`;
+}
