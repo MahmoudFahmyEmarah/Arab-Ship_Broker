@@ -52,6 +52,7 @@ begin
   perform public.save_llm_credential(v_a, 'llm-contract A2', 'anthropic', 'claude-haiku-5-5', null, null, false);
   select id into strict v_active from public.llm_credential where is_active;
   if v_active <> v_b then raise exception 'L8: editing an inactive key changed the active one'; end if;
+  if (select is_active from public.llm_credential where id = v_a) then raise exception 'L8: the edited inactive key became active'; end if;
 
   -- L7 · unknown id
   if public.set_active_llm_credential_if_unchanged(gen_random_uuid(), now()) <> 'not_found' then raise exception 'L7: unknown id not refused'; end if;

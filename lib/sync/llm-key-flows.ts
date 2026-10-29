@@ -37,7 +37,15 @@ export async function activateIfVerified(d: KeyFlowDeps, id: string): Promise<st
   if (!mayActivate(probe.data.family, probe.data.modelFound)) {
     return `the provider did not confirm the model "${probe.data.model}" — pick a model it serves and test again`;
   }
-  const refusal = activationRefusal(await d.activateIfUnchanged(id, probe.data.token));
+  // an RPC error is a refusal, never a thrown failure: the save already happened (inactive) and was audited, so the
+  // owner must see "saved, not activated", not "could not save" (which invites a duplicate save)
+  let result: string;
+  try {
+    result = await d.activateIfUnchanged(id, probe.data.token);
+  } catch (e) {
+    return `the activation could not be recorded (${e instanceof Error ? e.message : String(e)}) — the key stays inactive`;
+  }
+  const refusal = activationRefusal(result);
   if (refusal) return refusal;
   await d.audit({ action: "settings.llm.activate", targetId: id, summary: `Activated the LLM key after a passing provider test (${probe.data.model})` });
   return null;

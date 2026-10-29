@@ -78,6 +78,15 @@ await t("a failing re-test of an edited active key leaves it INACTIVE and says i
   assert.match(r.notActivated ?? "", /HTTP 401\)?\.?.*INACTIVE \(it was active before the edit\)/);
   assert.ok(!names(calls).includes("activateIfUnchanged"));
 });
+await t("an activation RPC error is a refusal, not a failed save", async () => {
+  const { d, calls } = fake({ probe: ok("anthropic", true) });
+  d.activateIfUnchanged = async () => { calls.push(["activateIfUnchanged"]); throw new Error("connection reset"); };
+  const r = await saveAndMaybeActivate(d, input({ makeActive: true, secret: "sk" }));
+  assert.equal(r.activated, false);
+  assert.match(r.notActivated ?? "", /could not be recorded \(connection reset\) — the key stays inactive/);
+  assert.deepEqual(names(calls), ["save", "audit", "probe", "activateIfUnchanged"], "no activation audit");
+  assert.match((await activateIfVerified(d, "k1")) ?? "", /could not be recorded/);
+});
 await t("a new key without the box ticked is saved inactive with no probe", async () => {
   const { d, calls } = fake({ probe: ok("anthropic", true) });
   const r = await saveAndMaybeActivate(d, input({ secret: "sk" }));
