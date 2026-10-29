@@ -72,7 +72,7 @@ assert.doesNotMatch(syncActions, /p_make_active: true/, "no import path activate
 // C2O-177: Test, Activate and save-with-activate share one provider/model probe; nothing activates without it
 assert.match(syncActions, /async function probeLlmCredential\(/, "one private probe helper");
 assert.match(syncActions, /export async function testLlmCredential[\s\S]*?return await probeLlmCredential\(c, who, id\);/, "Test runs the probe");
-assert.match(syncActions, /wasActive = row\?\.is_active === true;/, "the save knows whether it edits the active key");
+assert.match(syncActions, /return data\?\.is_active === true;/, "the save knows whether it edits the active key");
 // C2O-178: activation is version-bound and provider-family aware; the old unconditional switch is never called
 assert.equal(mayActivate("anthropic", true), true);
 assert.equal(mayActivate("anthropic", null), false, "Anthropic/Google must confirm the model");
@@ -82,13 +82,14 @@ assert.equal(mayActivate("openai-compatible", false), false);
 assert.equal(activationRefusal("activated"), null);
 assert.match(activationRefusal("changed") ?? "", /test it again/);
 assert.match(activationRefusal("weird") ?? "", /unexpected/);
-assert.equal((syncActions.match(/c\.rpc\("set_active_llm_credential_if_unchanged"/g) ?? []).length, 1, "one conditional activation call site (activateIfVerified)");
+assert.equal((syncActions.match(/c\.rpc\("set_active_llm_credential_if_unchanged"/g) ?? []).length, 1, "one conditional activation call site (keyFlowDeps)");
 assert.doesNotMatch(syncActions, /c\.rpc\("set_active_llm_credential",/, "the unconditional switch is never called");
 assert.doesNotMatch(syncActions, /\.update\(\{ is_active/, "no direct is_active writes");
-assert.match(syncActions, /p_expected_updated_at: probe\.data\.token/, "activation carries the token the test read");
-assert.match(syncActions, /if \(!mayActivate\(probe\.data\.family, probe\.data\.modelFound\)\)/, "the family rule gates activation");
-assert.equal((syncActions.match(/await activateIfVerified\(c, who, /g) ?? []).length, 2, "Activate and save-with-activate both go through activateIfVerified");
-assert.match(syncActions, /p_make_active: false,\n    \}\);\n    if \(error\) return \{ success: false, error: error\.message \};\n    const id = String\(data\);/, "the save RPC never activates");
+assert.match(syncActions, /p_expected_updated_at: token \}/, "activation carries the token the test read");
+assert.match(src("lib/sync/llm-key-flows.ts"), /if \(!mayActivate\(probe\.data\.family, probe\.data\.modelFound\)\)/, "the family rule gates activation");
+assert.match(syncActions, /await activateIfVerified\(keyFlowDeps\(c, who\), id\)/, "Activate goes through activateIfVerified");
+assert.match(syncActions, /await saveAndMaybeActivate\(keyFlowDeps\(c, who\), \{/, "save goes through saveAndMaybeActivate");
+assert.match(syncActions, /p_base_url: input\.baseUrl, p_secret: input\.secret,\n        p_make_active: false,/, "the save RPC never activates");
 assert.doesNotMatch(syncActions, /made active" : ""/, "the save audit never claims an activation");
 const migration = src("supabase/migrations/20261029100000_llm_credential_conditional_activation.sql");
 assert.match(migration, /is_active = false,\n    updated_at = clock_timestamp\(\);/, "every edit is saved inactive (DB)");

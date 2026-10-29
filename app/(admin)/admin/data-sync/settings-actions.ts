@@ -13,8 +13,9 @@ import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-sett
 import { getWatermark, setWatermark } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
-import { LLM_MODEL_SUGGESTIONS, activationRefusal, catalogueModel, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, mayActivate, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
+import { LLM_MODEL_SUGGESTIONS, catalogueModel, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
+import { activateIfVerified, saveAndMaybeActivate, type KeyFlowDeps } from "@/lib/sync/llm-key-flows";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -77,7 +78,38 @@ export interface SaveLlmInput {
   makeActive?: boolean;
 }
 
-export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string; notActivated?: string }>> {
+/** The real dependencies of the key flows (lib/sync/llm-key-flows.ts): save_llm_credential (every insert and
+ * edit lands inactive, 20261029100000), the provider probe, and the version-bound switch. */
+function keyFlowDeps(c: AdminDb, who: AdminWho): KeyFlowDeps {
+  return {
+    isActive: async (id) => {
+      const { data, error } = await c.from("llm_credential").select("is_active").eq("id", id).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data?.is_active === true;
+    },
+    save: async (input) => {
+      const { data, error } = await c.rpc("save_llm_credential", {
+        p_id: input.id ?? null, p_label: input.label, p_vendor: input.vendor, p_model: input.model,
+        p_base_url: input.baseUrl, p_secret: input.secret,
+        p_make_active: false,
+      });
+      if (error) throw new Error(error.message);
+      return String(data);
+    },
+    probe: async (id) => {
+      const r = await probeLlmCredential(c, who, id);
+      return r.success ? { ok: true, data: { model: r.data.model, modelFound: r.data.modelFound, family: r.data.family, token: r.data.token } } : { ok: false, error: r.error };
+    },
+    activateIfUnchanged: async (id, token) => {
+      const { data, error } = await c.rpc("set_active_llm_credential_if_unchanged", { p_id: id, p_expected_updated_at: token });
+      if (error) throw new Error(error.message);
+      return String(data);
+    },
+    audit: async (e) => { await logAudit(c, { actor: who, targetKind: "settings", ...e }); },
+  };
+}
+
+export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string; activated: boolean; notActivated?: string }>> {
   if (!input.label?.trim()) return { success: false, error: "Give the key a label." };
   if (!input.vendor?.trim() || !input.model?.trim()) return { success: false, error: "Vendor and model are required." };
   if (input.id && !UUID_RE.test(input.id)) return { success: false, error: "Invalid key id." };
@@ -86,54 +118,16 @@ export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ i
   if (!safe.ok) return { success: false, error: `Base URL rejected — ${safe.reason}.` };
   try {
     const { c, who } = await adminCtx();
-    let wasActive = false;
-    if (input.id) {
-      const { data: row, error: rErr } = await c.from("llm_credential").select("is_active").eq("id", input.id).maybeSingle();
-      if (rErr) return { success: false, error: rErr.message };
-      wasActive = row?.is_active === true;
-    }
-    // save_llm_credential (20261029100000) saves every insert and every edit INACTIVE: an edit of the active key
-    // takes it out of service at once, so untested values are never used by the classifier (C2O-178)
-    const { data, error } = await c.rpc("save_llm_credential", {
-      p_id: input.id ?? null,
-      p_label: input.label.trim(),
-      p_vendor: input.vendor.trim(),
-      p_model: input.model.trim(),
-      p_base_url: input.baseUrl?.trim() || null,
-      p_secret: input.secret?.trim() || null,
-      p_make_active: false,
+    // every insert and edit is saved INACTIVE; activation only through the tested, version-bound path (C2O-178)
+    const r = await saveAndMaybeActivate(keyFlowDeps(c, who), {
+      id: input.id, label: input.label.trim(), vendor: input.vendor.trim(), model: input.model.trim(),
+      baseUrl: input.baseUrl?.trim() || null, secret: input.secret?.trim() || null, makeActive: !!input.makeActive,
     });
-    if (error) return { success: false, error: error.message };
-    const id = String(data);
-    await logAudit(c, { actor: who, action: "settings.llm.save", targetKind: "settings", targetId: id, summary: `${input.id ? "Updated" : "Added"} LLM key “${input.label.trim()}” (${input.vendor.trim()} · ${input.model.trim()})${input.secret?.trim() ? " — secret rotated" : ""} — saved inactive`, detail: { vendor: input.vendor.trim(), model: input.model.trim(), baseUrl: input.baseUrl?.trim() || null, secretChanged: !!input.secret?.trim(), wasActive, activationRequested: !!input.makeActive } });
-    let notActivated: string | undefined;
-    if (input.makeActive) {
-      const refused = await activateIfVerified(c, who, id);
-      if (refused) notActivated = wasActive ? `${refused}. The key is now INACTIVE (it was active before the edit)` : refused;
-    } else if (wasActive) {
-      notActivated = "the edit took the key out of service — tick \"Make this the active key\" (it is tested first) to use it again";
-    }
     revalidatePath("/admin/data-sync");
-    return { success: true, data: { id, ...(notActivated ? { notActivated } : {}) } };
+    return { success: true, data: r };
   } catch (e) {
     return fail(e, "Could not save the key.");
   }
-}
-
-/** Tests the stored key and activates it only if the test passes AND the row is unchanged since the test read it
- * (set_active_llm_credential_if_unchanged). Returns null on success, else the reason it was not activated. */
-async function activateIfVerified(c: AdminDb, who: AdminWho, id: string): Promise<string | null> {
-  const probe = await probeLlmCredential(c, who, id);
-  if (!probe.success) return probe.error;
-  if (!mayActivate(probe.data.family, probe.data.modelFound)) {
-    return `the provider did not confirm the model "${probe.data.model}" — pick a model it serves and test again`;
-  }
-  const { data: result, error } = await c.rpc("set_active_llm_credential_if_unchanged", { p_id: id, p_expected_updated_at: probe.data.token });
-  if (error) return error.message;
-  const refusal = activationRefusal(String(result));
-  if (refusal) return refusal;
-  await logAudit(c, { actor: who, action: "settings.llm.activate", targetKind: "settings", targetId: id, summary: `Activated the LLM key after a passing provider test (${probe.data.model})` });
-  return null;
 }
 
 export async function activateLlmCredential(id: string): Promise<Result> {
@@ -141,7 +135,7 @@ export async function activateLlmCredential(id: string): Promise<Result> {
   try {
     const { c, who } = await adminCtx();
     // never activate an untested or since-edited key: probe, provider-family rule, version-bound switch (C2O-178)
-    const refused = await activateIfVerified(c, who, id);
+    const refused = await activateIfVerified(keyFlowDeps(c, who), id);
     if (refused) return { success: false, error: `Not activated — ${refused}` };
     revalidatePath("/admin/data-sync");
     return { success: true };

@@ -14,6 +14,7 @@ begin
     raise exception 'L1: an API role can execute a credential function';
   end if;
   if not has_function_privilege('service_role', v_cond, 'execute') then raise exception 'L1: service_role cannot activate'; end if;
+  if not has_function_privilege('service_role', v_save, 'execute') then raise exception 'L1: service_role cannot save'; end if;
 
   -- L2 · a new key is saved inactive even when p_make_active is true (the deployed app's old call)
   v_a := public.save_llm_credential(null, 'llm-contract A', 'anthropic', 'claude-haiku-5-5', null, 'sk-ant-contract-aaaa', true);
@@ -46,6 +47,11 @@ begin
   if public.set_active_llm_credential_if_unchanged(v_b, v_tok_b) <> 'activated' then raise exception 'L6: B not activated'; end if;
   select id into strict v_active from public.llm_credential where is_active;
   if v_active <> v_b then raise exception 'L6: the active key is not B'; end if;
+
+  -- L8 · editing a NON-active key leaves the active one (B) untouched
+  perform public.save_llm_credential(v_a, 'llm-contract A2', 'anthropic', 'claude-haiku-5-5', null, null, false);
+  select id into strict v_active from public.llm_credential where is_active;
+  if v_active <> v_b then raise exception 'L8: editing an inactive key changed the active one'; end if;
 
   -- L7 · unknown id
   if public.set_active_llm_credential_if_unchanged(gen_random_uuid(), now()) <> 'not_found' then raise exception 'L7: unknown id not refused'; end if;

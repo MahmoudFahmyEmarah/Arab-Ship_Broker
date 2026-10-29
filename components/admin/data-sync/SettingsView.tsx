@@ -62,7 +62,8 @@ export function SettingsView() {
     if (!r.success) { toast.error(r.error); return; }
     // the test proves the key AND the model id; a provider that cannot confirm an id is said so, never implied
     if (r.data.modelFound === true) toast.success(`Key authenticated and the provider serves ${r.data.model}.`);
-    else toast.success(`Key authenticated; the provider could not confirm the model id ${r.data.model} — a sync will tell.`);
+    else if (r.data.family === "openai-compatible") toast.success(`Key authenticated; this gateway cannot confirm the model id ${r.data.model} — it can still be activated.`);
+    else toast.warning(`Key authenticated, but the provider did not confirm the model ${r.data.model} — Activate will refuse until it does.`);
   };
   const remove = async (cr: LlmCredentialMeta) => {
     if (!confirm(`Delete key "${cr.label}"? Its encrypted secret is destroyed too.`)) return;
@@ -197,7 +198,7 @@ function KeyModal({ cred, onClose, onSaved }: {
     if (!r.success) { toast.error(r.error); return; }
     // activation runs the same provider/model test as the Test button; a failing key is saved but not activated
     if (r.data.notActivated) toast.warning(`${cred ? "Key updated" : "Key added"}, but NOT made active — ${r.data.notActivated}`);
-    else toast.success(cred ? "Key updated." : "Key added and encrypted.");
+    else toast.success(`${cred ? "Key updated" : "Key added and encrypted"}${r.data.activated ? " and made active (the provider test passed)" : " — inactive"}.`);
     onSaved();
   };
 
