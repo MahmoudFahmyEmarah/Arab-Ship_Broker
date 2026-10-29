@@ -83,7 +83,7 @@ await t("an activation RPC error is a refusal, not a failed save", async () => {
   d.activateIfUnchanged = async () => { calls.push(["activateIfUnchanged"]); throw new Error("connection reset"); };
   const r = await saveAndMaybeActivate(d, input({ makeActive: true, secret: "sk" }));
   assert.equal(r.activated, false);
-  assert.match(r.notActivated ?? "", /could not be recorded \(connection reset\) — the key stays inactive/);
+  assert.match(r.notActivated ?? "", /could not be recorded \(connection reset\) — it may or may not be active now/);
   assert.deepEqual(names(calls), ["save", "audit", "probe", "activateIfUnchanged"], "no activation audit");
   assert.match((await activateIfVerified(d, "k1")) ?? "", /could not be recorded/);
 });

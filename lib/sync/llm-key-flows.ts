@@ -43,7 +43,7 @@ export async function activateIfVerified(d: KeyFlowDeps, id: string): Promise<st
   try {
     result = await d.activateIfUnchanged(id, probe.data.token);
   } catch (e) {
-    return `the activation could not be recorded (${e instanceof Error ? e.message : String(e)}) — the key stays inactive`;
+    return `the activation could not be recorded (${e instanceof Error ? e.message : String(e)}) — it may or may not be active now: reload the list to see its state, and press Test`;
   }
   const refusal = activationRefusal(result);
   if (refusal) return refusal;
@@ -67,7 +67,10 @@ export async function saveAndMaybeActivate(d: KeyFlowDeps, input: SaveKeyInput):
   if (input.makeActive) {
     const refused = await activateIfVerified(d, id);
     if (!refused) return { id, activated: true };
-    return { id, activated: false, notActivated: wasActive ? `${refused}. The key is now INACTIVE (it was active before the edit)` : refused };
+    // "now INACTIVE" is only claimed when the activation was refused before the switch ran; an RPC error leaves
+    // the state unknown and its own message says so
+    const unknown = refused.startsWith("the activation could not be recorded");
+    return { id, activated: false, notActivated: wasActive && !unknown ? `${refused}. The key is now INACTIVE (it was active before the edit)` : refused };
   }
   if (wasActive) {
     return { id, activated: false, notActivated: "the edit took the key out of service — tick \"Make this the active key\" (it is tested first) to use it again" };
