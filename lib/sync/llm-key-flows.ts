@@ -1,0 +1,104 @@
+// The two state transitions of a Data Sync LLM key — save (every insert and edit lands inactive) and
+// activation (only after a passing provider test of exactly the stored values, through the version-bound
+// switch). Pure over injected dependencies, so scripts/llm-key-flows-check.ts can run them against a fake
+// client; app/(admin)/admin/data-sync/settings-actions.ts wires the real Supabase client (C2O-178).
+import { activationRefusal, mayActivate, type LlmProviderFamily } from "@/lib/sync/llm-provider";
+
+export type ProbeData = { model: string; modelFound: boolean | null; family: LlmProviderFamily; token: string };
+export type ProbeOutcome = { ok: true; data: ProbeData } | { ok: false; error: string };
+export type KeyAudit = { action: string; targetId: string; summary: string; ok?: boolean; detail?: Record<string, unknown> };
+
+export interface KeyFlowDeps {
+  /** whether the credential is the active key now (throws on a read error) */
+  isActive(id: string): Promise<boolean>;
+  /** save_llm_credential — always called with makeActive false; returns the id (throws on error) */
+  save(input: SaveKeyInput): Promise<string>;
+  /** the provider/model test of the STORED values, with the version token it read */
+  probe(id: string): Promise<ProbeOutcome>;
+  /** set_active_llm_credential_if_unchanged — 'activated' | 'changed' | 'not_found' (throws on error) */
+  activateIfUnchanged(id: string, token: string): Promise<string>;
+  audit(entry: KeyAudit): Promise<void>;
+}
+
+export interface SaveKeyInput {
+  id?: string;
+  label: string;
+  vendor: string;
+  model: string;
+  baseUrl: string | null;
+  secret: string | null;
+  makeActive: boolean;
+}
+
+/** The prefix activateIfVerified uses when the switch's outcome is unknown (an RPC transport error). */
+export const ACTIVATION_UNKNOWN = "the activation could not be recorded";
+
+/** Test, rule, version-bound switch, audit of the real outcome. Null = activated, else the refusal reason. */
+export async function activateIfVerified(d: KeyFlowDeps, id: string): Promise<string | null> {
+  const probe = await d.probe(id);
+  if (!probe.ok) return probe.error;
+  if (!mayActivate(probe.data.family, probe.data.modelFound)) {
+    return `the provider did not confirm the model "${probe.data.model}" — pick a model it serves and test again`;
+  }
+  // an RPC error is a refusal, never a thrown failure: the save already happened (inactive) and was audited, so the
+  // owner must see "saved, not activated", not "could not save" (which invites a duplicate save)
+  let result: string;
+  try {
+    result = await d.activateIfUnchanged(id, probe.data.token);
+  } catch (e) {
+    return `${ACTIVATION_UNKNOWN} (${e instanceof Error ? e.message : String(e)}) — it may or may not be active now: reload the list to see its state, and press Test`;
+  }
+  const refusal = activationRefusal(result);
+  if (refusal) return refusal;
+  await d.audit({ action: "settings.llm.activate", targetId: id, summary: `Activated the LLM key after a passing provider test (${probe.data.model})` });
+  return null;
+}
+
+/** Save inactive; when asked, activate only through activateIfVerified. An edit of the active key always takes it
+ * out of service first and is logged as such. */
+export async function saveAndMaybeActivate(d: KeyFlowDeps, input: SaveKeyInput): Promise<{ id: string; activated: boolean; activationUnknown?: boolean; notActivated?: string }> {
+  const wasActive = input.id ? await d.isActive(input.id) : false;
+  const id = await d.save({ ...input, makeActive: false });
+  await d.audit({
+    action: "settings.llm.save", targetId: id,
+    summary: `${input.id ? "Updated" : "Added"} LLM key “${input.label}” (${input.vendor} · ${input.model})${input.secret ? " — secret rotated" : ""} — saved inactive`,
+    detail: { vendor: input.vendor, model: input.model, baseUrl: input.baseUrl, secretChanged: !!input.secret, wasActive, activationRequested: input.makeActive },
+  });
+  if (wasActive) {
+    await d.audit({ action: "settings.llm.deactivate", targetId: id, summary: "The edit took the active LLM key out of service until it passes the provider test", ok: false });
+  }
+  if (input.makeActive) {
+    const refused = await activateIfVerified(d, id);
+    if (!refused) return { id, activated: true };
+    // "now INACTIVE" is only claimed when the activation was refused before the switch ran; an RPC error leaves
+    // the state unknown and its own message says so
+    // tri-state (C2O-183 P3): an unknown outcome is reported as unknown, never as "not activated"
+    if (refused.startsWith(ACTIVATION_UNKNOWN)) return { id, activated: false, activationUnknown: true, notActivated: refused };
+    return { id, activated: false, notActivated: wasActive ? `${refused}. The key is now INACTIVE (it was active before the edit)` : refused };
+  }
+  if (wasActive) {
+    return { id, activated: false, notActivated: "the edit took the key out of service — tick \"Make this the active key\" (it is tested first) to use it again" };
+  }
+  return { id, activated: false };
+}
+
+/** The standalone Activate outcome as structured state (C2O-184): the server classifies once, the form never
+ * parses text. "unknown" = the switch's result was lost (transport error) — the key may or may not be active. */
+export type ActivationResult = { outcome: "activated" } | { outcome: "unknown"; message: string } | { outcome: "refused"; message: string };
+
+export async function activateKey(d: KeyFlowDeps, id: string): Promise<ActivationResult> {
+  const refused = await activateIfVerified(d, id);
+  if (refused === null) return { outcome: "activated" };
+  if (refused.startsWith(ACTIVATION_UNKNOWN)) return { outcome: "unknown", message: refused };
+  return { outcome: "refused", message: refused };
+}
+
+/** What the form shows for an Activate result, and whether it must reload the key list: a known refusal is an
+ * error ("Not activated — …", list unchanged); an unknown result is a warning and ALWAYS reloads, so the list
+ * shows the real state; a success reloads too. */
+export function activationFeedback(r: { success: true; data: ActivationResult } | { success: false; error: string }): { kind: "success" | "warning" | "error"; text: string; reload: boolean } {
+  if (!r.success) return { kind: "error", text: r.error, reload: false };
+  if (r.data.outcome === "activated") return { kind: "success", text: "Active key switched (the provider test passed).", reload: true };
+  if (r.data.outcome === "unknown") return { kind: "warning", text: `Activation result unknown — reloading the key list to show its real state (${r.data.message})`, reload: true };
+  return { kind: "error", text: `Not activated — ${r.data.message}`, reload: false };
+}

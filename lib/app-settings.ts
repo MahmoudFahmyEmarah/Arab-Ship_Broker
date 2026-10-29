@@ -1,4 +1,5 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { LLM_MODEL_SUGGESTIONS } from "@/lib/sync/llm-provider";
 
 // Global platform flags live in public.app_settings (key/jsonb value). Keys are
 // centralised here so the reader, the admin action, and any future flag share
@@ -190,7 +191,7 @@ export const DEFAULT_CARD_FIELDS: Record<string, boolean> = {
 };
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsData = {
-  ai: { vendor: "anthropic", model: "claude-sonnet-4", baseUrl: "", apiKey: "" },
+  ai: { vendor: "anthropic", model: LLM_MODEL_SUGGESTIONS.anthropic[0], baseUrl: "", apiKey: "" },
   marketplace: {
     archiveLayer1: "30",
     archiveLayer2: "6",

@@ -17,6 +17,7 @@ import {
   type PlatformSettingsData,
   type MarketVisibilitySettings,
 } from "@/lib/app-settings";
+import { legacyKeyForSave } from "@/lib/sync/llm-provider";
 
 // Flip the global beta-mode flag. Owner-only (the "settings" section is
 // owner-only in the authorization registry); the edit guard keeps view seats
@@ -65,14 +66,23 @@ export async function savePlatformSettings(input: {
   // Store in canonical order / de-duplicated.
   const design = normalizeComingSoonDesign(input.design);
   const now = new Date().toISOString();
-  const { error } = await getSupabaseAdminClient()
+  const db = getSupabaseAdminClient();
+  // Provider secrets are edited only in Data Sync → Connections (Vault). While a plaintext legacy key is still
+  // stored the save is refused (import it first), so this read-modify-write can never write a key back after
+  // a Vault import; otherwise the stored key is always "" and the browser's value is never used.
+  const { data: storedRow, error: readErr } = await db.from("app_settings").select("value").eq("key", PLATFORM_SETTINGS_KEY).maybeSingle();
+  if (readErr) return { success: false, error: readErr.message };
+  const legacy = legacyKeyForSave((storedRow?.value as Partial<PlatformSettingsData> | null)?.ai?.apiKey);
+  if (!legacy.ok) return { success: false, error: legacy.error };
+  const settings: PlatformSettingsData = { ...input.settings, ai: { ...input.settings.ai, apiKey: legacy.apiKey } };
+  const { error } = await db
     .from("app_settings")
     .upsert(
       [
         { key: PLATFORM_MODE_KEY, value: input.mode, updated_at: now },
         { key: COMING_SOON_DESIGN_KEY, value: design, updated_at: now },
         { key: BETA_MODE_KEY, value: input.mode === "Beta", updated_at: now },
-        { key: PLATFORM_SETTINGS_KEY, value: input.settings, updated_at: now },
+        { key: PLATFORM_SETTINGS_KEY, value: settings, updated_at: now },
       ],
       { onConflict: "key" },
     );

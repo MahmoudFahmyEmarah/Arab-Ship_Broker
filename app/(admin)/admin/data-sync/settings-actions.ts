@@ -13,14 +13,15 @@ import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-sett
 import { getWatermark, setWatermark } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
-import { llmModelsEndpoint, llmProviderFamily } from "@/lib/sync/llm-provider";
+import { LLM_MODEL_SUGGESTIONS, catalogueModel, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
+import { activateKey, saveAndMaybeActivate, type ActivationResult, type KeyFlowDeps } from "@/lib/sync/llm-key-flows";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Result<T = undefined> =
-  | ({ success: true } & (T extends undefined ? object : { data: T }))
+  | ({ success: true } & ([T] extends [undefined] ? object : { data: T }))
   | { success: false; error: string };
 
 // requireAdmin denies by redirect(), which throws. Re-throw it so the bounce
@@ -77,7 +78,38 @@ export interface SaveLlmInput {
   makeActive?: boolean;
 }
 
-export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string }>> {
+/** The real dependencies of the key flows (lib/sync/llm-key-flows.ts): save_llm_credential (every insert and
+ * edit lands inactive, 20261029100000), the provider probe, and the version-bound switch. */
+function keyFlowDeps(c: AdminDb, who: AdminWho): KeyFlowDeps {
+  return {
+    isActive: async (id) => {
+      const { data, error } = await c.from("llm_credential").select("is_active").eq("id", id).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data?.is_active === true;
+    },
+    save: async (input) => {
+      const { data, error } = await c.rpc("save_llm_credential", {
+        p_id: input.id ?? null, p_label: input.label, p_vendor: input.vendor, p_model: input.model,
+        p_base_url: input.baseUrl, p_secret: input.secret,
+        p_make_active: false,
+      });
+      if (error) throw new Error(error.message);
+      return String(data);
+    },
+    probe: async (id) => {
+      const r = await probeLlmCredential(c, who, id);
+      return r.success ? { ok: true, data: { model: r.data.model, modelFound: r.data.modelFound, family: r.data.family, token: r.data.token } } : { ok: false, error: r.error };
+    },
+    activateIfUnchanged: async (id, token) => {
+      const { data, error } = await c.rpc("set_active_llm_credential_if_unchanged", { p_id: id, p_expected_updated_at: token });
+      if (error) throw new Error(error.message);
+      return String(data);
+    },
+    audit: async (e) => { await logAudit(c, { actor: who, targetKind: "settings", ...e }); },
+  };
+}
+
+export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string; activated: boolean; activationUnknown?: boolean; notActivated?: string }>> {
   if (!input.label?.trim()) return { success: false, error: "Give the key a label." };
   if (!input.vendor?.trim() || !input.model?.trim()) return { success: false, error: "Vendor and model are required." };
   if (input.id && !UUID_RE.test(input.id)) return { success: false, error: "Invalid key id." };
@@ -86,33 +118,27 @@ export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ i
   if (!safe.ok) return { success: false, error: `Base URL rejected — ${safe.reason}.` };
   try {
     const { c, who } = await adminCtx();
-    const { data, error } = await c.rpc("save_llm_credential", {
-      p_id: input.id ?? null,
-      p_label: input.label.trim(),
-      p_vendor: input.vendor.trim(),
-      p_model: input.model.trim(),
-      p_base_url: input.baseUrl?.trim() || null,
-      p_secret: input.secret?.trim() || null,
-      p_make_active: input.makeActive ?? false,
+    // every insert and edit is saved INACTIVE; activation only through the tested, version-bound path (C2O-178)
+    const r = await saveAndMaybeActivate(keyFlowDeps(c, who), {
+      id: input.id, label: input.label.trim(), vendor: input.vendor.trim(), model: input.model.trim(),
+      baseUrl: input.baseUrl?.trim() || null, secret: input.secret?.trim() || null, makeActive: !!input.makeActive,
     });
-    if (error) return { success: false, error: error.message };
-    await logAudit(c, { actor: who, action: "settings.llm.save", targetKind: "settings", targetId: String(data), summary: `${input.id ? "Updated" : "Added"} LLM key “${input.label.trim()}” (${input.vendor.trim()} · ${input.model.trim()})${input.secret?.trim() ? " — secret rotated" : ""}${input.makeActive ? " — made active" : ""}`, detail: { vendor: input.vendor.trim(), model: input.model.trim(), baseUrl: input.baseUrl?.trim() || null, secretChanged: !!input.secret?.trim(), makeActive: !!input.makeActive } });
     revalidatePath("/admin/data-sync");
-    return { success: true, data: { id: data as string } };
+    return { success: true, data: r };
   } catch (e) {
     return fail(e, "Could not save the key.");
   }
 }
 
-export async function activateLlmCredential(id: string): Promise<Result> {
+export async function activateLlmCredential(id: string): Promise<Result<ActivationResult>> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid key id." };
   try {
     const { c, who } = await adminCtx();
-    const { error } = await c.rpc("set_active_llm_credential", { p_id: id });
-    if (error) return { success: false, error: error.message };
-    await logAudit(c, { actor: who, action: "settings.llm.activate", targetKind: "settings", targetId: id, summary: "Switched the active LLM key" });
+    // never activate an untested or since-edited key: probe, provider-family rule, version-bound switch (C2O-178);
+    // the outcome crosses the action boundary as structured state — activated | unknown | refused (C2O-184)
+    const outcome = await activateKey(keyFlowDeps(c, who), id);
     revalidatePath("/admin/data-sync");
-    return { success: true };
+    return { success: true, data: outcome };
   } catch (e) {
     return fail(e, "Could not activate the key.");
   }
@@ -134,12 +160,34 @@ export async function deleteLlmCredential(id: string): Promise<Result> {
 
 // Read-only provider ping to confirm a stored key actually authenticates.
 // The plaintext is decrypted server-side (get_llm_secret) and never leaves here.
-export async function testLlmCredential(id: string): Promise<Result<{ status: number }>> {
+/** Proves the stored key authenticates AND that the stored model id exists at the provider — a key that
+ * auths with a model the provider does not serve fails every classification batch with a 404 (27 Oct 2026,
+ * "model: claude-sonnet-4-5"), so "key OK" alone is not a usable answer. `modelFound` is null only when the
+ * provider offers no way to check the id (an OpenAI-compatible gateway without a per-model endpoint or a
+ * readable list); that case stays a success so a working custom gateway is not refused. */
+export async function testLlmCredential(id: string): Promise<Result<ProbeResult>> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid key id." };
   try {
     const { c, who } = await adminCtx();
+    return await probeLlmCredential(c, who, id);
+  } catch (e) {
+    unstable_rethrow(e);
+    const msg = e instanceof Error ? e.message : "Test failed.";
+    return { success: false, error: `Could not reach the provider: ${msg}` };
+  }
+}
+
+type AdminDb = Awaited<ReturnType<typeof adminCtx>>["c"];
+type AdminWho = Awaited<ReturnType<typeof adminCtx>>["who"];
+
+/** The one provider/model check behind Test, Activate and save-with-activate (C2O-177): a key becomes the
+ * classifier key only after this succeeds (modelFound true, or null for a gateway that cannot confirm ids). */
+type ProbeResult = { status: number; model: string; modelFound: boolean | null; family: LlmProviderFamily; token: string };
+async function probeLlmCredential(c: AdminDb, who: AdminWho, id: string): Promise<Result<ProbeResult>> {
+  try {
+    // updated_at is the version token: activation later succeeds only if the row is still exactly what was tested
     const { data: meta, error: mErr } = await c
-      .from("llm_credential").select("vendor, base_url").eq("id", id).maybeSingle();
+      .from("llm_credential").select("vendor, model, base_url, updated_at").eq("id", id).maybeSingle();
     if (mErr) return { success: false, error: mErr.message };
     if (!meta) return { success: false, error: "Key not found." };
     const { data: secret, error: sErr } = await c.rpc("get_llm_secret", { p_id: id });
@@ -147,6 +195,8 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
     if (!secret) return { success: false, error: "No key stored for this credential." };
 
     const vendor = (meta.vendor as string).toLowerCase();
+    const model = String(meta.model ?? "").trim();
+    if (!model) return { success: false, error: "This key has no model id. Edit the key and choose one." };
     const override = (meta.base_url as string | null)?.replace(/\/$/, "") || null;
     // The decrypted key goes in the request headers — never to a private host
     // or over plain http, even if a stored override says so.
@@ -155,25 +205,40 @@ export async function testLlmCredential(id: string): Promise<Result<{ status: nu
     const family = llmProviderFamily(vendor);
 
     // Each provider gets a cheap, read-only models-list call to prove the key auths.
-    let url: string;
-    let headers: Record<string, string>;
-    if (family === "anthropic") {
-      url = llmModelsEndpoint(vendor, override);
-      headers = { "x-api-key": secret as string, "anthropic-version": "2023-06-01" };
-    } else if (family === "google") {
-      url = llmModelsEndpoint(vendor, override);
-      headers = { "x-goog-api-key": secret as string };
-    } else {
-      url = llmModelsEndpoint(vendor, override);
-      headers = { Authorization: `Bearer ${secret as string}` };
-    }
-
-    const res = await fetch(url, { method: "GET", headers, signal: AbortSignal.timeout(12000) });
-    await logAudit(c, { actor: who, action: "settings.llm.test", targetKind: "settings", targetId: id, summary: res.ok ? `Tested an LLM key — provider accepted it (HTTP ${res.status})` : `Tested an LLM key — provider rejected it (HTTP ${res.status})`, ok: res.ok, detail: { status: res.status, vendor } });
+    const headers: Record<string, string> =
+      family === "anthropic" ? { "x-api-key": secret as string, "anthropic-version": "2023-06-01" }
+      : family === "google" ? { "x-goog-api-key": secret as string }
+      : { Authorization: `Bearer ${secret as string}` };
+    // redirect: "manual" — the key must never follow a 30x to another origin (a 3xx reads as a rejection)
+    const res = await fetch(llmModelsEndpoint(vendor, override), { method: "GET", headers, redirect: "manual", signal: AbortSignal.timeout(12000) });
     if (!res.ok) {
+      await logAudit(c, { actor: who, action: "settings.llm.test", targetKind: "settings", targetId: id, summary: `Tested an LLM key — provider rejected it (HTTP ${res.status})`, ok: false, detail: { status: res.status, vendor, model } });
       return { success: false, error: `Provider rejected the key (HTTP ${res.status}).` };
     }
-    return { success: true, data: { status: res.status } };
+
+    // Then the model itself: GET <models>/<id> is definitive for Anthropic and Google (200 / 404); an
+    // OpenAI-compatible gateway may lack that route, so a 404 there falls back to the list we already hold.
+    // A timeout or network error on this second call is "not verifiable", never a failed key.
+    let modelFound: boolean | null = null;
+    let modelStatus: number | null = null;
+    try {
+      const mRes = await fetch(llmModelEndpoint(vendor, model, override), { method: "GET", headers, redirect: "manual", signal: AbortSignal.timeout(12000) });
+      modelStatus = mRes.status;
+      if (mRes.ok) modelFound = true;
+      else if (mRes.status === 404 && family !== "openai-compatible") modelFound = false;
+      else if (mRes.status === 404) modelFound = openAiCompatibleModelFound(await res.json().catch(() => null), model);
+    } catch {
+      modelFound = null;
+    }
+    const summary = modelFound === true ? `Tested an LLM key — provider accepted it and serves ${model}`
+      : modelFound === false ? `Tested an LLM key — provider accepted it but has no model ${model}`
+      : `Tested an LLM key — provider accepted it; model ${model} not verifiable (HTTP ${modelStatus})`;
+    await logAudit(c, { actor: who, action: "settings.llm.test", targetKind: "settings", targetId: id, summary, ok: modelFound !== false, detail: { status: res.status, modelStatus, vendor, model, modelFound } });
+    if (modelFound === false) {
+      const suggested = (LLM_MODEL_SUGGESTIONS[vendor] ?? []).join(", ");
+      return { success: false, error: `Key accepted, but the provider has no model "${model}" (HTTP ${modelStatus}). Edit the key and pick an id the provider serves${suggested ? ` — for ${vendor}: ${suggested}` : ""}.` };
+    }
+    return { success: true, data: { status: res.status, model, modelFound, family, token: String(meta.updated_at) } };
   } catch (e) {
     unstable_rethrow(e);
     const msg = e instanceof Error ? e.message : "Test failed.";
@@ -203,14 +268,17 @@ export async function importLegacyAiKey(): Promise<Result<{ imported: boolean }>
     const ai = settings?.ai;
     if (!ai?.apiKey?.trim()) return { success: true, data: { imported: false } };
 
+    // every legacy key is imported INACTIVE (C2O-176): the owner checks the model, presses Test, then activates
+    // it — an unverified id never becomes the classifier key. A retired Anthropic id maps to the default.
+    const importModel = catalogueModel(ai.vendor || "anthropic", ai.model);
     const { error: saveErr } = await c.rpc("save_llm_credential", {
       p_id: null,
-      p_label: "Imported from platform settings",
+      p_label: "Imported from platform settings — Test, then activate",
       p_vendor: ai.vendor || "anthropic",
-      p_model: ai.model || "claude-sonnet-4",
+      p_model: importModel || "unset",
       p_base_url: ai.baseUrl?.trim() || null,
       p_secret: ai.apiKey.trim(),
-      p_make_active: true,
+      p_make_active: false,
     });
     if (saveErr) return { success: false, error: saveErr.message };
 

@@ -28,7 +28,8 @@ export default async function AdminSettingsPage() {
       <PlatformSettings
         initialMode={mode}
         initialDesign={design}
-        initialSettings={settings}
+        // the legacy plaintext key never reaches the browser: keys live in Vault (Data Sync → Connections)
+        initialSettings={{ ...settings, ai: { ...settings.ai, apiKey: "" } }}
         initialVisibility={visibility}
         canEdit={canEdit}
       />
