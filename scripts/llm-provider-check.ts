@@ -96,6 +96,14 @@ const migration = src("supabase/migrations/20261029100000_llm_credential_conditi
 assert.match(migration, /is_active = false,\n    updated_at = clock_timestamp\(\);/, "every edit is saved inactive (DB)");
 assert.match(migration, /for update;\n  if not found then return 'not_found'; end if;\n  if p_expected_updated_at is null or v_updated is distinct from p_expected_updated_at then return 'changed'; end if;/, "the switch is locked and token-bound (DB)");
 assert.match(migration, /grant execute on function public\.set_active_llm_credential_if_unchanged\(uuid, timestamptz\) to service_role;/);
+// C2O-182: activations are serialised platform-wide, and the legacy unconditional switch is retired
+assert.match(migration, /perform pg_advisory_xact_lock\(7310290001\);\n  select updated_at into v_updated from public\.llm_credential where id = p_id for update;/, "the fixed advisory lock precedes the target read");
+assert.match(migration, /raise exception 'set_active_llm_credential is retired/, "the legacy switch refuses");
+assert.match(migration, /revoke all on function public\.set_active_llm_credential\(uuid\) from public, anon, authenticated, service_role;/, "no role may execute the legacy switch");
+assert.doesNotMatch(migration, /grant execute on function public\.set_active_llm_credential\(uuid\)/, "UP never re-grants the legacy switch");
+const validate = src("scripts/data-sync-validate.sh");
+assert.match(validate, /supabase\/tests\/data_sync\/llm_conditional_activation_smoke\.sql/, "the SQL contract runs in data-sync-validate");
+assert.match(validate, /supabase\/tests\/data_sync\/llm_activation_race_two_sessions\.sh/, "the two-session races run in data-sync-validate");
 assert.match(src("components/admin/data-sync/SettingsView.tsx"), /if \(r\.data\.notActivated\) toast\.warning\(/, "the form says when a saved key was not activated");
 // C2O-176 P1, behaviourally: a stored plaintext key blocks the save; otherwise the key written is always ""
 assert.equal(legacyKeyForSave("sk-ant-legacy").ok, false);

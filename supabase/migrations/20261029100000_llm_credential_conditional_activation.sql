@@ -10,8 +10,9 @@
 --      uses. It locks the row, compares updated_at (the version token every save advances) with the token the
 --      provider test read, and only then switches the single active key in one transaction. A drift returns
 --      'changed' and the app asks for a re-test; 'not_found' for an unknown id; 'activated' on success.
---   set_active_llm_credential(uuid) stays for the deployed app build during the window (service-only, as before);
---   the new app never calls it (pinned in scripts/llm-provider-check.ts).
+--   3. the legacy unconditional set_active_llm_credential(uuid) is RETIRED (C2O-182 P1): its body refuses and no
+--      API or service role may execute it. During the release window the deployed app's Activate button therefore
+--      fails closed until the new app is live — better than an untested switch. The new app never calls it.
 --
 -- DOWN: supabase/rollback/20261029100000_llm_credential_conditional_activation_down.sql
 set local lock_timeout = '5s';
@@ -71,6 +72,9 @@ as $function$
 declare
   v_updated timestamptz;
 begin
+  -- one activation at a time, platform-wide (C2O-182 P2): without it two different fresh rows could both pass
+  -- their token checks and one would hit idx_llm_one_active as a raw 23505 outside this function's contract
+  perform pg_advisory_xact_lock(7310290001);
   select updated_at into v_updated from public.llm_credential where id = p_id for update;
   if not found then return 'not_found'; end if;
   if p_expected_updated_at is null or v_updated is distinct from p_expected_updated_at then return 'changed'; end if;
@@ -82,5 +86,19 @@ $function$;
 
 revoke all on function public.save_llm_credential(uuid, text, text, text, text, text, boolean) from public, anon, authenticated;
 grant execute on function public.save_llm_credential(uuid, text, text, text, text, text, boolean) to service_role;
+create or replace function public.set_active_llm_credential(p_id uuid)
+ returns boolean
+ language plpgsql
+ volatile
+ security definer
+ set search_path to 'public'
+as $function$
+begin
+  raise exception 'set_active_llm_credential is retired: activate through set_active_llm_credential_if_unchanged after a passing provider test'
+    using errcode = '42501';
+end;
+$function$;
+revoke all on function public.set_active_llm_credential(uuid) from public, anon, authenticated, service_role;
+
 revoke all on function public.set_active_llm_credential_if_unchanged(uuid, timestamptz) from public, anon, authenticated;
 grant execute on function public.set_active_llm_credential_if_unchanged(uuid, timestamptz) to service_role;

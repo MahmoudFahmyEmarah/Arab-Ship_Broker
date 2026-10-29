@@ -54,5 +54,25 @@ $function$;
 
 drop function if exists public.set_active_llm_credential_if_unchanged(uuid, timestamptz);
 
+-- the legacy switch exactly as 20260704140000 defined it, with its service-only grant
+create or replace function public.set_active_llm_credential(p_id uuid)
+ returns boolean
+ language plpgsql
+ volatile
+ security definer
+ set search_path to 'public'
+as $function$
+begin
+  if not exists (select 1 from public.llm_credential where id = p_id) then
+    raise exception 'credential % not found', p_id using errcode = 'P0002';
+  end if;
+  update public.llm_credential set is_active = false where is_active and id <> p_id;
+  update public.llm_credential set is_active = true, updated_at = now() where id = p_id;
+  return true;
+end;
+$function$;
+revoke all on function public.set_active_llm_credential(uuid) from public, anon, authenticated;
+grant execute on function public.set_active_llm_credential(uuid) to service_role;
+
 revoke all on function public.save_llm_credential(uuid, text, text, text, text, text, boolean) from public, anon, authenticated;
 grant execute on function public.save_llm_credential(uuid, text, text, text, text, text, boolean) to service_role;

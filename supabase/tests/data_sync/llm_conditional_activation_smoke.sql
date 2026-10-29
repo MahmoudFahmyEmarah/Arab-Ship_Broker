@@ -54,6 +54,18 @@ begin
   if v_active <> v_b then raise exception 'L8: editing an inactive key changed the active one'; end if;
   if (select is_active from public.llm_credential where id = v_a) then raise exception 'L8: the edited inactive key became active'; end if;
 
+  -- L9 · the legacy unconditional switch is retired: no API or service role may execute it, and its body refuses
+  if has_function_privilege('service_role', 'public.set_active_llm_credential(uuid)'::regprocedure, 'execute')
+     or has_function_privilege('authenticated', 'public.set_active_llm_credential(uuid)'::regprocedure, 'execute') then
+    raise exception 'L9: the legacy switch is still executable';
+  end if;
+  begin
+    perform public.set_active_llm_credential(v_a);
+    raise exception 'L9: the legacy switch activated a key';
+  exception when insufficient_privilege then null;
+  end;
+  if (select is_active from public.llm_credential where id = v_a) then raise exception 'L9: A became active through the legacy switch'; end if;
+
   -- L7 · unknown id
   if public.set_active_llm_credential_if_unchanged(gen_random_uuid(), now()) <> 'not_found' then raise exception 'L7: unknown id not refused'; end if;
 
