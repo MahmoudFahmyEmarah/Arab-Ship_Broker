@@ -15,13 +15,13 @@ import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
 import { LLM_MODEL_SUGGESTIONS, catalogueModel, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
-import { activateIfVerified, saveAndMaybeActivate, type KeyFlowDeps } from "@/lib/sync/llm-key-flows";
+import { activateKey, saveAndMaybeActivate, type ActivationResult, type KeyFlowDeps } from "@/lib/sync/llm-key-flows";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Result<T = undefined> =
-  | ({ success: true } & (T extends undefined ? object : { data: T }))
+  | ({ success: true } & ([T] extends [undefined] ? object : { data: T }))
   | { success: false; error: string };
 
 // requireAdmin denies by redirect(), which throws. Re-throw it so the bounce
@@ -130,15 +130,15 @@ export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ i
   }
 }
 
-export async function activateLlmCredential(id: string): Promise<Result> {
+export async function activateLlmCredential(id: string): Promise<Result<ActivationResult>> {
   if (!UUID_RE.test(id)) return { success: false, error: "Invalid key id." };
   try {
     const { c, who } = await adminCtx();
-    // never activate an untested or since-edited key: probe, provider-family rule, version-bound switch (C2O-178)
-    const refused = await activateIfVerified(keyFlowDeps(c, who), id);
-    if (refused) return { success: false, error: `Not activated — ${refused}` };
+    // never activate an untested or since-edited key: probe, provider-family rule, version-bound switch (C2O-178);
+    // the outcome crosses the action boundary as structured state — activated | unknown | refused (C2O-184)
+    const outcome = await activateKey(keyFlowDeps(c, who), id);
     revalidatePath("/admin/data-sync");
-    return { success: true };
+    return { success: true, data: outcome };
   } catch (e) {
     return fail(e, "Could not activate the key.");
   }

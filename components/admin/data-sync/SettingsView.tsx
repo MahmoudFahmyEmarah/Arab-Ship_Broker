@@ -27,6 +27,7 @@ import {
 } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { Badge, Btn, Card, Switch, C, btn } from "./ui";
 import { GROQ_API_BASE_URL, LLM_MODEL_SUGGESTIONS, llmDefaultBaseUrl } from "@/lib/sync/llm-provider";
+import { activationFeedback } from "@/lib/sync/llm-key-flows";
 
 const VENDORS = ["anthropic", "openai", "google", "groq", "mistral", "other"];
 // The model catalogue per vendor lives in lib/sync/llm-provider.ts (shared with the key test and its unit
@@ -51,9 +52,10 @@ export function SettingsView() {
     setBusy(id);
     const r = await activateLlmCredential(id);
     setBusy(null);
-    if (!r.success) { toast.error(r.error); return; }
-    toast.success("Active key switched.");
-    await reloadKeys();
+    // structured outcome (C2O-184): "Not activated" only for a known refusal; an unknown result warns and reloads
+    const f = activationFeedback(r);
+    toast[f.kind](f.text);
+    if (f.reload) await reloadKeys();
   };
   const test = async (id: string) => {
     setBusy(id);

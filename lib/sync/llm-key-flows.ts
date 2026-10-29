@@ -81,3 +81,24 @@ export async function saveAndMaybeActivate(d: KeyFlowDeps, input: SaveKeyInput):
   }
   return { id, activated: false };
 }
+
+/** The standalone Activate outcome as structured state (C2O-184): the server classifies once, the form never
+ * parses text. "unknown" = the switch's result was lost (transport error) — the key may or may not be active. */
+export type ActivationResult = { outcome: "activated" } | { outcome: "unknown"; message: string } | { outcome: "refused"; message: string };
+
+export async function activateKey(d: KeyFlowDeps, id: string): Promise<ActivationResult> {
+  const refused = await activateIfVerified(d, id);
+  if (refused === null) return { outcome: "activated" };
+  if (refused.startsWith(ACTIVATION_UNKNOWN)) return { outcome: "unknown", message: refused };
+  return { outcome: "refused", message: refused };
+}
+
+/** What the form shows for an Activate result, and whether it must reload the key list: a known refusal is an
+ * error ("Not activated — …", list unchanged); an unknown result is a warning and ALWAYS reloads, so the list
+ * shows the real state; a success reloads too. */
+export function activationFeedback(r: { success: true; data: ActivationResult } | { success: false; error: string }): { kind: "success" | "warning" | "error"; text: string; reload: boolean } {
+  if (!r.success) return { kind: "error", text: r.error, reload: false };
+  if (r.data.outcome === "activated") return { kind: "success", text: "Active key switched (the provider test passed).", reload: true };
+  if (r.data.outcome === "unknown") return { kind: "warning", text: `Activation result unknown — reloading the key list to show its real state (${r.data.message})`, reload: true };
+  return { kind: "error", text: `Not activated — ${r.data.message}`, reload: false };
+}

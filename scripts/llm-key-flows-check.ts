@@ -2,7 +2,7 @@
 // a failed or unconfirmed test never reaches the activation RPC; a 'changed' token is refused; an unticked box
 // on an active edit leaves the key inactive; audits follow the real outcome.
 import assert from "node:assert/strict";
-import { activateIfVerified, saveAndMaybeActivate, type KeyFlowDeps, type ProbeOutcome, type SaveKeyInput } from "../lib/sync/llm-key-flows";
+import { activateIfVerified, activateKey, activationFeedback, saveAndMaybeActivate, type KeyFlowDeps, type ProbeOutcome, type SaveKeyInput } from "../lib/sync/llm-key-flows";
 
 type Call = [string, ...unknown[]];
 function fake(opts: { active?: boolean; probe: ProbeOutcome; rpc?: string }): { d: KeyFlowDeps; calls: Call[] } {
@@ -100,6 +100,35 @@ await t("a definite refusal is never reported as unknown", async () => {
   const r = await saveAndMaybeActivate(d, input({ makeActive: true, secret: "sk" }));
   assert.equal(r.activationUnknown, undefined);
   assert.match(r.notActivated ?? "", /test it again/);
+});
+await t("standalone Activate: a transport error crosses the boundary as UNKNOWN, warns and reloads", async () => {
+  const { d } = fake({ probe: ok("anthropic", true) });
+  d.activateIfUnchanged = async () => { throw new Error("socket hang up"); };
+  const res = await activateKey(d, "k1");
+  assert.equal(res.outcome, "unknown");
+  const f = activationFeedback({ success: true, data: res });
+  assert.equal(f.kind, "warning");
+  assert.equal(f.reload, true, "an unknown result always reloads the list");
+  assert.doesNotMatch(f.text, /Not activated/);
+});
+await t("standalone Activate: a known refusal is 'Not activated' and does not reload", async () => {
+  const refusals: ProbeOutcome[] = [ok("anthropic", null), { ok: false, error: "Provider rejected the key (HTTP 401)." }];
+  for (const probe of refusals) {
+    const { d } = fake({ probe });
+    const res = await activateKey(d, "k1");
+    assert.equal(res.outcome, "refused");
+    const f = activationFeedback({ success: true, data: res });
+    assert.deepEqual([f.kind, f.reload], ["error", false]);
+    assert.match(f.text, /^Not activated — /);
+  }
+  const { d } = fake({ probe: ok("anthropic", true), rpc: "changed" });
+  assert.equal((await activateKey(d, "k1")).outcome, "refused", "'changed' is a known refusal");
+});
+await t("standalone Activate: success reloads; an action failure is an error without reload", async () => {
+  const { d } = fake({ probe: ok("google", true) });
+  const f = activationFeedback({ success: true, data: await activateKey(d, "k1") });
+  assert.deepEqual([f.kind, f.reload], ["success", true]);
+  assert.deepEqual(activationFeedback({ success: false, error: "Invalid key id." }), { kind: "error", text: "Invalid key id.", reload: false });
 });
 await t("a new key without the box ticked is saved inactive with no probe", async () => {
   const { d, calls } = fake({ probe: ok("anthropic", true) });

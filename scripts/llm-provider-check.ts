@@ -88,7 +88,9 @@ assert.doesNotMatch(syncActions, /c\.rpc\("set_active_llm_credential",/, "the un
 assert.doesNotMatch(syncActions, /\.update\(\{ is_active/, "no direct is_active writes");
 assert.match(syncActions, /p_expected_updated_at: token \}/, "activation carries the token the test read");
 assert.match(src("lib/sync/llm-key-flows.ts"), /if \(!mayActivate\(probe\.data\.family, probe\.data\.modelFound\)\)/, "the family rule gates activation");
-assert.match(syncActions, /await activateIfVerified\(keyFlowDeps\(c, who\), id\)/, "Activate goes through activateIfVerified");
+assert.match(syncActions, /const outcome = await activateKey\(keyFlowDeps\(c, who\), id\);/, "Activate goes through activateKey (activateIfVerified + structured outcome)");
+assert.match(syncActions, /Promise<Result<ActivationResult>>/, "the standalone action returns the structured outcome");
+assert.match(src("components/admin/data-sync/SettingsView.tsx"), /const f = activationFeedback\(r\);\n    toast\[f\.kind\]\(f\.text\);\n    if \(f\.reload\) await reloadKeys\(\);/, "the form renders the outcome via activationFeedback and reloads when told");
 assert.match(syncActions, /await saveAndMaybeActivate\(keyFlowDeps\(c, who\), \{/, "save goes through saveAndMaybeActivate");
 assert.match(syncActions, /p_base_url: input\.baseUrl, p_secret: input\.secret,\n        p_make_active: false,/, "the save RPC never activates");
 assert.doesNotMatch(syncActions, /made active" : ""/, "the save audit never claims an activation");
