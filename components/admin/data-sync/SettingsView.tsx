@@ -38,7 +38,7 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** A server action whose response never arrived: the change may or may not have landed, so say so and let the
  * caller reload the list rather than claim success or failure. */
 const lostAck = (what: string, e: unknown) =>
-  `${what} did not confirm (${errText(e)}) — it may or may not have happened; the key list has been reloaded to show the real state.`;
+  `${what} did not confirm (${errText(e)}) — it may or may not have happened; reloading the key list to show the real state.`;
 
 export function SettingsView() {
   const [creds, setCreds] = useState<LlmCredentialMeta[] | null>(null);
