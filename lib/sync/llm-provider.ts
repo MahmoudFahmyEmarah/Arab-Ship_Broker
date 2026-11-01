@@ -104,6 +104,15 @@ export function catalogueModel(vendor: string, model?: string | null): string {
   return list.includes(m) ? m : list[0];
 }
 
+/** A key's model must come from the catalogue when the vendor has one (owner, 1 Nov 2026: a dropdown, never free
+ * text, so the stored id is always one the provider serves). Null when acceptable; otherwise the refusal text.
+ * A vendor without a catalogue ("other": a gateway you host) keeps a typed id. */
+export function modelChoiceRefusal(vendor: string, model: string): string | null {
+  const list = LLM_MODEL_SUGGESTIONS[(vendor ?? "").trim().toLowerCase()] ?? [];
+  if (list.length === 0) return null;
+  return list.includes((model ?? "").trim()) ? null : `Choose the model from the list for ${vendor.trim().toLowerCase()} (${list.join(", ")}).`;
+}
+
 /** The model for the app's direct Anthropic calls (circular parsing, Group Mail polish) when they run on the
  * ANTHROPIC_API_KEY env instead of a Data Sync credential: quality-sensitive single calls, so the current
  * Opus. Lives here so every runtime Anthropic id comes from one reviewed table. */

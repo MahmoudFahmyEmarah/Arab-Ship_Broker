@@ -32,7 +32,12 @@ import { activationFeedback } from "@/lib/sync/llm-key-flows";
 const VENDORS = ["anthropic", "openai", "google", "groq", "mistral", "other"];
 // The model catalogue per vendor lives in lib/sync/llm-provider.ts (shared with the key test and its unit
 // check) so the form, the test and the classifier can never disagree about which ids are current.
-const CUSTOM_MODEL = "__custom__";
+
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** A server action whose response never arrived: the change may or may not have landed, so say so and let the
+ * caller reload the list rather than claim success or failure. */
+const lostAck = (what: string, e: unknown) =>
+  `${what} did not confirm (${errText(e)}) — it may or may not have happened; reloading the key list to show the real state.`;
 
 export function SettingsView() {
   const [creds, setCreds] = useState<LlmCredentialMeta[] | null>(null);
@@ -50,7 +55,10 @@ export function SettingsView() {
 
   const activate = async (id: string) => {
     setBusy(id);
-    const r = await activateLlmCredential(id);
+    let r: Awaited<ReturnType<typeof activateLlmCredential>>;
+    // a lost response (network drop, redeploy) leaves the switch's result unknown: warn and show the real state
+    try { r = await activateLlmCredential(id); }
+    catch (e) { setBusy(null); toast.warning(lostAck("Activation", e)); await reloadKeys(); return; }
     setBusy(null);
     // structured outcome (C2O-184): "Not activated" only for a known refusal; an unknown result warns and reloads
     const f = activationFeedback(r);
@@ -59,7 +67,9 @@ export function SettingsView() {
   };
   const test = async (id: string) => {
     setBusy(id);
-    const r = await testLlmCredential(id);
+    let r: Awaited<ReturnType<typeof testLlmCredential>>;
+    try { r = await testLlmCredential(id); }
+    catch (e) { setBusy(null); toast.error(`The test did not return (${errText(e)}) — press Test again.`); return; }
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
     // the test proves the key AND the model id; a provider that cannot confirm an id is said so, never implied
@@ -70,7 +80,9 @@ export function SettingsView() {
   const remove = async (cr: LlmCredentialMeta) => {
     if (!confirm(`Delete key "${cr.label}"? Its encrypted secret is destroyed too.`)) return;
     setBusy(cr.id);
-    const r = await deleteLlmCredential(cr.id);
+    let r: Awaited<ReturnType<typeof deleteLlmCredential>>;
+    try { r = await deleteLlmCredential(cr.id); }
+    catch (e) { setBusy(null); toast.warning(lostAck("Delete", e)); await reloadKeys(); return; }
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
     toast.success("Key deleted.");
@@ -78,7 +90,9 @@ export function SettingsView() {
   };
   const importLegacy = async () => {
     setBusy("legacy");
-    const r = await importLegacyAiKey();
+    let r: Awaited<ReturnType<typeof importLegacyAiKey>>;
+    try { r = await importLegacyAiKey(); }
+    catch (e) { setBusy(null); toast.warning(lostAck("The import", e)); await reloadKeys(); return; }
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
     toast.success(r.data.imported ? "Legacy key imported and encrypted." : "No legacy key found.");
@@ -174,8 +188,6 @@ function KeyModal({ cred, onClose, onSaved }: {
   const [label, setLabel] = useState(cred?.label ?? "");
   const [vendor, setVendor] = useState(cred?.vendor ?? "anthropic");
   const [model, setModel] = useState(cred?.model ?? LLM_MODEL_SUGGESTIONS.anthropic[0]);
-  // a stored id outside the catalogue (an old or custom one) opens the free-text field so it is never hidden
-  const [customModel, setCustomModel] = useState(!!cred && !(LLM_MODEL_SUGGESTIONS[cred.vendor] ?? []).includes(cred.model));
   const [baseUrl, setBaseUrl] = useState(cred?.base_url ?? "");
   const suggestions = LLM_MODEL_SUGGESTIONS[vendor] ?? [];
   const defaultBaseUrl = llmDefaultBaseUrl(vendor);
@@ -192,14 +204,20 @@ function KeyModal({ cred, onClose, onSaved }: {
 
   const save = async () => {
     setSaving(true);
-    const r = await saveLlmCredential({
-      id: cred?.id, label, vendor, model, baseUrl: baseUrl || null,
-      secret: secret || null, makeActive,
-    });
+    let r: Awaited<ReturnType<typeof saveLlmCredential>>;
+    try {
+      r = await saveLlmCredential({
+        id: cred?.id, label, vendor, model, baseUrl: baseUrl || null,
+        secret: secret || null, makeActive,
+      });
+    } catch (e) {
+      // the save may have landed: close and reload so the list shows the real state — never invite a duplicate save
+      setSaving(false); toast.warning(lostAck("The save", e)); onSaved(); return;
+    }
     setSaving(false);
     if (!r.success) { toast.error(r.error); return; }
     // activation runs the same provider/model test as the Test button; a failing key is saved but not activated
-    if (r.data.activationUnknown) toast.warning(`${cred ? "Key updated" : "Key added"}; activation result unknown — reload the list to see whether it is active (${r.data.notActivated})`);
+    if (r.data.activationUnknown) toast.warning(`${cred ? "Key updated" : "Key added"}; the activation result was lost, so the list now shows whether it is active. ${r.data.notActivated}`);
     else if (r.data.notActivated) toast.warning(`${cred ? "Key updated" : "Key added"}, but NOT made active — ${r.data.notActivated}`);
     else toast.success(`${cred ? "Key updated" : "Key added and encrypted"}${r.data.activated ? " and made active (the provider test passed)" : " — inactive"}.`);
     onSaved();
@@ -218,7 +236,7 @@ function KeyModal({ cred, onClose, onSaved }: {
             <select value={vendor} onChange={(e) => {
               const v = e.target.value; setVendor(v);
               const sug = LLM_MODEL_SUGGESTIONS[v] ?? [];
-              setModel(sug[0] ?? ""); setCustomModel(sug.length === 0);
+              setModel(sug[0] ?? "");
               if (v === "groq") setBaseUrl(GROQ_API_BASE_URL);
               else if (baseUrl.trim() === GROQ_API_BASE_URL) setBaseUrl("");
             }} className="ds-input">
@@ -227,20 +245,20 @@ function KeyModal({ cred, onClose, onSaved }: {
           </div>
           <div>
             <label style={lab}>Model</label>
-            {suggestions.length > 0 && !customModel ? (
-              <select value={suggestions.includes(model) ? model : CUSTOM_MODEL} onChange={(e) => {
-                if (e.target.value === CUSTOM_MODEL) { setCustomModel(true); setModel(""); } else setModel(e.target.value);
-              }} className="ds-input" aria-label="Model">
+            {suggestions.length > 0 ? (
+              // a dropdown only (owner, 1 Nov 2026): the stored id is always one the provider serves. A saved id that
+              // is no longer offered shows as "choose a model" and must be replaced before saving.
+              <select value={suggestions.includes(model) ? model : ""} onChange={(e) => setModel(e.target.value)} className="ds-input" aria-label="Model">
+                {!suggestions.includes(model) && <option value="" disabled>{model ? `${model} is no longer offered — choose a model` : "Choose a model"}</option>}
                 {suggestions.map((m) => <option key={m} value={m}>{m}</option>)}
-                <option value={CUSTOM_MODEL}>Other model id…</option>
               </select>
             ) : (
-              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="the exact model id the provider serves" className="ds-input" aria-label="Model id" />
+              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="the exact model id your gateway serves" className="ds-input" aria-label="Model id" />
             )}
             <span className="ds-rowsub">
-              {customModel && suggestions.length > 0
-                ? <>Any id the provider serves. <button type="button" onClick={() => { setCustomModel(false); setModel(suggestions[0]); }} style={{ background: "none", border: 0, padding: 0, font: "inherit", color: C.ink2, textDecoration: "underline", cursor: "pointer" }}>Back to the suggested models</button></>
-                : "Current models, newest first. After saving, Test checks that the provider serves this id."}
+              {suggestions.length > 0
+                ? "Current models, newest first. Saving with “make active” tests the key and this model first."
+                : "A gateway you host: type the exact model id it serves. Test checks it after saving."}
             </span>
           </div>
         </div>
@@ -258,7 +276,8 @@ function KeyModal({ cred, onClose, onSaved }: {
         </label>
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-        <button onClick={save} disabled={saving} style={btn("primary")}>
+        {/* a listed vendor's model must be picked from the list before saving (owner, 1 Nov 2026) */}
+        <button onClick={save} disabled={saving || (suggestions.length > 0 && !suggestions.includes(model))} style={btn("primary")}>
           {saving ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={15} />} {cred ? "Save" : "Add key"}
         </button>
         <button onClick={onClose} style={btn("ghost")}>Cancel</button>
