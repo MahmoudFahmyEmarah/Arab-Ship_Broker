@@ -316,7 +316,11 @@ export async function runEmailSync(
         return; // checkpoint stays where the last staged page left it
       }
       const emails: EmailMsg[] = fetched.messages;
-      step(emit, "fetch", "done", `${emails.length} email(s)${fetched.hasMore ? " · more waiting" : ""}${page > 1 ? ` · page ${page}` : ""}`);
+      // say how many are waiting in total, not only this page's size (owner, 1 Nov 2026: "only 25 mails?")
+      const waitingNote = fetched.waiting > emails.length
+        ? ` of ${fetched.waiting} waiting (read ${limit ?? 25} per page, up to ${maxPages} pages per run)`
+        : fetched.hasMore ? " · more waiting" : "";
+      step(emit, "fetch", "done", `${emails.length} email(s)${waitingNote}${page > 1 ? ` · page ${page}` : ""}`);
 
       if (emails.length === 0) {
         if (page === 1) {
