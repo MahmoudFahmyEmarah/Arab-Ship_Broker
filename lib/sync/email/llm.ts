@@ -43,8 +43,10 @@ export async function getActiveModel(supabase: SupabaseClient, opts: { maxOutput
 
   let model: BaseChatModel;
   if (family === "anthropic") {
+    // no `temperature`: the current Claude models reject it ("temperature is deprecated for this model", 400 on
+    // every classification batch, 1 Nov 2026); the structured-output schema keeps the extraction deterministic
     model = new ChatAnthropic({
-      apiKey: secret as string, model: modelName, temperature: 0, maxTokens,
+      apiKey: secret as string, model: modelName, maxTokens,
       ...(baseUrl ? { anthropicApiUrl: baseUrl } : {}),
     });
   } else if (family === "google") {

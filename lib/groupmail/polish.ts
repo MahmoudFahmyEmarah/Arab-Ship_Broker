@@ -39,7 +39,7 @@ export async function polishCircularBody(
     const model = new ChatAnthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
       model: ANTHROPIC_TASK_MODEL,
-      temperature: 0.2,
+      // no `temperature`: the current Claude models reject it (400, 1 Nov 2026)
       maxTokens: 4096,
     });
     const res = await model.invoke([

@@ -13,7 +13,7 @@ import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-sett
 import { getWatermark, setWatermark } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
-import { LLM_MODEL_SUGGESTIONS, catalogueModel, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
+import { LLM_MODEL_SUGGESTIONS, catalogueModel, modelChoiceRefusal, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
 import { activateKey, saveAndMaybeActivate, type ActivationResult, type KeyFlowDeps } from "@/lib/sync/llm-key-flows";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
@@ -112,6 +112,9 @@ function keyFlowDeps(c: AdminDb, who: AdminWho): KeyFlowDeps {
 export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string; activated: boolean; activationUnknown?: boolean; notActivated?: string }>> {
   if (!input.label?.trim()) return { success: false, error: "Give the key a label." };
   if (!input.vendor?.trim() || !input.model?.trim()) return { success: false, error: "Vendor and model are required." };
+  // the model comes from the vendor's list (the form offers a dropdown only); a typed id is refused here too
+  const choice = modelChoiceRefusal(input.vendor, input.model);
+  if (choice) return { success: false, error: choice };
   if (input.id && !UUID_RE.test(input.id)) return { success: false, error: "Invalid key id." };
   if (!input.id && !input.secret?.trim()) return { success: false, error: "Paste the API key." };
   const safe = isSafeBaseUrl(input.baseUrl?.trim() || null);

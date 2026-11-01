@@ -6,6 +6,7 @@ import {
   LLM_MODEL_SUGGESTIONS,
   ANTHROPIC_TASK_MODEL,
   activationRefusal,
+  modelChoiceRefusal,
   mayActivate,
   catalogueModel,
   legacyKeyForSave,
@@ -156,5 +157,20 @@ assert.equal(modelListedIn({ models: [{ name: "models/gemini-2.5-flash" }] }, "g
 assert.equal(modelListedIn({ models: [{ name: "models/gemini-2.5-flash" }] }, "google", "gemini-2.5-pro"), false);
 assert.equal(modelListedIn({ error: "nope" }, "openai-compatible", "gpt-4o"), null, "an unreadable list is 'not verifiable', never 'not found'");
 assert.equal(modelListedIn(null, "anthropic", "claude-opus-5"), null);
+
+// the current Claude models reject `temperature` (1 Nov 2026): no Anthropic constructor sets it
+for (const f of ["lib/sync/email/llm.ts", "lib/groupmail/polish.ts"]) {
+  const code = src(f).replace(/\/\/.*$/gm, "");
+  const m = code.match(/new ChatAnthropic\(\{[\s\S]*?\}\)/g) ?? [];
+  assert.ok(m.length > 0, `${f}: ChatAnthropic constructor found`);
+  for (const block of m) assert.doesNotMatch(block, /temperature/, `${f}: ChatAnthropic is built without temperature`);
+}
+// the model is chosen from the vendor's list (owner, 1 Nov 2026): dropdown only, refused on the server otherwise
+assert.equal(modelChoiceRefusal("anthropic", "claude-haiku-5-5"), null);
+assert.match(modelChoiceRefusal("anthropic", "claude-sonnet-4-5") ?? "", /Choose the model from the list for anthropic/);
+assert.match(modelChoiceRefusal("Anthropic", " typed-id ") ?? "", /Choose the model from the list/);
+assert.equal(modelChoiceRefusal("other", "my-gateway-model"), null, "a gateway you host keeps a typed id");
+assert.match(src("app/(admin)/admin/data-sync/settings-actions.ts"), /const choice = modelChoiceRefusal\(input\.vendor, input\.model\);\n  if \(choice\) return \{ success: false, error: choice \};/, "the save refuses an id outside the list");
+assert.doesNotMatch(src("components/admin/data-sync/SettingsView.tsx"), /Other model id|CUSTOM_MODEL|setCustomModel/, "the form offers no free-text model for a listed vendor");
 
 console.log("LLM provider checks passed");

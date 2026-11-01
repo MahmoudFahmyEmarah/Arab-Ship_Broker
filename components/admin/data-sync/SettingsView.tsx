@@ -32,7 +32,6 @@ import { activationFeedback } from "@/lib/sync/llm-key-flows";
 const VENDORS = ["anthropic", "openai", "google", "groq", "mistral", "other"];
 // The model catalogue per vendor lives in lib/sync/llm-provider.ts (shared with the key test and its unit
 // check) so the form, the test and the classifier can never disagree about which ids are current.
-const CUSTOM_MODEL = "__custom__";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** A server action whose response never arrived: the change may or may not have landed, so say so and let the
@@ -189,8 +188,6 @@ function KeyModal({ cred, onClose, onSaved }: {
   const [label, setLabel] = useState(cred?.label ?? "");
   const [vendor, setVendor] = useState(cred?.vendor ?? "anthropic");
   const [model, setModel] = useState(cred?.model ?? LLM_MODEL_SUGGESTIONS.anthropic[0]);
-  // a stored id outside the catalogue (an old or custom one) opens the free-text field so it is never hidden
-  const [customModel, setCustomModel] = useState(!!cred && !(LLM_MODEL_SUGGESTIONS[cred.vendor] ?? []).includes(cred.model));
   const [baseUrl, setBaseUrl] = useState(cred?.base_url ?? "");
   const suggestions = LLM_MODEL_SUGGESTIONS[vendor] ?? [];
   const defaultBaseUrl = llmDefaultBaseUrl(vendor);
@@ -239,7 +236,7 @@ function KeyModal({ cred, onClose, onSaved }: {
             <select value={vendor} onChange={(e) => {
               const v = e.target.value; setVendor(v);
               const sug = LLM_MODEL_SUGGESTIONS[v] ?? [];
-              setModel(sug[0] ?? ""); setCustomModel(sug.length === 0);
+              setModel(sug[0] ?? "");
               if (v === "groq") setBaseUrl(GROQ_API_BASE_URL);
               else if (baseUrl.trim() === GROQ_API_BASE_URL) setBaseUrl("");
             }} className="ds-input">
@@ -248,20 +245,20 @@ function KeyModal({ cred, onClose, onSaved }: {
           </div>
           <div>
             <label style={lab}>Model</label>
-            {suggestions.length > 0 && !customModel ? (
-              <select value={suggestions.includes(model) ? model : CUSTOM_MODEL} onChange={(e) => {
-                if (e.target.value === CUSTOM_MODEL) { setCustomModel(true); setModel(""); } else setModel(e.target.value);
-              }} className="ds-input" aria-label="Model">
+            {suggestions.length > 0 ? (
+              // a dropdown only (owner, 1 Nov 2026): the stored id is always one the provider serves. A saved id that
+              // is no longer offered shows as "choose a model" and must be replaced before saving.
+              <select value={suggestions.includes(model) ? model : ""} onChange={(e) => setModel(e.target.value)} className="ds-input" aria-label="Model">
+                {!suggestions.includes(model) && <option value="" disabled>{model ? `${model} is no longer offered — choose a model` : "Choose a model"}</option>}
                 {suggestions.map((m) => <option key={m} value={m}>{m}</option>)}
-                <option value={CUSTOM_MODEL}>Other model id…</option>
               </select>
             ) : (
-              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="the exact model id the provider serves" className="ds-input" aria-label="Model id" />
+              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="the exact model id your gateway serves" className="ds-input" aria-label="Model id" />
             )}
             <span className="ds-rowsub">
-              {customModel && suggestions.length > 0
-                ? <>Any id the provider serves. <button type="button" onClick={() => { setCustomModel(false); setModel(suggestions[0]); }} style={{ background: "none", border: 0, padding: 0, font: "inherit", color: C.ink2, textDecoration: "underline", cursor: "pointer" }}>Back to the suggested models</button></>
-                : "Current models, newest first. After saving, Test checks that the provider serves this id."}
+              {suggestions.length > 0
+                ? "Current models, newest first. Saving with “make active” tests the key and this model first."
+                : "A gateway you host: type the exact model id it serves. Test checks it after saving."}
             </span>
           </div>
         </div>
