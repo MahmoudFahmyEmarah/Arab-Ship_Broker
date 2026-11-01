@@ -34,6 +34,12 @@ const VENDORS = ["anthropic", "openai", "google", "groq", "mistral", "other"];
 // check) so the form, the test and the classifier can never disagree about which ids are current.
 const CUSTOM_MODEL = "__custom__";
 
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** A server action whose response never arrived: the change may or may not have landed, so say so and let the
+ * caller reload the list rather than claim success or failure. */
+const lostAck = (what: string, e: unknown) =>
+  `${what} did not confirm (${errText(e)}) — it may or may not have happened; the key list has been reloaded to show the real state.`;
+
 export function SettingsView() {
   const [creds, setCreds] = useState<LlmCredentialMeta[] | null>(null);
   const [legacy, setLegacy] = useState(false);
@@ -50,7 +56,10 @@ export function SettingsView() {
 
   const activate = async (id: string) => {
     setBusy(id);
-    const r = await activateLlmCredential(id);
+    let r: Awaited<ReturnType<typeof activateLlmCredential>>;
+    // a lost response (network drop, redeploy) leaves the switch's result unknown: warn and show the real state
+    try { r = await activateLlmCredential(id); }
+    catch (e) { setBusy(null); toast.warning(lostAck("Activation", e)); await reloadKeys(); return; }
     setBusy(null);
     // structured outcome (C2O-184): "Not activated" only for a known refusal; an unknown result warns and reloads
     const f = activationFeedback(r);
@@ -59,7 +68,9 @@ export function SettingsView() {
   };
   const test = async (id: string) => {
     setBusy(id);
-    const r = await testLlmCredential(id);
+    let r: Awaited<ReturnType<typeof testLlmCredential>>;
+    try { r = await testLlmCredential(id); }
+    catch (e) { setBusy(null); toast.error(`The test did not return (${errText(e)}) — press Test again.`); return; }
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
     // the test proves the key AND the model id; a provider that cannot confirm an id is said so, never implied
@@ -70,7 +81,9 @@ export function SettingsView() {
   const remove = async (cr: LlmCredentialMeta) => {
     if (!confirm(`Delete key "${cr.label}"? Its encrypted secret is destroyed too.`)) return;
     setBusy(cr.id);
-    const r = await deleteLlmCredential(cr.id);
+    let r: Awaited<ReturnType<typeof deleteLlmCredential>>;
+    try { r = await deleteLlmCredential(cr.id); }
+    catch (e) { setBusy(null); toast.warning(lostAck("Delete", e)); await reloadKeys(); return; }
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
     toast.success("Key deleted.");
@@ -78,7 +91,9 @@ export function SettingsView() {
   };
   const importLegacy = async () => {
     setBusy("legacy");
-    const r = await importLegacyAiKey();
+    let r: Awaited<ReturnType<typeof importLegacyAiKey>>;
+    try { r = await importLegacyAiKey(); }
+    catch (e) { setBusy(null); toast.warning(lostAck("The import", e)); await reloadKeys(); return; }
     setBusy(null);
     if (!r.success) { toast.error(r.error); return; }
     toast.success(r.data.imported ? "Legacy key imported and encrypted." : "No legacy key found.");
@@ -192,14 +207,20 @@ function KeyModal({ cred, onClose, onSaved }: {
 
   const save = async () => {
     setSaving(true);
-    const r = await saveLlmCredential({
-      id: cred?.id, label, vendor, model, baseUrl: baseUrl || null,
-      secret: secret || null, makeActive,
-    });
+    let r: Awaited<ReturnType<typeof saveLlmCredential>>;
+    try {
+      r = await saveLlmCredential({
+        id: cred?.id, label, vendor, model, baseUrl: baseUrl || null,
+        secret: secret || null, makeActive,
+      });
+    } catch (e) {
+      // the save may have landed: close and reload so the list shows the real state — never invite a duplicate save
+      setSaving(false); toast.warning(lostAck("The save", e)); onSaved(); return;
+    }
     setSaving(false);
     if (!r.success) { toast.error(r.error); return; }
     // activation runs the same provider/model test as the Test button; a failing key is saved but not activated
-    if (r.data.activationUnknown) toast.warning(`${cred ? "Key updated" : "Key added"}; activation result unknown — reload the list to see whether it is active (${r.data.notActivated})`);
+    if (r.data.activationUnknown) toast.warning(`${cred ? "Key updated" : "Key added"}; the activation result was lost, so the list now shows whether it is active. ${r.data.notActivated}`);
     else if (r.data.notActivated) toast.warning(`${cred ? "Key updated" : "Key added"}, but NOT made active — ${r.data.notActivated}`);
     else toast.success(`${cred ? "Key updated" : "Key added and encrypted"}${r.data.activated ? " and made active (the provider test passed)" : " — inactive"}.`);
     onSaved();
