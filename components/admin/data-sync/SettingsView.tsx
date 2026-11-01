@@ -276,7 +276,8 @@ function KeyModal({ cred, onClose, onSaved }: {
         </label>
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-        <button onClick={save} disabled={saving} style={btn("primary")}>
+        {/* a listed vendor's model must be picked from the list before saving (owner, 1 Nov 2026) */}
+        <button onClick={save} disabled={saving || (suggestions.length > 0 && !suggestions.includes(model))} style={btn("primary")}>
           {saving ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={15} />} {cred ? "Save" : "Add key"}
         </button>
         <button onClick={onClose} style={btn("ghost")}>Cancel</button>
