@@ -3,7 +3,7 @@
 // A preference changes how the estimator is SHOWN, never a figure and never where a figure came from. They live in one
 // governed row per member (pda_member_preferences), read with get_my_pda_preferences and written with
 // set_my_pda_preferences; nothing is kept in browser storage.
-import type { PdaEstimatorDensity } from "./estimator-contract";
+import type { PdaEstimatorDensity, PdaEstimatorTab } from "./estimator-contract";
 
 export type PdaStartTab = "estimate" | "ports";
 
@@ -37,8 +37,9 @@ export function parsePdaPreferences(raw: unknown): PdaPreferences {
 
 /**
  * The tab the page opens on. A handoff (a vessel, cargo or port sent from the Fixture Room or another surface) always
- * opens the Estimate, because that is what the sender asked for; otherwise the member's start tab applies.
+ * opens the Estimate, because that is what the sender asked for; then a validated `?tab=` (parsePdaTab) names the tab
+ * the link asked for; otherwise the member's start tab applies. An invalid tab never overrides the preference.
  */
-export function initialPdaTab(preferences: PdaPreferences, hasHandoff: boolean): PdaStartTab {
-  return hasHandoff ? "estimate" : preferences.startTab;
+export function initialPdaTab(preferences: PdaPreferences, hasHandoff: boolean, requested: PdaEstimatorTab | null = null): PdaEstimatorTab {
+  return hasHandoff ? "estimate" : requested ?? preferences.startTab;
 }

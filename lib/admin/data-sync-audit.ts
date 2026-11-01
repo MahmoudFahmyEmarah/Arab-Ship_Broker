@@ -15,7 +15,7 @@
 //   queue.port.resolve · queue.port.ignore · queue.port.sweep · positions.post
 //   run.upload · run.email · run.email.dry_run · run.email.cron · run.whatsapp.sweep · run.whatsapp.simulate
 //   whatsapp.message.delete · whatsapp.inbox.clear · whatsapp.teaser · whatsapp.worker.start · whatsapp.worker.stop
-//   settings.llm.save · settings.llm.activate · settings.llm.delete · settings.llm.test · settings.llm.import
+//   settings.llm.save · settings.llm.activate · settings.llm.deactivate · settings.llm.delete · settings.llm.test · settings.llm.import
 //   settings.email.save · settings.email.schedule · settings.email.watermark · settings.whatsapp.save
 import type { SupabaseClient } from "@supabase/supabase-js";
 

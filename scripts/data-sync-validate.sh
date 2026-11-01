@@ -7,6 +7,7 @@
 #   · every Data Sync TypeScript check (exit code, not output shape)
 #   · every Data Sync SQL smoke suite on the DISPOSABLE database
 #   · the two-session concurrency scripts (they COMMIT — disposable only)
+#     (the LLM race also requires LLM_RACE_DISPOSABLE=<the asb_* database the psql command reaches>)
 #
 # Exit 0 only when everything passed. Nothing here touches production.
 #
@@ -55,9 +56,11 @@ SQL_SUITES=(
   supabase/tests/data_sync/upload_lease_idempotency_smoke.sql
   supabase/tests/data_sync/lock_order_smoke.sql
   supabase/tests/data_sync/schedule_retry_alerts_smoke.sql
+  supabase/tests/data_sync/llm_conditional_activation_smoke.sql
 )
 RACE_SCRIPTS=(
   supabase/tests/data_sync/commit_race_two_sessions.sh
+  supabase/tests/data_sync/llm_activation_race_two_sessions.sh
   supabase/tests/data_sync/lock_order_two_sessions.sh
 )
 

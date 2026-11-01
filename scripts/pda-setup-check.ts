@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { parsePdaTab, PDA_ESTIMATOR_TABS } from "../lib/pda/estimator-contract";
 import { initialPdaTab, parsePdaPreferences, PDA_PREFERENCE_DEFAULTS } from "../lib/pda/preferences";
 
 let n = 0;
@@ -52,12 +53,27 @@ ok(/PDA_DOWN_REFUSED/.test(down) && /asb\.pda_prefs_down/.test(down) && /drop ta
 ok(/getMyPdaPreferences\(supabase\)\.catch\(\(\) => PDA_PREFERENCE_DEFAULTS\)/.test(bootstrap), "preferences load with the page; an unreadable row falls back to the defaults");
 ok(/export async function savePdaPreferences/.test(actions) && /const \{ supabase \} = await viewer\(\);\s*return \{ ok: true, data: await setMyPdaPreferences\(supabase, density, startTab\) \};/.test(actions),
   "saving goes through the member's own session after the estimator's viewer() gate");
-ok(/initialPdaTab\(initialPreferences, hasHandoff\)/.test(estimator) && /pda-route--\$\{density\}/.test(estimator),
-  "the estimator opens on the saved tab (unless handed off) and applies the saved row height");
-ok(/activeTab === "setup" \? \(\s*<PdaSetupWorkspace/.test(estimator), "the Setup tab renders the workspace; only Agents keeps the deferred card");
+ok(/initialPdaTab\(initialPreferences, hasHandoff, initialTab\)/.test(estimator) && /pda-route--\$\{density\}/.test(estimator),
+  "the estimator opens on the saved tab (unless handed off or a validated ?tab= names one) and applies the saved row height");
+ok(/activeTab === "setup" \? \(\s*<div className="pe-body"><PdaSetupWorkspace/.test(estimator), "the Setup tab renders the workspace inside the design's page body");
 ok(!/localStorage|sessionStorage|indexedDB/.test(setup + model), "nothing is kept in browser storage (the prototype's store is not authorised)");
 ok(/role="radiogroup"/.test(setup) && /aria-checked=/.test(setup) && /aria-labelledby=\{labelId\}/.test(setup) && /aria-live="polite"/.test(setup),
   "each preference is a labelled radiogroup; the save status is announced");
 ok(/never changes a figure/.test(setup) && !/displayCurrency|allocation/.test(setup), "Setup offers presentation only: no currency or allocation (those change figures)");
+
+// C2ALL-164 P1-1 · the canonical ?tab= contract
+const hub = read("components/pda/PdaPortsHub.tsx");
+const bootstrapServer = read("app/(dashboard)/dashboard/ports-da/bootstrap.server.ts");
+ok(PDA_ESTIMATOR_TABS.length === 4 && parsePdaTab("setup") === "setup" && parsePdaTab(["ports"]) === "ports" && parsePdaTab("bogus") === null && parsePdaTab(undefined) === null && parsePdaTab(["bogus", "ports"]) === null,
+  "parsePdaTab accepts exactly the four tab ids (first value of a repeated param) and answers null otherwise");
+ok(initialPdaTab(PDA_PREFERENCE_DEFAULTS, false, "agents") === "agents" && initialPdaTab(PDA_PREFERENCE_DEFAULTS, true, "agents") === "estimate"
+  && initialPdaTab({ ...PDA_PREFERENCE_DEFAULTS, startTab: "ports" }, false, null) === "ports" && initialPdaTab({ ...PDA_PREFERENCE_DEFAULTS, startTab: "ports" }, false) === "ports",
+  "a validated ?tab= opens that tab; a handoff still opens Estimate; null (absent or invalid) falls back to the member's start tab");
+ok(bootstrapServer.includes("initialTab: parsePdaTab(params.tab)") && estimator.includes("initialPdaTab(initialPreferences, hasHandoff, initialTab)")
+  && estimator.includes('url.searchParams.set("tab", id)') && estimator.includes("window.history.replaceState(window.history.state") && (estimator.match(/selectTab\(/g) ?? []).length >= 6
+  && (estimator.match(/setActiveTab\(/g) ?? []).length === 1,
+  "the page passes the validated tab to the estimator, which honours it on first render and keeps the URL in step with every switch (clicks, arrows, Setup shortcuts, card actions)");
+ok(hub.includes("const withOn = (href: string, on: string)") && hub.includes("href={withOn(t.href, on)}") && hub.includes("hub?arm=quick&on=${on}") && hub.includes("hub?arm=setup&on=${on}"),
+  "every hub tool and arm link carries the selected date (C2ALL-164 P2-2)");
 
 console.log(`PDA SETUP CHECK: ${n} passed`);

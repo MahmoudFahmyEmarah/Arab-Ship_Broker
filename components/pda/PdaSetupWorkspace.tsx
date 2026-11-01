@@ -4,7 +4,8 @@
 // A preference never changes a figure and never hides where a figure came from; it is saved in the member's own
 // governed row (set_my_pda_preferences), never in browser storage.
 import * as React from "react";
-import { Map as MapIcon } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, FileText, Map as MapIcon, UserRound } from "lucide-react";
 
 import { savePdaPreferences } from "@/app/(dashboard)/dashboard/ports-da/actions";
 import type { PdaEstimatorDensity } from "@/lib/pda/estimator-contract";
@@ -21,10 +22,12 @@ export function PdaSetupWorkspace({
   preferences,
   onSaved,
   onOpenPorts,
+  onOpenAgents,
 }: {
   preferences: PdaPreferences;
   onSaved: (next: PdaPreferences) => void;
   onOpenPorts: () => void;
+  onOpenAgents?: () => void;
 }) {
   const [save, setSave] = React.useState<SaveState>({ status: "idle" });
   const sequence = React.useRef(0);
@@ -42,12 +45,14 @@ export function PdaSetupWorkspace({
     }
   }
 
+  // the design's Setup (owner B2ALL-061): cards of preferences and of ways into the port database. A row appears only
+  // for a page that exists, so nothing here leads nowhere; more rows arrive with the Ports-module pages.
   return (
-    <section className="pda-setup" aria-labelledby="pda-setup-title">
-      <div className="pda-setup__card asb-card">
-        <div className="pda-setup__head">
-          <h2 id="pda-setup-title">What you see</h2>
-          <p>Your own preference, saved to your account. It never changes a figure, and it never hides where a figure came from.</p>
+    <section className="pe-set" aria-labelledby="pda-setup-title">
+      <div className="pe-set-card">
+        <div className="pe-set-card__hd">
+          <h2 id="pda-setup-title" className="pe-set-card__t">What you see</h2>
+          <span>Your own preference, saved to your account. It never changes a figure, and it never hides where a figure came from.</span>
         </div>
 
         <Choice
@@ -69,7 +74,7 @@ export function PdaSetupWorkspace({
           onPick={(startTab) => void persist(preferences.density, startTab)}
         />
 
-        <p className="pda-setup__status" role={save.status === "error" ? "alert" : "status"} aria-live="polite">
+        <p className="pe-set-status" role={save.status === "error" ? "alert" : "status"} aria-live="polite">
           {save.status === "saving" ? "Saving…" : null}
           {save.status === "saved" ? "Saved to your account." : null}
           {save.status === "error" ? save.message : null}
@@ -77,20 +82,63 @@ export function PdaSetupWorkspace({
         </p>
       </div>
 
-      <div className="pda-setup__card asb-card">
-        <div className="pda-setup__head">
-          <h2>Port data</h2>
-          <p>The records behind every figure in the estimate: each port, its terminals, and the published tariffs that price it.</p>
+      <div className="pe-set-card">
+        <div className="pe-set-card__hd">
+          <h2 className="pe-set-card__t">Port database and tariffs</h2>
+          <span>The records behind every figure in the estimate. The Ports and Agents tabs above open the same pages.</span>
         </div>
-        <button type="button" className="pda-setup__row" onClick={onOpenPorts}>
-          <span className="pda-setup__row-icon" aria-hidden="true"><MapIcon size={17} /></span>
-          <span className="pda-setup__row-text">
-            <b>Ports</b>
-            <span>One row per verified port: which services a published tariff prices, the editions in force and the terminals.</span>
-          </span>
-        </button>
+        <div className="pe-set-rows">
+          <Row icon={<MapIcon size={17} aria-hidden="true" />} label="Ports" onOpen={onOpenPorts}
+            desc="One record per port. Map first, then port by port, with what is known and which tariff prices it." />
+          <Link className="pe-set-row" href="/dashboard/ports-da/tariff-packs">
+            <span className="pe-set-row__ic"><FileText size={17} aria-hidden="true" /></span>
+            <span className="pe-set-row__tx">
+              <b>Tariff packs</b>
+              <span>One pack per published tariff, under the authority that issued it, and the port-to-packs resolver. Each pack opens its record.</span>
+            </span>
+            <span className="pe-set-row__go" aria-hidden="true"><ChevronRight size={15} /></span>
+          </Link>
+          {onOpenAgents ? (
+            <Row icon={<UserRound size={17} aria-hidden="true" />} label="Agents and contributions" onOpen={onOpenAgents}
+              desc="The agencies Arab ShipBroker has invited, quote requests to them, and their answers." />
+          ) : null}
+        </div>
+      </div>
+
+      <div className="pe-set-card">
+        <div className="pe-set-card__hd">
+          <h2 className="pe-set-card__t">Ports Module and reference</h2>
+          <span>The module&apos;s own pages: the hub with Quick DA, the directory and the map ranked by live listings, and the tariff atlas.</span>
+        </div>
+        <div className="pe-set-rows">
+          {[
+            { href: "/dashboard/ports-da/hub", label: "Ports Module hub", desc: "Quick DA from your own cargo and vessel, the tools, the most touched ports and the tariff coverage." },
+            { href: "/dashboard/ports-da/directory", label: "Port directory", desc: "Every port in the network, searchable, ranked by the live listings that touch it." },
+            { href: "/dashboard/ports-da/map", label: "Ports map", desc: "Pins sized by touches, filled where a tariff is held; the record a click away." },
+            { href: "/dashboard/ports-da/tariff-layouts", label: "Tariff layouts", desc: "The atlas of tariff shapes, and which published pack prices which port." },
+          ].map((link) => (
+            <Link key={link.href} className="pe-set-row" href={link.href}>
+              <span className="pe-set-row__ic"><FileText size={17} aria-hidden="true" /></span>
+              <span className="pe-set-row__tx"><b>{link.label}</b><span>{link.desc}</span></span>
+              <span className="pe-set-row__go" aria-hidden="true"><ChevronRight size={15} /></span>
+            </Link>
+          ))}
+        </div>
       </div>
     </section>
+  );
+}
+
+function Row({ icon, label, desc, onOpen }: { icon: React.ReactNode; label: string; desc: string; onOpen: () => void }) {
+  return (
+    <button type="button" className="pe-set-row" onClick={onOpen}>
+      <span className="pe-set-row__ic">{icon}</span>
+      <span className="pe-set-row__tx">
+        <b>{label}</b>
+        <span>{desc}</span>
+      </span>
+      <span className="pe-set-row__go" aria-hidden="true"><ChevronRight size={15} /></span>
+    </button>
   );
 }
 
@@ -113,19 +161,19 @@ function Choice<T extends string>({
 }) {
   const labelId = `pda-setup-${name}-label`;
   return (
-    <div className="pda-setup__pref">
-      <div className="pda-setup__pref-text">
+    <div className="pe-set-pref">
+      <div className="pe-set-pref__tx">
         <b id={labelId}>{label}</b>
         <span>{hint}</span>
       </div>
-      <div className="pda-setup__seg" role="radiogroup" aria-labelledby={labelId}>
+      <div className="pe-set-seg" role="radiogroup" aria-labelledby={labelId}>
         {options.map((option) => (
           <button
             key={option.id}
             type="button"
             role="radio"
             aria-checked={option.id === value}
-            className={option.id === value ? "is-on" : undefined}
+            className={`pe-set-seg__b${option.id === value ? " is-on" : ""}`}
             disabled={disabled}
             onClick={() => {
               if (option.id !== value) onPick(option.id);

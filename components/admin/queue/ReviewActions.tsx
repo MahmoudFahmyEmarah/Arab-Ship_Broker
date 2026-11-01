@@ -120,7 +120,7 @@ export function ReviewActions({
         <button
           onClick={handleApprove}
           disabled={isPending}
-          className="w-full flex items-center gap-3 px-4 py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded font-semibold text-sm transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3.5 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-white rounded font-semibold text-sm transition-colors"
         >
           {isPending ? (
             <Loader2 className="w-4 h-4 animate-spin shrink-0" />
@@ -129,7 +129,7 @@ export function ReviewActions({
           )}
           <span className="flex-1 text-left">Approve</span>
           <div className="text-right">
-            <p className="text-[11px] font-normal text-green-200">
+            <p className="text-[11px] font-normal text-green-50">
               Goes live · clean_posts+1
             </p>
           </div>
@@ -144,7 +144,7 @@ export function ReviewActions({
             <Edit3 className="w-4 h-4 shrink-0 text-amber-600" />
             <span className="flex-1 text-left">Approve with amendments</span>
             <div className="text-right mr-1">
-              <p className="text-[11px] font-normal text-amber-600">
+              <p className="text-[11px] font-normal text-amber-800">
                 Goes live · strike+1
               </p>
             </div>
@@ -192,7 +192,7 @@ export function ReviewActions({
             <XCircle className="w-4 h-4 shrink-0 text-red-500" />
             <span className="flex-1 text-left">Reject</span>
             <div className="text-right mr-1">
-              <p className="text-[11px] font-normal text-red-400">
+              <p className="text-[11px] font-normal text-red-700">
                 Not live · strike+1
               </p>
             </div>
@@ -240,7 +240,7 @@ export function ReviewActions({
             <AlertTriangle className="w-4 h-4 shrink-0 text-orange-500" />
             <span className="flex-1 text-left">Flag for further review</span>
             <div className="text-right mr-1">
-              <p className="text-[11px] font-normal text-orange-400">
+              <p className="text-[11px] font-normal text-orange-800">
                 Held · strike+1
               </p>
             </div>

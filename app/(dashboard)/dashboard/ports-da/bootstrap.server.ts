@@ -5,7 +5,7 @@ import {
   type PdaEstimatorBootstrap,
   type PdaEstimatorPortOption,
   type PdaEstimatorSearchParams,
-} from "@/lib/pda/estimator-contract";
+ parsePdaTab, type PdaEstimatorTab } from "@/lib/pda/estimator-contract";
 import { loadCargoViews, loadVesselViews } from "@/lib/portal/data";
 import type { PdaTerminalItem } from "@/sdk/app/pda";
 import { getMyPdaPreferences, listPdaTerminals } from "@/sdk/app/pda";
@@ -17,6 +17,8 @@ export interface PdaEstimatorPageData {
   terminals: PdaTerminalItem[];
   /** the member's Setup preferences; the defaults when none are saved or they cannot be read */
   preferences: PdaPreferences;
+  /** the tab the URL asked for (`?tab=`), validated; null when absent or unknown */
+  initialTab: PdaEstimatorTab | null;
 }
 
 export async function loadPdaEstimatorPageData(
@@ -57,5 +59,5 @@ export async function loadPdaEstimatorPageData(
     ? resolved
     : markPdaEstimatorCatalogUnavailable(resolved);
 
-  return { bootstrap, terminals, preferences };
+  return { bootstrap, terminals, preferences, initialTab: parsePdaTab(params.tab) };
 }

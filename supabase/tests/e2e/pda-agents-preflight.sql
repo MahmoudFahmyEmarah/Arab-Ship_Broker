@@ -11,9 +11,10 @@
 --       reported, not failed: the run's exact data fingerprint already holds them as found, and anything younger is
 --       residue by definition
 --   I2  no run of the CURRENT runner left anything either (the pdaag-<12 hex> shapes)
---   I3  the post-Wave-7 target: none of the Wave 8 / Agents objects exists (the runner applies them unrecorded)
+--   I3a the post-Wave-9 target (staging caught up to production's 193, B2O-091): every Wave 8 / Agents object exists
+--   I3b none of the Wave 10 design objects exists yet (the runner applies them unrecorded)
 --   I4  every named guard trigger is present and enabled
---   I5  email dispatch is off, and beta_mode is exactly the pinned post-Wave-7 value
+--   I5  email dispatch is off, and beta_mode is exactly the pinned staging value (unchanged since Wave 7)
 begin transaction read only;
 do $pf$
 declare
@@ -72,16 +73,21 @@ begin
     into n;
   acc := acc || case when n = 0 then 'ok   ' else 'FAIL ' end || 'I2 runner/race identity shapes remaining: ' || n || E'\n'; bad := bad + (n <> 0)::int;
 
-  -- I3 · post-Wave-7: no Wave 8 / Agents object exists
+  -- I3a · post-Wave-9: every Wave 8 / Agents object exists (9 tables + 7 functions = 16)
   select count(*) into n from (values
       ('public.pda_member_preferences'), ('public.pda_estimate_sets'), ('public.pda_agencies'), ('public.pda_port_agents'),
       ('public.pda_agency_events'), ('public.pda_quote_requests'), ('public.pda_quote_request_recipients'),
       ('public.pda_agency_quotes'), ('public.pda_quote_acceptances')) t(rel)
    where to_regclass(t.rel) is not null;
-  select n + count(*) into n from pg_proc p join pg_namespace s on s.oid = p.pronamespace
+  select n + count(distinct p.proname) into n from pg_proc p join pg_namespace s on s.oid = p.pronamespace
    where s.nspname = 'public' and p.proname in ('list_pda_ports_workspace', 'get_my_pda_preferences', 'pda_save_estimate_set', 'get_my_pda_agency',
-         'create_pda_quote_request', 'pda_accept_agency_quote', 'pda_admin_record_agency_quote', 'list_pda_tariff_packs');
-  acc := acc || case when n = 0 then 'ok   ' else 'FAIL ' end || 'I3 Wave 8 / Agents objects present (must be 0 on the post-Wave-7 target): ' || n || E'\n'; bad := bad + (n <> 0)::int;
+         'create_pda_quote_request', 'pda_accept_agency_quote', 'pda_admin_record_agency_quote');
+  acc := acc || case when n = 16 then 'ok   ' else 'FAIL ' end || 'I3a Wave 8 / Agents objects present (must be 16 of 16 on the post-Wave-9 target): ' || n || E'\n'; bad := bad + (n <> 16)::int;
+
+  -- I3b · no Wave 10 design object exists yet
+  select count(*) into n from pg_proc p join pg_namespace s on s.oid = p.pronamespace
+   where s.nspname = 'public' and p.proname in ('list_pda_tariff_packs', 'get_pda_tariff_pack', 'fn_pda_tariff_pack_ref', 'get_port_touch_census');
+  acc := acc || case when n = 0 then 'ok   ' else 'FAIL ' end || 'I3b Wave 10 design objects present (must be 0): ' || n || E'\n'; bad := bad + (n <> 0)::int;
 
   -- I4 · named guards present and enabled
   select count(*) into n from (values
@@ -92,7 +98,7 @@ begin
    where s.nspname in ('public', 'market_private', 'fixture_private') and not t.tgisinternal and t.tgenabled = 'D';
   acc := acc || case when n = 0 then 'ok   ' else 'FAIL ' end || 'I4 named guards missing/disabled, or any application trigger disabled: ' || n || E'\n'; bad := bad + (n <> 0)::int;
 
-  -- I5 · email off, beta pinned (post-Wave-7 staging: beta_mode true, restored at 15:45 on 19 Oct)
+  -- I5 · email off, beta pinned (staging beta_mode true since 15:45 on 19 Oct; the catch-up does not change it)
   select (select count(*) from public.notification_dispatch_config where id = 1 and dispatch_url is not null)
        + (select count(*) from public.app_settings where key = 'beta_mode' and value <> 'true'::jsonb)
        + (1 - (select count(*) from public.app_settings where key = 'beta_mode'))

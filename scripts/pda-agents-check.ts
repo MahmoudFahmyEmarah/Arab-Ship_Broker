@@ -64,8 +64,13 @@ ok(/requireAdmin\(\{ section: "portagents", edit: true \}\)/.test(consoleActions
 ok(/actorId: actor\.rowId/.test(consoleActions) && /pdaAdminListAgencies\(db, actor\.rowId\)/.test(consolePage), "the actor is the admin's app user row, re-checked by the database");
 const agentsTab = read("components/pda/PdaAgentsWorkspace.tsx");
 const estimator = read("components/pda/PdaRouteEstimator.tsx");
-ok(/activeTab === "agents" \? \(\s*<PdaAgentsWorkspace initialPort=\{agentsFocus\} \/>/.test(estimator) && !/pda-route__deferred/.test(estimator),
-  "the Agents tab renders the directory; no tab is a placeholder any more");
+const portal = read("components/pda/PdaAgentPortal.tsx");
+ok(/activeTab === "agents" \? \(\s*<PdaAgentPortal mode="member" initialPort=\{agentsFocus\} \/>/.test(estimator) && !/pda-route__deferred/.test(estimator)
+  && /<PdaAgentsWorkspace initialPort=\{initialPort\} embedded \/>/.test(portal),
+  "the Agents tab is the design's Agent Portal, whose Request view holds the directory; no tab is a placeholder");
+ok(/who\?\.agency \? \[\{ id: "agency"/.test(portal) && /who\?\.isAdmin \? \[\{ id: "review"/.test(portal) && /get_my_pda_agency/.test(read("app/(dashboard)/dashboard/ports-da/actions.ts")),
+  "the Agency workspace shows only to staff of a listed agency and ASB review only to admins (the database decides staff)");
+ok(!/localStorage|sessionStorage/.test(portal) && /Not recorded yet/.test(portal), "the portal keeps nothing in the browser and says where the platform holds no data");
 ok(/onOpenAgents=\{\(\) => openPortAgents\(loadPort\)\}/.test(estimator), "a port card opens the Agents tab filtered to that port");
 ok(/open Quotes on it under Saved estimates/.test(agentsTab) && !/coming next/.test(agentsTab) && !/localStorage|sessionStorage|indexedDB|simulat/i.test(agentsTab.replace(/^\/\/.*$/gm, "")),
   "the tab points to the real quote requests (on a saved estimate) instead of simulating them; nothing is kept in the browser");

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import type { MarketVisibilitySettings } from "@/lib/app-settings";
+import { LLM_MODEL_SUGGESTIONS } from "@/lib/sync/llm-provider";
 import { savePlatformSettings, saveMarketVisibility } from "@/app/(admin)/admin/settings/actions";
 import { ComingSoon } from "@/components/portal/ComingSoon";
 // Type-only import: pulling a runtime value from app-settings would drag the
@@ -40,10 +41,12 @@ const MODE_NOTE: Record<PlatformMode, string> = {
 // ── AI provider catalogue (ported from the design) ───────────────────────────
 type Vendor = { label: string; base: string; keyHint: string; keyPrefix: string; models: string[] };
 const VENDORS: Record<string, Vendor> = {
-  anthropic: { label: "Anthropic", base: "https://api.anthropic.com", keyHint: "sk-ant-…", keyPrefix: "sk-ant", models: ["claude-opus-4", "claude-sonnet-4", "claude-3-5-sonnet", "claude-3-5-haiku"] },
-  openai: { label: "OpenAI", base: "https://api.openai.com/v1", keyHint: "sk-…", keyPrefix: "sk-", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1", "o1-mini"] },
-  google: { label: "Google (Gemini)", base: "https://generativelanguage.googleapis.com", keyHint: "AIza…", keyPrefix: "AIza", models: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"] },
-  mistral: { label: "Mistral", base: "https://api.mistral.ai/v1", keyHint: "…", keyPrefix: "", models: ["mistral-large-latest", "mistral-small-latest", "open-mixtral-8x22b"] },
+  // model lists come from the shared catalogue (lib/sync/llm-provider.ts), the same one Data Sync's key form
+  // and its key test use — this picker once carried retired ids (claude-opus-4, claude-sonnet-4, claude-3-5-*)
+  anthropic: { label: "Anthropic", base: "https://api.anthropic.com", keyHint: "sk-ant-…", keyPrefix: "sk-ant", models: [...LLM_MODEL_SUGGESTIONS.anthropic] },
+  openai: { label: "OpenAI", base: "https://api.openai.com/v1", keyHint: "sk-…", keyPrefix: "sk-", models: [...LLM_MODEL_SUGGESTIONS.openai] },
+  google: { label: "Google (Gemini)", base: "https://generativelanguage.googleapis.com", keyHint: "AIza…", keyPrefix: "AIza", models: [...LLM_MODEL_SUGGESTIONS.google] },
+  mistral: { label: "Mistral", base: "https://api.mistral.ai/v1", keyHint: "…", keyPrefix: "", models: [...LLM_MODEL_SUGGESTIONS.mistral] },
   azure: { label: "Azure OpenAI", base: "https://<resource>.openai.azure.com", keyHint: "32-char key", keyPrefix: "", models: ["gpt-4o (deployment)", "gpt-4 (deployment)", "gpt-35-turbo (deployment)"] },
   custom: { label: "Custom / self-hosted", base: "", keyHint: "token", keyPrefix: "", models: ["custom-model"] },
 };
@@ -56,8 +59,6 @@ const TIER_ROWS: [string, number, number, number, number][] = [
   ["Voyage estimator", 0, 0, 1, 1],
   ["Partner dashboard", 0, 0, 0, 1],
 ];
-
-type TestStatus = "untested" | "testing" | "ok" | "error";
 
 function Toggle({ on, onClick, disabled }: { on: boolean; onClick: () => void; disabled?: boolean }) {
   return (
@@ -180,10 +181,6 @@ export function PlatformSettings({
   const [vis, setVis] = React.useState<MarketVisibilitySettings>(initialVisibility);
   const [visBaseline, setVisBaseline] = React.useState<MarketVisibilitySettings>(initialVisibility);
 
-  // Transient AI-test UI (not persisted).
-  const [showKey, setShowKey] = React.useState(false);
-  const [status, setStatus] = React.useState<TestStatus>("untested");
-  const [msg, setMsg] = React.useState("");
   const V = VENDORS[ai.vendor] ?? VENDORS.anthropic;
 
   // Baseline = last-saved snapshot. Reset reverts to it; dirty compares to it.
@@ -206,31 +203,6 @@ export function PlatformSettings({
     JSON.stringify(design) !== JSON.stringify(baseline.design) ||
     JSON.stringify(settings) !== JSON.stringify(baseline.settings);
 
-  function testKey() {
-    const key = ai.apiKey.trim();
-    setStatus("testing");
-    setMsg("");
-    setTimeout(() => {
-      if (!key) {
-        setStatus("error");
-        setMsg("No API key provided.");
-        return;
-      }
-      if (ai.vendor !== "custom" && V.keyPrefix && !key.startsWith(V.keyPrefix)) {
-        setStatus("error");
-        setMsg(`Key doesn't look like a ${V.label} key (expected ${V.keyHint}).`);
-        return;
-      }
-      if (key.length < 12) {
-        setStatus("error");
-        setMsg("Key looks too short — check it was copied in full.");
-        return;
-      }
-      const ms = (0.4 + Math.random() * 0.9).toFixed(2);
-      setStatus("ok");
-      setMsg(`Connected · ${ai.model} responded in ${ms}s.`);
-    }, 850);
-  }
 
   // Toggle a design tile, never allowing the last one to switch off.
   function toggleDesign(which: ComingSoonVariant) {
@@ -256,8 +228,6 @@ export function PlatformSettings({
     setFields(baseline.settings.cardFields);
     setAppearance(baseline.settings.appearance ?? { sidebar: "classic" });
     setVis(visBaseline);
-    setStatus("untested");
-    setMsg("");
     setError(null);
     setSaved(false);
   }
@@ -419,8 +389,6 @@ export function PlatformSettings({
                 onChange={(e) => {
                   const v = e.target.value;
                   setAi((a) => ({ ...a, vendor: v, model: (VENDORS[v] ?? VENDORS.anthropic).models[0] }));
-                  setStatus("untested");
-                  setMsg("");
                 }}
               >
                 {Object.entries(VENDORS).map(([k, v]) => (
@@ -439,8 +407,6 @@ export function PlatformSettings({
                 onChange={(e) => {
                   const m = e.target.value;
                   setAi((a) => ({ ...a, model: m }));
-                  setStatus("untested");
-                  setMsg("");
                 }}
               >
                 {V.models.map((m) => (
@@ -467,46 +433,10 @@ export function PlatformSettings({
             </div>
             <div className="adm-field" style={{ gridColumn: "1 / -1" }}>
               <span className="adm-field__label">API key</span>
-              <div className="adn-key-row">
-                <input
-                  className="adm-input adn-key-input"
-                  type={showKey ? "text" : "password"}
-                  placeholder={V.keyHint}
-                  value={ai.apiKey}
-                  disabled={!canEdit}
-                  onChange={(e) => {
-                    const apiKey = e.target.value;
-                    setAi((a) => ({ ...a, apiKey }));
-                    setStatus("untested");
-                    setMsg("");
-                  }}
-                />
-                <button
-                  type="button"
-                  className="adm-btn small"
-                  onClick={() => setShowKey((s) => !s)}
-                >
-                  {showKey ? "Hide" : "Show"}
-                </button>
-                <button
-                  type="button"
-                  className="adm-btn primary small adn-test-btn"
-                  onClick={testKey}
-                  disabled={status === "testing" || !canEdit}
-                >
-                  {status === "testing" ? "Testing…" : "Test key"}
-                </button>
-              </div>
-              <div className={`adn-test-result is-${status}`}>
-                {status === "testing" && (
-                  <>
-                    <span className="adn-spin" /> Sending a test request to {V.label}…
-                  </>
-                )}
-                {status === "ok" && <>✓ {msg}</>}
-                {status === "error" && <>✕ {msg}</>}
-                {status === "untested" && <>Run a one-token test call to confirm the key and model respond.</>}
-              </div>
+              <p className="adm-muted" style={{ margin: 0 }}>
+                Provider keys are stored encrypted in Vault and managed in{" "}
+                <a href="/admin/data-sync" className="adm-link">Data Sync → Connections</a>, where Test checks the key and the model with the provider.
+              </p>
             </div>
           </div>
         </div>

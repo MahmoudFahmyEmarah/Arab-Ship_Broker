@@ -1,0 +1,204 @@
+/* da-calculator/pda-face.css - the simple face of the PDA Estimator.
+   Two PDAs at first glance, four tweaks under each, everything else behind a
+   link. Tokens only; 11px type floor; hairlines, never boxes on boxes. */
+
+.pf{padding:12px 20px 72px;display:flex;flex-direction:column;gap:11px}
+
+/* ── the deal: one line ───────────────────────────────────────────── */
+.pf-deal{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);padding:9px 12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pf-deal__k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--asb-gray-500);margin-bottom:2px}
+.pf-deal__slot{min-width:0;flex:1 1 210px}
+.pf-deal__v{display:flex;align-items:baseline;gap:7px;min-width:0}
+.pf-deal__n{font-size:13.5px;font-weight:600;color:var(--asb-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-deal__m{font-size:11.5px;color:var(--asb-gray-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-deal__x{border:0;background:none;color:var(--asb-gray-400);cursor:pointer;padding:2px;line-height:1;font-size:12px}
+.pf-deal__x:hover{color:var(--asb-red)}
+.pf-deal__act{margin-left:auto;display:flex;gap:7px;align-items:center}
+
+/* typeahead, shared by the deal slots and the port change */
+.pf-ta{position:relative}
+.pf-ta input{width:100%;font:400 13px/1.3 var(--asb-font);color:var(--asb-navy);background:var(--asb-white);border:var(--bd);border-radius:var(--r-input);padding:7px 9px;min-height:34px}
+.pf-ta input:focus{outline:none;border-color:var(--asb-blue);box-shadow:0 0 0 2px rgba(24,95,165,.12)}
+.pf-sug{position:absolute;z-index:40;left:0;right:0;top:calc(100% + 3px);background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);box-shadow:var(--sh-card-hover);max-height:280px;overflow:auto;min-width:260px}
+.pf-sug__o{display:block;width:100%;text-align:left;border:0;background:none;font-family:inherit;padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--asb-gray-100,#F2F4F7)}
+.pf-sug__o:last-child{border-bottom:0}
+.pf-sug__o.is-cur,.pf-sug__o:hover{background:var(--asb-blue-light,#E8F1FB)}
+.pf-sug__n{font-size:12.5px;font-weight:600;color:var(--asb-navy)}
+.pf-sug__m{font-size:11px;color:var(--asb-gray-700);margin-top:1px}
+.pf-sug__none{padding:9px 10px;font-size:11.5px;color:var(--asb-gray-500)}
+
+/* ── the two PDAs ─────────────────────────────────────────────────── */
+.pf-two{display:grid;grid-template-columns:1fr 1fr;gap:11px;align-items:start}
+.pf-col{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);display:flex;flex-direction:column;min-width:0}
+.pf-col__hd{padding:7px 12px 8px;border-bottom:var(--bd);display:flex;align-items:baseline;gap:8px;min-width:0}
+.pf-col__r{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--asb-blue);white-space:nowrap;flex:none}
+.pf-col--disch .pf-col__r{color:var(--asb-gold-deep)}
+.pf-col__p{font-size:15px;font-weight:600;color:var(--asb-navy);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.pf-col__m{font-size:11px;color:var(--asb-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0}
+.pf-col__swap{flex:1 1 auto;min-width:0;max-width:260px}
+.pf-col__ch{margin-left:auto;flex:none}
+
+.pf-fig{padding:14px 14px 13px;display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.pf-fig__v{font-size:31px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.01em}
+.pf-fig__v.is-gap{font-size:19px;color:var(--asb-gray-500);font-weight:500}
+.pf-fig__k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--asb-gray-500);padding-bottom:3px}
+.pf-fig__loc{margin-left:auto;text-align:right;font-size:11.5px;color:var(--asb-gray-700);font-variant-numeric:tabular-nums;padding-bottom:2px}
+.is-usd-only .pf-fig__loc{display:none}
+
+/* ── the four tweaks ──────────────────────────────────────────────── */
+.pf-tw{border-top:var(--bd);display:flex;flex-direction:column}
+/* Days of stay, Berth shifts, Handling and ETA sit two by two; the agent keeps
+   the full width below them. */
+.pf-tw__g{display:grid;grid-template-columns:1fr 1fr}
+.pf-tw__g .pf-tw__r{border-right:1px solid var(--asb-gray-100,#F2F4F7)}
+.pf-tw__g .pf-tw__r:nth-child(2n){border-right:0}
+.pf-tw__r{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--asb-gray-100,#F2F4F7);min-height:42px;flex-wrap:wrap}
+.pf-tw__r:last-child{border-bottom:0}
+.pf-tw__k{font-size:12.5px;color:var(--asb-gray-700);flex:1 1 auto;min-width:0}
+.pf-tw__k b{color:var(--asb-navy);font-weight:600}
+.pf-tw__h{font-size:11px;color:var(--asb-gray-500);display:block;margin-top:1px}
+.pf-num.asb-input,.pf-num{width:64px;flex:none;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;min-height:32px;padding:6px 8px}
+.pf-date.asb-input,.pf-date{width:auto;flex:none;min-height:32px;padding:6px 8px}
+/* The ASB DS ships no Select component (see its component list), so the agent
+   picker is a native <select> held to the DS Input contract: same border,
+   radius, height, type size and focus colour. Flagged for Capt. Mohamed:
+   either add a Select to the DS or keep this. */
+.pf-sel{font:inherit;font-size:12px;color:var(--asb-navy);background:var(--asb-white);border:0.5px solid var(--asb-gray-200);border-radius:var(--r-input, 4px);padding:6px 8px;min-height:30px;width:100%;max-width:190px}
+.pf-sel:focus{outline:none;border-color:var(--asb-blue)}
+/* Density modifier on the DS SegmentedToggle - the dense rows cannot carry its
+   default 13px padding. Nothing else about the component is changed. */
+.pf-seg-dense.match-toggle{flex:none}
+.pf-seg-dense .match-toggle__seg{padding:5px 9px;font-size:11.5px;min-height:30px;white-space:nowrap}
+.pf-reset{font-size:11px;color:var(--asb-blue);border:0;background:none;cursor:pointer;padding:2px 4px;font-family:inherit}
+
+/* ── the trigger ──────────────────────────────────────────────────── */
+.pf-trig{margin:0 14px 11px;background:var(--asb-amber-bg);border-left:2px solid var(--asb-amber);border-radius:0 var(--r-card) var(--r-card) 0;padding:9px 11px;font-size:12px;color:var(--asb-navy);line-height:1.5}
+.pf-trig b{font-weight:600}
+.pf-trig__l{margin:6px 0 0;display:flex;flex-direction:column;gap:3px}
+.pf-trig__i{display:flex;gap:8px;font-size:11.5px;color:var(--asb-gray-700);font-variant-numeric:tabular-nums}
+.pf-trig__i span:first-child{flex:1;min-width:0;color:var(--asb-navy)}
+.pf-trig--warn{background:var(--asb-red-bg);border-left-color:var(--asb-red)}
+
+/* ── the way down: breakdown + verify ─────────────────────────────── */
+.pf-foot{border-top:var(--bd);padding:8px 12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pf-foot__s{font-size:11px;color:var(--asb-gray-500);margin-left:auto}
+.pf-bd{border-top:var(--bd);padding:10px 14px 13px}
+.pf-bd table{width:100%;border-collapse:collapse}
+.pf-bd th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--asb-gray-500);font-weight:600;text-align:left;padding:5px 6px;border-bottom:var(--bd)}
+.pf-bd td{font-size:12px;color:var(--asb-navy);padding:6px;border-bottom:1px solid var(--asb-gray-100,#F2F4F7)}
+.pf-bd td.n,.pf-bd th.n{text-align:right;font-variant-numeric:tabular-nums}
+.pf-bd tr.is-extra td{color:var(--asb-gray-700)}
+.pf-bd tr.is-off td{color:var(--asb-gray-500)}
+.pf-bd tr.is-off td:first-child{color:var(--asb-gray-700)}
+.pf-bd tr.is-tot td{font-weight:600;border-bottom:0;border-top:var(--bd)}
+.pf-bd__b{font-size:11px;color:var(--asb-gray-500);display:block;margin-top:1px}
+.pf-vlink{border:0;background:none;color:var(--asb-blue);font:400 11px/1 var(--asb-font);font-family:inherit;cursor:pointer;padding:4px 5px;white-space:nowrap}
+.pf-vlink:hover{text-decoration:underline}
+
+/* ── the answer for both ports ────────────────────────────────────── */
+.pf-tot{position:sticky;bottom:0;background:var(--asb-navy);color:#fff;border-radius:var(--r-card);padding:11px 15px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;box-shadow:var(--sh-card-hover)}
+.pf-tot__k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.72)}
+.pf-tot__v{font-size:23px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.pf-tot__m{font-size:12px;color:rgba(255,255,255,.82);font-variant-numeric:tabular-nums}
+.pf-tot__a{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.pf-tot .asb-btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.24);color:#fff}
+.pf-tot .asb-btn:hover{background:rgba(255,255,255,.2)}
+.pf-tot .asb-btn--primary{background:var(--asb-white);color:var(--asb-navy);border-color:var(--asb-white)}
+
+/* ── the answer, at the top: one strip, four figures ──────────────
+   Two subtotals (the pair a broker negotiates between), the transits, and the
+   all-in. Everything the old two-card band said, in a quarter of the height. */
+.pf-strip{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card)}
+/* the confidence line: what the figure rests on, before the figure */
+.pf-strip__conf{padding:5px 12px 0;font-size:11.5px;color:var(--asb-gray-700);line-height:1.5}
+.pf-strip__hd{display:flex;align-items:center;gap:10px;padding:5px 11px;border-bottom:var(--bd);flex-wrap:wrap}
+.pf-strip__rt{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--asb-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pf-strip__lk{font-size:11px;color:var(--asb-blue);text-decoration:none;white-space:nowrap;margin-left:auto}
+.pf-strip__lk:hover{text-decoration:underline}
+.pf-strip__acct{flex:none;display:flex;align-items:center;gap:7px}
+.pf-strip__al{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--asb-gray-500);white-space:nowrap}
+.pf-strip__acct .match-toggle__seg{padding:4px 8px;min-height:24px;font-size:11px}
+.pf-strip__cells{display:grid;grid-template-columns:repeat(4,1fr)}
+.pf-cell{padding:7px 11px 8px;border-left:var(--bd);min-width:0;display:flex;flex-direction:column;gap:1px}
+.pf-cell:first-child{border-left:0}
+.pf-cell__k{font-size:11px;font-weight:600;letter-spacing:.055em;text-transform:uppercase;color:var(--asb-gray-500);text-wrap:balance}
+.pf-cell__v{font-size:21px;font-weight:600;color:var(--asb-navy);font-variant-numeric:tabular-nums;line-height:1.15;letter-spacing:-.015em;display:flex;align-items:baseline;gap:5px}
+.pf-cell__v.is-gap{font-size:13px;font-weight:500;color:var(--asb-gray-500);text-transform:uppercase;letter-spacing:.04em}
+/* The caveat under each figure is never clipped. It carries the words the whole
+   design exists to say - "not sourced", "agent to quote", "part total" - and a
+   clamp cut them mid-phrase, so "1 transit not sourced" read as "1 transit
+   not". The strip grows instead: a disclosure outranks a fixed height. */
+.pf-cell__n{font-size:11px;color:var(--asb-gray-500);line-height:1.35;text-wrap:pretty}
+.pf-cell--em{background:var(--asb-gray-50)}
+.pf-cell--all{background:var(--asb-navy)}
+.pf-cell--all .pf-cell__k{color:rgba(255,255,255,.7)}
+.pf-cell--all .pf-cell__v{color:#fff}
+.pf-cell--all .pf-cell__v.is-gap{color:rgba(255,255,255,.7)}
+.pf-cell--all .pf-cell__n{color:rgba(255,255,255,.72)}
+.is-compact .pf-cell__v{font-size:19px}
+
+/* Top-bar actions: icon only, the label carried by the tooltip. */
+.pe-icons{gap:5px}
+.pe-iconbtn{position:relative;width:34px;min-width:34px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+.pe-iconbtn .ti{font-size:16px}
+.pe-iconbtn__c{position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 4px;border-radius:99px;background:var(--asb-blue);color:#fff;font-size:11px;font-weight:600;line-height:15px;text-align:center}
+@media (pointer:coarse){.pe-iconbtn{width:44px;min-width:44px;height:44px}}
+
+/* ── the handling pole ─────────────────────────────────────────────── */
+.pf-hd{border-top:var(--bd);padding:8px 12px 10px}
+.pf-hd__t{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--asb-gray-500);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.pf-hd__s{font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;color:var(--asb-gray-500)}
+.pf-hd .pf-tw__r{padding:5px 0;border-bottom:1px solid var(--asb-gray-100,#F2F4F7)}
+.pf-hd__tab{width:100%;border-collapse:collapse}
+.pf-hd__tab td{font-size:12px;color:var(--asb-navy);padding:5px 4px;border-bottom:1px solid var(--asb-gray-100,#F2F4F7);vertical-align:top}
+.pf-hd__tab td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pf-hd__tab tr.is-off td{color:var(--asb-gray-500)}
+.pf-hd__tab tr.is-tot td{font-weight:600;border-bottom:0}
+.pf-hd__pay{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--asb-gray-500)}
+.pf-hd__q{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.pf-hd__qo{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;padding:7px 9px;border:var(--bd);border-radius:var(--r-card);cursor:pointer;align-items:baseline}
+.pf-hd__qo.is-on{border-color:var(--asb-blue);background:var(--asb-blue-light,#E8F1FB)}
+.pf-hd__qo input{grid-row:span 3;align-self:center}
+.pf-hd__qn{font-size:12.5px;font-weight:600;color:var(--asb-navy)}
+.pf-hd__qv{font-size:11.5px;color:var(--asb-gray-700);font-variant-numeric:tabular-nums}
+.pf-hd__opt{font-size:12px;color:var(--asb-gray-700);display:flex;gap:6px;align-items:center}
+
+/* ── nothing picked yet ───────────────────────────────────────────── */
+.pf-empty{background:var(--asb-white);border:var(--bd);border-radius:var(--r-card);padding:26px 20px;text-align:center}
+.pf-empty__t{font-size:14.5px;font-weight:600;color:var(--asb-navy)}
+.pf-empty__s{font-size:12.5px;color:var(--asb-gray-700);margin-top:5px;line-height:1.55;max-width:520px;margin-left:auto;margin-right:auto}
+
+/* ── the arrival line (a handover), one row not a card ─────────────── */
+.pf-arr{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--asb-gray-700);background:var(--asb-blue-light,#E8F1FB);border-radius:var(--r-card);padding:7px 11px}
+.pf-arr b{color:var(--asb-navy);font-weight:600}
+.pf-arr__x{margin-left:auto;border:0;background:none;color:var(--asb-gray-500);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px}
+
+.is-compact .pf-tw__r{min-height:36px;padding:5px 14px}
+.is-compact .pf-fig{padding:11px 14px 10px}
+.is-compact .pf-fig__v{font-size:27px}
+
+@media (max-width:1023px){
+  .pf-two{grid-template-columns:1fr}
+  /* The strip stays four across down to the tablet floor. The figures do not
+     wrap; the caveat lines do, and the cell grows to fit them. */
+  .pf-cell{padding:6px 9px 7px}
+  .pf-cell__k{font-size:11px}
+  .pf{padding:11px 14px 80px}
+  .pf-deal__slot{flex:1 1 100%}
+  .pf-deal__act{margin-left:0;width:100%}
+}
+@media (max-width:599px){
+  .pf-tw__g{grid-template-columns:1fr}
+  .pf-tw__g .pf-tw__r{border-right:0}
+  .pf-strip__cells{grid-template-columns:1fr 1fr}
+  .pf-cell:nth-child(3){border-left:0}
+  .pf-cell:nth-child(n+3){border-top:var(--bd)}
+  .pf-fig__v{font-size:26px}
+  .pf-tot{gap:10px}
+  .pf-tot__a{width:100%;margin-left:0}
+  .pf-tw__r{flex-wrap:wrap}
+}
+@media print{
+  .pf-tot{position:static;box-shadow:none}
+  .pf-foot,.pf-deal__act,.pf-tot__a{display:none}
+}

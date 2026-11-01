@@ -7,6 +7,7 @@
 // the plain edited body only.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ANTHROPIC_TASK_MODEL } from "@/lib/sync/llm-provider";
 
 export type PolishMode = "proofread" | "rephrase";
 
@@ -37,7 +38,7 @@ export async function polishCircularBody(
     const { ChatAnthropic } = await import("@langchain/anthropic");
     const model = new ChatAnthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
-      model: "claude-opus-4-8",
+      model: ANTHROPIC_TASK_MODEL,
       temperature: 0.2,
       maxTokens: 4096,
     });

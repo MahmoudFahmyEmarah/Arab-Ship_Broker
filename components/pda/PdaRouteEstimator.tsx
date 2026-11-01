@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Anchor, CalendarDays, ChevronRight, Loader2, Map, Package, Plus, Settings2, Ship, UserRound, X, RefreshCw } from "lucide-react";
+import { Anchor, CalendarDays, ChevronRight, FileText, Loader2, Map, Plus, Settings2, ShieldCheck, Ship, UserRound, X, RefreshCw } from "lucide-react";
 
 import { measuredPdaPassage, previewPdaRouteFrame, previewPdaRouteLeg } from "@/app/(dashboard)/dashboard/ports-da/actions";
 import {
@@ -39,15 +39,18 @@ import type { PortChoice as PortSearchChoice } from "@/lib/ports/port-search";
 import "@/components/design-system/asb-ds.css";
 import { PdaPortsWorkspace } from "./PdaPortsWorkspace";
 import { PdaSetupWorkspace } from "./PdaSetupWorkspace";
-import { PdaAgentsWorkspace } from "./PdaAgentsWorkspace";
+import { PdaAgentPortal } from "./PdaAgentPortal";
 import { PdaSaveBar, PdaSavedEstimates } from "./PdaSavedEstimates";
 import { initialPdaTab, type PdaPreferences } from "@/lib/pda/preferences";
 import "./pda-route-estimator.css";
+import "./ports-module.css";
 
 interface Props {
   bootstrap: PdaEstimatorBootstrap;
   terminals: PdaTerminalItem[];
   preferences: PdaPreferences;
+  /** the validated `?tab=` of the request (parsePdaTab); null when absent or unknown */
+  initialTab?: PdaEstimatorTab | null;
 }
 
 const TABS: Array<{ id: PdaEstimatorTab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
@@ -144,12 +147,23 @@ function routeLeg(input: {
   };
 }
 
-export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPreferences }: Props) {
+export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPreferences, initialTab = null }: Props) {
   const initialCargo = bootstrap.catalog.cargos.find((item) => item.id === bootstrap.initial.cargoId) ?? null;
   const hasHandoff = Boolean(bootstrap.initial.from || bootstrap.initial.vesselId || bootstrap.initial.cargoId
     || bootstrap.initial.loadPortLocode || bootstrap.initial.dischargePortLocode);
   const [preferences, setPreferences] = React.useState<PdaPreferences>(initialPreferences);
-  const [activeTab, setActiveTab] = React.useState<PdaEstimatorTab>(() => initialPdaTab(initialPreferences, hasHandoff));
+  const [activeTab, setActiveTab] = React.useState<PdaEstimatorTab>(() => initialPdaTab(initialPreferences, hasHandoff, initialTab));
+  // the canonical ?tab= contract (C2ALL-164 P1-1): every switch keeps the URL in step, so a reload or a shared link
+  // opens the same tab; replaceState leaves the history alone
+  const selectTab = React.useCallback((id: PdaEstimatorTab) => {
+    setActiveTab(id);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", id);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+  // the head's Verification panel (design): honest empty state until verification requests exist
+  const [verifyOpen, setVerifyOpen] = React.useState(false);
   // the member's saved row height wins over the bootstrap default; it never changes a figure
   const density = preferences.saved ? preferences.density : bootstrap.initial.density;
   const [vesselId, setVesselId] = React.useState(bootstrap.initial.vesselId ?? "");
@@ -207,12 +221,12 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
   const openPortAgents = (locode: string) => {
     if (!locode) return;
     setAgentsFocus(locode);
-    setActiveTab("agents");
+    selectTab("agents");
   };
   const openPortRecord = (locode: string) => {
     if (!locode) return;
     setPortsFocus(locode);
-    setActiveTab("ports");
+    selectTab("ports");
   };
   const partTokens = React.useRef({ load: 0, discharge: 0, frame: 0 });
   const requestSequence = React.useRef(0);
@@ -544,14 +558,37 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
 
   return (
     // a <div>: the dashboard shell already provides the page's <main> landmark (no nested main)
-    <div className={`asb-ds pda-route pda-route--${density}`}>
-      <header className="pda-route__header">
-        <h1>Ports Cost Estimator</h1>
-        <p>{subtitle}</p>
+    <div className={`asb-ds pm-scope pda-route pda-route--${density}${density === "compact" ? " is-compact" : ""}`}>
+      {/* the design's head (owner B2ALL-061): page title with an inline eyebrow, then the page actions */}
+      <header className="pe-head">
+        <div className="pe-head__top">
+          <div className="pe-head__title">
+            <h1 className="page-title">Ports Cost Estimator</h1>
+            <p className="eyebrow">{subtitle}</p>
+          </div>
+          <div className="pe-head__act pe-icons">
+            {selected ? (
+              <button type="button" className="asb-btn pe-iconbtn" title="Save or export this estimate" aria-label="Save or export this estimate"
+                onClick={() => document.getElementById("pda-save")?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                <FileText size={14} aria-hidden="true" />
+              </button>
+            ) : null}
+            <button type="button" className="asb-btn pe-iconbtn" title="Verification requests" aria-label="Verification requests"
+              aria-expanded={verifyOpen} onClick={() => setVerifyOpen((open) => !open)}>
+              <ShieldCheck size={14} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        {verifyOpen ? (
+          <div className="pe-verify" role="region" aria-label="Verification requests">
+            <b>No verification asked for yet.</b>
+            <span>Asking a port agent or the desk to confirm a charge line is not built yet; quotes from agencies are requested from a saved estimate.</span>
+          </div>
+        ) : null}
       </header>
 
       <nav
-        className="pda-route__tabs asb-tabs"
+        className="pe-tabs"
         aria-label="Ports Cost Estimator sections"
         role="tablist"
         onKeyDown={(event) => {
@@ -563,13 +600,13 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
           else if (event.key === "End") next = TABS.length - 1;
           else return;
           event.preventDefault();
-          setActiveTab(TABS[next]!.id);
+          selectTab(TABS[next]!.id);
           document.getElementById(`pda-tab-${TABS[next]!.id}`)?.focus();
         }}
       >
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
-            className="asb-tab"
+            className={`pe-tabs__b${activeTab === id ? " is-on" : ""}`}
             key={id}
             id={`pda-tab-${id}`}
             type="button"
@@ -577,9 +614,9 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
             aria-selected={activeTab === id}
             aria-controls="pda-tabpanel"
             tabIndex={activeTab === id ? 0 : -1}
-            onClick={() => setActiveTab(id)}
+            onClick={() => selectTab(id)}
           >
-            <Icon size={14} /> {label}
+            <Icon size={14} aria-hidden="true" />{label}
           </button>
         ))}
       </nav>
@@ -593,12 +630,12 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
       {activeTab === "ports" ? (
         <PdaPortsWorkspace initialSelected={portsFocus} />
       ) : activeTab === "agents" ? (
-        <PdaAgentsWorkspace initialPort={agentsFocus} />
+        <PdaAgentPortal mode="member" initialPort={agentsFocus} />
       ) : activeTab === "setup" ? (
-        <PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => setActiveTab("ports")} />
+        <div className="pe-body"><PdaSetupWorkspace preferences={preferences} onSaved={setPreferences} onOpenPorts={() => selectTab("ports")} onOpenAgents={() => selectTab("agents")} /></div>
       ) : (
-        <>
-          <section className={`pda-selection asb-card ${selected ? "is-selected" : ""}`} aria-label="Estimate records">
+        <div className="pf">
+          <section className={`pf-deal ${selected ? "is-selected" : ""}`} aria-label="Estimate records">
             {selected && vessel && cargo ? (
               <>
                 <SelectedRecord
@@ -613,8 +650,8 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
                   detail={`${cargo.quantityLabel} · ${cargo.loadPort.name} → ${cargo.dischargePort.name}`}
                   onClear={() => chooseCargo("")}
                 />
-                <button type="button" className="asb-button pda-selection__new" onClick={reset}>
-                  <Plus size={14} /> New
+                <button type="button" className="asb-btn pf-deal__new" onClick={reset}>
+                  <Plus size={14} aria-hidden="true" /> New
                 </button>
               </>
             ) : (
@@ -642,10 +679,9 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
           ))}
 
           {!selected || !vessel || !cargo ? (
-            <section className="pda-empty-state asb-card">
-              <div className="pda-empty-state__icons" aria-hidden="true"><Ship size={23} /><Package size={23} /></div>
-              <h2>Pick a vessel and a cargo.</h2>
-              <p>Both come from your own records. The vessel is the reference; the cargo supplies quantity, type and the two ports. Both PDAs are priced from the tariff that governs each port, then from quotes, and say not sourced where neither exists.</p>
+            <section className="pf-empty" aria-labelledby="pda-empty-title">
+              <h2 id="pda-empty-title" className="pf-empty__t">Pick a vessel and a cargo.</h2>
+              <p className="pf-empty__s">Both come from your own records. The vessel is the reference; the cargo supplies quantity, type and the two ports. Both PDAs are priced from the tariff that governs each port, then from quotes, and say not sourced where neither exists.</p>
             </section>
           ) : (
             <div className="pda-workspace">
@@ -803,7 +839,7 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
           )}
 
           <PdaSavedEstimates refreshKey={historyKey} />
-        </>
+        </div>
       )}
       </section>
     </div>
@@ -812,13 +848,13 @@ export function PdaRouteEstimator({ bootstrap, terminals, preferences: initialPr
 
 function SelectedRecord({ label, title, detail, onClear }: { label: string; title: string; detail: string; onClear: () => void }) {
   return (
-    <div className="pda-selection__record">
-      <span className="pda-selection__label">{label}</span>
-      <div>
-        <strong>{title}</strong>
-        <p>{detail}</p>
+    <div className="pf-deal__slot">
+      <div className="pf-deal__k">{label}</div>
+      <div className="pf-deal__v">
+        <span className="pf-deal__n" title={title}>{title}</span>
+        <span className="pf-deal__m">{detail}</span>
+        <button type="button" className="pf-deal__x" aria-label={`Clear ${label.toLowerCase()}`} onClick={onClear}><X size={14} aria-hidden="true" /></button>
       </div>
-      <button type="button" aria-label={`Clear ${label.toLowerCase()}`} onClick={onClear}><X size={13} /></button>
     </div>
   );
 }
@@ -860,13 +896,11 @@ function CatalogPicker({
   }
 
   return (
-    <div className="pda-picker">
-      <label htmlFor={`pda-${kind}-search`}>{label}</label>
-      <div className="pda-picker__control">
-        {kind === "vessel" ? <Ship size={15} /> : <Package size={15} />}
+    <div className="pf-deal__slot">
+      <label className="pf-deal__k" htmlFor={`pda-${kind}-search`}>{label}</label>
+      <div className="pf-ta">
         <input
           id={`pda-${kind}-search`}
-          className="asb-control"
           value={open ? query : selectedLabel}
           placeholder={kind === "vessel" ? "Search your fleet" : "Search your cargoes"}
           disabled={disabled}
@@ -904,27 +938,28 @@ function CatalogPicker({
             }
           }}
         />
-        {selected ? <button type="button" onClick={() => onChange("")} aria-label={`Clear ${label.toLowerCase()}`}><X size={13} /></button> : null}
-      </div>
+        {selected ? <button type="button" className="pf-deal__x pf-ta__x" onClick={() => onChange("")} aria-label={`Clear ${label.toLowerCase()}`}><X size={14} aria-hidden="true" /></button> : null}
       {open && !disabled ? (
-        <div className="pda-picker__menu asb-card" id={`pda-${kind}-options`} role="listbox">
+        <div className="pf-sug" id={`pda-${kind}-options`} role="listbox">
           {filtered.length ? filtered.map((item) => (
             <button
               key={item.id}
               id={`pda-${kind}-option-${item.id}`}
               type="button"
               role="option"
+              className={`pf-sug__o${activeItem?.id === item.id ? " is-cur" : ""}`}
               aria-selected={item.id === value}
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setActiveIndex(filtered.indexOf(item))}
               onClick={() => choose(item)}
             >
-              <strong>{"name" in item ? item.name : item.cargo}</strong>
-              <span>{"name" in item ? `${item.type} · ${item.dwt} DWT · IMO ${item.imo}` : `${item.quantityLabel} · ${item.loadPort.name} → ${item.dischargePort.name}`}</span>
+              <div className="pf-sug__n">{"name" in item ? item.name : item.cargo}</div>
+              <div className="pf-sug__m">{"name" in item ? `${item.type} · ${item.dwt} DWT · IMO ${item.imo}` : `${item.quantityLabel} · ${item.loadPort.name} → ${item.dischargePort.name}`}</div>
             </button>
-          )) : <p>No authorised {kind === "vessel" ? "vessels" : "cargoes"} match this search.</p>}
+          )) : <div className="pf-sug__none">No authorised {kind === "vessel" ? "vessels" : "cargoes"} match “{query.trim()}”.</div>}
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

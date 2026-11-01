@@ -13,6 +13,7 @@
 // CircularParseResult, always passed through sanitizeResult (hard guardrail).
 
 import Anthropic from "@anthropic-ai/sdk";
+import { ANTHROPIC_TASK_MODEL } from "@/lib/sync/llm-provider";
 import { createClient } from "@supabase/supabase-js";
 import { CIRCULAR_SYSTEM_PROMPT } from "./prompt";
 import { extractJson, sanitizeResult } from "./extract";
@@ -64,7 +65,7 @@ async function runAnthropic(input: EngineInput, today: string): Promise<Circular
     : buildUserText(input, today);
 
   const message = await client.messages.create({
-    model: "claude-opus-4-8",
+    model: ANTHROPIC_TASK_MODEL,
     max_tokens: 3000,
     // Static prompt first (prompt-cacheable); the per-day date lives in the
     // user turn so it never invalidates the cached prefix.

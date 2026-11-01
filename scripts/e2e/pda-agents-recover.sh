@@ -49,17 +49,12 @@ if [ "$tdok" = "TEARDOWN OK $RUN" ]; then
 else fail "teardown: last line '${tdok:-<none>}'; $(printf '%s\n' "$td" | sed -n 's/^STDERR //p' | tr '\n' ' ' | redact | cut -c1-300)"; exit 1; fi
 
 # 2 · DOWNs newest first, only where the object is present
-for m in 20261019120000_pda_desk_quotes 20261019110000_pda_quote_acceptance 20261019100000_pda_quote_requests 20261018140000_pda_estimate_set_org_lineage \
-         20261018130000_pda_agencies 20261018120000_pda_estimate_sets 20261018110000_pda_member_preferences 20261018100000_pda_ports_workspace; do
+for m in 20261019140000_pda_port_touch_census 20261019130000_pda_tariff_packs; do
+  # after the 193 catch-up (B2O-091) a run applies only the Wave 10 design pair; both DOWNs drop read functions only,
+  # so neither needs an export marker
   case "$m" in
-    20261019120000_*) marker="$([ $DISCARD = 1 ] && echo "set local asb.pda_desk_quotes_down = 'history-exported:$RUN';")"; probe="select exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'pda_agency_quotes' and column_name = 'entered_via')";;
-    20261019110000_*) marker="$([ $DISCARD = 1 ] && echo "set local asb.pda_acceptances_down = 'history-exported:$RUN';")"; probe="select to_regclass('public.pda_quote_acceptances') is not null";;
-    20261019100000_*) marker="$([ $DISCARD = 1 ] && echo "set local asb.pda_quotes_down = 'history-exported:$RUN';")"; probe="select to_regclass('public.pda_quote_requests') is not null";;
-    20261018140000_*) marker=""; probe="select coalesce(pg_get_functiondef(to_regprocedure('public.pda_save_estimate_set(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid)')) like '%v_org uuid := p_owner_org_id%', false)";;
-    20261018130000_*) marker="$([ $DISCARD = 1 ] && echo "set local asb.pda_agencies_down = 'registry-exported:$RUN';")"; probe="select to_regclass('public.pda_agencies') is not null";;
-    20261018120000_*) marker="$([ $DISCARD = 1 ] && echo "set local asb.pda_sets_down = 'history-exported:$RUN';")"; probe="select to_regclass('public.pda_estimate_sets') is not null";;
-    20261018110000_*) marker="$([ $DISCARD = 1 ] && echo "set local asb.pda_prefs_down = 'discard-preferences';")"; probe="select to_regclass('public.pda_member_preferences') is not null";;
-    20261018100000_*) marker=""; probe="select to_regprocedure('public.list_pda_ports_workspace(date)') is not null";;
+    20261019140000_*) marker=""; probe="select to_regprocedure('public.get_port_touch_census()') is not null";;
+    20261019130000_*) marker=""; probe="select to_regprocedure('public.list_pda_tariff_packs(date)') is not null";;
   esac
   present=$(psqlro -c "$probe" 2>&1) || { fail "probe for $m failed: $(printf '%s' "$present" | tr '\n' ' ' | redact | cut -c1-200)"; exit 1; }
   case "$present" in

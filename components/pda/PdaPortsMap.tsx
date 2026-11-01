@@ -15,10 +15,13 @@ export default function PdaPortsMap({
   ports,
   selected,
   onSelect,
+  sizes,
 }: {
   ports: readonly PdaWorkspacePort[];
   selected: string | null;
   onSelect: (locode: string) => void;
+  /** optional pin diameters by LOCODE (the Ports Map sizes pins by live-listing touches); the pin style itself never changes */
+  sizes?: Readonly<Record<string, number>>;
 }) {
   const hostRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<L.Map | null>(null);
@@ -53,7 +56,8 @@ export default function PdaPortsMap({
       if (port.latitude == null || port.longitude == null) continue;
       const held = port.tariffs.length > 0;
       const isSelected = port.locode === selected;
-      const size = isSelected ? 16 : held ? 12 : 9;
+      const base = sizes?.[port.locode] ?? (held ? 12 : 9);
+      const size = isSelected ? Math.max(16, base) : base;
       const icon = L.divIcon({
         className: "",
         iconSize: [size, size],
@@ -76,7 +80,7 @@ export default function PdaPortsMap({
     // the tab can mount before its pane has its final size: fit once more after layout
     const timer = window.setTimeout(fit, 90);
     return () => window.clearTimeout(timer);
-  }, [ports, selected]);
+  }, [ports, selected, sizes]);
 
   return <div ref={hostRef} className="pda-ports__map" role="img" aria-label="Map of the ports shown below; filled pins hold a published tariff" />;
 }
