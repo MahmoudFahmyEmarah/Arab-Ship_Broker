@@ -12,7 +12,7 @@ import { buildClassifierGraph } from "./graph";
 import { LangChainClassifier } from "./classifier";
 import { getActiveModel } from "./llm";
 import { UsageMeter, aiBudgetToday, meterUsage } from "./usage";
-import { fetchCirculars } from "./imap";
+import { fetchCirculars, imapPageSize } from "./imap";
 import { recordsToSheets } from "./to-rows";
 import type { CargoRecord, EmailMsg, SyncEvent, SyncStepKey, SyncStepState, VesselRecord } from "./types";
 
@@ -318,7 +318,7 @@ export async function runEmailSync(
       const emails: EmailMsg[] = fetched.messages;
       // say how many are waiting in total, not only this page's size (owner, 1 Nov 2026: "only 25 mails?")
       const waitingNote = fetched.waiting > emails.length
-        ? ` of ${fetched.waiting} waiting (read ${limit ?? 25} per page, up to ${maxPages} pages per run)`
+        ? ` of ${fetched.waiting} waiting (read ${imapPageSize(limit)} per page, up to ${maxPages} pages per run)`
         : fetched.hasMore ? " · more waiting" : "";
       step(emit, "fetch", "done", `${emails.length} email(s)${waitingNote}${page > 1 ? ` · page ${page}` : ""}`);
 
