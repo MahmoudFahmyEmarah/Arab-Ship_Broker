@@ -270,7 +270,9 @@ function KeyModal({ cred, onClose, onSaved }: {
           </div>
         </div>
         <div>
-          <label style={lab}>Base URL <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — empty means the provider default{defaultBaseUrl ? `: ${defaultBaseUrl}` : ""})</span></label>
+          <label style={lab}>Base URL <span style={{ color: C.ink3, fontWeight: 400 }}>{vendor === "other"
+            ? "(required — your gateway's API root)"
+            : `(optional — empty means the provider default${defaultBaseUrl ? `: ${defaultBaseUrl}` : ""})`}</span></label>
           <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={defaultBaseUrl ?? "https://…/v1 (a gateway you host)"} className="ds-input" />
           {vendor === "groq" && <span className="ds-rowsub">OpenAI-compatible Groq endpoint. Choose a suggested model because Data Sync requires structured output.</span>}
         </div>

@@ -8,6 +8,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { getActiveModel } from "../lib/sync/email/llm";
+import { GROQ_API_BASE_URL } from "../lib/sync/llm-provider";
 
 type Row = { vendor: string | null; model: string | null; base_url?: string | null };
 function fake(row: Row) {
@@ -36,6 +37,8 @@ async function main() {
     await refused({ vendor: "OpenAI-compatible", model: "gpt-4o", base_url: "https://gw.example.com/v1" }, /not supported/);
     await refused({ vendor: null, model: "gpt-4o" }, /not supported/);
   });
+  await t("a legacy-import placeholder model 'unset' fails closed", () =>
+    refused({ vendor: "other", model: "unset", base_url: "https://gw.example.com/v1" }, /no model id/));
   await t("a listed provider with an off-list (retired) model fails closed", () =>
     refused({ vendor: "anthropic", model: "claude-sonnet-4-5" }, /cannot be used — Choose the model from the list for anthropic/));
   await t("an alias row is held to its provider's list", () =>
@@ -53,12 +56,15 @@ async function main() {
   });
   await t("google and groq build their clients", async () => {
     assert.ok((await getActiveModel(fake({ vendor: "google", model: "gemini-3.5-flash" }).client)).model instanceof ChatGoogleGenerativeAI);
-    assert.ok((await getActiveModel(fake({ vendor: "groq", model: "openai/gpt-oss-20b" }).client)).model instanceof ChatOpenAI);
+    const groq = (await getActiveModel(fake({ vendor: "groq", model: "openai/gpt-oss-20b" }).client)).model;
+    assert.ok(groq instanceof ChatOpenAI);
+    assert.equal((groq as unknown as { clientConfig: { baseURL?: string } }).clientConfig.baseURL, GROQ_API_BASE_URL, "groq goes to its official root");
   });
   await t("canonical 'other' with a safe base URL and a typed model builds the compatible client", async () => {
     const m = await getActiveModel(fake({ vendor: "other", model: "my-gateway-model", base_url: "https://gw.example.com/v1" }).client);
     assert.ok(m.model instanceof ChatOpenAI);
     assert.deepEqual([m.vendor, m.modelName], ["other", "my-gateway-model"]);
+    assert.equal((m.model as unknown as { clientConfig: { baseURL?: string } }).clientConfig.baseURL, "https://gw.example.com/v1", "the gateway key goes to the gateway, never a default host");
   });
   console.log(`LLM runtime boundary: ${n} executable checks passed`);
 }

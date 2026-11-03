@@ -199,12 +199,10 @@ async function probeLlmCredential(c: AdminDb, who: AdminWho, id: string): Promis
       .from("llm_credential").select("vendor, model, base_url, updated_at").eq("id", id).maybeSingle();
     if (mErr) return { success: false, error: mErr.message };
     if (!meta) return { success: false, error: "Key not found." };
-    const { data: secret, error: sErr } = await c.rpc("get_llm_secret", { p_id: id });
-    if (sErr) return { success: false, error: sErr.message };
-    if (!secret) return { success: false, error: "No key stored for this credential." };
 
     const model = String(meta.model ?? "").trim();
-    if (!model) return { success: false, error: "This key has no model id. Edit the key and choose one." };
+    // "unset" is the placeholder a legacy import stores when the old settings had no model (B2O P3)
+    if (!model || model === "unset") return { success: false, error: "This key has no model id. Edit the key and choose one." };
     // a stored row is held to the same rule as a save (C2O-186): a non-canonical provider or an id outside the
     // provider's list is never tested into service — the owner edits the key first
     const vendor = canonicalVendor(meta.vendor as string);
@@ -217,6 +215,10 @@ async function probeLlmCredential(c: AdminDb, who: AdminWho, id: string): Promis
     const safe = isSafeBaseUrl(override);
     if (!safe.ok) return { success: false, error: `Stored base URL rejected — ${safe.reason}. Edit the key and fix it.` };
     if (vendor === "other" && !override) return { success: false, error: "This custom gateway key has no base URL. Edit the key and enter the gateway's URL." };
+    // decrypted only once the row passed every rule above (B2O P3: validate before decrypting, as the runtime does)
+    const { data: secret, error: sErr } = await c.rpc("get_llm_secret", { p_id: id });
+    if (sErr) return { success: false, error: sErr.message };
+    if (!secret) return { success: false, error: "No key stored for this credential." };
     const family = llmProviderFamily(vendor);
 
     // Each provider gets a cheap, read-only models-list call to prove the key auths.

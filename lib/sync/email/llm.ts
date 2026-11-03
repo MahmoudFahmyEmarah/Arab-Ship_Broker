@@ -34,6 +34,7 @@ export async function getActiveModel(supabase: SupabaseClient, opts: { maxOutput
   const vendor = canonicalVendor(cred.vendor as string | null);
   if (!vendor) throw new Error(`The active LLM key's provider "${String(cred.vendor)}" is not supported. Edit it in Data Sync → Connections and choose a provider from the list.`);
   const modelName = String(cred.model ?? "").trim();
+  if (!modelName || modelName === "unset") throw new Error("The active LLM key has no model id. Edit it in Data Sync → Connections and choose one.");
   const refusal = modelChoiceRefusal(vendor, modelName);
   if (refusal) throw new Error(`The active LLM key cannot be used — ${refusal} Edit it in Data Sync → Connections.`);
   const baseUrl = (cred.base_url as string | null)?.trim() || undefined;

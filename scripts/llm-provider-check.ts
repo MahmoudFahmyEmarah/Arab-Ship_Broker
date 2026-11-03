@@ -222,6 +222,7 @@ assert.match(actionsSrc, /p_base_url: ai\.baseUrl\?\.trim\(\) \|\| null,[\s\S]{0
   const scrubAt = actionsSrc.indexOf('const scrubbed = { ...settings, ai: { ...ai, apiKey: "" } };');
   assert.ok(saveAt > 0 && scrubAt > saveAt, "the plaintext is scrubbed only after the Vault save succeeded");
 }
+assert.ok(actionsSrc.indexOf('if (vendor === "other" && !override) return') < actionsSrc.indexOf('c.rpc("get_llm_secret"'), "Test/Activate decrypt the key only after every rule passed (B2O P3)");
 const runtimeSrc = src("lib/sync/email/llm.ts");
 assert.doesNotMatch(runtimeSrc, /llmProviderFamily/, "the classifier runtime picks its client from the canonical vendor only");
 assert.ok(runtimeSrc.indexOf("canonicalVendor(") < runtimeSrc.indexOf('rpc("get_llm_secret"'), "the active row is validated before its secret is decrypted");
