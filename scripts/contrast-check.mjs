@@ -1,5 +1,5 @@
 // Muted-grey contrast guard (owner, 3 Nov 2026; Codex C2ALL-187 P2-2): every definition of --asb-gray-500 outside
-// the navy-sidebar/map exception is the same value, and that value reads at >= 4.5:1 (unrounded) on every surface
+// the navy-sidebar exception is the same value, and that value reads at >= 4.5:1 (unrounded) on every surface
 // it is used on. Run: node scripts/contrast-check.mjs
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
