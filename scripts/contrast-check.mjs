@@ -14,8 +14,8 @@ const FILES = ["app/design-tokens.css", "app/globals.css", "lib/portal/portal.cs
 const values = new Set();
 for (const f of FILES) {
   const css = readFileSync(f, "utf8");
-  // drop the one exception block (navy sidebar + map) before collecting the platform values
-  const platform = css.replace(/\.asb-portal\[data-sidebar="navy"\] \.asb-sidebar,\s*\.asb-map\s*\{[^}]*\}/g, "");
+  // drop the one exception block (the navy sidebar) before collecting the platform values
+  const platform = css.replace(/\.asb-portal\[data-sidebar="navy"\] \.asb-sidebar\s*\{[^}]*\}/g, "");
   for (const m of platform.matchAll(/--asb-gray-500:\s*(#[0-9A-Fa-f]{6})/g)) values.add(m[1].toUpperCase());
 }
 assert.equal(values.size, 1, `one muted grey across the platform, found ${[...values].join(", ")}`);
@@ -29,5 +29,5 @@ for (const bg of SURFACES) {
 }
 // no stale muted hex left written inline outside the exception
 const exceptionOnly = readFileSync("app/design-tokens.css", "utf8").match(/--asb-gray-500:\s*#8B95A3/gi) ?? [];
-assert.equal(exceptionOnly.length, 1, "the old grey appears once in design-tokens: the navy-sidebar/map exception");
+assert.equal(exceptionOnly.length, 1, "the old grey appears once in design-tokens: the navy-sidebar exception");
 console.log(`MUTED GREY CONTRAST: ${grey} >= 4.5:1 on ${SURFACES.length} surfaces — ALL ASSERTIONS PASSED`);

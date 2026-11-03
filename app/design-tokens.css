@@ -218,10 +218,11 @@
   --asb-red-bg: #FCEBEB;
 }
 
-/* The muted grey keeps its live value only where a darker one reads WORSE: on the navy sidebar and on the map.
-   A white or classic sidebar takes the darker grey like the rest of the platform (C2ALL-187 P2-1). */
-.asb-portal[data-sidebar="navy"] .asb-sidebar,
-.asb-map {
+/* The muted grey keeps its live value only where a darker one reads WORSE: on the navy sidebar. A white or classic
+   sidebar takes the darker grey like the rest of the platform (C2ALL-187 P2-1). The map is NOT excepted: it never
+   draws with this token (its own colours are fixed), and the white cards and panels shown inside it need the darker
+   grey (O2B P3b, 3 Nov 2026). */
+.asb-portal[data-sidebar="navy"] .asb-sidebar {
   --asb-gray-500: #8B95A3;
 }
 
