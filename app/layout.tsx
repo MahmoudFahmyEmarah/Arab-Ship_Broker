@@ -19,11 +19,12 @@ const geistSans = localFont({
   display: "swap",
 });
 
-// ASB design system font — Inter (weights 400/500/600 per tokens.css; the variable file covers them)
+// ASB design system font — Inter (weights 400/500/600 per tokens.css: the file is Google's wght 400..600 range, so
+// heavier text keeps the synthesised bold it had before)
 const inter = localFont({
   variable: "--font-inter",
   src: "./fonts/inter-latin-wght.woff2",
-  weight: "100 900",
+  weight: "400 600",
   display: "swap",
 });
 
@@ -32,7 +33,7 @@ const inter = localFont({
 const notoArabic = localFont({
   variable: "--font-arabic",
   src: "./fonts/noto-sans-arabic-wght.woff2",
-  weight: "100 900",
+  weight: "400 600",
   display: "swap",
 });
 
