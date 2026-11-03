@@ -46,7 +46,8 @@
   --asb-gray-200: #DDE2EA;
   --asb-gray-400: #B6BFCC;
   --asb-slate: #6B7A99;
-  --asb-gray-500: #68727F; /* muted text, 4.9:1 on white (was #8B95A3, 3.0:1; owner, 3 Nov 2026) */
+  --asb-gray-500: #626D79; /* muted text: 5.3:1 on white, >= 4.6:1 on every tinted panel (was #8B95A3, 3.0:1;
+                              owner, 3 Nov 2026; scripts/contrast-check.mjs guards it) */
   --asb-gray-600: #5F6B7D;
   --asb-faint: #9AA7BD;
   --asb-ink-secondary: #46566F;
@@ -208,7 +209,6 @@
    :root blocks always overrode. The design palette above applies everywhere else. */
 .asb-sidebar,
 .asb-map {
-  --asb-gray-500: #8B95A3; /* kept: on the navy sidebar a darker grey would READ WORSE (owner pin, 19 Oct) */
   --asb-blue: #185FA5;
   --asb-green: #27500A;
   --asb-green-bg: #EAF3DE;
@@ -216,6 +216,13 @@
   --asb-amber-bg: #FAEEDA;
   --asb-red: #A32D2D;
   --asb-red-bg: #FCEBEB;
+}
+
+/* The muted grey keeps its live value only where a darker one reads WORSE: on the navy sidebar and on the map.
+   A white or classic sidebar takes the darker grey like the rest of the platform (C2ALL-187 P2-1). */
+.asb-portal[data-sidebar="navy"] .asb-sidebar,
+.asb-map {
+  --asb-gray-500: #8B95A3;
 }
 
 /* Named design shades for the admin console (Portal standalone 7, owner 19 Oct 2026): the design values that have no
@@ -243,6 +250,6 @@
   --adm-d-red-bg: #FBE7E7;
   --adm-d-flag-bg: #FFD7D2;
   --adm-d-amber-ink: #5C2E0B;
-  --adm-d-muted: #68727F;
+  --adm-d-muted: #626D79;
   --adm-d-line: #DDE2EA;
 }

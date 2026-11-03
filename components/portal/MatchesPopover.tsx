@@ -37,7 +37,7 @@ type Item =
   | { kind: "vessel"; id: string; view: VesselView | null; fallback: { name: string; dwt: number | null; open: string } | null; fit: FitBand | null }
   | { kind: "cargo"; id: string; view: CargoView | null; fallback: { name: string; qty: string; route: string } | null; fit: FitBand | null };
 
-const FIT_COLOR: Record<FitBand, string> = { Strong: "#2A9962", Good: "#185FA5", Possible: "#854F0B", Weak: "#68727F" };
+const FIT_COLOR: Record<FitBand, string> = { Strong: "#2A9962", Good: "#185FA5", Possible: "#854F0B", Weak: "#626D79" };
 
 export function MatchesPopover({
   source,
@@ -240,7 +240,7 @@ function VesselDetails({ v }: { v: VesselView }) {
         <Row k="DWT" v={`${v.dwt} MT`} />
         <Row k="Gear" v={v.geared == null ? "—" : v.geared ? "Geared" : "Gearless"} />
         <Row k="Flag" v={<>{fc && <span className={`fi fi-${fc}`} style={{ marginRight: 4 }} aria-hidden />}{v.flag}</>} />
-        <Row k="Open port" v={<>{v.openPort}{v.openPortZone && v.openPortZone !== "—" ? <span style={{ color: "#68727F" }}> · {v.openPortZone}</span> : null}</>} />
+        <Row k="Open port" v={<>{v.openPort}{v.openPortZone && v.openPortZone !== "—" ? <span style={{ color: "#626D79" }}> · {v.openPortZone}</span> : null}</>} />
         <Row k="Open date" v={formatShortDate(v.openDate)} />
         <Row k="Built" v={v.built ? `${v.built} (${v.age} yrs)` : "—"} />
         <Row k="Grain cap" v={`${v.grainCap} m³`} />
@@ -261,7 +261,7 @@ function CargoDetails({ c }: { c: CargoView }) {
         <span className="asb-badge tiny cargo-type" style={{ marginLeft: 8 }}>{c.type}</span>
       </div>
       <div className="mpop__grid">
-        <Row k="Route" v={<>{pol} → {pod}<span style={{ color: "#68727F" }}> · {c.route.polZone} → {c.route.podZone}</span></>} />
+        <Row k="Route" v={<>{pol} → {pod}<span style={{ color: "#626D79" }}> · {c.route.polZone} → {c.route.podZone}</span></>} />
         <Row k="Laycan" v={c.spot ? "SPOT" : formatLaycanRange(c.laycanFrom, c.laycanTo)} />
         <Row k="Quantity" v={<>{weight}{c.vol && c.vol !== "—" ? ` / ${c.vol} ${c.volUnit ?? "m³"}` : ""}</>} />
         <Row k="Terms" v={c.loadTerms || "—"} />
