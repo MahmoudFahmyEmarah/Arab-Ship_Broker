@@ -157,9 +157,15 @@ async function enqueueVessels(
       }
     }
     if (updates.length) {
-      // one round trip for every refreshed sighting (phase 5)
-      const { error } = await supabase.from("vessel_review_queue").upsert(updates.map((u) => ({ id: u.id, ...u.patch })), { onConflict: "id" });
-      if (error) throw new Error(`vessel review queue: ${error.message}`);
+      // A plain UPDATE per refreshed row, never an upsert (3 Nov 2026): an upsert of a partial patch builds an
+      // INSERT row first, so the NOT NULL vessel_name / composite_key failed ("null value in column vessel_name")
+      // whenever a pending row was sighted again; a multi-row upsert also nulls the keys one patch lacks (it
+      // would wipe a stored GRT/NRT/built), and two sightings absorbed into one row would hit it twice.
+      const results = await Promise.all(
+        updates.map((u) => supabase.from("vessel_review_queue").update(u.patch).eq("id", u.id)),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw new Error(`vessel review queue: ${failed.error.message}`);
     }
     if (inserts.length) {
       // Re-surface (re-open) a previously-resolved vessel when it's sighted again.
