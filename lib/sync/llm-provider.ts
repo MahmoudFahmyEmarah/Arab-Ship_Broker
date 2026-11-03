@@ -14,15 +14,23 @@ const cleanBaseUrl = (value?: string | null): string | undefined => {
   return clean || undefined;
 };
 
+// Every family/default helper reads the CANONICAL vendor (C2O-188): no substring match is left anywhere, so
+// "claude-ish" is not Anthropic and "custom" is not a gateway. Callers that must not guess (save, Test/Activate,
+// the classifier runtime) refuse a null canonicalVendor() before they get here.
 export function isGroqVendor(vendor?: string | null): boolean {
-  return (vendor ?? "").trim().toLowerCase().includes("groq");
+  return canonicalVendor(vendor) === "groq";
+}
+
+/** The client family of a canonical vendor. */
+export function vendorFamily(vendor: LlmVendor): LlmProviderFamily {
+  if (vendor === "anthropic") return "anthropic";
+  if (vendor === "google") return "google";
+  return "openai-compatible";
 }
 
 export function llmProviderFamily(vendor?: string | null): LlmProviderFamily {
-  const normalized = (vendor ?? "").trim().toLowerCase();
-  if (normalized.includes("anthropic") || normalized.includes("claude")) return "anthropic";
-  if (normalized.includes("google") || normalized.includes("gemini")) return "google";
-  return "openai-compatible";
+  const v = canonicalVendor(vendor);
+  return v ? vendorFamily(v) : "openai-compatible";
 }
 
 /** Complete API root used by OpenAI-compatible clients. Groq gets a safe
@@ -95,10 +103,10 @@ export function llmDefaultBaseUrl(vendor?: string | null): string | undefined {
   const family = llmProviderFamily(vendor);
   if (family === "anthropic") return "https://api.anthropic.com";
   if (family === "google") return "https://generativelanguage.googleapis.com";
-  if (isGroqVendor(vendor)) return GROQ_API_BASE_URL;
-  const normalized = (vendor ?? "").trim().toLowerCase();
-  if (normalized.includes("openai")) return OPENAI_API_BASE_URL;
-  if (normalized.includes("mistral")) return "https://api.mistral.ai/v1";
+  const v = canonicalVendor(vendor);
+  if (v === "groq") return GROQ_API_BASE_URL;
+  if (v === "openai") return OPENAI_API_BASE_URL;
+  if (v === "mistral") return "https://api.mistral.ai/v1";
   return undefined;
 }
 

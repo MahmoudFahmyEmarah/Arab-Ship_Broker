@@ -123,6 +123,8 @@ export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ i
   if (!input.id && !input.secret?.trim()) return { success: false, error: "Paste the API key." };
   const safe = isSafeBaseUrl(input.baseUrl?.trim() || null);
   if (!safe.ok) return { success: false, error: `Base URL rejected — ${safe.reason}.` };
+  // a custom gateway names its own host: its key is never sent to a default provider URL (C2O-188)
+  if (vendor === "other" && !input.baseUrl?.trim()) return { success: false, error: "A custom gateway needs its base URL." };
   try {
     const { c, who } = await adminCtx();
     // every insert and edit is saved INACTIVE; activation only through the tested, version-bound path (C2O-178)
@@ -214,6 +216,7 @@ async function probeLlmCredential(c: AdminDb, who: AdminWho, id: string): Promis
     // or over plain http, even if a stored override says so.
     const safe = isSafeBaseUrl(override);
     if (!safe.ok) return { success: false, error: `Stored base URL rejected — ${safe.reason}. Edit the key and fix it.` };
+    if (vendor === "other" && !override) return { success: false, error: "This custom gateway key has no base URL. Edit the key and enter the gateway's URL." };
     const family = llmProviderFamily(vendor);
 
     // Each provider gets a cheap, read-only models-list call to prove the key auths.
@@ -282,8 +285,11 @@ export async function importLegacyAiKey(): Promise<Result<{ imported: boolean }>
 
     // every legacy key is imported INACTIVE (C2O-176): the owner checks the model, presses Test, then activates
     // it — an unverified id never becomes the classifier key. A retired Anthropic id maps to the default.
-    // the legacy vendor goes through the same parser (C2O-186); an unknown one is refused, never imported as "other"
-    const importVendor = canonicalVendor(ai.vendor || "anthropic");
+    // the legacy vendor goes through the same parser (C2O-186). The one exception is the legacy page's own
+    // custom-gateway value, exactly "custom", which imports as canonical "other" with its typed model and base URL
+    // (C2O-188); any other unknown name is refused, never guessed
+    const legacyVendor = (ai.vendor ?? "").trim().toLowerCase();
+    const importVendor = legacyVendor === "custom" ? "other" : canonicalVendor(ai.vendor || "anthropic");
     if (!importVendor) return { success: false, error: `The old settings name the provider "${ai.vendor}", which Data Sync does not support. Add the key with "Add a key" instead.` };
     const importModel = catalogueModel(importVendor, ai.model);
     const { error: saveErr } = await c.rpc("save_llm_credential", {

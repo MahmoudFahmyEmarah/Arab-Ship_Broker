@@ -69,7 +69,7 @@ assert.match(settingsAction, /ai: \{ \.\.\.input\.settings\.ai, apiKey: legacy\.
 assert.doesNotMatch(settingsAction, /value: input\.settings,/, "input.settings is never written verbatim");
 assert.doesNotMatch(legacyUi, /ai\.apiKey|apiKey \}\)|testKey|responded in/, "no key field and no simulated test on the legacy page");
 assert.match(legacyUi, /href="\/admin\/data-sync"/, "the legacy page points to the Vault-backed editor");
-assert.match(syncActions, /const importVendor = canonicalVendor\(ai\.vendor \|\| "anthropic"\);\n    if \(!importVendor\) return/, "the legacy import canonicalises its vendor and refuses an unknown one");
+assert.match(syncActions, /const importVendor = legacyVendor === "custom" \? "other" : canonicalVendor\(ai\.vendor \|\| "anthropic"\);\n    if \(!importVendor\) return/, "the legacy import canonicalises its vendor and refuses an unknown one");
 assert.match(syncActions, /const importModel = catalogueModel\(importVendor, ai\.model\);/, "the legacy import maps a retired id onto the catalogue");
 assert.match(syncActions, /p_vendor: importVendor,/, "the legacy import stores the canonical vendor");
 assert.match(syncActions, /p_make_active: false,/, "every legacy import is inactive until Test");
@@ -204,7 +204,27 @@ assert.match(actionsSrc, /const stale = modelChoiceRefusal\(vendor, model\);\n  
 const formSrc = src("components/admin/data-sync/SettingsView.tsx");
 assert.match(formSrc, /useState<LlmVendor \| "">\(cred \? canonicalVendor\(cred\.vendor\) \?\? "" : "anthropic"\)/, "the form canonicalises the stored vendor before the catalogue lookup");
 assert.match(formSrc, /\{vendor !== "other" \? \(/, "only canonical other renders a free-text model");
-assert.match(formSrc, /const modelOk = vendor === "other" \? model\.trim\(\)\.length > 0 : !!vendor && suggestions\.includes\(model\);/, "Save needs a provider and a listed model");
+assert.match(formSrc, /const modelOk = vendor === "other" \? model\.trim\(\)\.length > 0 && baseUrl\.trim\(\)\.length > 0 : !!vendor && suggestions\.includes\(model\);/, "Save needs a provider and a listed model (a gateway also needs its URL)");
+
+// C2O-188: no substring guess is left in the family helpers; a gateway needs its URL; legacy "custom" imports as other
+assert.equal(llmProviderFamily("claude-ish"), "openai-compatible", "a substring is not a family (callers refuse unknown vendors first)");
+assert.equal(llmProviderFamily("Anthropic"), "anthropic");
+assert.equal(llmProviderFamily("gemini"), "google");
+assert.equal(isGroqVendor("not-groq-really"), false, "groq is matched exactly");
+assert.equal(llmDefaultBaseUrl("openai-compatible"), undefined, "no default host for a non-canonical vendor");
+assert.match(actionsSrc, /if \(vendor === "other" && !input\.baseUrl\?\.trim\(\)\) return \{ success: false, error: "A custom gateway needs its base URL\." \};/, "the save refuses a gateway without a URL");
+assert.match(actionsSrc, /if \(vendor === "other" && !override\) return/, "Test/Activate refuse a stored gateway without a URL");
+assert.match(actionsSrc, /const importVendor = legacyVendor === "custom" \? "other" : canonicalVendor\(ai\.vendor \|\| "anthropic"\);/, "exactly legacy 'custom' imports as other; other names go through the parser");
+assert.equal(catalogueModel("other", " custom-model "), "custom-model", "an imported gateway keeps its typed model");
+assert.match(actionsSrc, /p_base_url: ai\.baseUrl\?\.trim\(\) \|\| null,[\s\S]{0,80}p_make_active: false,/, "the import keeps the base URL and stays inactive");
+{
+  const saveAt = actionsSrc.indexOf("if (saveErr) return { success: false, error: saveErr.message };");
+  const scrubAt = actionsSrc.indexOf('const scrubbed = { ...settings, ai: { ...ai, apiKey: "" } };');
+  assert.ok(saveAt > 0 && scrubAt > saveAt, "the plaintext is scrubbed only after the Vault save succeeded");
+}
+const runtimeSrc = src("lib/sync/email/llm.ts");
+assert.doesNotMatch(runtimeSrc, /llmProviderFamily/, "the classifier runtime picks its client from the canonical vendor only");
+assert.ok(runtimeSrc.indexOf("canonicalVendor(") < runtimeSrc.indexOf('rpc("get_llm_secret"'), "the active row is validated before its secret is decrypted");
 assert.match(formSrc, /disabled=\{saving \|\| !modelOk\}/);
 assert.doesNotMatch(src("components/admin/data-sync/SettingsView.tsx"), /Other model id|CUSTOM_MODEL|setCustomModel/, "the form offers no free-text model for a listed vendor");
 

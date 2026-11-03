@@ -9,7 +9,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
-import { llmProviderFamily, openAiCompatibleBaseUrl } from "@/lib/sync/llm-provider";
+import { canonicalVendor, modelChoiceRefusal, openAiCompatibleBaseUrl, vendorFamily } from "@/lib/sync/llm-provider";
 
 export interface ActiveModel {
   model: BaseChatModel;
@@ -28,18 +28,26 @@ export async function getActiveModel(supabase: SupabaseClient, opts: { maxOutput
   if (error) throw new Error(`Reading the active LLM key: ${error.message}`);
   if (!cred) throw new Error("No active LLM key. Add one in Data Sync → Settings.");
 
-  const { data: secret, error: sErr } = await supabase.rpc("get_llm_secret", { p_id: cred.id });
-  if (sErr) throw new Error(`Decrypting the LLM key: ${sErr.message}`);
-  if (!secret) throw new Error("The active LLM key has no stored secret.");
-
-  const vendor = String(cred.vendor).toLowerCase();
-  const modelName = String(cred.model);
+  // The active row is held to the save/Test/Activate rule BEFORE its secret is decrypted (C2O-188): the canonical
+  // vendor picks the client (no substring guess), an unknown vendor or an id outside the provider's list fails
+  // closed, and a custom gateway ("other") must name its own safe base URL — its key never goes to a default host.
+  const vendor = canonicalVendor(cred.vendor as string | null);
+  if (!vendor) throw new Error(`The active LLM key's provider "${String(cred.vendor)}" is not supported. Edit it in Data Sync → Connections and choose a provider from the list.`);
+  const modelName = String(cred.model ?? "").trim();
+  const refusal = modelChoiceRefusal(vendor, modelName);
+  if (refusal) throw new Error(`The active LLM key cannot be used — ${refusal} Edit it in Data Sync → Connections.`);
   const baseUrl = (cred.base_url as string | null)?.trim() || undefined;
   if (baseUrl) {
     const safe = isSafeBaseUrl(baseUrl);
     if (!safe.ok) throw new Error(`Stored LLM base URL rejected — ${safe.reason}. Edit the credential in Data Sync → Connections.`);
+  } else if (vendor === "other") {
+    throw new Error("The active LLM key is a custom gateway with no base URL. Edit it in Data Sync → Connections and enter the gateway's URL.");
   }
-  const family = llmProviderFamily(vendor);
+  const family = vendorFamily(vendor);
+
+  const { data: secret, error: sErr } = await supabase.rpc("get_llm_secret", { p_id: cred.id });
+  if (sErr) throw new Error(`Decrypting the LLM key: ${sErr.message}`);
+  if (!secret) throw new Error("The active LLM key has no stored secret.");
 
   let model: BaseChatModel;
   if (family === "anthropic") {

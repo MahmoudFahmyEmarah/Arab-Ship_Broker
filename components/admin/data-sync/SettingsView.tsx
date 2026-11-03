@@ -192,7 +192,8 @@ function KeyModal({ cred, onClose, onSaved }: {
   const [baseUrl, setBaseUrl] = useState(cred?.base_url ?? "");
   const suggestions = vendor ? LLM_MODEL_SUGGESTIONS[vendor] ?? [] : [];
   // only canonical "other" types its model; every listed provider must pick from its list
-  const modelOk = vendor === "other" ? model.trim().length > 0 : !!vendor && suggestions.includes(model);
+  // a custom gateway also needs its own base URL (C2O-188), so its key never goes to a default host
+  const modelOk = vendor === "other" ? model.trim().length > 0 && baseUrl.trim().length > 0 : !!vendor && suggestions.includes(model);
   const defaultBaseUrl = llmDefaultBaseUrl(vendor);
   const [secret, setSecret] = useState("");
   const [makeActive, setMakeActive] = useState(cred ? cred.is_active : true);
