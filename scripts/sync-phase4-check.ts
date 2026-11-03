@@ -43,7 +43,8 @@ console.log("vessel review queue refresh (3 Nov 2026)");
   // a re-sighted pending vessel is refreshed with a plain UPDATE: an upsert of the partial patch failed the NOT NULL
   // vessel_name ("null value in column vessel_name", reproduced on a clone) and nulled keys another patch lacked
   const stage = readFileSync("lib/sync/stage.ts", "utf8").replace(/\r\n/g, "\n");
-  ok(/\.update\(u\.patch\)\.eq\("id", u\.id\)/.test(stage), "each refreshed row is a plain update by id");
+  ok(/\.update\(patch\)\.eq\("id", id\)/.test(stage), "each refreshed row is a plain update by id");
+  ok(stage.includes("merged.set(u.id, { ...(merged.get(u.id) ?? {}), ...u.patch });"), "sightings of one row merge in order before the update");
   ok(!/upsert\(updates\.map/.test(stage), "the refresh is never an upsert of partial patches");
 }
 
