@@ -67,6 +67,28 @@ export const LLM_MODEL_SUGGESTIONS: Record<string, readonly string[]> = {
   other: [],
 };
 
+/** The vendors a key can be saved under, in form order. "other" is the one deliberate custom-gateway choice and the
+ * only vendor whose model is typed rather than picked from the catalogue. */
+export const LLM_VENDORS = ["anthropic", "openai", "google", "groq", "mistral", "other"] as const;
+export type LlmVendor = (typeof LLM_VENDORS)[number];
+
+// Legacy spellings seen in stored rows and old settings, mapped onto a catalogue vendor. Deliberately exact (no
+// substring match) and never onto "other": an alias of a listed provider must not unlock the free-text model.
+const VENDOR_ALIASES: Record<string, LlmVendor> = {
+  claude: "anthropic", "anthropic claude": "anthropic",
+  gemini: "google", "google gemini": "google", "google ai": "google",
+  "open ai": "openai", "groq cloud": "groq", groqcloud: "groq", "mistral ai": "mistral", mistralai: "mistral",
+};
+
+/** One vendor parser for the form, the server and the import (C2O-186): any casing or known alias of a listed
+ * provider becomes its canonical name; "other" stays "other"; anything else ("OpenAI-compatible", a typo, "")
+ * is null — the caller refuses it, so no spelling bypasses the catalogue-only model rule. */
+export function canonicalVendor(vendor?: string | null): LlmVendor | null {
+  const n = (vendor ?? "").trim().toLowerCase().replace(/[\s_-]+/gu, " ");
+  if ((LLM_VENDORS as readonly string[]).includes(n)) return n as LlmVendor;
+  return VENDOR_ALIASES[n] ?? null;
+}
+
 /** The API root a vendor is called at when no base URL is stored — shown in the form so an empty
  * field reads as "provider default", not as "missing". Unknown vendors have no default. */
 export function llmDefaultBaseUrl(vendor?: string | null): string | undefined {
@@ -98,7 +120,7 @@ export function modelListedIn(list: unknown, family: LlmProviderFamily, model: s
  * unlisted id for a vendor that has a catalogue becomes that vendor's default (so a retired id imported from
  * old settings never becomes the active classifier model); a vendor without a catalogue keeps what it has. */
 export function catalogueModel(vendor: string, model?: string | null): string {
-  const list = LLM_MODEL_SUGGESTIONS[(vendor ?? "").trim().toLowerCase()] ?? [];
+  const list = LLM_MODEL_SUGGESTIONS[canonicalVendor(vendor) ?? "other"] ?? [];
   const m = (model ?? "").trim();
   if (list.length === 0) return m;
   return list.includes(m) ? m : list[0];
@@ -108,9 +130,13 @@ export function catalogueModel(vendor: string, model?: string | null): string {
  * text, so the stored id is always one the provider serves). Null when acceptable; otherwise the refusal text.
  * A vendor without a catalogue ("other": a gateway you host) keeps a typed id. */
 export function modelChoiceRefusal(vendor: string, model: string): string | null {
-  const list = LLM_MODEL_SUGGESTIONS[(vendor ?? "").trim().toLowerCase()] ?? [];
-  if (list.length === 0) return null;
-  return list.includes((model ?? "").trim()) ? null : `Choose the model from the list for ${vendor.trim().toLowerCase()} (${list.join(", ")}).`;
+  // canonical first (C2O-186): an alias or casing of a listed provider is held to that provider's list, an
+  // unknown vendor is refused, and only canonical "other" accepts a typed id
+  const v = canonicalVendor(vendor);
+  if (!v) return `Choose the provider from the list (${LLM_VENDORS.join(", ")}).`;
+  if (v === "other") return (model ?? "").trim() ? null : "Type the exact model id your gateway serves.";
+  const list = LLM_MODEL_SUGGESTIONS[v] ?? [];
+  return list.includes((model ?? "").trim()) ? null : `Choose the model from the list for ${v} (${list.join(", ")}).`;
 }
 
 /** The model for the app's direct Anthropic calls (circular parsing, Group Mail polish) when they run on the
