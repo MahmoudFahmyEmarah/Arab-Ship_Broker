@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 
-import { Geist, Inter, Noto_Sans_Arabic } from "next/font/google";
+// Self-hosted variable fonts (app/fonts, SIL OFL): the build never fetches Google Fonts — the production build of
+// 1 Nov 2026 failed when that fetch did not resolve (owner, 3 Nov 2026).
+import localFont from "next/font/local";
 // Design-system tokens first (single source of truth for every surface);
 // globals.css may refine them for the portal, admin.css consumes them as-is.
 import "./design-tokens.css";
@@ -10,24 +12,29 @@ import "./globals.css";
 import { PropellerLoader } from "@/components/portal/PropellerLoader";
 import { CookieConsent } from "@/components/CookieConsent";
 
-const geistSans = Geist({
+const geistSans = localFont({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  src: "./fonts/geist-sans-variable.woff2",
+  weight: "100 900",
+  display: "swap",
 });
 
-// ASB design system font — Inter (weights 400/500/600 per tokens.css)
-const inter = Inter({
+// ASB design system font — Inter (weights 400/500/600 per tokens.css: the file is Google's wght 400..600 range, so
+// heavier text keeps the synthesised bold it had before)
+const inter = localFont({
   variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  src: "./fonts/inter-latin-wght.woff2",
+  weight: "400 600",
+  display: "swap",
 });
 
 // Arabic-capable webfont for bilingual brand/UI text (pairs with Inter).
 // Exposed as --font-arabic; applied only to Arabic (dir="rtl") elements.
-const notoArabic = Noto_Sans_Arabic({
+const notoArabic = localFont({
   variable: "--font-arabic",
-  subsets: ["arabic"],
-  weight: ["400", "500", "600"],
+  src: "./fonts/noto-sans-arabic-wght.woff2",
+  weight: "400 600",
+  display: "swap",
 });
 
 const SITE_TITLE = "Arab ShipBroker Maritime Brokerage for MENA";

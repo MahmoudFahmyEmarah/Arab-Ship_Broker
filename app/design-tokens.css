@@ -46,7 +46,7 @@
   --asb-gray-200: #DDE2EA;
   --asb-gray-400: #B6BFCC;
   --asb-slate: #6B7A99;
-  --asb-gray-500: #8B95A3;
+  --asb-gray-500: #68727F; /* muted text, 4.9:1 on white (was #8B95A3, 3.0:1; owner, 3 Nov 2026) */
   --asb-gray-600: #5F6B7D;
   --asb-faint: #9AA7BD;
   --asb-ink-secondary: #46566F;
@@ -208,6 +208,7 @@
    :root blocks always overrode. The design palette above applies everywhere else. */
 .asb-sidebar,
 .asb-map {
+  --asb-gray-500: #8B95A3; /* kept: on the navy sidebar a darker grey would READ WORSE (owner pin, 19 Oct) */
   --asb-blue: #185FA5;
   --asb-green: #27500A;
   --asb-green-bg: #EAF3DE;
@@ -242,6 +243,6 @@
   --adm-d-red-bg: #FBE7E7;
   --adm-d-flag-bg: #FFD7D2;
   --adm-d-amber-ink: #5C2E0B;
-  --adm-d-muted: #8B95A3;
+  --adm-d-muted: #68727F;
   --adm-d-line: #DDE2EA;
 }
