@@ -40,12 +40,12 @@ export function InvoiceDocument({ invoice, lines, customer, payments, issuer, ba
         .inv .meta{text-align:right;font-size:12px}
         .inv .meta b{display:block;font-size:15px;color:#0D2545}
         .inv .status{display:inline-block;margin-top:6px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:6px;background:#E6F1FB;color:#24486B}
-        .inv .status.paid{background:#DFF0E6;color:#2E8B57}.inv .status.void{background:#F5E1E1;color:#A83A3A}.inv .status.draft{background:#F5F7FA;color:#8B95A3}
+        .inv .status.paid{background:#DFF0E6;color:#2E8B57}.inv .status.void{background:#F5E1E1;color:#A83A3A}.inv .status.draft{background:#F5F7FA;color:#68727F}
         .inv .parties{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:18px 0}
-        .inv .party h3{margin:0 0 4px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#8B95A3}
+        .inv .party h3{margin:0 0 4px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#68727F}
         .inv .party .n{font-weight:600;color:#0D2545}
         .inv table{width:100%;border-collapse:collapse;margin-top:8px}
-        .inv th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#8B95A3;text-align:left;padding:8px 8px;border-bottom:1px solid #DDE5F0;background:#F5F7FA}
+        .inv th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#68727F;text-align:left;padding:8px 8px;border-bottom:1px solid #DDE5F0;background:#F5F7FA}
         .inv td{padding:9px 8px;border-bottom:1px solid #EDF1F8;vertical-align:top}
         .inv .r{text-align:right;white-space:nowrap}
         .inv .totals{margin-left:auto;width:340px;margin-top:10px}
@@ -54,10 +54,10 @@ export function InvoiceDocument({ invoice, lines, customer, payments, issuer, ba
         .inv .egp{color:#5F6B7D;font-size:11.5px}
         .inv .pay{margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
         .inv .box{border:1px solid #DDE5F0;border-radius:10px;padding:12px 14px}
-        .inv .box h3{margin:0 0 6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#8B95A3}
+        .inv .box h3{margin:0 0 6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#68727F}
         .inv .kv{display:grid;grid-template-columns:110px 1fr;gap:2px 10px;font-size:12px}
         .inv .kv span:nth-child(odd){color:#5F6B7D}
-        .inv .foot{margin-top:26px;padding-top:12px;border-top:1px solid #DDE5F0;font-size:11px;color:#8B95A3;line-height:1.6}
+        .inv .foot{margin-top:26px;padding-top:12px;border-top:1px solid #DDE5F0;font-size:11px;color:#68727F;line-height:1.6}
         .inv .eta{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;word-break:break-all}
         @media print{ body{background:#fff} .inv{padding:0;max-width:none} .no-print{display:none!important} @page{margin:14mm} }
       `}</style>

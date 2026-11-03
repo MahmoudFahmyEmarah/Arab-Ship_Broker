@@ -128,7 +128,7 @@ export function CargoCard({
               <span className="cc-qty__w">{weight}</span>
               <span
                 className="cc-qty__v"
-                style={{ color: sfMissing ? "#8B95A3" : "#185FA5" }}
+                style={{ color: sfMissing ? "#68727F" : "#185FA5" }}
               >
                 {volume}
               </span>
