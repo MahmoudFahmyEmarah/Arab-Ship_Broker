@@ -43,19 +43,21 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$MANIFEST" ] || { echo "usage: release-check.sh <manifest> [--isolated]" >&2; exit 2; }
 cd "$(dirname "$0")/.."
+. scripts/supabase-cli.sh
+supabase_cli_check || exit 2
 [ -f "$MANIFEST" ] || { echo "manifest not found: $MANIFEST" >&2; exit 2; }
 want=$(grep -vE '^\s*(#|$)' "$MANIFEST" | sed -E 's/\.sql\s*$//; s/_.*$//' | sort -u)
 [ -n "$want" ] || { echo "manifest is empty" >&2; exit 2; }
 
 tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
-if ! npx supabase migration list --linked > "$tmp" 2>&1; then
+if ! sb migration list --linked > "$tmp" 2>&1; then
   echo "supabase migration list failed (is the project linked?)" >&2
   tail -3 "$tmp" >&2
   exit 2
 fi
 
-# The CLI emits either a JSON object or a backtick table, depending on
-# version and flags. Parse both, and fail loudly rather than reporting an
+# The CLI emits a JSON object (with notices possibly after it), a backtick
+# table or a plain table, depending on version and flags. Parse both, and fail loudly rather than reporting an
 # empty pending set — a parsing bug must never read as "nothing else is
 # pending, go ahead and push".
 parsed=$(python - "$tmp" <<'PY'
@@ -64,10 +66,20 @@ import json, re, sys
 raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
 rows, pending = 0, []
 
-m = re.search(r'\{.*"migrations".*\}\s*$', raw, re.S)
-if m:
+# the JSON object is one line; the CLI may print notices AFTER it (an "update available" line once a newer CLI
+# exists stopped Wave 11 on 3 Nov 2026), so find that line instead of requiring it to end the output
+doc = None
+for line in raw.splitlines():
+    s = line.strip()
+    if s.startswith("{") and '"migrations"' in s:
+        try:
+            doc = json.loads(s)
+            break
+        except Exception:
+            doc = None
+if doc is not None:
     try:
-        for r in json.loads(m.group(0)).get("migrations", []):
+        for r in doc.get("migrations", []):
             rows += 1
             if r.get("local") and not r.get("remote"):
                 pending.append(r["local"])
@@ -76,8 +88,10 @@ if m:
 
 if rows == 0:
     for line in raw.splitlines():
-        t = re.match(r"\s*`([0-9]{14})?\s*`\s*\|\s*`([0-9]{14})?\s*`", line)
-        if not t:
+        # backtick table (older CLI) or plain table (CLI 2.105):  local | remote | time
+        t = (re.match(r"\s*`([0-9]{14})?\s*`\s*\|\s*`([0-9]{14})?\s*`", line)
+             or re.match(r"\s*([0-9]{14})?\s*\|\s*([0-9]{14})?\s*\|", line))
+        if not t or not (t.group(1) or t.group(2)):
             continue
         rows += 1
         if t.group(1) and not t.group(2):
@@ -156,7 +170,7 @@ if [ $fail = 0 ]; then
     fi
   else
     echo "RELEASE CHECK: OK — the pending set is exactly the manifest."
-    echo "apply with:  npx supabase db push        (only these files are pending; never pass --include-all)"
+    echo "apply with:  supabase db push        (only these files are pending; never pass --include-all)"
   fi
 else
   echo "RELEASE CHECK: FAILED — do not apply."

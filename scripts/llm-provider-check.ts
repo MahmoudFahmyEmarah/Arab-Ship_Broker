@@ -7,6 +7,7 @@ import {
   ANTHROPIC_TASK_MODEL,
   activationRefusal,
   modelChoiceRefusal,
+  canonicalVendor,
   mayActivate,
   catalogueModel,
   legacyKeyForSave,
@@ -68,7 +69,9 @@ assert.match(settingsAction, /ai: \{ \.\.\.input\.settings\.ai, apiKey: legacy\.
 assert.doesNotMatch(settingsAction, /value: input\.settings,/, "input.settings is never written verbatim");
 assert.doesNotMatch(legacyUi, /ai\.apiKey|apiKey \}\)|testKey|responded in/, "no key field and no simulated test on the legacy page");
 assert.match(legacyUi, /href="\/admin\/data-sync"/, "the legacy page points to the Vault-backed editor");
-assert.match(syncActions, /const importModel = catalogueModel\(ai\.vendor \|\| "anthropic", ai\.model\);/, "the legacy import maps a retired id onto the catalogue");
+assert.match(syncActions, /const importVendor = canonicalVendor\(ai\.vendor \|\| "anthropic"\);\n    if \(!importVendor\) return/, "the legacy import uses the shared parser and refuses an unknown vendor");
+assert.match(syncActions, /const importModel = catalogueModel\(importVendor, ai\.model\);/, "the legacy import maps a retired id onto the catalogue");
+assert.match(syncActions, /p_vendor: importVendor,/, "the legacy import stores the canonical vendor");
 assert.match(syncActions, /p_make_active: false,/, "every legacy import is inactive until Test");
 assert.doesNotMatch(syncActions, /p_make_active: true/, "no import path activates an unverified key");
 // C2O-177: Test, Activate and save-with-activate share one provider/model probe; nothing activates without it
@@ -170,7 +173,62 @@ assert.equal(modelChoiceRefusal("anthropic", "claude-haiku-5-5"), null);
 assert.match(modelChoiceRefusal("anthropic", "claude-sonnet-4-5") ?? "", /Choose the model from the list for anthropic/);
 assert.match(modelChoiceRefusal("Anthropic", " typed-id ") ?? "", /Choose the model from the list/);
 assert.equal(modelChoiceRefusal("other", "my-gateway-model"), null, "a gateway you host keeps a typed id");
-assert.match(src("app/(admin)/admin/data-sync/settings-actions.ts"), /const choice = modelChoiceRefusal\(input\.vendor, input\.model\);\n  if \(choice\) return \{ success: false, error: choice \};/, "the save refuses an id outside the list");
+assert.match(src("app/(admin)/admin/data-sync/settings-actions.ts"), /const choice = modelChoiceRefusal\(vendor, input\.model\);\n  if \(choice\) return \{ success: false, error: choice \};/, "the save refuses an id outside the list");
+
+// one canonical vendor parser for form, server and import (C2O-186)
+assert.equal(canonicalVendor("Anthropic"), "anthropic", "stored casing is canonicalised");
+assert.equal(canonicalVendor(" ANTHROPIC "), "anthropic");
+assert.equal(canonicalVendor("claude"), "anthropic", "a known alias maps onto its provider");
+assert.equal(canonicalVendor("Gemini"), "google");
+assert.equal(canonicalVendor("Google"), "google");
+assert.equal(canonicalVendor("GroqCloud"), "groq");
+assert.equal(canonicalVendor("Mistral AI"), "mistral");
+assert.equal(canonicalVendor("other"), "other");
+assert.equal(canonicalVendor("custom"), "other", "the legacy UI's exact custom value remains compatible");
+assert.equal(canonicalVendor(" CUSTOM "), "other", "legacy custom casing is canonicalised");
+for (const bad of ["OpenAI-compatible", "openai compatible", "my-gateway", "", "   ", null, undefined, "claude-ish", "anthropic2"]) {
+  assert.equal(canonicalVendor(bad), null, `an unknown vendor is null: ${String(bad)}`);
+}
+// aliases cannot bypass a listed catalogue; unknown vendors are refused; only canonical "other" takes a typed id
+assert.match(modelChoiceRefusal("claude", "bogus") ?? "", /Choose the model from the list for anthropic/, "an alias is held to its provider's list");
+assert.equal(modelChoiceRefusal("claude", "claude-haiku-5-5"), null, "an alias with a listed id is accepted (and stored canonical)");
+assert.match(modelChoiceRefusal("Anthropic", "bogus") ?? "", /Choose the model from the list for anthropic/, "mixed case is held to the list");
+assert.match(modelChoiceRefusal("gemini", "bogus") ?? "", /for google/);
+assert.match(modelChoiceRefusal("OpenAI-compatible", "bogus") ?? "", /Choose the provider from the list/, "a non-canonical gateway spelling is refused, not treated as other");
+assert.match(modelChoiceRefusal("some-vendor", "anything") ?? "", /Choose the provider from the list/, "an arbitrary unknown vendor is refused");
+assert.equal(modelChoiceRefusal("OTHER", "my-model"), null, "canonical other keeps a typed id");
+assert.match(modelChoiceRefusal("other", "  ") ?? "", /Type the exact model id/, "other still needs an id");
+const actionsSrc = src("app/(admin)/admin/data-sync/settings-actions.ts");
+assert.match(actionsSrc, /const vendor = canonicalVendor\(input\.vendor\);\n  if \(!vendor\) return/, "the save canonicalises or refuses before the model rule");
+assert.match(actionsSrc, /id: input\.id, label: input\.label\.trim\(\), vendor, model:/, "the save persists the canonical vendor");
+assert.match(actionsSrc, /const vendor = canonicalVendor\(meta\.vendor as string\);\n    if \(!vendor\) return/, "Test/Activate refuse a stored non-canonical vendor");
+assert.match(actionsSrc, /const stale = modelChoiceRefusal\(vendor, model\);\n    if \(stale\) return/, "Test/Activate refuse a stored id outside the list");
+const formSrc = src("components/admin/data-sync/SettingsView.tsx");
+assert.match(formSrc, /useState<LlmVendor \| "">\(cred \? canonicalVendor\(cred\.vendor\) \?\? "" : "anthropic"\)/, "the form canonicalises the stored vendor before the catalogue lookup");
+assert.match(formSrc, /\{vendor !== "other" \? \(/, "only canonical other renders a free-text model");
+assert.match(formSrc, /const modelOk = vendor === "other" \? model\.trim\(\)\.length > 0 && baseUrl\.trim\(\)\.length > 0 : !!vendor && suggestions\.includes\(model\);/, "Save needs a provider and a listed model (a gateway also needs its URL)");
+
+// C2O-188: no substring guess is left in the family helpers; a gateway needs its URL; legacy "custom" imports as other
+assert.equal(llmProviderFamily("claude-ish"), "openai-compatible", "a substring is not a family (callers refuse unknown vendors first)");
+assert.equal(llmProviderFamily("Anthropic"), "anthropic");
+assert.equal(llmProviderFamily("gemini"), "google");
+assert.equal(isGroqVendor("not-groq-really"), false, "groq is matched exactly");
+assert.equal(llmDefaultBaseUrl("openai-compatible"), undefined, "no default host for a non-canonical vendor");
+assert.match(actionsSrc, /if \(vendor === "other" && !input\.baseUrl\?\.trim\(\)\) return \{ success: false, error: "A custom gateway needs its base URL\." \};/, "the save refuses a gateway without a URL");
+assert.match(actionsSrc, /if \(vendor === "other" && !override\) return/, "Test/Activate refuse a stored gateway without a URL");
+assert.match(actionsSrc, /const importVendor = canonicalVendor\(ai\.vendor \|\| "anthropic"\);/, "legacy import uses the same parser as stored/runtime rows");
+assert.equal(catalogueModel("other", " custom-model "), "custom-model", "an imported gateway keeps its typed model");
+assert.match(actionsSrc, /p_base_url: ai\.baseUrl\?\.trim\(\) \|\| null,[\s\S]{0,80}p_make_active: false,/, "the import keeps the base URL and stays inactive");
+{
+  const saveAt = actionsSrc.indexOf("if (saveErr) return { success: false, error: saveErr.message };");
+  const scrubAt = actionsSrc.indexOf('const scrubbed = { ...settings, ai: { ...ai, apiKey: "" } };');
+  assert.ok(saveAt > 0 && scrubAt > saveAt, "the plaintext is scrubbed only after the Vault save succeeded");
+}
+assert.ok(actionsSrc.indexOf('if (vendor === "other" && !override) return') < actionsSrc.indexOf('c.rpc("get_llm_secret"'), "Test/Activate decrypt the key only after every rule passed (B2O P3)");
+const runtimeSrc = src("lib/sync/email/llm.ts");
+assert.doesNotMatch(runtimeSrc, /llmProviderFamily/, "the classifier runtime picks its client from the canonical vendor only");
+assert.ok(runtimeSrc.indexOf("canonicalVendor(") < runtimeSrc.indexOf('rpc("get_llm_secret"'), "the active row is validated before its secret is decrypted");
+assert.match(formSrc, /disabled=\{saving \|\| !modelOk\}/);
 assert.doesNotMatch(src("components/admin/data-sync/SettingsView.tsx"), /Other model id|CUSTOM_MODEL|setCustomModel/, "the form offers no free-text model for a listed vendor");
 
 console.log("LLM provider checks passed");

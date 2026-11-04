@@ -38,6 +38,12 @@ export interface FetchResult {
   waiting: number;
 }
 
+/** The page size a fetch actually uses: the requested limit clamped to 1..100, 25 by default. One definition, so
+ * the run log can state it without repeating the default (B2O P3b, 3 Nov 2026). */
+export function imapPageSize(limit?: number): number {
+  return Math.min(Math.max(limit ?? 25, 1), 100);
+}
+
 /** UID-mode page: the lowest UIDs first, exactly `limit` of them. */
 /**
  * UID mode reads metadata for the first page only (P2, 20 Sep 2026): the
@@ -79,7 +85,7 @@ export async function fetchCirculars(
   password: string,
   opts: FetchOpts = {},
 ): Promise<FetchResult> {
-  const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
+  const limit = imapPageSize(opts.limit);
   // Default window if no watermark yet: last 7 days.
   const since = opts.since ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   // IMAP SINCE is date-granular, so search from the start of the watermark's day,

@@ -4,7 +4,7 @@
  * The IMAP fetch used to read envelope metadata for the WHOLE backlog on
  * every page; now it reads the first page plus one UID.
  */
-import { uidCandidates, pickUidPage } from "@/lib/sync/email/imap";
+import { uidCandidates, pickUidPage, imapPageSize } from "@/lib/sync/email/imap";
 
 let pass = 0, fail = 0;
 const ok = (c: boolean, label: string, extra = "") => { if (c) { pass++; console.log(`  ok   ${label}`); } else { fail++; console.error(` FAIL  ${label}${extra ? ` — ${extra}` : ""}`); } };
@@ -21,5 +21,8 @@ ok(tail.fetch.length === 3 && tail.waiting === 3, "a backlog smaller than a page
 ok(!pickUidPage(tail.fetch.map((uid) => ({ uid, when: new Date() })), 50).hasMore, "…and reports nothing more");
 const past = uidCandidates([120, 121], 200, 50); // IMAP returns the highest UID for n:* past the end
 ok(past.fetch.length === 0 && past.waiting === 0, "UIDs below the checkpoint are dropped");
+// one page-size definition (B2O P3b): the fetch and the run log agree on the default and the clamp
+ok(imapPageSize(undefined) === 25 && imapPageSize(40) === 40, "the page size defaults to 25 and keeps a valid limit");
+ok(imapPageSize(500) === 100 && imapPageSize(0) === 1, "…and is clamped to 1..100");
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

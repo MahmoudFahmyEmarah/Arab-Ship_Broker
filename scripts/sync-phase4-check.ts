@@ -4,6 +4,7 @@
  *    batch's own ports sheet counts as known, blanks are ignored
  *  - workbook limits refuse oversized input before it is parsed further
  */
+import { readFileSync } from "node:fs";
 import { referencedPortCodes, unknownPortCodes } from "@/lib/sync/ports-check";
 import { WORKBOOK_LIMITS, checkGrid } from "@/lib/sync/xlsx-source";
 
@@ -36,6 +37,16 @@ ok(/rows/.test(checkGrid("01_CARGO", grid(WORKBOOK_LIMITS.rows + 3, 5)) ?? ""), 
 ok(/columns/.test(checkGrid("01_CARGO", grid(3, WORKBOOK_LIMITS.cols + 1)) ?? ""), "too many columns is refused");
 ok(/characters/.test(checkGrid("01_CARGO", grid(3, 3, "y".repeat(WORKBOOK_LIMITS.cellChars + 1))) ?? ""), "an oversized cell is refused");
 ok(checkGrid("01_CARGO", grid(3, 3, "y".repeat(WORKBOOK_LIMITS.cellChars))) === null, "a cell at the limit passes");
+
+console.log("vessel review queue refresh (3 Nov 2026)");
+{
+  // a re-sighted pending vessel is refreshed with a plain UPDATE: an upsert of the partial patch failed the NOT NULL
+  // vessel_name ("null value in column vessel_name", reproduced on a clone) and nulled keys another patch lacked
+  const stage = readFileSync("lib/sync/stage.ts", "utf8").replace(/\r\n/g, "\n");
+  ok(/\.update\(patch\)\.eq\("id", id\)/.test(stage), "each refreshed row is a plain update by id");
+  ok(stage.includes("merged.set(u.id, { ...(merged.get(u.id) ?? {}), ...u.patch });"), "sightings of one row merge in order before the update");
+  ok(!/upsert\(updates\.map/.test(stage), "the refresh is never an upsert of partial patches");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

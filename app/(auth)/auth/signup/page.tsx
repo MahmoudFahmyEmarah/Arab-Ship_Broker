@@ -96,7 +96,7 @@ function BrokerGlyph() {
 }
 
 const FIELD_LABEL =
-  "block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#8B95A3] mb-1.5";
+  "block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#626D79] mb-1.5";
 const INPUT =
   "w-full h-10 rounded-lg border border-[#DDE2EA] bg-white pl-9.5 pr-3.5 text-sm text-[#1A1A1A] placeholder:text-[#B6BFCC] transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-[#185FA5] focus:shadow-[0_0_0_3px_rgba(24,95,165,0.12)]";
 const INPUT_ICON =
@@ -331,7 +331,7 @@ export default function SignupPage() {
                         <span className="block text-[13px] font-semibold text-[#1B3A5C] leading-[1.3]">
                           {opt.title}
                         </span>
-                        <span className="block text-[11px] text-[#8B95A3] leading-[1.35] mt-px">
+                        <span className="block text-[11px] text-[#626D79] leading-[1.35] mt-px">
                           {opt.desc}
                         </span>
                       </span>
@@ -350,7 +350,7 @@ export default function SignupPage() {
                   );
                 })}
               </div>
-              <p className="flex items-center gap-1.25 text-[11px] text-[#8B95A3] leading-[1.4] mt-1.25">
+              <p className="flex items-center gap-1.25 text-[11px] text-[#626D79] leading-[1.4] mt-1.25">
                 <Info className="w-3.25 h-3.25 text-[#185FA5] shrink-0" />
                 This sets up your workspace. You can add the other profile anytime.
               </p>
@@ -395,7 +395,7 @@ export default function SignupPage() {
                       {errors.companyName.message}
                     </p>
                   )}
-                  <p className="text-[11px] text-[#8B95A3] leading-[1.4] mt-1">
+                  <p className="text-[11px] text-[#626D79] leading-[1.4] mt-1">
                     {companyMode === "register"
                       ? "You'll be the company's admin and can approve teammates who join."
                       : "Your request goes to your company's admin for approval. Your seat activates once they confirm."}
@@ -486,7 +486,7 @@ export default function SignupPage() {
               <span className="wave wave--front" />
             </button>
 
-            <p className="text-center text-[12.5px] text-[#8B95A3] mt-2.5">
+            <p className="text-center text-[12.5px] text-[#626D79] mt-2.5">
               Already have an account?{" "}
               <Link
                 href="/auth/login"
@@ -498,11 +498,11 @@ export default function SignupPage() {
 
             <p className="text-center text-[10.5px] text-[#B6BFCC] leading-normal mt-2">
               By creating an account you agree to the{" "}
-              <Link href="/terms" className="text-[#8B95A3] hover:underline">
+              <Link href="/terms" className="text-[#626D79] hover:underline">
                 Terms of Service
               </Link>{" "}
               and{" "}
-              <Link href="/legal" className="text-[#8B95A3] hover:underline">
+              <Link href="/legal" className="text-[#626D79] hover:underline">
                 Privacy Policy
               </Link>
               .

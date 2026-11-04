@@ -10,7 +10,7 @@ const REGIME_COLORS: Record<string, string> = {
   "Solid bulk cargo except grain": "#185FA5",
   "Grain & agri": "#27500A",
   "Break-bulk": "#854F0B",
-  Other: "#8B95A3",
+  Other: "#626D79",
 };
 
 // Design band order (MI_BANDS — en dashes as emitted by the generator)
@@ -78,7 +78,7 @@ export function TrendChart({ series }: { series: TrendPoint[] }) {
         ))}
         <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#B6BFCC" strokeWidth={1} />
         {series.map((e, i) => (
-          <text key={e.weekId} x={x(i)} y={H - 8} textAnchor="middle" style={{ fontSize: 11, fill: "#8B95A3" }}>
+          <text key={e.weekId} x={x(i)} y={H - 8} textAnchor="middle" style={{ fontSize: 11, fill: "#626D79" }}>
             {weekShort(e.weekId)}
           </text>
         ))}
