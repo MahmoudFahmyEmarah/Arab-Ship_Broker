@@ -59,7 +59,16 @@ export function createLimiter(max: number): <T>(fn: () => Promise<T>) => Promise
 /** The parser's message without the raw model output it quotes ("Text: …" can carry extracted email content). */
 export function unreadableSummary(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
-  return m.replace(/Text:\s*"[\s\S]*?"\.\s*/u, "").replace(/\s+/gu, " ").slice(0, 200);
+  // the quote runs to the LAST '". Error:' (the model output may itself contain '".'); with no such marker, drop
+  // everything from "Text:" on — the quote may be cut anywhere (B2O P3)
+  const at = m.indexOf("Text:");
+  let s = m;
+  if (at >= 0) {
+    const end = m.lastIndexOf('". Error:');
+    s = end > at ? m.slice(0, at) + m.slice(end + 3) : m.slice(0, at);
+  }
+  // cap by code points, so an emoji is never cut in half
+  return Array.from(s.replace(/\s+/gu, " ").trim()).slice(0, 200).join("");
 }
 
 export type BatchOutcome<C, V> = { cargo: C[]; vessels: V[] };

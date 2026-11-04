@@ -2,7 +2,7 @@
 // page). No network: a fake classifier "cuts off" any batch whose records would not fit. Run: npx tsx scripts/sync-batch-split-check.ts
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { classifyWithSplit, createLimiter, halveEmail, isUnreadableReply, MIN_HALVE_CHARS } from "../lib/sync/email/batch-split";
+import { classifyWithSplit, createLimiter, halveEmail, isUnreadableReply, MIN_HALVE_CHARS, unreadableSummary } from "../lib/sync/email/batch-split";
 import type { EmailMsg } from "../lib/sync/email/types";
 
 const email = (i: number, text = `order ${i}`): EmailMsg => ({ id: `m${i}`, from: "b@x", subject: `s${i}`, date: "2026-09-10", text }) as unknown as EmailMsg;
@@ -138,6 +138,15 @@ async function main() {
       assert.match(e.message, /expected/);
       return true;
     });
+  });
+  await t("the summary drops the whole quote even when the model output itself contains '\".'", async () => {
+    const tricky = new Error('Failed to parse. Text: "{\\"a\\":\\"x\\"}". more body SECRET". Error: [{"expected":"array"}] Troubleshooting URL: https://docs.langchain.com/x/OUTPUT_PARSING_FAILURE/');
+    const s = unreadableSummary(tricky);
+    assert.doesNotMatch(s, /SECRET|more body/, s);
+    assert.match(s, /^Failed to parse\. Error: \[\{"expected":"array"\}\]/);
+    assert.doesNotMatch(unreadableSummary(new Error('Failed to parse. Text: "{\\"cut off SECRET')), /SECRET/, "a quote with no end marker is dropped entirely");
+    assert.equal(Array.from(unreadableSummary(new Error("😀".repeat(300)))).length, 200, "capped by code points");
+    assert.doesNotMatch(unreadableSummary(new Error("😀".repeat(300))), /�/);
   });
   await t("run.ts: no retry of an unreadable reply, every call through one limiter, its own advice", async () => {
     const run = readFileSync("lib/sync/email/run.ts", "utf8").replace(/\r\n/g, "\n");
