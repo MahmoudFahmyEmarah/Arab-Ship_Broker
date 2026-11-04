@@ -13,7 +13,7 @@ import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-sett
 import { getWatermark, setWatermark } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
-import { LLM_MODEL_SUGGESTIONS, catalogueModel, modelChoiceRefusal, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
+import { LLM_MODEL_SUGGESTIONS, LLM_VENDORS, canonicalVendor, catalogueModel, modelChoiceRefusal, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
 import { logAudit } from "@/lib/admin/data-sync-audit";
 import { activateKey, saveAndMaybeActivate, type ActivationResult, type KeyFlowDeps } from "@/lib/sync/llm-key-flows";
 import { describeSchedule, nextRunAt, specFromRow, type ScheduleSpec } from "@/lib/sync/email/schedule";
@@ -112,18 +112,24 @@ function keyFlowDeps(c: AdminDb, who: AdminWho): KeyFlowDeps {
 export async function saveLlmCredential(input: SaveLlmInput): Promise<Result<{ id: string; activated: boolean; activationUnknown?: boolean; notActivated?: string }>> {
   if (!input.label?.trim()) return { success: false, error: "Give the key a label." };
   if (!input.vendor?.trim() || !input.model?.trim()) return { success: false, error: "Vendor and model are required." };
+  // one canonical vendor (C2O-186): casing and known aliases map onto a listed provider, anything else is refused,
+  // and the canonical name is what gets stored — the browser's spelling is never trusted
+  const vendor = canonicalVendor(input.vendor);
+  if (!vendor) return { success: false, error: `Choose the provider from the list (${LLM_VENDORS.join(", ")}).` };
   // the model comes from the vendor's list (the form offers a dropdown only); a typed id is refused here too
-  const choice = modelChoiceRefusal(input.vendor, input.model);
+  const choice = modelChoiceRefusal(vendor, input.model);
   if (choice) return { success: false, error: choice };
   if (input.id && !UUID_RE.test(input.id)) return { success: false, error: "Invalid key id." };
   if (!input.id && !input.secret?.trim()) return { success: false, error: "Paste the API key." };
   const safe = isSafeBaseUrl(input.baseUrl?.trim() || null);
   if (!safe.ok) return { success: false, error: `Base URL rejected — ${safe.reason}.` };
+  // a custom gateway names its own host: its key is never sent to a default provider URL (C2O-188)
+  if (vendor === "other" && !input.baseUrl?.trim()) return { success: false, error: "A custom gateway needs its base URL." };
   try {
     const { c, who } = await adminCtx();
     // every insert and edit is saved INACTIVE; activation only through the tested, version-bound path (C2O-178)
     const r = await saveAndMaybeActivate(keyFlowDeps(c, who), {
-      id: input.id, label: input.label.trim(), vendor: input.vendor.trim(), model: input.model.trim(),
+      id: input.id, label: input.label.trim(), vendor, model: input.model.trim(),
       baseUrl: input.baseUrl?.trim() || null, secret: input.secret?.trim() || null, makeActive: !!input.makeActive,
     });
     revalidatePath("/admin/data-sync");
@@ -193,18 +199,26 @@ async function probeLlmCredential(c: AdminDb, who: AdminWho, id: string): Promis
       .from("llm_credential").select("vendor, model, base_url, updated_at").eq("id", id).maybeSingle();
     if (mErr) return { success: false, error: mErr.message };
     if (!meta) return { success: false, error: "Key not found." };
-    const { data: secret, error: sErr } = await c.rpc("get_llm_secret", { p_id: id });
-    if (sErr) return { success: false, error: sErr.message };
-    if (!secret) return { success: false, error: "No key stored for this credential." };
 
-    const vendor = (meta.vendor as string).toLowerCase();
     const model = String(meta.model ?? "").trim();
-    if (!model) return { success: false, error: "This key has no model id. Edit the key and choose one." };
+    // "unset" is the placeholder a legacy import stores when the old settings had no model (B2O P3)
+    if (!model || model === "unset") return { success: false, error: "This key has no model id. Edit the key and choose one." };
+    // a stored row is held to the same rule as a save (C2O-186): a non-canonical provider or an id outside the
+    // provider's list is never tested into service — the owner edits the key first
+    const vendor = canonicalVendor(meta.vendor as string);
+    if (!vendor) return { success: false, error: `This key's provider "${String(meta.vendor)}" is not one Data Sync supports. Edit the key and choose the provider from the list.` };
+    const stale = modelChoiceRefusal(vendor, model);
+    if (stale) return { success: false, error: `This key's model "${model}" is not offered any more. Edit the key: ${stale}` };
     const override = (meta.base_url as string | null)?.replace(/\/$/, "") || null;
     // The decrypted key goes in the request headers — never to a private host
     // or over plain http, even if a stored override says so.
     const safe = isSafeBaseUrl(override);
     if (!safe.ok) return { success: false, error: `Stored base URL rejected — ${safe.reason}. Edit the key and fix it.` };
+    if (vendor === "other" && !override) return { success: false, error: "This custom gateway key has no base URL. Edit the key and enter the gateway's URL." };
+    // decrypted only once the row passed every rule above (B2O P3: validate before decrypting, as the runtime does)
+    const { data: secret, error: sErr } = await c.rpc("get_llm_secret", { p_id: id });
+    if (sErr) return { success: false, error: sErr.message };
+    if (!secret) return { success: false, error: "No key stored for this credential." };
     const family = llmProviderFamily(vendor);
 
     // Each provider gets a cheap, read-only models-list call to prove the key auths.
@@ -273,11 +287,15 @@ export async function importLegacyAiKey(): Promise<Result<{ imported: boolean }>
 
     // every legacy key is imported INACTIVE (C2O-176): the owner checks the model, presses Test, then activates
     // it — an unverified id never becomes the classifier key. A retired Anthropic id maps to the default.
-    const importModel = catalogueModel(ai.vendor || "anthropic", ai.model);
+    // The shared parser carries the legacy page's exact `custom` -> `other` compatibility mapping, so both newly
+    // imported and already stored custom-gateway rows behave identically (C2O-188/C2O-190).
+    const importVendor = canonicalVendor(ai.vendor || "anthropic");
+    if (!importVendor) return { success: false, error: `The old settings name the provider "${ai.vendor}", which Data Sync does not support. Add the key with "Add a key" instead.` };
+    const importModel = catalogueModel(importVendor, ai.model);
     const { error: saveErr } = await c.rpc("save_llm_credential", {
       p_id: null,
       p_label: "Imported from platform settings — Test, then activate",
-      p_vendor: ai.vendor || "anthropic",
+      p_vendor: importVendor,
       p_model: importModel || "unset",
       p_base_url: ai.baseUrl?.trim() || null,
       p_secret: ai.apiKey.trim(),

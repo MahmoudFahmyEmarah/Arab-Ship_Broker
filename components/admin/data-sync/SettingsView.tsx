@@ -26,10 +26,9 @@ import {
   type LlmCredentialMeta, type EmailConfigMeta,
 } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { Badge, Btn, Card, Switch, C, btn } from "./ui";
-import { GROQ_API_BASE_URL, LLM_MODEL_SUGGESTIONS, llmDefaultBaseUrl } from "@/lib/sync/llm-provider";
+import { GROQ_API_BASE_URL, LLM_MODEL_SUGGESTIONS, LLM_VENDORS, canonicalVendor, llmDefaultBaseUrl, type LlmVendor } from "@/lib/sync/llm-provider";
 import { activationFeedback } from "@/lib/sync/llm-key-flows";
 
-const VENDORS = ["anthropic", "openai", "google", "groq", "mistral", "other"];
 // The model catalogue per vendor lives in lib/sync/llm-provider.ts (shared with the key test and its unit
 // check) so the form, the test and the classifier can never disagree about which ids are current.
 
@@ -186,10 +185,15 @@ function KeyModal({ cred, onClose, onSaved }: {
   cred: LlmCredentialMeta | null; onClose: () => void; onSaved: () => void;
 }) {
   const [label, setLabel] = useState(cred?.label ?? "");
-  const [vendor, setVendor] = useState(cred?.vendor ?? "anthropic");
+  // the stored vendor is canonicalised BEFORE the catalogue lookup (C2O-186): "Anthropic" or "claude" opens as
+  // anthropic with its dropdown; an unsupported spelling opens with no provider chosen and Save stays disabled
+  const [vendor, setVendor] = useState<LlmVendor | "">(cred ? canonicalVendor(cred.vendor) ?? "" : "anthropic");
   const [model, setModel] = useState(cred?.model ?? LLM_MODEL_SUGGESTIONS.anthropic[0]);
   const [baseUrl, setBaseUrl] = useState(cred?.base_url ?? "");
-  const suggestions = LLM_MODEL_SUGGESTIONS[vendor] ?? [];
+  const suggestions = vendor ? LLM_MODEL_SUGGESTIONS[vendor] ?? [] : [];
+  // only canonical "other" types its model; every listed provider must pick from its list
+  // a custom gateway also needs its own base URL (C2O-188), so its key never goes to a default host
+  const modelOk = vendor === "other" ? model.trim().length > 0 && baseUrl.trim().length > 0 : !!vendor && suggestions.includes(model);
   const defaultBaseUrl = llmDefaultBaseUrl(vendor);
   const [secret, setSecret] = useState("");
   const [makeActive, setMakeActive] = useState(cred ? cred.is_active : true);
@@ -234,18 +238,19 @@ function KeyModal({ cred, onClose, onSaved }: {
           <div>
             <label style={lab}>Vendor</label>
             <select value={vendor} onChange={(e) => {
-              const v = e.target.value; setVendor(v);
+              const v = canonicalVendor(e.target.value); if (!v) return; setVendor(v);
               const sug = LLM_MODEL_SUGGESTIONS[v] ?? [];
               setModel(sug[0] ?? "");
               if (v === "groq") setBaseUrl(GROQ_API_BASE_URL);
               else if (baseUrl.trim() === GROQ_API_BASE_URL) setBaseUrl("");
             }} className="ds-input">
-              {VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}
+              {!vendor && <option value="" disabled>{cred ? `${cred.vendor} is not supported — choose a provider` : "Choose a provider"}</option>}
+              {LLM_VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
           <div>
             <label style={lab}>Model</label>
-            {suggestions.length > 0 ? (
+            {vendor !== "other" ? (
               // a dropdown only (owner, 1 Nov 2026): the stored id is always one the provider serves. A saved id that
               // is no longer offered shows as "choose a model" and must be replaced before saving.
               <select value={suggestions.includes(model) ? model : ""} onChange={(e) => setModel(e.target.value)} className="ds-input" aria-label="Model">
@@ -256,14 +261,18 @@ function KeyModal({ cred, onClose, onSaved }: {
               <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="the exact model id your gateway serves" className="ds-input" aria-label="Model id" />
             )}
             <span className="ds-rowsub">
-              {suggestions.length > 0
-                ? "Current models, newest first. Saving with “make active” tests the key and this model first."
-                : "A gateway you host: type the exact model id it serves. Test checks it after saving."}
+              {vendor === "other"
+                ? "A gateway you host: type the exact model id it serves. Test checks it after saving."
+                : vendor
+                  ? "Current models, newest first. Saving with “make active” tests the key and this model first."
+                  : "Choose the provider first; its current models then appear here."}
             </span>
           </div>
         </div>
         <div>
-          <label style={lab}>Base URL <span style={{ color: C.ink3, fontWeight: 400 }}>(optional — empty means the provider default{defaultBaseUrl ? `: ${defaultBaseUrl}` : ""})</span></label>
+          <label style={lab}>Base URL <span style={{ color: C.ink3, fontWeight: 400 }}>{vendor === "other"
+            ? "(required — your gateway's API root)"
+            : `(optional — empty means the provider default${defaultBaseUrl ? `: ${defaultBaseUrl}` : ""})`}</span></label>
           <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={defaultBaseUrl ?? "https://…/v1 (a gateway you host)"} className="ds-input" />
           {vendor === "groq" && <span className="ds-rowsub">OpenAI-compatible Groq endpoint. Choose a suggested model because Data Sync requires structured output.</span>}
         </div>
@@ -277,7 +286,7 @@ function KeyModal({ cred, onClose, onSaved }: {
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
         {/* a listed vendor's model must be picked from the list before saving (owner, 1 Nov 2026) */}
-        <button onClick={save} disabled={saving || (suggestions.length > 0 && !suggestions.includes(model))} style={btn("primary")}>
+        <button onClick={save} disabled={saving || !modelOk} style={btn("primary")}>
           {saving ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={15} />} {cred ? "Save" : "Add key"}
         </button>
         <button onClick={onClose} style={btn("ghost")}>Cancel</button>
