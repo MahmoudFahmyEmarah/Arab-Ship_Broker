@@ -14,7 +14,7 @@ import { getActiveModel } from "./llm";
 import { UsageMeter, aiBudgetToday, meterUsage } from "./usage";
 import { fetchCirculars, imapPageSize } from "./imap";
 import { recordsToSheets } from "./to-rows";
-import { classifyWithSplit, createLimiter, isUnreadableReply } from "./batch-split";
+import { SPLIT_CALL_BUDGET, classifyWithSplit, createLimiter, isUnreadableReply } from "./batch-split";
 import type { CargoRecord, EmailMsg, SyncEvent, SyncStepKey, SyncStepState, VesselRecord } from "./types";
 
 type Emit = (e: SyncEvent) => void;
@@ -157,6 +157,8 @@ async function classifyAll(
   // ONE cap on model calls in flight for the whole run: a split batch's halves wait their turn instead of fanning out
   // past CONCURRENCY (B2O P2, 4 Nov 2026)
   const gate = createLimiter(CONCURRENCY);
+  // and ONE budget of extra split calls for the whole run: a model that never answers readably fails fast
+  const splitBudget = { left: SPLIT_CALL_BUDGET };
   // Array push is safe across these awaits (single-threaded); order doesn't matter.
   await mapLimit(batches, CONCURRENCY, async (batch) => {
     try {
@@ -165,6 +167,7 @@ async function classifyAll(
         batch,
         (b) => gate(() => withRetry(() => withTimeout(graph.invoke({ emails: b }), BATCH_TIMEOUT_MS, "classify"), RETRIES)),
         (what) => emit({ type: "log", msg: what }),
+        splitBudget,
       );
       cargo.push(...res.cargo);
       vessels.push(...res.vessels);
@@ -369,11 +372,14 @@ export async function runEmailSync(
         const formatRejected = /json[ _]schema|response_format|structured output|invalid schema/i.test(firstError ?? "");
         // a short email whose reply still cannot be read after every split is neither a key nor a budget problem
         const unreadable = /UNREADABLE_EMAIL/.test(firstError ?? "");
+        const unreadableRun = /UNREADABLE_REPLIES/.test(firstError ?? "");
         const advice = formatRejected
           ? "the AI provider rejected the request format (not the key or budget) — choose a model with structured-output support in Settings or report it"
-          : unreadable
-            ? "the model could not answer one email in a readable form (not the key or budget) — run again; if the same email fails again, report it with its subject"
-            : "fix the LLM key or budget in Settings and run again";
+          : unreadableRun
+            ? "the model's replies keep failing to parse (not the key or budget) — choose another model in Settings, or report it"
+            : unreadable
+              ? "the model could not answer one email in a readable form (not the key or budget) — run again; if the same email fails again, report it with its subject"
+              : "fix the LLM key or budget in Settings and run again";
         emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync checkpoint stays at ${since.toISOString().slice(0, 16).replace("T", " ")} UTC — ${advice}; nothing was skipped.` });
         return;
       }

@@ -90,12 +90,64 @@ async function main() {
     assert.equal(r.flatMap((x) => x.cargo).length, 50, "every email arrives");
     assert.ok(peak <= 5, `peak in flight ${peak} must not exceed 5`);
   });
+  await t("halving always shrinks: the two probe texts and every length/newline position (no endless paid recursion)", async () => {
+    // the reviewer's probes: a 2,399-char text with its newline at 600, and 2,051 chars with the newline at 550
+    const probe = (len: number, nlAt: number) => email(9, `${"a".repeat(nlAt)}\n${"b".repeat(len - nlAt - 1)}`);
+    for (const e of [probe(2399, 600), probe(2051, 550)]) {
+      const hs = halveEmail(e);
+      assert.equal(hs.length, 2);
+      assert.ok(hs.every((h) => h.text.length < e.text.length), `both halves shorter than ${e.text.length}: ${hs.map((h) => h.text.length)}`);
+    }
+    for (let len = MIN_HALVE_CHARS; len <= 9000; len += 137) {
+      for (const nlAt of [1, 300, 600, Math.floor(len / 4), Math.floor(len / 3), Math.floor(len / 2) - 1, len - 2]) {
+        const e = probe(len, Math.min(nlAt, len - 2));
+        const hs = halveEmail(e);
+        assert.equal(hs.length, 2, `len ${len} nl ${nlAt} must halve`);
+        assert.ok(hs[0].text.length < len && hs[1].text.length < len, `len ${len} nl ${nlAt}: halves ${hs[0].text.length}/${hs[1].text.length}`);
+        assert.ok(e.text.startsWith(hs[0].text) && e.text.endsWith(hs[1].text));
+        assert.ok(hs[0].text.length + hs[1].text.length >= len, "together they cover the text");
+      }
+    }
+    // a whole chain of halvings from the digest part size ends below the minimum in a few levels
+    let cur = email(8, "x".repeat(8600)); let depth = 0;
+    while (halveEmail(cur).length === 2) { cur = halveEmail(cur)[1]; depth++; assert.ok(depth < 12, "terminates"); }
+    assert.ok(cur.text.length < MIN_HALVE_CHARS);
+  });
+  await t("a model that never answers readably fails fast on the split budget", async () => {
+    const calls: number[] = [];
+    const run = async (b: EmailMsg[]) => { calls.push(b.length); throw CUT_OFF; };
+    const bigs = Array.from({ length: 10 }, (_, i) => email(i, "y".repeat(8000)));
+    await assert.rejects(classifyWithSplit(bigs, run, () => {}), /UNREADABLE_REPLIES: .*after 40 extra calls/);
+    assert.ok(calls.length <= 1 + 40, `at most 1 + ${40} calls, got ${calls.length}`);
+  });
+  await t("the limiter never exceeds its cap, even at the hand-over (limit 1)", async () => {
+    const gate = createLimiter(1);
+    let inFlight = 0, peak = 0;
+    await Promise.all(Array.from({ length: 8 }, () => gate(async () => {
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 2));
+      inFlight--;
+    })));
+    assert.equal(peak, 1);
+  });
+  await t("the unreadable error never carries the raw model output", async () => {
+    const leaky = new Error('Failed to parse. Text: "{\\"results\\":[{\\"commodity\\":\\"SECRET CARGO 5000mt\\"". Error: [{"expected":"array"}] Troubleshooting URL: https://docs.langchain.com/x/OUTPUT_PARSING_FAILURE/');
+    await assert.rejects(classifyWithSplit([email(1)], async () => { throw leaky; }, () => {}), (e: Error) => {
+      assert.match(e.message, /^UNREADABLE_EMAIL: /);
+      assert.doesNotMatch(e.message, /SECRET CARGO/, "the quoted model text is dropped");
+      assert.match(e.message, /expected/);
+      return true;
+    });
+  });
   await t("run.ts: no retry of an unreadable reply, every call through one limiter, its own advice", async () => {
     const run = readFileSync("lib/sync/email/run.ts", "utf8").replace(/\r\n/g, "\n");
     assert.match(run, /if \(isUnreadableReply\(e\)\) throw e;/, "withRetry never repeats a cut-off batch");
     assert.match(run, /const gate = createLimiter\(CONCURRENCY\);/);
     assert.match(run, /\(b\) => gate\(\(\) => withRetry\(\(\) => withTimeout\(graph\.invoke\(\{ emails: b \}\), BATCH_TIMEOUT_MS, "classify"\), RETRIES\)\),/, "every model call goes through the shared gate");
     assert.match(run, /const unreadable = \/UNREADABLE_EMAIL\/\.test\(firstError \?\? ""\);/, "an unreadable email gets its own advice, not 'fix the key or budget'");
+    assert.match(run, /const unreadableRun = \/UNREADABLE_REPLIES\/\.test\(firstError \?\? ""\);/, "an exhausted split budget gets its own advice");
+    assert.match(run, /const splitBudget = \{ left: SPLIT_CALL_BUDGET \};/, "one split budget per run");
+    assert.match(run, /\(what\) => emit\(\{ type: "log", msg: what \}\),\n        splitBudget,\n      \);/, "every batch shares the run's split budget");
   });
   console.log(`SYNC BATCH SPLIT: ${n} checks passed`);
 }
