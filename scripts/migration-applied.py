@@ -7,8 +7,8 @@ Exit 0 when the version appears as a remote entry, 1 when it does not, 2 when
 the output could not be parsed at all. The last case matters: "I could not
 read the list" must never be mistaken for "it is not applied" — or for "it is".
 
-The CLI prints either a JSON object or a backtick table depending on version
-and flags, so both are parsed (the same two shapes scripts/release-check.sh
+The CLI prints a JSON object (notices may follow it), a backtick table or a
+plain table depending on version and flags, so all three are parsed (the same two shapes scripts/release-check.sh
 handles).
 """
 import json
@@ -26,10 +26,19 @@ def main() -> int:
     rows = 0
     remote: set[str] = set()
 
-    m = re.search(r'\{.*"migrations".*\}\s*$', raw, re.S)
-    if m:
+    # the JSON object is one line; notices may follow it (an "update available" line, 3 Nov 2026)
+    doc = None
+    for line in raw.splitlines():
+        s = line.strip()
+        if s.startswith("{") and '"migrations"' in s:
+            try:
+                doc = json.loads(s)
+                break
+            except Exception:
+                doc = None
+    if doc is not None:
         try:
-            for r in json.loads(m.group(0)).get("migrations", []):
+            for r in doc.get("migrations", []):
                 rows += 1
                 if r.get("remote"):
                     remote.add(str(r["remote"]))
@@ -37,10 +46,11 @@ def main() -> int:
             rows, remote = 0, set()
 
     if rows == 0:
-        # table form:  ` local ` | ` remote ` | ` time `
+        # table form, backtick (older CLI) or plain (CLI 2.105):  local | remote | time
         for line in raw.splitlines():
-            t = re.match(r"\s*`([0-9]{14})?\s*`\s*\|\s*`([0-9]{14})?\s*`", line)
-            if not t:
+            t = (re.match(r"\s*`([0-9]{14})?\s*`\s*\|\s*`([0-9]{14})?\s*`", line)
+                 or re.match(r"\s*([0-9]{14})?\s*\|\s*([0-9]{14})?\s*\|", line))
+            if not t or not (t.group(1) or t.group(2)):
                 continue
             rows += 1
             if t.group(2):

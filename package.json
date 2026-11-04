@@ -22,7 +22,7 @@
     "test:module-integration": "node scripts/module-integration-contract-check.mjs",
     "test:market-privacy": "node --import tsx scripts/market-privacy-check.ts",
     "test:e2e-target": "node --import tsx scripts/e2e/target-check.ts",
-    "prebuild": "npm run test:route-alerts && npm run test:zones && npm run test:llm-providers && npm run test:port-search && npm run test:user-privileges && npm run test:port-tariff-inventory && npm run test:pda && npm run test:fixture-room && npm run test:module-integration && npm run test:market-privacy && npm run test:e2e-target && npm run test:suez && npm run test:voyage && npm run test:bunker && npm run test:rules && npm run test:legacy-econ && npm run test:shared-fixture-services",
+    "prebuild": "npm run test:route-alerts && npm run test:zones && npm run test:llm-providers && npm run test:port-search && npm run test:user-privileges && npm run test:port-tariff-inventory && npm run test:pda && npm run test:fixture-room && npm run test:module-integration && npm run test:market-privacy && npm run test:e2e-target && npm run test:suez && npm run test:voyage && npm run test:bunker && npm run test:rules && npm run test:legacy-econ && npm run test:shared-fixture-services && npm run test:release-parsers",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -32,7 +32,8 @@
     "test:bunker": "node --import tsx scripts/bunker-check.ts",
     "test:rules": "node --import tsx scripts/rules-check.ts && node --import tsx scripts/intelligence-rules-check.ts && node --import tsx scripts/rules-ui-contract-check.ts && node --import tsx scripts/matching-live-surfaces-check.ts",
     "test:rules:db": "node --import tsx scripts/matching-sql-parity-check.ts && node --import tsx scripts/matching-concurrency-check.ts && node scripts/run-intelligence-race.mjs",
-    "test:legacy-econ": "node scripts/legacy-econ-guard.mjs"
+    "test:legacy-econ": "node scripts/legacy-econ-guard.mjs",
+    "test:release-parsers": "bash scripts/migration-list-parse-check.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
