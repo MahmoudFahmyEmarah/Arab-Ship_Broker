@@ -14,6 +14,7 @@ import { getActiveModel } from "./llm";
 import { UsageMeter, aiBudgetToday, meterUsage } from "./usage";
 import { fetchCirculars, imapPageSize } from "./imap";
 import { recordsToSheets } from "./to-rows";
+import { classifyWithSplit, isUnreadableReply } from "./batch-split";
 import type { CargoRecord, EmailMsg, SyncEvent, SyncStepKey, SyncStepState, VesselRecord } from "./types";
 
 type Emit = (e: SyncEvent) => void;
@@ -99,6 +100,8 @@ function batchEmails(emails: EmailMsg[]): EmailMsg[][] {
 
 // Retry transient failures (e.g. "fetch failed" network blips, 429/503) with
 // exponential backoff. Non-transient errors still surface after the attempts.
+// An unreadable reply is NOT retried: the same batch is cut off the same way
+// again; classifyWithSplit halves it instead (4 Nov 2026).
 async function withRetry<T>(fn: () => Promise<T>, tries = RETRIES): Promise<T> {
   let last: unknown;
   for (let i = 0; i < tries; i += 1) {
@@ -106,6 +109,7 @@ async function withRetry<T>(fn: () => Promise<T>, tries = RETRIES): Promise<T> {
       return await fn();
     } catch (e) {
       last = e;
+      if (isUnreadableReply(e)) throw e;
       if (i < tries - 1) await sleep(700 * (i + 1));
     }
   }
@@ -153,7 +157,12 @@ async function classifyAll(
   // Array push is safe across these awaits (single-threaded); order doesn't matter.
   await mapLimit(batches, CONCURRENCY, async (batch) => {
     try {
-      const res = await withRetry(() => withTimeout(graph.invoke({ emails: batch }), BATCH_TIMEOUT_MS, "classify"), RETRIES);
+      // an unreadable (cut-off) reply splits the batch in half, down to single emails, instead of failing the page
+      const res = await classifyWithSplit(
+        batch,
+        (b) => withRetry(() => withTimeout(graph.invoke({ emails: b }), BATCH_TIMEOUT_MS, "classify"), RETRIES),
+        (size) => emit({ type: "log", msg: `a reply for ${size} email(s) was cut off — splitting them into two smaller batches` }),
+      );
       cargo.push(...res.cargo);
       vessels.push(...res.vessels);
       doneEmails += batch.length; doneBatches += 1;
