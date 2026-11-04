@@ -4,6 +4,7 @@
 # unless it reports exactly the version pinned in scripts/supabase-cli.version. A CLI major or config migration is a
 # separate, reviewed change to that file.
 SUPABASE_BIN="${SUPABASE_BIN:-supabase}"
+export SUPABASE_BIN   # child scripts (the harness) use exactly this binary
 SUPABASE_CLI_PIN="$(tr -d '\r\n' < "$(dirname "${BASH_SOURCE[0]}")/supabase-cli.version")"
 supabase_cli_check() {
   local got

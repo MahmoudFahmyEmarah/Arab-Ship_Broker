@@ -30,4 +30,10 @@ for shape in json-notice plain backtick; do
 done
 out=$(python "$T/rc.py" "$T/garbage")
 ok "unparseable output gives ROWS=0 (release-check then refuses)" '[ "$(printf "%s\n" "$out" | sed -n "s/^ROWS=//p")" = 0 ]'
+# the release CLI interface (Codex C2ALL-195): one exported binary, checked by every linked caller
+ok "the wrapper exports the selected SUPABASE_BIN" 'grep -q "^export SUPABASE_BIN" scripts/supabase-cli.sh'
+ok "the harness checks the pin in linked mode" 'grep -q "supabase_cli_check || exit 2" scripts/migration-harness.sh'
+ok "the harness calls only sb (no fallback binary)" '! grep -q "SUPABASE_BIN:-supabase" scripts/migration-harness.sh && grep -q "sb db query --linked" scripts/migration-harness.sh'
+ok "release-check and release-apply check the pin first" 'grep -q "supabase_cli_check || exit 2" scripts/release-check.sh && grep -q "supabase_cli_check || exit 2" scripts/release-apply.sh'
+ok "no npx supabase in the release path" '! grep -qE "npx supabase" scripts/release-check.sh scripts/release-apply.sh scripts/migration-harness.sh'
 [ $fail = 0 ] && echo "MIGRATION LIST PARSERS: ALL ASSERTIONS PASSED" || { echo "MIGRATION LIST PARSERS: FAILED"; exit 1; }

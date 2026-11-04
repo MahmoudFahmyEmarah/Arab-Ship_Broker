@@ -54,6 +54,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ ${#CHAIN[@]} -gt 0 ] || { echo "--chain is required" >&2; exit 2; }
+# linked mode reaches a real project: the same pinned CLI as release-check/release-apply, checked here too
+# (Codex C2ALL-195 P2), and nothing but that binary is ever called
+if [ "$TARGET" = linked ]; then
+  . "$(dirname "$0")/supabase-cli.sh"
+  supabase_cli_check || exit 2
+fi
 
 TMP="$(mktemp -d -t harness.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
@@ -190,7 +196,7 @@ SQL
   # The DO block above raises on purpose, so the CLI exits non-zero on a
   # SUCCESSFUL dry run. Capture the status without letting `set -e` abort.
   rc=0
-  res="$("${SUPABASE_BIN:-supabase}" db query --linked --file "$out" 2>&1)" || rc=$?
+  res="$(sb db query --linked --file "$out" 2>&1)" || rc=$?
   res="$(printf '%s' "$res" | grep -viE 'new version|recommend updating|Initialising|Connecting to remote')"
   printf '%s\n' "$res" > "$TMP/linked.out"
   if printf '%s' "$res" | grep -q "HARNESS RESULT"; then
