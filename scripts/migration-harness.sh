@@ -190,7 +190,7 @@ SQL
   # The DO block above raises on purpose, so the CLI exits non-zero on a
   # SUCCESSFUL dry run. Capture the status without letting `set -e` abort.
   rc=0
-  res="$(supabase db query --linked --file "$out" 2>&1)" || rc=$?
+  res="$("${SUPABASE_BIN:-supabase}" db query --linked --file "$out" 2>&1)" || rc=$?
   res="$(printf '%s' "$res" | grep -viE 'new version|recommend updating|Initialising|Connecting to remote')"
   printf '%s\n' "$res" > "$TMP/linked.out"
   if printf '%s' "$res" | grep -q "HARNESS RESULT"; then

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Is one migration version recorded as APPLIED on the linked project?
 
-    npx supabase migration list --linked 2>&1 | python scripts/migration-applied.py <version>
+    supabase migration list --linked 2>&1 | python scripts/migration-applied.py <version>
 
 Exit 0 when the version appears as a remote entry, 1 when it does not, 2 when
 the output could not be parsed at all. The last case matters: "I could not

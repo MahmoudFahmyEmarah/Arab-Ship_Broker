@@ -43,12 +43,14 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$MANIFEST" ] || { echo "usage: release-check.sh <manifest> [--isolated]" >&2; exit 2; }
 cd "$(dirname "$0")/.."
+. scripts/supabase-cli.sh
+supabase_cli_check || exit 2
 [ -f "$MANIFEST" ] || { echo "manifest not found: $MANIFEST" >&2; exit 2; }
 want=$(grep -vE '^\s*(#|$)' "$MANIFEST" | sed -E 's/\.sql\s*$//; s/_.*$//' | sort -u)
 [ -n "$want" ] || { echo "manifest is empty" >&2; exit 2; }
 
 tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
-if ! npx supabase migration list --linked > "$tmp" 2>&1; then
+if ! sb migration list --linked > "$tmp" 2>&1; then
   echo "supabase migration list failed (is the project linked?)" >&2
   tail -3 "$tmp" >&2
   exit 2
@@ -168,7 +170,7 @@ if [ $fail = 0 ]; then
     fi
   else
     echo "RELEASE CHECK: OK — the pending set is exactly the manifest."
-    echo "apply with:  npx supabase db push        (only these files are pending; never pass --include-all)"
+    echo "apply with:  supabase db push        (only these files are pending; never pass --include-all)"
   fi
 else
   echo "RELEASE CHECK: FAILED — do not apply."

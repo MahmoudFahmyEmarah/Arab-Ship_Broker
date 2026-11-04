@@ -44,6 +44,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 cd "$(dirname "$0")/.."
+. scripts/supabase-cli.sh
+supabase_cli_check || exit 2
 [ -f "$MANIFEST" ] || { echo "manifest not found: $MANIFEST" >&2; exit 2; }
 say() { printf '%s\n' "$*"; }
 
@@ -82,14 +84,14 @@ FILES="$(printf '%s
 
 run_one() { # $1 path
   case "$TARGET" in
-    linked) npx supabase db query --linked --file "$1";;
+    linked) sb db query --linked --file "$1";;
     local)  docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q -1 -f - < "$1";;
     *) echo "unknown target: $TARGET" >&2; return 2;;
   esac
 }
 record() { # $1 version
   case "$TARGET" in
-    linked) npx supabase migration repair --status applied "$1";;
+    linked) sb migration repair --status applied "$1";;
     local)  docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -q -c "insert into supabase_migrations.schema_migrations (version) values ('$1') on conflict do nothing";;
   esac
 }
@@ -99,7 +101,7 @@ verify_recorded() { # $1 version — read the history back; trust nothing else
     linked)
       # exit 2 from the parser means "could not read it", which is not proof
       # of anything: treat it as a failure to verify, never as verified
-      npx supabase migration list --linked 2>&1 | python scripts/migration-applied.py "$1";;
+      sb migration list --linked 2>&1 | python scripts/migration-applied.py "$1";;
     local)
       docker exec -i supabase_db_arab-ship-broker psql -U postgres -d postgres -tAc         "select 1 from supabase_migrations.schema_migrations where version = '$1'" | grep -q 1;;
     *) return 1;;
@@ -128,14 +130,14 @@ for f in $FILES; do
 ' "$rec_out" | sed 's/^/         /'
     say "       STOPPED. The database now holds this migration's changes while the history does not."
     say "       Record it by hand before anything else:"
-    say "         npx supabase migration repair --status applied $v"
+    say "         supabase migration repair --status applied $v"
     say "       Then re-run this script; already-recorded files are refused by release-check."
     exit 1
   fi
   if ! verify_recorded "$v"; then
     say " FAIL  $f was applied and 'record' reported success, but $v is NOT in the migration history."
     say "       STOPPED — the history is the only thing that stops a re-apply. Repair it by hand:"
-    say "         npx supabase migration repair --status applied $v"
+    say "         supabase migration repair --status applied $v"
     exit 1
   fi
   say "       recorded $v"
