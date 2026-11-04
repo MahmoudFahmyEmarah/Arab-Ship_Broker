@@ -14,7 +14,7 @@ import { getActiveModel } from "./llm";
 import { UsageMeter, aiBudgetToday, meterUsage } from "./usage";
 import { fetchCirculars, imapPageSize } from "./imap";
 import { recordsToSheets } from "./to-rows";
-import { classifyWithSplit, isUnreadableReply } from "./batch-split";
+import { classifyWithSplit, createLimiter, isUnreadableReply } from "./batch-split";
 import type { CargoRecord, EmailMsg, SyncEvent, SyncStepKey, SyncStepState, VesselRecord } from "./types";
 
 type Emit = (e: SyncEvent) => void;
@@ -154,14 +154,17 @@ async function classifyAll(
   let doneBatches = 0;
   let failed = 0;
   let firstError: string | null = null;
+  // ONE cap on model calls in flight for the whole run: a split batch's halves wait their turn instead of fanning out
+  // past CONCURRENCY (B2O P2, 4 Nov 2026)
+  const gate = createLimiter(CONCURRENCY);
   // Array push is safe across these awaits (single-threaded); order doesn't matter.
   await mapLimit(batches, CONCURRENCY, async (batch) => {
     try {
       // an unreadable (cut-off) reply splits the batch in half, down to single emails, instead of failing the page
       const res = await classifyWithSplit(
         batch,
-        (b) => withRetry(() => withTimeout(graph.invoke({ emails: b }), BATCH_TIMEOUT_MS, "classify"), RETRIES),
-        (size) => emit({ type: "log", msg: `a reply for ${size} email(s) was cut off — splitting them into two smaller batches` }),
+        (b) => gate(() => withRetry(() => withTimeout(graph.invoke({ emails: b }), BATCH_TIMEOUT_MS, "classify"), RETRIES)),
+        (what) => emit({ type: "log", msg: what }),
       );
       cargo.push(...res.cargo);
       vessels.push(...res.vessels);
@@ -364,9 +367,13 @@ export async function runEmailSync(
         // A provider that refuses the request FORMAT (schema/response_format) is a code or model-choice problem;
         // telling the owner to fix the key or budget sends them the wrong way (18 Oct 2026, Groq strict schema).
         const formatRejected = /json[ _]schema|response_format|structured output|invalid schema/i.test(firstError ?? "");
+        // a short email whose reply still cannot be read after every split is neither a key nor a budget problem
+        const unreadable = /UNREADABLE_EMAIL/.test(firstError ?? "");
         const advice = formatRejected
           ? "the AI provider rejected the request format (not the key or budget) — choose a model with structured-output support in Settings or report it"
-          : "fix the LLM key or budget in Settings and run again";
+          : unreadable
+            ? "the model could not answer one email in a readable form (not the key or budget) — run again; if the same email fails again, report it with its subject"
+            : "fix the LLM key or budget in Settings and run again";
         emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync checkpoint stays at ${since.toISOString().slice(0, 16).replace("T", " ")} UTC — ${advice}; nothing was skipped.` });
         return;
       }
