@@ -287,11 +287,9 @@ export async function importLegacyAiKey(): Promise<Result<{ imported: boolean }>
 
     // every legacy key is imported INACTIVE (C2O-176): the owner checks the model, presses Test, then activates
     // it — an unverified id never becomes the classifier key. A retired Anthropic id maps to the default.
-    // the legacy vendor goes through the same parser (C2O-186). The one exception is the legacy page's own
-    // custom-gateway value, exactly "custom", which imports as canonical "other" with its typed model and base URL
-    // (C2O-188); any other unknown name is refused, never guessed
-    const legacyVendor = (ai.vendor ?? "").trim().toLowerCase();
-    const importVendor = legacyVendor === "custom" ? "other" : canonicalVendor(ai.vendor || "anthropic");
+    // The shared parser carries the legacy page's exact `custom` -> `other` compatibility mapping, so both newly
+    // imported and already stored custom-gateway rows behave identically (C2O-188/C2O-190).
+    const importVendor = canonicalVendor(ai.vendor || "anthropic");
     if (!importVendor) return { success: false, error: `The old settings name the provider "${ai.vendor}", which Data Sync does not support. Add the key with "Add a key" instead.` };
     const importModel = catalogueModel(importVendor, ai.model);
     const { error: saveErr } = await c.rpc("save_llm_credential", {

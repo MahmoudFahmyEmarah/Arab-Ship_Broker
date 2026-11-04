@@ -14,9 +14,9 @@ const cleanBaseUrl = (value?: string | null): string | undefined => {
   return clean || undefined;
 };
 
-// Every family/default helper reads the CANONICAL vendor (C2O-188): no substring match is left anywhere, so
-// "claude-ish" is not Anthropic and "custom" is not a gateway. Callers that must not guess (save, Test/Activate,
-// the classifier runtime) refuse a null canonicalVendor() before they get here.
+// Every family/default helper reads the CANONICAL vendor (C2O-188/C2O-190): no substring match is left anywhere.
+// The exact legacy value `custom` remains a gateway alias, while arbitrary spellings such as `custom-ish` are
+// refused by callers when canonicalVendor() returns null.
 export function isGroqVendor(vendor?: string | null): boolean {
   return canonicalVendor(vendor) === "groq";
 }
@@ -81,15 +81,17 @@ export const LLM_VENDORS = ["anthropic", "openai", "google", "groq", "mistral", 
 export type LlmVendor = (typeof LLM_VENDORS)[number];
 
 // Legacy spellings seen in stored rows and old settings, mapped onto a catalogue vendor. Deliberately exact (no
-// substring match) and never onto "other": an alias of a listed provider must not unlock the free-text model.
+// substring match). The only alias onto "other" is the legacy UI's literal `custom`; arbitrary names must not
+// unlock the free-text model.
 const VENDOR_ALIASES: Record<string, LlmVendor> = {
   claude: "anthropic", "anthropic claude": "anthropic",
   gemini: "google", "google gemini": "google", "google ai": "google",
   "open ai": "openai", "groq cloud": "groq", groqcloud: "groq", "mistral ai": "mistral", mistralai: "mistral",
+  custom: "other",
 };
 
-/** One vendor parser for the form, the server and the import (C2O-186): any casing or known alias of a listed
- * provider becomes its canonical name; "other" stays "other"; anything else ("OpenAI-compatible", a typo, "")
+/** One vendor parser for the form, server, import and runtime (C2O-186/C2O-190): any casing or exact known alias
+ * becomes canonical; legacy `custom` becomes `other`; anything else ("OpenAI-compatible", a typo, "")
  * is null — the caller refuses it, so no spelling bypasses the catalogue-only model rule. */
 export function canonicalVendor(vendor?: string | null): LlmVendor | null {
   const n = (vendor ?? "").trim().toLowerCase().replace(/[\s_-]+/gu, " ");

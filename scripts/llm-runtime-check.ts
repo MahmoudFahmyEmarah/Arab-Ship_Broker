@@ -32,8 +32,7 @@ async function refused(row: Row, pattern: RegExp) {
 async function main() {
   await t("an unknown vendor that merely contains 'claude' fails closed (no Anthropic guess)", () =>
     refused({ vendor: "claude-ish", model: "claude-haiku-5-5" }, /provider "claude-ish" is not supported/));
-  await t("'custom' and 'OpenAI-compatible' active rows fail closed (no OpenAI guess)", async () => {
-    await refused({ vendor: "custom", model: "custom-model", base_url: "https://gw.example.com/v1" }, /not supported/);
+  await t("non-canonical OpenAI-compatible and null active rows fail closed (no OpenAI guess)", async () => {
     await refused({ vendor: "OpenAI-compatible", model: "gpt-4o", base_url: "https://gw.example.com/v1" }, /not supported/);
     await refused({ vendor: null, model: "gpt-4o" }, /not supported/);
   });
@@ -65,6 +64,12 @@ async function main() {
     assert.ok(m.model instanceof ChatOpenAI);
     assert.deepEqual([m.vendor, m.modelName], ["other", "my-gateway-model"]);
     assert.equal((m.model as unknown as { clientConfig: { baseURL?: string } }).clientConfig.baseURL, "https://gw.example.com/v1", "the gateway key goes to the gateway, never a default host");
+  });
+  await t("an already-stored legacy 'custom' gateway canonicalises to other", async () => {
+    const m = await getActiveModel(fake({ vendor: "custom", model: "legacy-gateway-model", base_url: "https://legacy-gw.example.com/v1" }).client);
+    assert.ok(m.model instanceof ChatOpenAI);
+    assert.deepEqual([m.vendor, m.modelName], ["other", "legacy-gateway-model"]);
+    assert.equal((m.model as unknown as { clientConfig: { baseURL?: string } }).clientConfig.baseURL, "https://legacy-gw.example.com/v1");
   });
   console.log(`LLM runtime boundary: ${n} executable checks passed`);
 }

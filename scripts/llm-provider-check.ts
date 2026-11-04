@@ -69,7 +69,7 @@ assert.match(settingsAction, /ai: \{ \.\.\.input\.settings\.ai, apiKey: legacy\.
 assert.doesNotMatch(settingsAction, /value: input\.settings,/, "input.settings is never written verbatim");
 assert.doesNotMatch(legacyUi, /ai\.apiKey|apiKey \}\)|testKey|responded in/, "no key field and no simulated test on the legacy page");
 assert.match(legacyUi, /href="\/admin\/data-sync"/, "the legacy page points to the Vault-backed editor");
-assert.match(syncActions, /const importVendor = legacyVendor === "custom" \? "other" : canonicalVendor\(ai\.vendor \|\| "anthropic"\);\n    if \(!importVendor\) return/, "the legacy import canonicalises its vendor and refuses an unknown one");
+assert.match(syncActions, /const importVendor = canonicalVendor\(ai\.vendor \|\| "anthropic"\);\n    if \(!importVendor\) return/, "the legacy import uses the shared parser and refuses an unknown vendor");
 assert.match(syncActions, /const importModel = catalogueModel\(importVendor, ai\.model\);/, "the legacy import maps a retired id onto the catalogue");
 assert.match(syncActions, /p_vendor: importVendor,/, "the legacy import stores the canonical vendor");
 assert.match(syncActions, /p_make_active: false,/, "every legacy import is inactive until Test");
@@ -184,6 +184,8 @@ assert.equal(canonicalVendor("Google"), "google");
 assert.equal(canonicalVendor("GroqCloud"), "groq");
 assert.equal(canonicalVendor("Mistral AI"), "mistral");
 assert.equal(canonicalVendor("other"), "other");
+assert.equal(canonicalVendor("custom"), "other", "the legacy UI's exact custom value remains compatible");
+assert.equal(canonicalVendor(" CUSTOM "), "other", "legacy custom casing is canonicalised");
 for (const bad of ["OpenAI-compatible", "openai compatible", "my-gateway", "", "   ", null, undefined, "claude-ish", "anthropic2"]) {
   assert.equal(canonicalVendor(bad), null, `an unknown vendor is null: ${String(bad)}`);
 }
@@ -214,7 +216,7 @@ assert.equal(isGroqVendor("not-groq-really"), false, "groq is matched exactly");
 assert.equal(llmDefaultBaseUrl("openai-compatible"), undefined, "no default host for a non-canonical vendor");
 assert.match(actionsSrc, /if \(vendor === "other" && !input\.baseUrl\?\.trim\(\)\) return \{ success: false, error: "A custom gateway needs its base URL\." \};/, "the save refuses a gateway without a URL");
 assert.match(actionsSrc, /if \(vendor === "other" && !override\) return/, "Test/Activate refuse a stored gateway without a URL");
-assert.match(actionsSrc, /const importVendor = legacyVendor === "custom" \? "other" : canonicalVendor\(ai\.vendor \|\| "anthropic"\);/, "exactly legacy 'custom' imports as other; other names go through the parser");
+assert.match(actionsSrc, /const importVendor = canonicalVendor\(ai\.vendor \|\| "anthropic"\);/, "legacy import uses the same parser as stored/runtime rows");
 assert.equal(catalogueModel("other", " custom-model "), "custom-model", "an imported gateway keeps its typed model");
 assert.match(actionsSrc, /p_base_url: ai\.baseUrl\?\.trim\(\) \|\| null,[\s\S]{0,80}p_make_active: false,/, "the import keeps the base URL and stays inactive");
 {
