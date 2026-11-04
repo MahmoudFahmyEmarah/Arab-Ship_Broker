@@ -10,8 +10,84 @@ import type { EmailMsg } from "./types";
 
 /** The model answered, but its reply could not be read against the schema (usually cut off at the output cap). */
 export function isUnreadableReply(e: unknown): boolean {
-  const m = e instanceof Error ? e.message : String(e);
-  return /Failed to parse|OUTPUT_PARSING_FAILURE/i.test(m);
+  const seen = new Set<unknown>();
+  let current: unknown = e;
+  for (let depth = 0; depth < 8 && current != null && !seen.has(current); depth += 1) {
+    seen.add(current);
+    if (typeof current === "object") {
+      const x = current as { lc_error_code?: unknown; message?: unknown; cause?: unknown };
+      if (x.lc_error_code === "OUTPUT_PARSING_FAILURE") return true;
+      if (typeof x.message === "string" && /\/errors\/OUTPUT_PARSING_FAILURE\//i.test(x.message)) return true;
+      current = x.cause;
+    } else {
+      return typeof current === "string" && /\/errors\/OUTPUT_PARSING_FAILURE\//i.test(current);
+    }
+  }
+  return false;
+}
+
+export const MIN_MODEL_CALL_WINDOW_MS = 5_000;
+
+export function isSyncDeadline(e: unknown): boolean {
+  return e instanceof Error && (e.message.startsWith("SYNC_DEADLINE:") || e.message.startsWith("SYNC_PROVIDER_TIMEOUT:"));
+}
+
+export interface ModelCallCircuit {
+  closed: boolean;
+  reason: Error | null;
+}
+
+export function createModelCallCircuit(): ModelCallCircuit {
+  return { closed: false, reason: null };
+}
+
+/** Run one provider call under both its own timeout and the route's absolute deadline. LangChain races its public
+ * invocation against AbortSignal, so that promise can reject before the underlying HTTP request confirms settlement.
+ * On timeout, close the run-wide circuit before aborting: no retry or queued batch can overlap the uncertain call. */
+export async function runAbortableCall<T>(
+  invoke: (signal: AbortSignal) => Promise<T>,
+  opts: { timeoutMs: number; deadlineAt: number | null; label: string; circuit: ModelCallCircuit; minStartMs?: number },
+): Promise<T> {
+  if (opts.circuit.closed) {
+    throw opts.circuit.reason ?? new Error("SYNC_PROVIDER_TIMEOUT: this run stopped after a provider timeout");
+  }
+  const now = Date.now();
+  const remaining = opts.deadlineAt == null ? opts.timeoutMs : opts.deadlineAt - now;
+  const minStart = opts.minStartMs ?? MIN_MODEL_CALL_WINDOW_MS;
+  if (remaining < minStart) {
+    throw new Error(`SYNC_DEADLINE: less than ${Math.ceil(Math.max(0, remaining) / 1000)}s remains; no new ${opts.label} call was started`);
+  }
+
+  const waitMs = Math.min(opts.timeoutMs, remaining);
+  const controller = new AbortController();
+  let timeoutError: Error | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const invocation = Promise.resolve().then(() => invoke(controller.signal));
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      timeoutError = opts.deadlineAt != null && Date.now() >= opts.deadlineAt
+        ? new Error(`SYNC_DEADLINE: the ${opts.label} call reached the run deadline`)
+        : new Error(`SYNC_PROVIDER_TIMEOUT: ${opts.label} timed out after ${Math.round(waitMs / 1000)}s; this run admitted no successor calls`);
+      opts.circuit.closed = true;
+      opts.circuit.reason = timeoutError;
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, waitMs);
+  });
+
+  try {
+    return await Promise.race([invocation, timeout]);
+  } catch (e) {
+    if (timeoutError) {
+      // Await the public invocation for callback cleanup. It may settle before the underlying HTTP request, which is
+      // why the circuit stays closed for the rest of this run instead of handing the limiter slot to a successor.
+      try { await invocation; } catch { /* the expected abort rejection */ }
+      throw timeoutError;
+    }
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /** The text of a short email is never halved: its reply should fit, so a failure there is something else. */

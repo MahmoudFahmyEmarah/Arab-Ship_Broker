@@ -14,7 +14,8 @@ import { getActiveModel } from "./llm";
 import { UsageMeter, aiBudgetToday, meterUsage } from "./usage";
 import { fetchCirculars, imapPageSize } from "./imap";
 import { recordsToSheets } from "./to-rows";
-import { SPLIT_CALL_BUDGET, classifyWithSplit, createLimiter, isUnreadableReply } from "./batch-split";
+import { SPLIT_CALL_BUDGET, classifyWithSplit, createLimiter, createModelCallCircuit, isSyncDeadline, isUnreadableReply, runAbortableCall } from "./batch-split";
+import type { ModelCallCircuit } from "./batch-split";
 import type { CargoRecord, EmailMsg, SyncEvent, SyncStepKey, SyncStepState, VesselRecord } from "./types";
 
 type Emit = (e: SyncEvent) => void;
@@ -73,15 +74,6 @@ function dedupBy<T>(items: T[], key: (x: T) => string): T[] {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Hard timeout: a stalled network request never rejects on its own, so race it
-// against a timer. This is what stops the run hanging on the last email.
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_r, rej) => setTimeout(() => rej(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms)),
-  ]);
-}
-
 // Group emails into token-budgeted batches so many go in a single LLM call.
 function batchEmails(emails: EmailMsg[]): EmailMsg[][] {
   const batches: EmailMsg[][] = [];
@@ -102,14 +94,14 @@ function batchEmails(emails: EmailMsg[]): EmailMsg[][] {
 // exponential backoff. Non-transient errors still surface after the attempts.
 // An unreadable reply is NOT retried: the same batch is cut off the same way
 // again; classifyWithSplit halves it instead (4 Nov 2026).
-async function withRetry<T>(fn: () => Promise<T>, tries = RETRIES): Promise<T> {
+async function withRetry<T>(fn: (signal: AbortSignal) => Promise<T>, deadlineAt: number | null, circuit: ModelCallCircuit, tries = RETRIES): Promise<T> {
   let last: unknown;
   for (let i = 0; i < tries; i += 1) {
     try {
-      return await fn();
+      return await runAbortableCall(fn, { timeoutMs: BATCH_TIMEOUT_MS, deadlineAt, label: "classify", circuit });
     } catch (e) {
       last = e;
-      if (isUnreadableReply(e)) throw e;
+      if (isUnreadableReply(e) || isSyncDeadline(e)) throw e;
       if (i < tries - 1) await sleep(700 * (i + 1));
     }
   }
@@ -133,6 +125,7 @@ async function classifyAll(
   supabase: SupabaseClient,
   emails: EmailMsg[],
   emit: Emit,
+  deadlineAt: number | null = null,
 ): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[]; failed: number; firstError: string | null }> {
   // Daily token budget — shared with Data quality. Refusing here keeps the
   // watermark where it was, so nothing is skipped once the cap resets.
@@ -157,6 +150,9 @@ async function classifyAll(
   // ONE cap on model calls in flight for the whole run: a split batch's halves wait their turn instead of fanning out
   // past CONCURRENCY (B2O P2, 4 Nov 2026)
   const gate = createLimiter(CONCURRENCY);
+  // A timed-out LangChain invocation can reject before its underlying provider request confirms settlement. Once that
+  // happens, this shared circuit refuses every retry and queued batch so no new paid call overlaps the uncertain one.
+  const modelCallCircuit = createModelCallCircuit();
   // and ONE budget of extra split calls for the whole run: a model that never answers readably fails fast
   const splitBudget = { left: SPLIT_CALL_BUDGET };
   // Array push is safe across these awaits (single-threaded); order doesn't matter.
@@ -165,7 +161,7 @@ async function classifyAll(
       // an unreadable (cut-off) reply splits the batch in half, down to single emails, instead of failing the page
       const res = await classifyWithSplit(
         batch,
-        (b) => gate(() => withRetry(() => withTimeout(graph.invoke({ emails: b }), BATCH_TIMEOUT_MS, "classify"), RETRIES)),
+        (b) => gate(() => withRetry((signal) => graph.invoke({ emails: b }, { signal }), deadlineAt, modelCallCircuit, RETRIES)),
         (what) => emit({ type: "log", msg: what }),
         splitBudget,
       );
@@ -353,7 +349,7 @@ export async function runEmailSync(
       step(emit, "classify", "running", `${emails.length} email(s)`);
       let classified: Awaited<ReturnType<typeof classifyAll>>;
       try {
-        classified = await d.classifyAll(supabase, emails, emit);
+        classified = await d.classifyAll(supabase, emails, emit, t0 + budgetMs);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "classification failed";
         step(emit, "classify", "failed", msg);
@@ -373,8 +369,11 @@ export async function runEmailSync(
         // a short email whose reply still cannot be read after every split is neither a key nor a budget problem
         const unreadable = /UNREADABLE_EMAIL/.test(firstError ?? "");
         const unreadableRun = /UNREADABLE_REPLIES/.test(firstError ?? "");
+        const deadlineUsed = /SYNC_DEADLINE/.test(firstError ?? "");
         const advice = formatRejected
           ? "the AI provider rejected the request format (not the key or budget) — choose a model with structured-output support in Settings or report it"
+          : deadlineUsed
+            ? "this run used its time budget — run it again to continue from the unchanged checkpoint"
           : unreadableRun
             ? "the model's replies keep failing to parse (not the key or budget) — choose another model in Settings, or report it"
             : unreadable
@@ -427,7 +426,7 @@ export async function runEmailDryRun(
   step(emit, "classify", "running", "1 sample");
   let res: Awaited<ReturnType<typeof classifyAll>>;
   try {
-    res = await classifyAll(supabase, [email], emit);
+    res = await classifyAll(supabase, [email], emit, Date.now() + 240_000);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "classification failed";
     step(emit, "classify", "failed", msg);

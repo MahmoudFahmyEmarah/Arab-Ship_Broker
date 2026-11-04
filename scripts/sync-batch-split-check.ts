@@ -2,13 +2,13 @@
 // page). No network: a fake classifier "cuts off" any batch whose records would not fit. Run: npx tsx scripts/sync-batch-split-check.ts
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { classifyWithSplit, createLimiter, halveEmail, isUnreadableReply, MIN_HALVE_CHARS, unreadableSummary } from "../lib/sync/email/batch-split";
+import { classifyWithSplit, createLimiter, createModelCallCircuit, halveEmail, isUnreadableReply, MIN_HALVE_CHARS, runAbortableCall, unreadableSummary } from "../lib/sync/email/batch-split";
 import type { EmailMsg } from "../lib/sync/email/types";
 
 const email = (i: number, text = `order ${i}`): EmailMsg => ({ id: `m${i}`, from: "b@x", subject: `s${i}`, date: "2026-09-10", text }) as unknown as EmailMsg;
 const mail = (n: number): EmailMsg[] => Array.from({ length: n }, (_, i) => email(i));
 // exactly the error LangChain raised in production on 4 Nov 2026
-const CUT_OFF = new Error('Failed to parse. Text: "{}". Error: [{"expected":"array","code":"invalid_type","path":["results"]}] Troubleshooting URL: https://docs.langchain.com/oss/javascript/langchain/errors/OUTPUT_PARSING_FAILURE/');
+const CUT_OFF = Object.assign(new Error('Failed to parse. Text: "{}". Error: [{"expected":"array","code":"invalid_type","path":["results"]}] Troubleshooting URL: https://docs.langchain.com/oss/javascript/langchain/errors/OUTPUT_PARSING_FAILURE/'), { lc_error_code: "OUTPUT_PARSING_FAILURE" });
 
 /** A fake classifier whose reply is cut off when the batch carries more than `maxChars` of text in total. */
 function fakeRun(maxChars: number) {
@@ -25,9 +25,11 @@ let n = 0;
 const t = async (name: string, fn: () => Promise<void>) => { await fn(); n++; console.log(`  ok   ${name}`); };
 
 async function main() {
-  await t("the production error text is recognised as an unreadable reply; ordinary errors are not", async () => {
+  await t("only the structured parser code (including a nested cause) or its exact URL marks an unreadable reply", async () => {
     assert.equal(isUnreadableReply(CUT_OFF), true);
-    for (const e of [new Error("fetch failed"), new Error("classify timed out after 90s"), new Error("429 Too Many Requests")]) assert.equal(isUnreadableReply(e), false);
+    assert.equal(isUnreadableReply(Object.assign(new Error("wrapper"), { cause: CUT_OFF })), true);
+    assert.equal(isUnreadableReply(new Error("Troubleshooting URL: https://docs.langchain.com/oss/javascript/langchain/errors/OUTPUT_PARSING_FAILURE/")), true);
+    for (const e of [new Error("fetch failed"), new Error("classify timed out after 90s"), new Error("429 Too Many Requests"), new TypeError("Failed to parse URL from https://bad host")]) assert.equal(isUnreadableReply(e), false);
   });
   await t("a batch that fits is classified in one call, unchanged", async () => {
     const f = fakeRun(10_000); const splits: string[] = [];
@@ -130,8 +132,44 @@ async function main() {
     })));
     assert.equal(peak, 1);
   });
+  await t("the absolute deadline refuses a new paid call before invoking the provider", async () => {
+    let started = 0;
+    await assert.rejects(runAbortableCall(async () => { started++; return 1; }, {
+      timeoutMs: 100,
+      deadlineAt: Date.now() - 1,
+      label: "classify",
+      circuit: createModelCallCircuit(),
+      minStartMs: 1,
+    }), /SYNC_DEADLINE: .*no new classify call was started/);
+    assert.equal(started, 0);
+  });
+  await t("a LangChain-style immediate abort rejection trips the circuit before the limiter can admit a successor", async () => {
+    const gate = createLimiter(1);
+    const circuit = createModelCallCircuit();
+    let rawActive = 0, rawSettled = false, successorStarted = 0;
+    const stuck = () => gate(() => runAbortableCall((signal) => {
+      rawActive++;
+      // Model the installed LangChain wrapper: it rejects immediately on abort, while the provider settles later.
+      const rawProvider = new Promise<number>((resolve) => setTimeout(() => {
+        rawActive--; rawSettled = true; resolve(1);
+      }, 80));
+      return new Promise<number>((resolve, reject) => {
+        rawProvider.then(resolve, reject);
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    }, { timeoutMs: 15, deadlineAt: Date.now() + 1_000, label: "classify", circuit, minStartMs: 1 }));
+    await assert.rejects(stuck(), /SYNC_PROVIDER_TIMEOUT:.*no successor calls/);
+    assert.equal(rawSettled, false, "the provider can still be unsettled when LangChain hands control back");
+    await assert.rejects(gate(() => runAbortableCall(async () => { successorStarted++; return 2; }, {
+      timeoutMs: 15, deadlineAt: Date.now() + 1_000, label: "classify", circuit, minStartMs: 1,
+    })), /SYNC_PROVIDER_TIMEOUT/);
+    assert.equal(successorStarted, 0, "the closed circuit admits no retry or queued provider call");
+    assert.equal(rawActive, 1, "the assertion genuinely ran while the first provider request was unsettled");
+    await new Promise((resolve) => setTimeout(resolve, 90));
+    assert.equal(rawActive, 0);
+  });
   await t("the unreadable error never carries the raw model output", async () => {
-    const leaky = new Error('Failed to parse. Text: "{\\"results\\":[{\\"commodity\\":\\"SECRET CARGO 5000mt\\"". Error: [{"expected":"array"}] Troubleshooting URL: https://docs.langchain.com/x/OUTPUT_PARSING_FAILURE/');
+    const leaky = Object.assign(new Error('Failed to parse. Text: "{\\"results\\":[{\\"commodity\\":\\"SECRET CARGO 5000mt\\"". Error: [{"expected":"array"}] Troubleshooting URL: https://docs.langchain.com/x/OUTPUT_PARSING_FAILURE/'), { lc_error_code: "OUTPUT_PARSING_FAILURE" });
     await assert.rejects(classifyWithSplit([email(1)], async () => { throw leaky; }, () => {}), (e: Error) => {
       assert.match(e.message, /^UNREADABLE_EMAIL: /);
       assert.doesNotMatch(e.message, /SECRET CARGO/, "the quoted model text is dropped");
@@ -140,7 +178,7 @@ async function main() {
     });
   });
   await t("the summary drops the whole quote even when the model output itself contains '\".'", async () => {
-    const tricky = new Error('Failed to parse. Text: "{\\"a\\":\\"x\\"}". more body SECRET". Error: [{"expected":"array"}] Troubleshooting URL: https://docs.langchain.com/x/OUTPUT_PARSING_FAILURE/');
+    const tricky = Object.assign(new Error('Failed to parse. Text: "{\\"a\\":\\"x\\"}". more body SECRET". Error: [{"expected":"array"}] Troubleshooting URL: https://docs.langchain.com/x/OUTPUT_PARSING_FAILURE/'), { lc_error_code: "OUTPUT_PARSING_FAILURE" });
     const s = unreadableSummary(tricky);
     assert.doesNotMatch(s, /SECRET|more body/, s);
     assert.match(s, /^Failed to parse\. Error: \[\{"expected":"array"\}\]/);
@@ -150,13 +188,16 @@ async function main() {
   });
   await t("run.ts: no retry of an unreadable reply, every call through one limiter, its own advice", async () => {
     const run = readFileSync("lib/sync/email/run.ts", "utf8").replace(/\r\n/g, "\n");
-    assert.match(run, /if \(isUnreadableReply\(e\)\) throw e;/, "withRetry never repeats a cut-off batch");
+    assert.match(run, /if \(isUnreadableReply\(e\) \|\| isSyncDeadline\(e\)\) throw e;/, "withRetry repeats neither a cut-off batch nor an exhausted deadline");
     assert.match(run, /const gate = createLimiter\(CONCURRENCY\);/);
-    assert.match(run, /\(b\) => gate\(\(\) => withRetry\(\(\) => withTimeout\(graph\.invoke\(\{ emails: b \}\), BATCH_TIMEOUT_MS, "classify"\), RETRIES\)\),/, "every model call goes through the shared gate");
+    assert.match(run, /const modelCallCircuit = createModelCallCircuit\(\);/, "one provider-timeout circuit is shared by the whole run");
+    assert.match(run, /\(b\) => gate\(\(\) => withRetry\(\(signal\) => graph\.invoke\(\{ emails: b \}, \{ signal \}\), deadlineAt, modelCallCircuit, RETRIES\)\),/, "every model call goes through the shared gate, cancellation, deadline and circuit");
     assert.match(run, /const unreadable = \/UNREADABLE_EMAIL\/\.test\(firstError \?\? ""\);/, "an unreadable email gets its own advice, not 'fix the key or budget'");
     assert.match(run, /const unreadableRun = \/UNREADABLE_REPLIES\/\.test\(firstError \?\? ""\);/, "an exhausted split budget gets its own advice");
+    assert.match(run, /const deadlineUsed = \/SYNC_DEADLINE\/\.test\(firstError \?\? ""\);/, "a spent wall-clock budget gets retry advice");
     assert.match(run, /const splitBudget = \{ left: SPLIT_CALL_BUDGET \};/, "one split budget per run");
     assert.match(run, /\(what\) => emit\(\{ type: "log", msg: what \}\),\n        splitBudget,\n      \);/, "every batch shares the run's split budget");
+    assert.match(run, /d\.classifyAll\(supabase, emails, emit, t0 \+ budgetMs\)/, "the route budget reaches classification as an absolute deadline");
   });
   console.log(`SYNC BATCH SPLIT: ${n} checks passed`);
 }
