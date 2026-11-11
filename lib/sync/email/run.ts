@@ -370,10 +370,14 @@ export async function runEmailSync(
         const unreadable = /UNREADABLE_EMAIL/.test(firstError ?? "");
         const unreadableRun = /UNREADABLE_REPLIES/.test(firstError ?? "");
         const deadlineUsed = /SYNC_DEADLINE/.test(firstError ?? "");
+        // one provider call ran past its 90 s cap: the run stopped on purpose, nothing was staged (B2C-198)
+        const providerTimeout = /SYNC_PROVIDER_TIMEOUT/.test(firstError ?? "");
         const advice = formatRejected
           ? "the AI provider rejected the request format (not the key or budget) — choose a model with structured-output support in Settings or report it"
           : deadlineUsed
             ? "this run used its time budget — run it again to continue from the unchanged checkpoint"
+          : providerTimeout
+            ? "the AI provider did not answer in time (not the key or budget) — run it again to continue from the unchanged checkpoint; if it keeps timing out, choose a faster model in Settings"
           : unreadableRun
             ? "the model's replies keep failing to parse (not the key or budget) — choose another model in Settings, or report it"
             : unreadable
