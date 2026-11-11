@@ -116,6 +116,17 @@ async function main() {
     ok(w2.length === 1, "a run without a job row (dry run) writes nothing");
   }
 
+  // B2C-198: a provider timeout gets its own advice, and the abort signal reaches the model call explicitly
+  {
+    const { readFileSync } = await import("node:fs");
+    const run = readFileSync("lib/sync/email/run.ts", "utf8").replace(/\r\n/g, "\n");
+    ok(/const providerTimeout = \/SYNC_PROVIDER_TIMEOUT\/\.test\(firstError/.test(run) && /: providerTimeout\n\s*\? "the AI provider did not answer in time \(not the key or budget\)/.test(run),
+      "a provider timeout is advised as a rerun, never as 'fix the key or budget'");
+    const clf = readFileSync("lib/sync/email/classifier.ts", "utf8");
+    const graph = readFileSync("lib/sync/email/graph.ts", "utf8");
+    ok(/\{ callbacks: this\.callbacks, signal \}/.test(clf) && /clf\.classifyBatch\(s\.emails, config\?\.signal\)/.test(graph),
+      "the abort signal is passed to the model call explicitly");
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail) process.exit(1);
 }

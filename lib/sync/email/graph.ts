@@ -140,8 +140,9 @@ export type ClassifierGraph = ReturnType<typeof buildClassifierGraph>;
 
 export function buildClassifierGraph(clf: Classifier) {
   // gate1: ONE LLM call classifies + extracts a whole batch of emails.
-  const gate1 = async (s: typeof GraphState.State) => {
-    const results = await clf.classifyBatch(s.emails);
+  // the run's AbortSignal (graph.invoke(..., { signal })) is handed to the model call explicitly
+  const gate1 = async (s: typeof GraphState.State, config?: { signal?: AbortSignal }) => {
+    const results = await clf.classifyBatch(s.emails, config?.signal);
     const nc = results.reduce((a, r) => a + r.cargo.length, 0);
     const nv = results.reduce((a, r) => a + r.vessels.length, 0);
     return { results, log: [`gate1 · classified ${s.emails.length} email(s): ${nc} cargo, ${nv} vessel`] };

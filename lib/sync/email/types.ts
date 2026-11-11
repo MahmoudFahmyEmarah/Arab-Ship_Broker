@@ -83,7 +83,7 @@ export interface ClassifyResult {
 // cargo + vessel extraction), returning one result per input email in order.
 // Batching many emails per call is far fewer round-trips than one call each.
 export interface Classifier {
-  classifyBatch(emails: EmailMsg[]): Promise<ClassifyResult[]>;
+  classifyBatch(emails: EmailMsg[], signal?: AbortSignal): Promise<ClassifyResult[]>;
 }
 
 // The five stages every channel run passes through. The UI's run panel keys
