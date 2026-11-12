@@ -14,6 +14,7 @@
 
 import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import type { Classifier, CargoRecord, VesselRecord, EmailMsg, ClassifyResult } from "./types";
+import { calendarDay } from "../normalize";
 
 // Commodities we recognise as GRAIN regime; anything else a human maps via the
 // Manual Review queue (asb_regime = UNMAPPED).
@@ -37,12 +38,14 @@ export function assignRegime(rec: CargoRecord): CargoRecord {
 // Hard guardrail for year-less laycans: circulars quote "10–20 Jun" with no year,
 // and the model may default it to a past year. A laycan is always near-term, so
 // any ISO date whose year is BEFORE the current year is re-stamped to the current
-// year. Genuine future dates and SPOT/PPT (non-ISO) are left untouched.
+// year. Genuine future dates and SPOT/PPT (non-ISO) are left untouched. A re-stamp that names a day the current
+// year does not have (29 Feb) is not made: the value stays as extracted, a real day the gate can judge.
 function fixLaycanYear(v: string | null | undefined, currentYear: number): string | null | undefined {
   if (typeof v !== "string") return v;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
-  if (!m) return v;
-  return Number(m[1]) < currentYear ? `${currentYear}-${m[2]}-${m[3]}` : v;
+  if (!m || Number(m[1]) >= currentYear) return v;
+  const restamped = `${currentYear}-${m[2]}-${m[3]}`;
+  return calendarDay(restamped) ? restamped : v;
 }
 
 // ── SANITATION — raw LLM output must never reach a contact or the DB as-is ──

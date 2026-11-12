@@ -206,6 +206,13 @@ export const SHEET_SPECS: SheetSpec[] = [
         if (typeof payload[nCol] === "string")
           f.push({ level: "error", field: nCol, msg: `"${payload[nCol]}" is not a number` });
       }
+      // a laycan that is not a date (or names a day that does not exist) is stored as no laycan — say so, so the
+      // reviewer corrects it rather than the listing silently losing its window
+      for (const [hdr, col] of [["LAYCAN_FROM", "laycan_from"], ["LAYCAN_TO", "laycan_to"]] as const) {
+        const cell = raw[hdr] ?? null;
+        if (parseLaycan(cell).bad)
+          f.push({ level: "warn", field: col, msg: `laycan "${String(cell).trim()}" is not a real date — stored without it; correct it in Review` });
+      }
       const regime = upper(raw["ASB_REGIME"] ?? null);
       if (regime === "UNMAPPED")
         f.push({ level: "info", field: "asb_regime", msg: "UNMAPPED — assign a regime in Manual Review" });

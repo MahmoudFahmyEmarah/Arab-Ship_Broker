@@ -66,9 +66,12 @@ export function parseLaycan(v: Cell): LaycanParse {
   const s = String(v).trim();
   if (SPOT_TOKENS.has(s.toUpperCase())) return { date: null, isSpot: true, bad: false };
 
-  // yyyy-mm-dd
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return { date: `${iso[1]}-${iso[2]}-${iso[3]}`, isSpot: false, bad: false };
+  // yyyy-mm-dd — only a day that exists: "2026-02-30" used to pass here, and one such row failed the whole batch
+  // commit (jsonb_populate_record casts the payload to the table's date column)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const day = calendarDay(s);
+    return day ? { date: day, isSpot: false, bad: false } : { date: null, isSpot: false, bad: true };
+  }
 
   // Excel serial date number (days since 1899-12-30)
   if (typeof v === "number" && v > 20000 && v < 80000) {
@@ -80,6 +83,17 @@ export function parseLaycan(v: Cell): LaycanParse {
   if (!isNaN(d.getTime())) return { date: d.toISOString().slice(0, 10), isSpot: false, bad: false };
 
   return { date: null, isSpot: false, bad: true };
+}
+
+/** A day that exists, as "yyyy-mm-dd"; otherwise null. A date column refuses "SPOT", "end Nov" and 2026-02-30
+ *  alike, so this is the only shape that may be written to one straight from extracted text. */
+export function calendarDay(v: Cell): string | null {
+  const s = str(v);
+  const m = s ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(s) : null;
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const t = new Date(Date.UTC(y, mo - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d ? s : null;
 }
 
 /** LOCODE hygiene per the reference: 5 chars, no spaces, upper-case. */
