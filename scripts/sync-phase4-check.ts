@@ -8,7 +8,10 @@ import { readFileSync } from "node:fs";
 import { referencedPortCodes, unknownPortCodes } from "@/lib/sync/ports-check";
 import { WORKBOOK_LIMITS, checkGrid } from "@/lib/sync/xlsx-source";
 import { queueOpenDate } from "@/lib/sync/stage";
-import { calendarDay } from "@/lib/sync/normalize";
+import { calendarDay, parseLaycan } from "@/lib/sync/normalize";
+import { normalizeCargo } from "@/lib/sync/email/graph";
+import { specById } from "@/lib/sync/sheets";
+import type { RawRow } from "@/lib/sync/types";
 
 let pass = 0, fail = 0;
 const ok = (c: boolean, label: string) => { if (c) { pass++; console.log(`  ok   ${label}`); } else { fail++; console.error(` FAIL  ${label}`); } };
@@ -69,6 +72,31 @@ console.log("vessel review queue open date (12 Nov 2026)");
   const stage = readFileSync("lib/sync/stage.ts", "utf8").replace(/\r\n/g, "\n");
   ok(/open_date: queueOpenDate\(raw\),/.test(stage) && !/open_date: asStr\(raw\["OPEN_DATE"\]\)/.test(stage),
     "the queue row takes its open date only through queueOpenDate");
+}
+
+console.log("cargo laycans are real days (B2O-127, 12 Nov 2026)");
+{
+  // an impossible ISO laycan used to pass parseLaycan; one such row failed the whole batch commit
+  // (jsonb_populate_record casts the payload to cargo_listings' date columns)
+  const pl = (v: unknown) => parseLaycan(v as string);
+  ok(pl("2026-06-10").date === "2026-06-10" && !pl("2026-06-10").bad, "a real ISO laycan is kept");
+  ok(pl("2024-02-29").date === "2024-02-29", "a real leap day is kept");
+  for (const w of ["2026-02-30", "2026-11-31", "2026-02-29", "2026-00-10", "2026-13-01"])
+    ok(pl(w).date === null && pl(w).bad && !pl(w).isSpot, `"${w}" is not a day: no date, marked bad`);
+  ok(pl("SPOT").isSpot && !pl("SPOT").bad && pl("SPOT").date === null, "SPOT is still spot");
+  const nc = (from: string) => normalizeCargo({ commodity: "wheat", qty_min_mt: 1, qty_max_mt: 1, laycan_from: from }, 2026).laycan_from;
+  ok(nc("2024-06-10") === "2026-06-10", "the year guard still re-stamps a past-year laycan");
+  ok(nc("2024-02-29") === "2024-02-29", "the year guard never makes 2026-02-29 (kept as extracted, a real day)");
+  ok(normalizeCargo({ commodity: "wheat", qty_min_mt: 1, qty_max_mt: 1, laycan_from: "2024-02-29" }, 2028).laycan_from === "2028-02-29", "a re-stamp into a leap year keeps 29 Feb");
+  const cargo = specById("cargo");
+  const flags = cargo?.validate?.({}, { LAYCAN_FROM: "2026-02-30", LAYCAN_TO: "2026-03-05" }) ?? [];
+  ok(flags.some((x) => x.level === "warn" && x.field === "laycan_from" && x.msg.includes("2026-02-30")), "the row says its laycan is not a real date");
+  ok(!flags.some((x) => x.field === "laycan_to"), "a real laycan_to is not flagged");
+  const quiet = cargo?.validate?.({}, { LAYCAN_FROM: "SPOT", LAYCAN_TO: null }) ?? [];
+  ok(!quiet.some((x) => x.field === "laycan_from" || x.field === "laycan_to"), "SPOT and a blank laycan are not flagged");
+  const derived: RawRow = {};
+  cargo?.derive?.(derived, { LAYCAN_FROM: "2026-11-31" });
+  ok(derived["laycan_from"] === null && derived["is_spot"] === false, "the payload never carries the impossible day");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
