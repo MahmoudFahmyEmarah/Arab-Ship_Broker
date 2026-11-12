@@ -82,6 +82,17 @@ export function parseLaycan(v: Cell): LaycanParse {
   return { date: null, isSpot: false, bad: true };
 }
 
+/** A day that exists, as "yyyy-mm-dd"; otherwise null. A date column refuses "SPOT", "end Nov" and 2026-02-30
+ *  alike, so this is the only shape that may be written to one straight from extracted text. */
+export function calendarDay(v: Cell): string | null {
+  const s = str(v);
+  const m = s ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(s) : null;
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const t = new Date(Date.UTC(y, mo - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d ? s : null;
+}
+
 /** LOCODE hygiene per the reference: 5 chars, no spaces, upper-case. */
 export function locode(v: Cell): string | null {
   const s = upper(v);

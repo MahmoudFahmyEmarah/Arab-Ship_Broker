@@ -13,6 +13,7 @@ import { fetchCommodityIndex, resolveCommodity, type CommodityIndex } from "./co
 import { fetchPortIndex, resolvePortLocode } from "./ports";
 import { gateChannelFor } from "./batch-status";
 import { referencedPortCodes, unknownPortCodes } from "./ports-check";
+import { calendarDay } from "./normalize";
 
 const CHUNK = 500;
 
@@ -49,6 +50,15 @@ const isoDay = (v: string | null): string | null => {
   const d = new Date(v);
   return Number.isNaN(+d) ? null : d.toISOString().slice(0, 10);
 };
+
+/** The queued vessel's open date — a KEY matchmaking factor that never stays empty. The model is asked for
+ * yyyy-mm-dd, but circulars write "SPOT", "PPT" or "prompt" (open now) and the word can come through as-is: on
+ * 12 Nov 2026 one "SPOT" failed the whole queue write ("invalid input syntax for type date") and with it the sync
+ * page. Only a real calendar day is kept; anything else — spot included, which means open on the day of the
+ * circular — falls back to the circular's posted date, else today (the day the record entered the database). */
+export function queueOpenDate(raw: Record<string, Cell>, now: Date = new Date()): string {
+  return calendarDay(raw["OPEN_DATE"]) ?? isoDay(asStr(raw["_SRC_DATE"])) ?? now.toISOString().slice(0, 10);
+}
 
 // Queue IMO-less vessels for manual review, deduped by a name+built+dwt
 // composite. The DWT in the key is rounded to the nearest 100 — the same ship
@@ -108,11 +118,9 @@ async function enqueueVessels(
       vessel_type: asStr(s.payload["vessel_type"]), flag: asStr(s.payload["flag"]),
       // tonnage intelligence — GRT is key for the Port Module / cost calc
       grt: asInt(raw["GRT"]), nrt: asInt(raw["NRT"]),
-      // open-position intelligence (raw-only keys from the channel extraction).
-      // Open date is a KEY matchmaking factor and never stays empty: the
-      // extracted date wins, else the circular's posted date, else today —
-      // the day the record entered the database.
-      open_date: asStr(raw["OPEN_DATE"]) ?? isoDay(asStr(raw["_SRC_DATE"])) ?? isoDay(new Date().toISOString()),
+      // open-position intelligence (raw-only keys from the channel extraction);
+      // the open date is always a real day (see queueOpenDate)
+      open_date: queueOpenDate(raw),
       open_port: asStr(raw["OPEN_PORT"]), open_country: asStr(raw["OPEN_COUNTRY"]),
       open_zone: asStr(raw["OPEN_ZONE"]), direction: asStr(raw["DIRECTION"]),
       dest_zones: destZones ? destZones.split("|").filter(Boolean) : null,
