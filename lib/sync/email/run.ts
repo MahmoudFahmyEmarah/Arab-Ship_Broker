@@ -26,6 +26,10 @@ const RETRIES = 2;                 // attempts per batch
 const BATCH_TIMEOUT_MS = 90_000;   // hard cap per batch call (stalled requests never reject)
 const MAX_BATCH_EMAILS = 10;       // emails per LLM call (output-token safety)
 const MAX_BATCH_CHARS = 120_000;   // ~30k input tokens per call, well under model limits
+// A page after the first starts only while its fetch and one full classify call still fit before the run deadline.
+// A page begun with ~40 s left was cut at the deadline, its paid calls thrown away, and the run reported FAILED
+// although the pages before it were staged and the checkpoint had moved (owner, 12 Nov 2026).
+export const PAGE_START_MIN_MS = BATCH_TIMEOUT_MS + 10_000;
 
 // Long digests (many circulars stacked in one email) used to be TRUNCATED at
 // the classifier's per-email cap — every order past the cut was silently lost.
@@ -126,7 +130,7 @@ async function classifyAll(
   emails: EmailMsg[],
   emit: Emit,
   deadlineAt: number | null = null,
-): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[]; failed: number; firstError: string | null }> {
+): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[]; failed: number; firstError: string | null; deadlineOnly: boolean }> {
   // Daily token budget — shared with Data quality. Refusing here keeps the
   // watermark where it was, so nothing is skipped once the cap resets.
   const budget = await aiBudgetToday(supabase);
@@ -146,6 +150,7 @@ async function classifyAll(
   let doneEmails = 0;
   let doneBatches = 0;
   let failed = 0;
+  let deadlineFailed = 0;   // batches stopped by the run's own deadline (not a provider timeout, not a model error)
   let firstError: string | null = null;
   // ONE cap on model calls in flight for the whole run: a split batch's halves wait their turn instead of fanning out
   // past CONCURRENCY (B2O P2, 4 Nov 2026)
@@ -172,6 +177,7 @@ async function classifyAll(
     } catch (e) {
       doneEmails += batch.length; doneBatches += 1; failed += 1;
       const msg = e instanceof Error ? e.message : "error";
+      if (msg.startsWith("SYNC_DEADLINE:")) deadlineFailed += 1;
       if (!firstError) firstError = msg;
       emit({ type: "log", msg: `[${doneEmails}/${expanded.length}] ✗ batch ${doneBatches}/${batches.length} skipped (${batch.length} email(s)) — ${msg}` });
     }
@@ -189,7 +195,7 @@ async function classifyAll(
     emit({ type: "usage", tokens: totals.tokens, cost, calls: totals.calls });
     emit({ type: "log", msg: `model usage · ${totals.tokens.toLocaleString()} tokens · USD ${cost.toFixed(4)} · ${totals.calls} call(s)` });
   }
-  return { cargo: uCargo, vessels: uVessels, failed, firstError };
+  return { cargo: uCargo, vessels: uVessels, failed, firstError, deadlineOnly: failed > 0 && deadlineFailed === failed };
 }
 
 async function stageAndFinish(
@@ -306,10 +312,11 @@ export async function runEmailSync(
 
     const totals: Totals = { new: 0, updated: 0, unchanged: 0, invalid: 0, errors: 0, gateBlocked: 0, queued: 0 };
     let lastBatchId: string | null = null;
-    let pages = 0;
+    let pages = 0;   // pages this run finished: classified in full, staged when they held records, checkpoint moved
     for (let page = 1; page <= maxPages; page += 1) {
-      if (page > 1 && Date.now() - t0 > budgetMs) {
-        emit({ type: "log", msg: `time budget used after ${page - 1} page(s) — the rest is picked up by the next run` });
+      const left = t0 + budgetMs - Date.now();
+      if (page > 1 && left < PAGE_START_MIN_MS) {
+        emit({ type: "log", msg: `time budget used after ${page - 1} page(s) (${Math.max(0, Math.round(left / 1000))} s left, a page needs up to ${PAGE_START_MIN_MS / 1000} s) — the rest is picked up by the next run` });
         break;
       }
       step(emit, "fetch", "running", `page ${page} · since ${since.toISOString().slice(0, 16).replace("T", " ")} UTC`);
@@ -344,7 +351,6 @@ export async function runEmailSync(
         }
         break;
       }
-      pages += 1;
 
       step(emit, "classify", "running", `${emails.length} email(s)`);
       let classified: Awaited<ReturnType<typeof classifyAll>>;
@@ -356,7 +362,15 @@ export async function runEmailSync(
         emit({ type: "error", error: msg });
         return; // checkpoint stays — nothing was read by the model
       }
-      const { cargo, vessels, failed, firstError } = classified;
+      const { cargo, vessels, failed, firstError, deadlineOnly } = classified;
+      if (failed > 0 && deadlineOnly && pages > 0) {
+        // Only the run's own deadline stopped this page, after earlier pages were staged and the checkpoint moved
+        // through them: the run ends as it does at a page boundary, not as a failure. None of this page is staged and
+        // the checkpoint stays after the last staged page, so the next run reads this page again; nothing is skipped.
+        step(emit, "classify", "done", `${pages} page(s) read · page ${page} is read again by the next run`);
+        emit({ type: "log", msg: `time budget used during page ${page} — its ${emails.length} email(s) were not staged and are read again by the next run` });
+        break;
+      }
       step(emit, "classify", failed > 0 ? "failed" : "done", `${cargo.length} cargo · ${vessels.length} vessel${failed ? ` · ${failed} batch(es) failed` : ""}`);
       if (failed > 0) {
         // Part of the mail was never read by the model: keep the checkpoint
@@ -375,7 +389,10 @@ export async function runEmailSync(
         const advice = formatRejected
           ? "the AI provider rejected the request format (not the key or budget) — choose a model with structured-output support in Settings or report it"
           : deadlineUsed
-            ? "this run used its time budget — run it again to continue from the unchanged checkpoint"
+            ? pages === 0
+              // a first page that does not fit one run's budget would stop the next run in the same place
+              ? "the first page of mail did not finish within this run's time budget — run it again; if it stops on the same page again, report it"
+              : "this run used its time budget — run it again to continue from the unchanged checkpoint"
           : providerTimeout
             ? "the AI provider did not answer in time (not the key or budget) — run it again to continue from the unchanged checkpoint; if it keeps timing out, choose a faster model in Settings"
           : unreadableRun
@@ -386,6 +403,7 @@ export async function runEmailSync(
         emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync checkpoint stays at ${since.toISOString().slice(0, 16).replace("T", " ")} UTC — ${advice}; nothing was skipped.` });
         return;
       }
+      pages += 1;
       if (cargo.length || vessels.length) {
         const result = await d.stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy, false);
         if (result) { lastBatchId = result.batchId; Object.assign(totals, addTotals(totals, { ...result.totals, gateBlocked: result.gate?.blocked ?? 0 })); }

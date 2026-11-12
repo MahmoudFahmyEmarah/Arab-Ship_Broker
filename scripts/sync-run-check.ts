@@ -9,7 +9,7 @@
  *         older pending mail
  *   P1-2  RunSettler writes one terminal status, once, with or without events
  */
-import { runEmailSync, type RunDeps } from "@/lib/sync/email/run";
+import { PAGE_START_MIN_MS, runEmailSync, type RunDeps } from "@/lib/sync/email/run";
 import { RunSettler } from "@/lib/sync/email/finalize";
 import type { SyncEvent } from "@/lib/sync/email/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -26,9 +26,11 @@ function fakeSupabase(): SupabaseClient {
   } as unknown as SupabaseClient;
 }
 
-interface Trace { fetches: { since: Date; lastUid: number | null; uidValidity: number | null }[]; checkpoints: { token: string; cp: unknown }[]; releases: (string | null)[]; claims: string[] }
-function fakeDeps(t: Trace, opts: { claimed?: boolean; lastSyncAt?: Date | null; lastUid?: number | null; uidValidity?: number | null; messages?: number; hasMore?: boolean } = {}): Partial<RunDeps> {
+interface Trace { fetches: { since: Date; lastUid: number | null; uidValidity: number | null }[]; checkpoints: { token: string; cp: unknown }[]; releases: (string | null)[]; claims: string[]; stages?: number }
+type ClassifyResult = Awaited<ReturnType<RunDeps["classifyAll"]>>;
+function fakeDeps(t: Trace, opts: { claimed?: boolean; lastSyncAt?: Date | null; lastUid?: number | null; uidValidity?: number | null; messages?: number; hasMore?: boolean; classify?: (call: number) => Partial<ClassifyResult> } = {}): Partial<RunDeps> {
   const token = "tok-" + Math.random().toString(36).slice(2);
+  let classifyCalls = 0;
   return {
     claimSyncRun: async (_sb, _src, label) => { t.claims.push(label); return opts.claimed === false ? { claimed: false, leaseToken: null, leaseOwner: "cron", leaseUntil: new Date(Date.now() + 60_000) } : { claimed: true, leaseToken: token, leaseOwner: label, leaseUntil: new Date(Date.now() + 60_000) }; },
     getEmailCheckpoint: async () => ({ lastSyncAt: opts.lastSyncAt ?? null, uidValidity: opts.uidValidity ?? null, lastUid: opts.lastUid ?? null, leaseOwner: null, leaseUntil: null }),
@@ -40,8 +42,11 @@ function fakeDeps(t: Trace, opts: { claimed?: boolean; lastSyncAt?: Date | null;
       return { messages: Array.from({ length: n }, (_, i) => ({ id: String(100 + i), from: "a@b", subject: `s${i}`, date: null, text: `cargo ${i}` })),
                newestAt: n ? new Date("2026-09-20T09:00:00Z") : null, hasMore: !!opts.hasMore, mode: "date" as const, uidValidity: 1234, lastUid: n ? 100 + n - 1 : null, waiting: n };
     },
-    classifyAll: async (_sb, emails) => ({ cargo: emails.map((e) => ({ commodity: e.subject } as never)), vessels: [], failed: 0, firstError: null }),
-    stageAndFinish: async () => ({ batchId: "batch-1", totals: { new: 1, updated: 0, unchanged: 0, invalid: 0, errors: 0 }, gate: null } as never),
+    classifyAll: async (_sb, emails) => ({
+      cargo: emails.map((e) => ({ commodity: e.subject } as never)), vessels: [], failed: 0, firstError: null, deadlineOnly: false,
+      ...(opts.classify?.(++classifyCalls) ?? {}),
+    }),
+    stageAndFinish: async () => { t.stages = (t.stages ?? 0) + 1; return { batchId: "batch-1", totals: { new: 1, updated: 0, unchanged: 0, invalid: 0, errors: 0 }, gate: null } as never; },
   };
 }
 const collect = () => { const events: SyncEvent[] = []; return { events, emit: (e: SyncEvent) => { events.push(e); } }; };
@@ -114,6 +119,70 @@ async function main() {
     const s3 = new RunSettler();
     await s3.finish(sb2, null);
     ok(w2.length === 1, "a run without a job row (dry run) writes nothing");
+  }
+
+  // 12 Nov 2026 (owner): a page begun with ~40 s left was cut at the run deadline and the whole run reported FAILED,
+  // although the pages before it were staged and the checkpoint had moved through them
+  console.log("12 Nov · the run's time budget");
+  const fresh = (): Trace => ({ fetches: [], checkpoints: [], releases: [], claims: [] });
+  const natural = { messages: 2, hasMore: true, lastSyncAt: new Date("2026-09-09T00:00:00Z"), lastUid: 500, uidValidity: 1234 };
+  const deadline = { failed: 1, firstError: "SYNC_DEADLINE: the classify call reached the run deadline", deadlineOnly: true, cargo: [] };
+  const errors = (ev: SyncEvent[]) => ev.filter((e) => e.type === "error").map((e) => (e as { error: string }).error);
+  const logs = (ev: SyncEvent[]) => ev.filter((e) => e.type === "log").map((e) => (e as { msg: string }).msg);
+  {
+    // less than a page's window left after page 1: page 2 is never fetched, so no model call is paid for and lost
+    const t = fresh();
+    const { events, emit } = collect();
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", budgetMs: PAGE_START_MIN_MS - 1, maxPages: 6, deps: fakeDeps(t, natural) });
+    ok(t.fetches.length === 1, "a page that cannot get its full window is not started", String(t.fetches.length));
+    ok(events.some((e) => e.type === "done") && errors(events).length === 0, "…and the run ends as done, not failed");
+    ok(logs(events).some((m) => /time budget used after 1 page\(s\) \(\d+ s left, a page needs up to 100 s\)/.test(m)), "…saying how much time was left", JSON.stringify(logs(events)));
+  }
+  {
+    const t = fresh();
+    const { emit } = collect();
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", budgetMs: PAGE_START_MIN_MS + 60_000, maxPages: 2, deps: fakeDeps(t, natural) });
+    ok(t.fetches.length === 2 && t.checkpoints.length === 2, "with a page's window left, the next page is read", `${t.fetches.length} fetches`);
+  }
+  {
+    // the deadline cuts page 2 after page 1 was staged: the run is done, page 2 is read again next time
+    const t = fresh();
+    const { events, emit } = collect();
+    const settler = new RunSettler();
+    await runEmailSync({ supabase: fakeSupabase(), emit: (e) => { settler.note(e); emit(e); }, owner: "cron", deps: fakeDeps(t, { ...natural, classify: (n) => (n === 2 ? deadline : {}) }) });
+    ok(t.fetches.length === 2 && t.stages === 1, "page 1 staged, page 2 cut by the deadline is not staged", `stages=${t.stages}`);
+    ok(t.checkpoints.length === 1, "the checkpoint moved through page 1 only (page 2 is read again)", String(t.checkpoints.length));
+    ok(errors(events).length === 0 && events.some((e) => e.type === "done" && e.batchId === "batch-1"), "the run ends as done with page 1's batch, not FAILED", JSON.stringify(errors(events)));
+    ok(settler.outcome?.ok === true && settler.outcome.rows === 1, "the job is recorded as succeeded (scheduled runs too)");
+    ok(logs(events).some((m) => /time budget used during page 2 — its 2 email\(s\) were not staged and are read again by the next run/.test(m)), "…and the log says page 2 is read again");
+  }
+  {
+    // the deadline on the FIRST page is still a failure: nothing moved, and a rerun may stop in the same place
+    const t = fresh();
+    const { events, emit } = collect();
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", deps: fakeDeps(t, { ...natural, classify: () => deadline }) });
+    ok(t.checkpoints.length === 0 && t.stages === undefined, "a first page cut by the deadline stages nothing and moves nothing");
+    ok(errors(events).length === 1 && /the first page of mail did not finish within this run's time budget — run it again; if it stops on the same page again, report it/.test(errors(events)[0]), "…and fails with advice that does not promise a rerun fixes it", JSON.stringify(errors(events)));
+  }
+  {
+    // any failure other than the run's own deadline stays a failure, even after a staged page
+    for (const [label, r] of [
+      ["a provider timeout", { failed: 1, firstError: "SYNC_PROVIDER_TIMEOUT: classify timed out after 90s; this run admitted no successor calls", deadlineOnly: false }],
+      ["a deadline mixed with another failure", { failed: 2, firstError: "SYNC_DEADLINE: the classify call reached the run deadline", deadlineOnly: false }],
+      ["a model error", { failed: 1, firstError: "UNREADABLE_EMAIL: the model's reply for the email \"x\" could not be read", deadlineOnly: false }],
+    ] as const) {
+      const t = fresh();
+      const { events, emit } = collect();
+      await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", deps: fakeDeps(t, { ...natural, classify: (n) => (n === 2 ? { ...r, cargo: [] } : {}) }) });
+      ok(errors(events).length === 1 && !events.some((e) => e.type === "done") && t.checkpoints.length === 1, `${label} on page 2 still fails the run (checkpoint after page 1)`, JSON.stringify(errors(events)));
+    }
+  }
+  {
+    const { readFileSync } = await import("node:fs");
+    const run = readFileSync("lib/sync/email/run.ts", "utf8").replace(/\r\n/g, "\n");
+    ok(/if \(msg\.startsWith\("SYNC_DEADLINE:"\)\) deadlineFailed \+= 1;/.test(run) && /deadlineOnly: failed > 0 && deadlineFailed === failed/.test(run),
+      "classifyAll calls a page deadline-only only when EVERY failed batch hit the run deadline");
+    ok(/export const PAGE_START_MIN_MS = BATCH_TIMEOUT_MS \+ 10_000;/.test(run), "a page's window is one full classify call plus the fetch");
   }
 
   // B2C-198: a provider timeout gets its own advice, and the abort signal reaches the model call explicitly
