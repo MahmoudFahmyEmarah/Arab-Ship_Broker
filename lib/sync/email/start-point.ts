@@ -28,6 +28,20 @@ export function startPointChanged(input: string, checkpointIso: string | null): 
  *  - the box shows the checkpoint, or nothing → undefined (natural: the checkpoint moves as pages are staged)
  *  - anything else is a start point the owner chose → its instant
  */
+/**
+ * What the card does with its held point when an inbox run's stream ends and the run handed none back.
+ *  - the run settled (done / empty / skipped / error) → "clear": nothing is left to continue; the box returns to the
+ *    checkpoint (every backfill exit that leaves mail unread hands a point back, so a settled run without one is
+ *    either natural or read through)
+ *  - the stream ended without a terminal event (the platform cut the function, the connection dropped) → the point
+ *    it was sent is held again, so a retry re-reads from there (safe: re-reading only meets duplicates); a natural
+ *    run that was cut leaves things as they are ("keep")
+ */
+export function pointAfterRun(r: { settled: boolean; sentSince: string | undefined }): "clear" | "keep" | { hold: string } {
+  if (r.settled) return "clear";
+  return r.sentSince ? { hold: r.sentSince } : "keep";
+}
+
 export function startPointToSend(input: string, checkpointIso: string | null, resumeIso: string | null): string | undefined {
   if (!input) return undefined;
   if (resumeIso && input === toLocalInput(resumeIso)) return new Date(resumeIso).toISOString();

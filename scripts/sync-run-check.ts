@@ -11,7 +11,7 @@
  */
 import { PAGE_START_FLOOR_MS, pageStartNeedMs, runEmailSync, type RunDeps } from "@/lib/sync/email/run";
 import { deadlineOnlyFailure } from "@/lib/sync/email/batch-split";
-import { startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
+import { pointAfterRun, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 import { RunSettler } from "@/lib/sync/email/finalize";
 import type { SyncEvent } from "@/lib/sync/email/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -253,10 +253,48 @@ async function main() {
     }
   }
   {
+    // B2O-132 P2-1: a backfill that ends before its first page hands back the point it was sent ("try again after it
+    // finishes" must continue the backfill, not fall back to the checkpoint)
+    const chosen = new Date("2026-09-01T00:00:00Z");
+    const noInbox = { from: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }), rpc: async () => ({ data: null, error: null }) } as unknown as SupabaseClient;
+    const cases: [string, SupabaseClient, (t: Trace) => Partial<RunDeps>, "skipped" | "error"][] = [
+      ["a refused lease (another run holds the inbox)", fakeSupabase(), (t) => fakeDeps(t, { ...natural, claimed: false }), "skipped"],
+      ["a lease claim that throws", fakeSupabase(), (t) => ({ ...fakeDeps(t, natural), claimSyncRun: async () => { throw new Error("lease unavailable"); } }), "error"],
+      ["an unreadable checkpoint", fakeSupabase(), (t) => ({ ...fakeDeps(t, natural), getEmailCheckpoint: async () => { throw new Error("checkpoint unreadable"); } }), "error"],
+      ["no inbox configured", noInbox, (t) => fakeDeps(t, natural), "error"],
+    ];
+    for (const [label, sb, deps, terminal] of cases) {
+      const t = fresh();
+      const { events, emit } = collect();
+      await runEmailSync({ supabase: sb, emit, owner: "admin:x", since: chosen, deps: deps(t) });
+      const at = events.findIndex((e) => e.type === "resume"), end = events.findIndex((e) => e.type === terminal);
+      ok(t.fetches.length === 0 && resumes(events).length === 1 && resumes(events)[0] === chosen.toISOString() && at >= 0 && at < end,
+        `backfill ended by ${label}: the card is handed back the point it sent, before the ${terminal}`, JSON.stringify(events.filter((e) => e.type !== "log" && e.type !== "step")));
+    }
+    const t = fresh();
+    const { events, emit } = collect();
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", deps: fakeDeps(t, { ...natural, claimed: false }) });
+    ok(events.some((e) => e.type === "skipped") && resumes(events).length === 0, "a natural run refused the lease hands out no point");
+  }
+  {
+    // what the card does with its held point when a stream ends with no point handed back
+    ok(pointAfterRun({ settled: true, sentSince: undefined }) === "clear" && pointAfterRun({ settled: true, sentSince: "2026-09-01T00:00:00.000Z" }) === "clear",
+      "a settled run that handed none back leaves nothing to continue (natural, or a backfill read through)");
+    const cut = pointAfterRun({ settled: false, sentSince: "2026-09-01T00:00:00.000Z" });
+    ok(typeof cut === "object" && cut.hold === "2026-09-01T00:00:00.000Z", "a backfill cut off without a result holds the point it was sent, so a retry re-reads from there");
+    ok(pointAfterRun({ settled: false, sentSince: undefined }) === "keep", "a natural run cut off without a result changes nothing");
+  }
+  {
     // B2O-131 P1-1 / P2-1: what a "Sync now" click sends, judged in the box's own form, in several zones
+    // the zone in force before the loop, restored by name afterwards (deleting TZ does not restore it on Windows)
     const realTz = process.env.TZ;
+    const startZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const jan = new Date("2026-01-15T12:00:00Z");
+    const startOffset = jan.getTimezoneOffset();
+    const janOffset: Record<string, number> = { UTC: 0, "Africa/Cairo": -120, "America/New_York": 300, "Asia/Kolkata": -330 };
     for (const tz of ["UTC", "Africa/Cairo", "America/New_York", "Asia/Kolkata"]) {
       process.env.TZ = tz;
+      ok(jan.getTimezoneOffset() === janOffset[tz], `${tz}: the zone switch took effect (offset ${janOffset[tz]} min in January)`, String(jan.getTimezoneOffset()));
       const wm = "2026-09-11T12:59:41.123Z";                       // a checkpoint is page.newestAt or startedAt: seconds
       const box = toLocalInput(wm);
       ok(startPointToSend(box, wm, null) === undefined && !startPointChanged(box, wm), `${tz}: an untouched box is a natural run, never a backfill from the minute's floor`);
@@ -272,7 +310,8 @@ async function main() {
     // 1 Nov 2026 01:30 happens twice in New York; the exact point is sent, never re-parsed from the ambiguous wall time
     const second = "2026-11-01T06:30:12.000Z";                     // 01:30:12 EST, the second 01:30
     ok(toLocalInput(second) === "2026-11-01T01:30" && startPointToSend(toLocalInput(second), null, second) === second, "a stop point in a repeated DST hour is sent exactly");
-    if (realTz === undefined) delete process.env.TZ; else process.env.TZ = realTz;
+    process.env.TZ = realTz ?? startZone;
+    ok(jan.getTimezoneOffset() === startOffset, `the zone in force before the loop (${startZone}) is back afterwards`, String(jan.getTimezoneOffset()));
   }
   {
     // the deadline on the FIRST page is still a failure: nothing moved, and a rerun may stop in the same place
@@ -307,17 +346,24 @@ async function main() {
       "…not with no failures, a provider timeout, a non-Error reason or a real error among them");
     const card = readFileSync("components/admin/data-sync/EmailSyncCard.tsx", "utf8").replace(/\r\n/g, "\n");
     const page = readFileSync("components/admin/data-sync/DataSyncClient.tsx", "utf8").replace(/\r\n/g, "\n");
-    ok(/const sinceChanged = startPointChanged\(since, watermark\);/.test(card) && /run\(\{ limit: 25, since: startPointToSend\(since, watermark, resume\.current\) \}\)/.test(card)
+    ok(/const sinceChanged = resumeFrom != null \|\| startPointChanged\(since, watermark\);/.test(card) && /run\(\{ limit: 25, since: startPointToSend\(since, watermark, resume\.current\) \}\)/.test(card)
       && !/const toLocalInput =/.test(card) && !/sinceIso/.test(card),
       "the card decides what to send only through the tested start-point helpers (no ISO-vs-minute comparison left)");
     ok(/else if \(evt\.type === "resume"\) \{ resumed = true; holdResume\(evt\.since\); setSince\(toLocalInput\(evt\.since\)\); \}/.test(card)
       && /setSince\(toLocalInput\(resume\.current \?\? r\.data\.email\)\)/.test(card)
-      && /if \(!body\.sample && !resumed\) holdResume\(null\);\n\s*await loadWatermark\(\);/.test(card)
+      && /const next = pointAfterRun\(\{ settled, sentSince: typeof body\.since === "string" \? body\.since : undefined \}\);\n\s*if \(next === "clear"\) holdResume\(null\);\n\s*else if \(next !== "keep"\) holdResume\(next\.hold\);/.test(card)
+      && /if \(evt\.type === "done" \|\| evt\.type === "empty" \|\| evt\.type === "skipped" \|\| evt\.type === "error"\) settled = true;/.test(card)
       && /onClick=\{\(\) => \{ holdResume\(null\); setSince\(toLocalInput\(watermark\)\); \}\}/.test(card),
-      "the card shows a handed-back point, prefers it on every reload, and drops it on Reset or after an inbox run that handed none");
-    ok(/export function DataSyncClient[\s\S]*const \[emailResume, setEmailResume\] = useState<string \| null>\(null\);[\s\S]*function IntakeView/.test(page)
-      && /emailResume=\{emailResume\} onEmailResume=\{setEmailResume\}/.test(page) && /resumeFrom=\{emailResume\} onResume=\{onEmailResume\}/.test(page),
-      "the point is held by the page, which outlives the card when a run opens its batch in Review");
+      "the card shows a handed-back point, prefers it on every reload, and settles it through pointAfterRun (Reset drops it)");
+    ok(/if \(resumeFrom !== shownResume\) \{\n\s*setShownResume\(resumeFrom\);\n\s*if \(resumeFrom\) setSince\(toLocalInput\(resumeFrom\)\);\n\s*\}/.test(card)
+      && /useEffect\(\(\) => \{ resume\.current = resumeFrom; \}, \[resumeFrom\]\);/.test(card),
+      "a mounted card follows the page's point (box during render, ref in an effect)");
+    ok(!/useState\(false\)/.test(card.slice(card.indexOf("export function EmailSyncCard"), card.indexOf("const [log, setLog]"))) && /onRunning\(true\);/.test(card) && /onRunning\(false\);/.test(card),
+      "the card's busy state is the page's, so a card shown again mid-run stays busy");
+    ok(/export function DataSyncClient[\s\S]*const \[emailResume, setEmailResume\] = useState<string \| null>\(null\);[\s\S]*const \[emailRunning, setEmailRunning\] = useState\(false\);[\s\S]*function IntakeView/.test(page)
+      && /emailResume=\{emailResume\} onEmailResume=\{setEmailResume\}/.test(page) && /emailRunning=\{emailRunning\} onEmailRunning=\{setEmailRunning\}/.test(page)
+      && /resumeFrom=\{emailResume\} onResume=\{onEmailResume\} running=\{emailRunning\} onRunning=\{onEmailRunning\}/.test(page),
+      "the point and the busy state are held by the page, which outlives the card when a run opens its batch in Review");
   }
 
   // B2C-198: a provider timeout gets its own advice, and the abort signal reaches the model call explicitly

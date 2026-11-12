@@ -271,7 +271,10 @@ export async function runEmailSync(
     .from("email_ingest_config")
     .select("imap_host, imap_port, username, folder, search_query, is_enabled")
     .maybeSingle();
-  const fail = (msg: string) => { step(emit, "connect", "failed", msg); emit({ type: "error", error: msg }); };
+  // A backfill that ends before it reads a page (configuration, password, lease or checkpoint) hands the card back the
+  // point it was sent, so a retry continues the backfill instead of falling back to the checkpoint (B2O-132 P2-1).
+  const keepChosenPoint = () => { if (sinceOverride) emit({ type: "resume", since: sinceOverride.toISOString() }); };
+  const fail = (msg: string) => { step(emit, "connect", "failed", msg); keepChosenPoint(); emit({ type: "error", error: msg }); };
   if (error) { fail(error.message); return; }
   if (!cfg) { fail("No circulation inbox configured — set it up in Connections."); return; }
   if (!cfg.is_enabled) { fail("The circulation inbox is disabled. Enable it in Connections."); return; }
@@ -296,6 +299,7 @@ export async function runEmailSync(
     const until = lease.leaseUntil ? lease.leaseUntil.toISOString().slice(11, 16) : "soon";
     const msg = `Another inbox sync (${lease.leaseOwner ?? "unknown"}) is still running — its lease expires at ${until} UTC. Nothing was fetched; try again after it finishes.`;
     step(emit, "fetch", "skipped", "another run holds the inbox");
+    keepChosenPoint();
     emit({ type: "skipped", message: msg });
     return;
   }

@@ -14,17 +14,20 @@ import { Mail, Play, FlaskConical, ChevronDown, RotateCcw } from "lucide-react";
 import { getSyncWatermarks } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { ChannelCard, SamplePanel, RunLog } from "./ChannelCard";
 import { Btn, C, relTime } from "./ui";
-import { startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
+import { pointAfterRun, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 
 import type { SyncEvent } from "@/lib/sync/email/types";
 type Evt = SyncEvent;
 
-export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, onResume }: {
+export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, onResume, running, onRunning }: {
   onDone: (batchId: string) => void;
   /** Where a stopped backfill continues from (ISO), held by the page: this card unmounts when a run opens its batch. */
   resumeFrom: string | null;
   /** Hold (or clear, with null) that point. */
   onResume: (iso: string | null) => void;
+  /** Whether an inbox run is streaming, held by the page: a card mounted again mid-run stays busy (B2O-132 P2-2). */
+  running: boolean;
+  onRunning: (running: boolean) => void;
   /** Whether an IMAP config exists and is switched on (from Connections). */
   enabled: boolean | null;
   /** Every streamed event, so the Intake run panel can draw the run. */
@@ -32,7 +35,6 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
   /** "Tonight 02:00 · nightly" when the cron is armed, else "On demand". */
   nextRun?: string;
 }) {
-  const [running, setRunning] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [showSample, setShowSample] = useState(false);
   const [sample, setSample] = useState("");
@@ -45,10 +47,20 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
   // filled: on mount, and after a run that handed one back (B2O-131 P1-2). Kept in a ref for the async reload.
   const resume = useRef<string | null>(resumeFrom);
   const holdResume = (iso: string | null) => { resume.current = iso; onResume(iso); };
+  // Follow the page's point while mounted: a card shown again mid-run receives the point the earlier instance's run
+  // hands to the page (B2O-132 P2-2). The box changes during render (React's pattern for state that follows a prop);
+  // the ref follows in an effect, for the async reload.
+  const [shownResume, setShownResume] = useState(resumeFrom);
+  if (resumeFrom !== shownResume) {
+    setShownResume(resumeFrom);
+    if (resumeFrom) setSince(toLocalInput(resumeFrom));
+  }
+  useEffect(() => { resume.current = resumeFrom; }, [resumeFrom]);
   const loadWatermark = async () => { const r = await getSyncWatermarks(); if (r.success) { setWatermark(r.data.email); setSince(toLocalInput(resume.current ?? r.data.email)); } };
   useEffect(() => { void loadWatermark(); }, []);
-  // judged in the box's own form (local wall time, to the minute): an untouched box is never a backfill (B2O-131 P1-1)
-  const sinceChanged = startPointChanged(since, watermark);
+  // judged in the box's own form (local wall time, to the minute): an untouched box is never a backfill (B2O-131 P1-1);
+  // a held point always shows the border and Reset, even in the checkpoint's own minute (B2O-132 P3)
+  const sinceChanged = resumeFrom != null || startPointChanged(since, watermark);
 
   const append = (line: string) => {
     setLog((l) => [...l, line]);
@@ -57,7 +69,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
 
   const run = async (body: Record<string, unknown>) => {
     if (running) return;
-    setRunning(true);
+    onRunning(true);
     setLog([]);
     onEvent?.({ type: "start", title: body.sample ? "Dry run · pasted email" : "Circulation inbox · sync" });
     try {
@@ -72,6 +84,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
       const dec = new TextDecoder();
       let buf = "";
       let resumed = false;   // the run handed back where a backfill stopped
+      let settled = false;   // a terminal event arrived (done / empty / skipped / error)
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -84,6 +97,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
           let evt: Evt;
           try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
           onEvent?.(evt);
+          if (evt.type === "done" || evt.type === "empty" || evt.type === "skipped" || evt.type === "error") settled = true;
           if (evt.type === "log") append(evt.msg);
           else if (evt.type === "error") { append(`✗ ${evt.error}`); toast.error(evt.error); }
           else if (evt.type === "empty") { append(`• ${evt.message}`); toast.message(evt.message); }
@@ -96,8 +110,13 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
           }
         }
       }
-      // an inbox run that handed back no point leaves nothing to continue: the box returns to the checkpoint
-      if (!body.sample && !resumed) holdResume(null);
+      // an inbox run that handed back no point: settled → nothing to continue (the box returns to the checkpoint);
+      // cut off without a result → the point it was sent is held again, so a retry re-reads from there
+      if (!body.sample && !resumed) {
+        const next = pointAfterRun({ settled, sentSince: typeof body.since === "string" ? body.since : undefined });
+        if (next === "clear") holdResume(null);
+        else if (next !== "keep") holdResume(next.hold);
+      }
       await loadWatermark();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Email sync failed.";
@@ -105,7 +124,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
       onEvent?.({ type: "error", error: msg });
       toast.error(msg);
     } finally {
-      setRunning(false);
+      onRunning(false);
       onEvent?.({ type: "finish" });
     }
   };
