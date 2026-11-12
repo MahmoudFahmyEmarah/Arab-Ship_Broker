@@ -11,6 +11,7 @@
  */
 import { PAGE_START_FLOOR_MS, pageStartNeedMs, runEmailSync, type RunDeps } from "@/lib/sync/email/run";
 import { deadlineOnlyFailure } from "@/lib/sync/email/batch-split";
+import { startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 import { RunSettler } from "@/lib/sync/email/finalize";
 import type { SyncEvent } from "@/lib/sync/email/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -41,7 +42,8 @@ function fakeDeps(t: Trace, opts: { claimed?: boolean; lastSyncAt?: Date | null;
       t.fetches.push({ since: o.since as Date, lastUid: o.lastUid ?? null, uidValidity: o.uidValidity ?? null });
       const n = opts.messages ?? 0;
       return { messages: Array.from({ length: n }, (_, i) => ({ id: String(100 + i), from: "a@b", subject: `s${i}`, date: null, text: `cargo ${i}` })),
-               newestAt: n ? new Date("2026-09-20T09:00:00Z") : null, hasMore: !!opts.hasMore, mode: "date" as const, uidValidity: 1234, lastUid: n ? 100 + n - 1 : null, waiting: n };
+               // each page is an hour later (page 1 09:00, page 2 10:00 …), so a stop point taken from the wrong page shows
+               newestAt: n ? new Date(Date.UTC(2026, 8, 20, 8 + t.fetches.length)) : null, hasMore: !!opts.hasMore, mode: "date" as const, uidValidity: 1234, lastUid: n ? 100 + n - 1 : null, waiting: n };
     },
     classifyAll: async (_sb, emails) => ({
       cargo: emails.map((e) => ({ commodity: e.subject } as never)), vessels: [], failed: 0, firstError: null, deadlineOnly: false,
@@ -131,10 +133,10 @@ async function main() {
   const errors = (ev: SyncEvent[]) => ev.filter((e) => e.type === "error").map((e) => (e as { error: string }).error);
   const logs = (ev: SyncEvent[]) => ev.filter((e) => e.type === "log").map((e) => (e as { msg: string }).msg);
   const resumes = (ev: SyncEvent[]) => ev.filter((e) => e.type === "resume").map((e) => (e as { since: string }).since);
-  // a fake wall clock: each classifyAll call "takes" `ms`, so the measured gate can be driven without waiting
+  // a fake wall clock, frozen except for what each classifyAll call "takes", so the gate's arithmetic is exact
   const withClock = async (fn: (advance: (ms: number) => void) => Promise<void>) => {
-    const real = Date.now; let offset = 0;
-    Date.now = () => real() + offset;
+    const real = Date.now; const base = real(); let offset = 0;
+    Date.now = () => base + offset;
     try { await fn((ms) => { offset += ms; }); } finally { Date.now = real; }
   };
   ok(pageStartNeedMs(0) === 60_000 && pageStartNeedMs(40_000) === 60_000 && pageStartNeedMs(50_000) === 72_500 && pageStartNeedMs(130_000) === 172_500,
@@ -195,19 +197,82 @@ async function main() {
   {
     // B2O-130 P2-1: a backfill persists nothing, so every early stop hands the card where the backfill stopped
     const chosen = new Date("2026-09-01T00:00:00Z");
-    const cases: [string, Partial<Parameters<typeof runEmailSync>[0]>, ((n: number) => Partial<ClassifyResult>) | undefined][] = [
-      ["a deadline cut", {}, (n) => (n === 2 ? deadline : {})],
-      ["the time gate", { budgetMs: PAGE_START_FLOOR_MS - 1 }, undefined],
-      ["the page limit", { maxPages: 1 }, undefined],
+    // [label, run options, classify stub, the point after the last staged page (page 1 = 09:00, page 2 = 10:00)]
+    const cases: [string, Partial<Parameters<typeof runEmailSync>[0]>, ((n: number) => Partial<ClassifyResult>) | undefined, string][] = [
+      ["a deadline cut on page 2", {}, (n) => (n === 2 ? deadline : {}), "2026-09-20T09:00:00.000Z"],
+      ["a deadline cut on page 3", {}, (n) => (n === 3 ? deadline : {}), "2026-09-20T10:00:00.000Z"],
+      ["the time gate", { budgetMs: PAGE_START_FLOOR_MS - 1 }, undefined, "2026-09-20T09:00:00.000Z"],
+      ["the page limit after 1 page", { maxPages: 1 }, undefined, "2026-09-20T09:00:00.000Z"],
+      ["the page limit after 2 pages", { maxPages: 2 }, undefined, "2026-09-20T10:00:00.000Z"],
     ];
-    for (const [label, extra, classify] of cases) {
+    for (const [label, extra, classify, point] of cases) {
       const t = fresh();
       const { events, emit } = collect();
       await runEmailSync({ supabase: fakeSupabase(), emit, owner: "admin:x", since: chosen, ...extra, deps: fakeDeps(t, { ...natural, classify }) });
       ok(t.checkpoints.length === 0 && errors(events).length === 0, `backfill stopped by ${label}: no checkpoint write, not a failure`);
-      ok(resumes(events).length === 1 && resumes(events)[0] === "2026-09-20T09:00:00.000Z", `…the card is handed the point after the last staged page`, JSON.stringify(resumes(events)));
-      ok(logs(events).some((m) => / — this backfill stopped at 2026-09-20 09:00 UTC; the card keeps that as the start point, press Sync now to continue$/.test(m)), "…and the log says so, never \"the next run\"", JSON.stringify(logs(events)));
+      ok(resumes(events).length === 1 && resumes(events)[0] === point, `…the card is handed ${point.slice(11, 16)}, the point after the last staged page`, JSON.stringify(resumes(events)));
+      ok(logs(events).some((m) => m.endsWith(` — this backfill stopped at ${point.slice(0, 16).replace("T", " ")} UTC; the card keeps that as the start point, press Sync now to continue`)), "…and the log says so, never \"the next run\"", JSON.stringify(logs(events)));
     }
+  }
+  {
+    // B2O-131 P2-2: a backfill that stops on an ERROR keeps its point too (the card would fall back to the checkpoint)
+    const chosen = new Date("2026-09-01T00:00:00Z");
+    const failing = (n: number): Partial<ClassifyResult> => (n === 2 ? { failed: 1, firstError: "UNREADABLE_EMAIL: x", deadlineOnly: false, cargo: [] } : {});
+    for (const [label, deps] of [
+      ["a failed batch", (t: Trace) => fakeDeps(t, { ...natural, classify: failing })],
+      ["a classification that throws", (t: Trace) => { const base = fakeDeps(t, natural); let n = 0; return { ...base, classifyAll: async (...a: Parameters<RunDeps["classifyAll"]>) => { if (++n === 2) throw new Error("AI budget exhausted"); return base.classifyAll!(...a); } }; }],
+      ["an IMAP failure", (t: Trace) => { const base = fakeDeps(t, natural); let n = 0; return { ...base, fetchCirculars: async (...a: Parameters<RunDeps["fetchCirculars"]>) => { if (++n === 2) throw new Error("socket hang up"); return base.fetchCirculars!(...a); } }; }],
+    ] as const) {
+      const t = fresh();
+      const { events, emit } = collect();
+      await runEmailSync({ supabase: fakeSupabase(), emit, owner: "admin:x", since: chosen, deps: deps(t) });
+      const at = events.findIndex((e) => e.type === "resume"), err = events.findIndex((e) => e.type === "error");
+      ok(errors(events).length === 1 && resumes(events).length === 1 && resumes(events)[0] === "2026-09-20T09:00:00.000Z" && at < err,
+        `backfill stopped by ${label}: the card is handed the point after page 1, before the error`, JSON.stringify(events.filter((e) => e.type === "resume" || e.type === "error")));
+    }
+    {
+      const t = fresh();
+      const { events, emit } = collect();
+      await runEmailSync({ supabase: fakeSupabase(), emit, owner: "admin:x", since: chosen, deps: fakeDeps(t, { ...natural, classify: failing }) });
+      ok(/This backfill stopped at 2026-09-20 09:00 UTC; the card keeps that as the start point — /.test(errors(events)[0] ?? ""), "…and a backfill's error names its stop point, not \"the sync checkpoint\"", JSON.stringify(errors(events)));
+    }
+    {
+      // a staging failure is thrown to the route; the point is handed over first
+      const t = fresh();
+      const { events, emit } = collect();
+      const base = fakeDeps(t, natural); let n = 0;
+      const threw = await runEmailSync({ supabase: fakeSupabase(), emit, owner: "admin:x", since: chosen, deps: { ...base, stageAndFinish: async (...a: Parameters<RunDeps["stageAndFinish"]>) => { if (++n === 2) throw new Error("vessel review queue: invalid input"); return base.stageAndFinish!(...a); } } }).then(() => false, () => true);
+      ok(threw && resumes(events).length === 1 && resumes(events)[0] === "2026-09-20T09:00:00.000Z", "a backfill whose staging throws still hands the card the point after page 1", JSON.stringify(resumes(events)));
+    }
+    {
+      // natural runs never hand out a point, on any exit
+      const t = fresh();
+      const { events, emit } = collect();
+      await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", deps: fakeDeps(t, { ...natural, classify: failing }) });
+      ok(resumes(events).length === 0 && /The sync checkpoint stays at 2026-09-20 09:00 UTC — /.test(errors(events)[0] ?? ""), "a natural run's error keeps its wording and hands out no point");
+    }
+  }
+  {
+    // B2O-131 P1-1 / P2-1: what a "Sync now" click sends, judged in the box's own form, in several zones
+    const realTz = process.env.TZ;
+    for (const tz of ["UTC", "Africa/Cairo", "America/New_York", "Asia/Kolkata"]) {
+      process.env.TZ = tz;
+      const wm = "2026-09-11T12:59:41.123Z";                       // a checkpoint is page.newestAt or startedAt: seconds
+      const box = toLocalInput(wm);
+      ok(startPointToSend(box, wm, null) === undefined && !startPointChanged(box, wm), `${tz}: an untouched box is a natural run, never a backfill from the minute's floor`);
+      ok(startPointToSend(toLocalInput("2026-09-11T12:59:00.000Z"), "2026-09-11T12:59:00.000Z", null) === undefined, `${tz}: …also when the checkpoint is on an exact minute`);
+      const chosen = toLocalInput("2026-09-01T06:30:00.000Z");
+      ok(startPointToSend(chosen, wm, null) === "2026-09-01T06:30:00.000Z" && startPointChanged(chosen, wm), `${tz}: a point the owner chose is sent as that instant`);
+      const resume = "2026-09-20T09:00:37.250Z";
+      ok(startPointToSend(toLocalInput(resume), wm, resume) === resume, `${tz}: the box still showing a stopped backfill's point sends it exactly (seconds kept)`);
+      ok(startPointToSend(chosen, wm, resume) === "2026-09-01T06:30:00.000Z" && startPointToSend(box, wm, resume) === undefined, `${tz}: …but an edited box, or the checkpoint, wins over a held point`);
+      ok(startPointToSend("", wm, resume) === undefined && startPointToSend("", null, null) === undefined && toLocalInput(null) === "" && toLocalInput("not a date") === "", `${tz}: an empty box is a natural run`);
+    }
+    process.env.TZ = "America/New_York";
+    // 1 Nov 2026 01:30 happens twice in New York; the exact point is sent, never re-parsed from the ambiguous wall time
+    const second = "2026-11-01T06:30:12.000Z";                     // 01:30:12 EST, the second 01:30
+    ok(toLocalInput(second) === "2026-11-01T01:30" && startPointToSend(toLocalInput(second), null, second) === second, "a stop point in a repeated DST hour is sent exactly");
+    if (realTz === undefined) delete process.env.TZ; else process.env.TZ = realTz;
   }
   {
     // the deadline on the FIRST page is still a failure: nothing moved, and a rerun may stop in the same place
@@ -241,8 +306,18 @@ async function main() {
       && !deadlineOnlyFailure([new Error("SYNC_DEADLINE: x"), "SYNC_DEADLINE: a string, not an Error"]) && !deadlineOnlyFailure([new Error("fetch failed")]),
       "…not with no failures, a provider timeout, a non-Error reason or a real error among them");
     const card = readFileSync("components/admin/data-sync/EmailSyncCard.tsx", "utf8").replace(/\r\n/g, "\n");
-    ok(/else if \(evt\.type === "resume"\) resumeFrom = evt\.since;/.test(card) && /await loadWatermark\(\);\n\s*if \(resumeFrom\) setSince\(toLocalInput\(resumeFrom\)\);/.test(card),
-      "the card keeps a stopped backfill's point as its start point, after the watermark reload (local time, like every start point)");
+    const page = readFileSync("components/admin/data-sync/DataSyncClient.tsx", "utf8").replace(/\r\n/g, "\n");
+    ok(/const sinceChanged = startPointChanged\(since, watermark\);/.test(card) && /run\(\{ limit: 25, since: startPointToSend\(since, watermark, resume\.current\) \}\)/.test(card)
+      && !/const toLocalInput =/.test(card) && !/sinceIso/.test(card),
+      "the card decides what to send only through the tested start-point helpers (no ISO-vs-minute comparison left)");
+    ok(/else if \(evt\.type === "resume"\) \{ resumed = true; holdResume\(evt\.since\); setSince\(toLocalInput\(evt\.since\)\); \}/.test(card)
+      && /setSince\(toLocalInput\(resume\.current \?\? r\.data\.email\)\)/.test(card)
+      && /if \(!body\.sample && !resumed\) holdResume\(null\);\n\s*await loadWatermark\(\);/.test(card)
+      && /onClick=\{\(\) => \{ holdResume\(null\); setSince\(toLocalInput\(watermark\)\); \}\}/.test(card),
+      "the card shows a handed-back point, prefers it on every reload, and drops it on Reset or after an inbox run that handed none");
+    ok(/export function DataSyncClient[\s\S]*const \[emailResume, setEmailResume\] = useState<string \| null>\(null\);[\s\S]*function IntakeView/.test(page)
+      && /emailResume=\{emailResume\} onEmailResume=\{setEmailResume\}/.test(page) && /resumeFrom=\{emailResume\} onResume=\{onEmailResume\}/.test(page),
+      "the point is held by the page, which outlives the card when a run opens its batch in Review");
   }
 
   // B2C-198: a provider timeout gets its own advice, and the abort signal reaches the model call explicitly

@@ -319,15 +319,17 @@ export async function runEmailSync(
     let lastBatchId: string | null = null;
     let pages = 0;   // pages this run finished: classified in full, staged when they held records, checkpoint moved
     let slowestPageMs = 0;   // fetch through classification, over the pages this run finished
-    const utc = (d: Date) => `${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
-    // The run stops with mail still waiting. A natural run has moved the checkpoint, so the next run continues. A
-    // backfill (start point chosen on the card) persists nothing and the card resets its start point after a run, so
-    // the card is told where this backfill stopped and keeps that as its start point (B2O-130 P2-1).
+    const utc = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+    // A natural run moves the checkpoint page by page, so the next run continues by itself. A backfill (start point
+    // chosen on the card) persists nothing, and the card resets its start point after a run, so whenever a backfill
+    // stops before its mail is read through (mail still waiting, or an error) the card is handed the point after the
+    // last staged page and keeps it as its start point (B2O-130 P2-1, B2O-131 P2-2).
+    const keepBackfillPoint = () => { if (sinceOverride) emit({ type: "resume", since: since.toISOString() }); };
     const stopWithMailWaiting = (why: string) => {
       emit({ type: "log", msg: sinceOverride
         ? `${why} — this backfill stopped at ${utc(since)}; the card keeps that as the start point, press Sync now to continue`
         : `${why} — the rest is picked up by the next run` });
-      if (sinceOverride) emit({ type: "resume", since: since.toISOString() });
+      keepBackfillPoint();
     };
     for (let page = 1; page <= maxPages; page += 1) {
       const pageT0 = Date.now();
@@ -348,6 +350,7 @@ export async function runEmailSync(
       } catch (e) {
         const msg = `IMAP: ${e instanceof Error ? e.message : "fetch failed"}`;
         step(emit, "fetch", "failed", msg);
+        keepBackfillPoint();
         emit({ type: "error", error: msg });
         return; // checkpoint stays where the last staged page left it
       }
@@ -377,6 +380,7 @@ export async function runEmailSync(
       } catch (e) {
         const msg = e instanceof Error ? e.message : "classification failed";
         step(emit, "classify", "failed", msg);
+        keepBackfillPoint();
         emit({ type: "error", error: msg });
         return; // checkpoint stays — nothing was read by the model
       }
@@ -418,13 +422,19 @@ export async function runEmailSync(
             : unreadable
               ? "the model could not answer one email in a readable form (not the key or budget) — run again; if the same email fails again, report it with its subject"
               : "fix the LLM key or budget in Settings and run again";
-        emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync checkpoint stays at ${since.toISOString().slice(0, 16).replace("T", " ")} UTC — ${advice}; nothing was skipped.` });
+        const where = sinceOverride
+          ? `This backfill stopped at ${utc(since)}; the card keeps that as the start point`
+          : `The sync checkpoint stays at ${utc(since)}`;
+        keepBackfillPoint();
+        emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). ${where} — ${advice}; nothing was skipped.` });
         return;
       }
       pages += 1;
       slowestPageMs = Math.max(slowestPageMs, Date.now() - pageT0);
       if (cargo.length || vessels.length) {
-        const result = await d.stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy, false);
+        let result: Awaited<ReturnType<typeof stageAndFinish>>;
+        // a staging failure is thrown to the route; a backfill still hands the card its point first
+        try { result = await d.stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy, false); } catch (e) { keepBackfillPoint(); throw e; }
         if (result) { lastBatchId = result.batchId; Object.assign(totals, addTotals(totals, { ...result.totals, gateBlocked: result.gate?.blocked ?? 0 })); }
       } else {
         emit({ type: "log", msg: `page ${page}: no cargo or vessel records in these ${emails.length} email(s)` });

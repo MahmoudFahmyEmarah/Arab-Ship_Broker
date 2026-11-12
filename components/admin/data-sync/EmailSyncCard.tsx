@@ -14,19 +14,17 @@ import { Mail, Play, FlaskConical, ChevronDown, RotateCcw } from "lucide-react";
 import { getSyncWatermarks } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { ChannelCard, SamplePanel, RunLog } from "./ChannelCard";
 import { Btn, C, relTime } from "./ui";
-
-// datetime-local wants local wall time without the zone
-const toLocalInput = (iso: string | null) => {
-  if (!iso) return "";
-  const d = new Date(iso); const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-};
+import { startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 
 import type { SyncEvent } from "@/lib/sync/email/types";
 type Evt = SyncEvent;
 
-export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
+export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, onResume }: {
   onDone: (batchId: string) => void;
+  /** Where a stopped backfill continues from (ISO), held by the page: this card unmounts when a run opens its batch. */
+  resumeFrom: string | null;
+  /** Hold (or clear, with null) that point. */
+  onResume: (iso: string | null) => void;
   /** Whether an IMAP config exists and is switched on (from Connections). */
   enabled: boolean | null;
   /** Every streamed event, so the Intake run panel can draw the run. */
@@ -42,11 +40,15 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
   // Start point for the fetch. Default = the last SUCCESSFUL sync (a failed
   // run never moves it); the admin can move it back to re-read older mail.
   const [watermark, setWatermark] = useState<string | null>(null);
-  const [since, setSince] = useState("");
-  const loadWatermark = async () => { const r = await getSyncWatermarks(); if (r.success) { setWatermark(r.data.email); setSince(toLocalInput(r.data.email)); } };
+  const [since, setSince] = useState(() => toLocalInput(resumeFrom));
+  // A stopped backfill's point outlives this card (held by the page) and wins over the checkpoint when the box is
+  // filled: on mount, and after a run that handed one back (B2O-131 P1-2). Kept in a ref for the async reload.
+  const resume = useRef<string | null>(resumeFrom);
+  const holdResume = (iso: string | null) => { resume.current = iso; onResume(iso); };
+  const loadWatermark = async () => { const r = await getSyncWatermarks(); if (r.success) { setWatermark(r.data.email); setSince(toLocalInput(resume.current ?? r.data.email)); } };
   useEffect(() => { void loadWatermark(); }, []);
-  const sinceIso = since ? new Date(since).toISOString() : null;
-  const sinceChanged = (sinceIso ?? "") !== (watermark ? new Date(watermark).toISOString() : "");
+  // judged in the box's own form (local wall time, to the minute): an untouched box is never a backfill (B2O-131 P1-1)
+  const sinceChanged = startPointChanged(since, watermark);
 
   const append = (line: string) => {
     setLog((l) => [...l, line]);
@@ -69,8 +71,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
-      // a backfill that stopped with mail still waiting persists nothing: keep where it stopped as the start point
-      let resumeFrom: string | null = null;
+      let resumed = false;   // the run handed back where a backfill stopped
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -87,7 +88,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
           else if (evt.type === "error") { append(`✗ ${evt.error}`); toast.error(evt.error); }
           else if (evt.type === "empty") { append(`• ${evt.message}`); toast.message(evt.message); }
           else if (evt.type === "skipped") { append(`• ${evt.message}`); toast.message(evt.message); }
-          else if (evt.type === "resume") resumeFrom = evt.since;
+          else if (evt.type === "resume") { resumed = true; holdResume(evt.since); setSince(toLocalInput(evt.since)); }
           else if (evt.type === "done") {
             append(`✓ staged ${evt.totals.new + evt.totals.updated} record(s)`);
             toast.success(`Staged ${evt.totals.new + evt.totals.updated} record(s) for review.`);
@@ -95,8 +96,9 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
           }
         }
       }
+      // an inbox run that handed back no point leaves nothing to continue: the box returns to the checkpoint
+      if (!body.sample && !resumed) holdResume(null);
       await loadWatermark();
-      if (resumeFrom) setSince(toLocalInput(resumeFrom));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Email sync failed.";
       append(`✗ ${msg}`);
@@ -125,7 +127,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
           <Btn
             kind="accent" icon={<Play size={15} />} busy={running}
             title="Fetches mail since the last successful run"
-            onClick={() => run({ limit: 25, since: sinceChanged ? sinceIso : undefined })}
+            onClick={() => run({ limit: 25, since: startPointToSend(since, watermark, resume.current) })}
           >
             Sync now
           </Btn>
@@ -156,7 +158,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
         {sinceChanged && (
           <Btn size="sm" kind="ghost" disabled={running} icon={<RotateCcw size={12} />}
             title="Back to the last successful sync"
-            onClick={() => setSince(toLocalInput(watermark))}>
+            onClick={() => { holdResume(null); setSince(toLocalInput(watermark)); }}>
             Reset
           </Btn>
         )}
