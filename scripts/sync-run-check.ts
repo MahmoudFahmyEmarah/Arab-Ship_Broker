@@ -9,7 +9,8 @@
  *         older pending mail
  *   P1-2  RunSettler writes one terminal status, once, with or without events
  */
-import { PAGE_START_MIN_MS, runEmailSync, type RunDeps } from "@/lib/sync/email/run";
+import { PAGE_START_FLOOR_MS, pageStartNeedMs, runEmailSync, type RunDeps } from "@/lib/sync/email/run";
+import { deadlineOnlyFailure } from "@/lib/sync/email/batch-split";
 import { RunSettler } from "@/lib/sync/email/finalize";
 import type { SyncEvent } from "@/lib/sync/email/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -129,21 +130,47 @@ async function main() {
   const deadline = { failed: 1, firstError: "SYNC_DEADLINE: the classify call reached the run deadline", deadlineOnly: true, cargo: [] };
   const errors = (ev: SyncEvent[]) => ev.filter((e) => e.type === "error").map((e) => (e as { error: string }).error);
   const logs = (ev: SyncEvent[]) => ev.filter((e) => e.type === "log").map((e) => (e as { msg: string }).msg);
+  const resumes = (ev: SyncEvent[]) => ev.filter((e) => e.type === "resume").map((e) => (e as { since: string }).since);
+  // a fake wall clock: each classifyAll call "takes" `ms`, so the measured gate can be driven without waiting
+  const withClock = async (fn: (advance: (ms: number) => void) => Promise<void>) => {
+    const real = Date.now; let offset = 0;
+    Date.now = () => real() + offset;
+    try { await fn((ms) => { offset += ms; }); } finally { Date.now = real; }
+  };
+  ok(pageStartNeedMs(0) === 60_000 && pageStartNeedMs(40_000) === 60_000 && pageStartNeedMs(50_000) === 72_500 && pageStartNeedMs(130_000) === 172_500,
+    "a page needs the slowest page so far x 1.25 + 10 s, never less than the 60 s floor");
   {
-    // less than a page's window left after page 1: page 2 is never fetched, so no model call is paid for and lost
+    // less than the floor left after page 1: page 2 is never fetched, so no model call is paid for and lost
     const t = fresh();
     const { events, emit } = collect();
-    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", budgetMs: PAGE_START_MIN_MS - 1, maxPages: 6, deps: fakeDeps(t, natural) });
-    ok(t.fetches.length === 1, "a page that cannot get its full window is not started", String(t.fetches.length));
-    ok(events.some((e) => e.type === "done") && errors(events).length === 0, "…and the run ends as done, not failed");
-    ok(logs(events).some((m) => /time budget used after 1 page\(s\) \(\d+ s left, a page needs up to 100 s\)/.test(m)), "…saying how much time was left", JSON.stringify(logs(events)));
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", budgetMs: PAGE_START_FLOOR_MS - 1, maxPages: 6, deps: fakeDeps(t, natural) });
+    ok(t.fetches.length === 1, "a page that cannot get its window is not started", String(t.fetches.length));
+    ok(events.some((e) => e.type === "done") && errors(events).length === 0 && resumes(events).length === 0, "…and the run ends as done, not failed (a natural run needs no resume point)");
+    ok(logs(events).some((m) => /^time budget used after 1 page\(s\) \(\d+ s left; the slowest page took 0 s, so the next needs about 60 s\) — the rest is picked up by the next run$/.test(m)), "…saying how much time was left", JSON.stringify(logs(events)));
   }
   {
     const t = fresh();
-    const { emit } = collect();
-    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", budgetMs: PAGE_START_MIN_MS + 60_000, maxPages: 2, deps: fakeDeps(t, natural) });
+    const { events, emit } = collect();
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", budgetMs: PAGE_START_FLOOR_MS + 60_000, maxPages: 2, deps: fakeDeps(t, natural) });
     ok(t.fetches.length === 2 && t.checkpoints.length === 2, "with a page's window left, the next page is read", `${t.fetches.length} fetches`);
+    ok(logs(events).some((m) => m === "page limit reached after 2 page(s) — the rest is picked up by the next run") && logs(events).filter((m) => m.endsWith("reading the next page")).length === 1,
+      "the last allowed page says the page limit stopped the run, not \"reading the next page\"", JSON.stringify(logs(events)));
   }
+  await withClock(async (advance) => {
+    // B2O-130 P2-2: page 1 took 130 s, 110 s are left; the fixed 100 s window would have started page 2 and lost it
+    const t = fresh();
+    const { events, emit } = collect();
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", budgetMs: 240_000, maxPages: 6, deps: fakeDeps(t, { ...natural, classify: () => { advance(130_000); return {}; } }) });
+    ok(t.fetches.length === 1 && t.stages === 1, "a page as slow as the last one is not started when it cannot finish", `${t.fetches.length} fetches`);
+    ok(logs(events).some((m) => /\(110 s left; the slowest page took 130 s, so the next needs about 173 s\)/.test(m)), "…measured from this run's pages", JSON.stringify(logs(events)));
+  });
+  await withClock(async (advance) => {
+    // and fast pages are not stopped early: 50 s pages fit four in 240 s (the fixed 100 s window allowed three)
+    const t = fresh();
+    const { emit } = collect();
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", budgetMs: 240_000, maxPages: 6, deps: fakeDeps(t, { ...natural, classify: () => { advance(50_000); return {}; } }) });
+    ok(t.fetches.length === 4 && t.checkpoints.length === 4, "fast pages keep going while the measured window fits", `${t.fetches.length} fetches`);
+  });
   {
     // the deadline cuts page 2 after page 1 was staged: the run is done, page 2 is read again next time
     const t = fresh();
@@ -154,7 +181,33 @@ async function main() {
     ok(t.checkpoints.length === 1, "the checkpoint moved through page 1 only (page 2 is read again)", String(t.checkpoints.length));
     ok(errors(events).length === 0 && events.some((e) => e.type === "done" && e.batchId === "batch-1"), "the run ends as done with page 1's batch, not FAILED", JSON.stringify(errors(events)));
     ok(settler.outcome?.ok === true && settler.outcome.rows === 1, "the job is recorded as succeeded (scheduled runs too)");
-    ok(logs(events).some((m) => /time budget used during page 2 — its 2 email\(s\) were not staged and are read again by the next run/.test(m)), "…and the log says page 2 is read again");
+    ok(logs(events).some((m) => m === "time budget used during page 2 (its 2 email(s) were not staged) — the rest is picked up by the next run"), "…and the log says the rest is read next time", JSON.stringify(logs(events)));
+    ok(resumes(events).length === 0, "…with no resume point (the checkpoint carries a natural run)");
+  }
+  {
+    // a cut after a finished page that held no records: nothing to review, still not a failure
+    const t = fresh();
+    const { events, emit } = collect();
+    await runEmailSync({ supabase: fakeSupabase(), emit, owner: "cron", deps: fakeDeps(t, { ...natural, classify: (n) => (n === 2 ? deadline : { cargo: [] }) }) });
+    ok(errors(events).length === 0 && events.some((e) => e.type === "empty") && t.stages === undefined && t.checkpoints.length === 1,
+      "a cut after a page with no records ends as empty, checkpoint after page 1", JSON.stringify(events.filter((e) => e.type !== "log" && e.type !== "step")));
+  }
+  {
+    // B2O-130 P2-1: a backfill persists nothing, so every early stop hands the card where the backfill stopped
+    const chosen = new Date("2026-09-01T00:00:00Z");
+    const cases: [string, Partial<Parameters<typeof runEmailSync>[0]>, ((n: number) => Partial<ClassifyResult>) | undefined][] = [
+      ["a deadline cut", {}, (n) => (n === 2 ? deadline : {})],
+      ["the time gate", { budgetMs: PAGE_START_FLOOR_MS - 1 }, undefined],
+      ["the page limit", { maxPages: 1 }, undefined],
+    ];
+    for (const [label, extra, classify] of cases) {
+      const t = fresh();
+      const { events, emit } = collect();
+      await runEmailSync({ supabase: fakeSupabase(), emit, owner: "admin:x", since: chosen, ...extra, deps: fakeDeps(t, { ...natural, classify }) });
+      ok(t.checkpoints.length === 0 && errors(events).length === 0, `backfill stopped by ${label}: no checkpoint write, not a failure`);
+      ok(resumes(events).length === 1 && resumes(events)[0] === "2026-09-20T09:00:00.000Z", `…the card is handed the point after the last staged page`, JSON.stringify(resumes(events)));
+      ok(logs(events).some((m) => / — this backfill stopped at 2026-09-20 09:00 UTC; the card keeps that as the start point, press Sync now to continue$/.test(m)), "…and the log says so, never \"the next run\"", JSON.stringify(logs(events)));
+    }
   }
   {
     // the deadline on the FIRST page is still a failure: nothing moved, and a rerun may stop in the same place
@@ -180,9 +233,16 @@ async function main() {
   {
     const { readFileSync } = await import("node:fs");
     const run = readFileSync("lib/sync/email/run.ts", "utf8").replace(/\r\n/g, "\n");
-    ok(/if \(msg\.startsWith\("SYNC_DEADLINE:"\)\) deadlineFailed \+= 1;/.test(run) && /deadlineOnly: failed > 0 && deadlineFailed === failed/.test(run),
-      "classifyAll calls a page deadline-only only when EVERY failed batch hit the run deadline");
-    ok(/export const PAGE_START_MIN_MS = BATCH_TIMEOUT_MS \+ 10_000;/.test(run), "a page's window is one full classify call plus the fetch");
+    ok(/failures\.push\(e\);/.test(run) && /deadlineOnly: deadlineOnlyFailure\(failures\) \};/.test(run),
+      "classifyAll judges deadline-only on every failed batch's reason");
+    ok(deadlineOnlyFailure([new Error("SYNC_DEADLINE: the classify call reached the run deadline"), new Error("SYNC_DEADLINE: less than 3s remains; no new classify call was started")]),
+      "deadline-only: every failure is the run deadline");
+    ok(!deadlineOnlyFailure([]) && !deadlineOnlyFailure([new Error("SYNC_DEADLINE: x"), new Error("SYNC_PROVIDER_TIMEOUT: classify timed out after 90s")])
+      && !deadlineOnlyFailure([new Error("SYNC_DEADLINE: x"), "SYNC_DEADLINE: a string, not an Error"]) && !deadlineOnlyFailure([new Error("fetch failed")]),
+      "…not with no failures, a provider timeout, a non-Error reason or a real error among them");
+    const card = readFileSync("components/admin/data-sync/EmailSyncCard.tsx", "utf8").replace(/\r\n/g, "\n");
+    ok(/else if \(evt\.type === "resume"\) resumeFrom = evt\.since;/.test(card) && /await loadWatermark\(\);\n\s*if \(resumeFrom\) setSince\(toLocalInput\(resumeFrom\)\);/.test(card),
+      "the card keeps a stopped backfill's point as its start point, after the watermark reload (local time, like every start point)");
   }
 
   // B2C-198: a provider timeout gets its own advice, and the abort signal reaches the model call explicitly
@@ -197,6 +257,10 @@ async function main() {
       "the abort signal is passed to the model call explicitly");
   }
   console.log(`\n${pass} passed, ${fail} failed`);
+  finished = true;
   if (fail) process.exit(1);
 }
-main();
+// A run whose promise never settles lets Node exit 0 with the rest unrun (seen 12 Nov 2026): that is a failure.
+let finished = false;
+process.on("beforeExit", () => { if (!finished) { console.error(`stalled after ${pass + fail} check(s) — a promise never settled`); process.exit(1); } });
+main().catch((e) => { console.error(e); process.exit(1); });

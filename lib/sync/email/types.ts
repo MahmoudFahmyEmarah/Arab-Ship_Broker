@@ -99,6 +99,8 @@ export type SyncEvent =
   | { type: "usage"; tokens: number; cost: number; calls: number }
   | { type: "done"; batchId: string; totals: { new: number; updated: number; unchanged: number; invalid: number; errors: number; gateBlocked?: number; queued?: number } }
   | { type: "empty"; message: string }
+  /** a backfill stopped with mail still waiting: the card keeps `since` (ISO) as its start point (not terminal) */
+  | { type: "resume"; since: string }
   /** the run did not start — another run holds the source's lease (phase 1) */
   | { type: "skipped"; message: string }
   | { type: "error"; error: string };

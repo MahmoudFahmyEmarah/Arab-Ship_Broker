@@ -143,6 +143,35 @@ async function main() {
     }), /SYNC_DEADLINE: .*no new classify call was started/);
     assert.equal(started, 0);
   });
+  await t("a wait capped by the run deadline is a deadline cut even when the timer fires early (B2O-130 P2-3)", async () => {
+    // freeze the clock at the start: the timer fires after the real 20 ms, but Date.now() still reads "before the
+    // deadline" — the old re-read in the timer called this a provider timeout and the run failed instead of stopping.
+    // The stand-in call settles only on abort, as the provider wrapper does (runAbortableCall awaits it after a cut).
+    const hang = (signal: AbortSignal) => new Promise<number>((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+    const real = Date.now; const frozen = real();
+    Date.now = () => frozen;
+    try {
+      await assert.rejects(runAbortableCall(hang, {
+        timeoutMs: 1_000, deadlineAt: frozen + 20, label: "classify", circuit: createModelCallCircuit(), minStartMs: 1,
+      }), /^Error: SYNC_DEADLINE: the classify call reached the run deadline$/);
+    } finally { Date.now = real; }
+    // the provider's own cap, well inside the deadline, is still a provider timeout
+    await assert.rejects(runAbortableCall(hang, {
+      timeoutMs: 15, deadlineAt: Date.now() + 1_000, label: "classify", circuit: createModelCallCircuit(), minStartMs: 1,
+    }), /SYNC_PROVIDER_TIMEOUT: classify timed out/);
+  });
+  await t("two failed halves raise the real reason, not the deadline (a real failure never passes as a time cut)", async () => {
+    const DEADLINE = new Error("SYNC_DEADLINE: the classify call reached the run deadline");
+    for (const order of [["s0", "s1"], ["s1", "s0"]]) {
+      const run = async (b: EmailMsg[]) => {
+        if (b.length > 1) throw CUT_OFF;
+        throw b[0].subject === order[0] ? DEADLINE : new Error("529 overloaded");
+      };
+      await assert.rejects(classifyWithSplit(mail(2), run, () => {}), /529 overloaded/, `deadline on ${order[0]}`);
+    }
+    // both halves cut by the deadline: the deadline it is
+    await assert.rejects(classifyWithSplit(mail(2), async (b) => { if (b.length > 1) throw CUT_OFF; throw DEADLINE; }, () => {}), /^Error: SYNC_DEADLINE/);
+  });
   await t("a LangChain-style immediate abort rejection trips the circuit before the limiter can admit a successor", async () => {
     const gate = createLimiter(1);
     const circuit = createModelCallCircuit();
@@ -200,5 +229,9 @@ async function main() {
     assert.match(run, /d\.classifyAll\(supabase, emails, emit, t0 \+ budgetMs\)/, "the route budget reaches classification as an absolute deadline");
   });
   console.log(`SYNC BATCH SPLIT: ${n} checks passed`);
+  finished = true;
 }
+// A check whose promise never settles lets Node exit 0 with the rest unrun (seen 12 Nov 2026): that is a failure.
+let finished = false;
+process.on("beforeExit", () => { if (!finished) { console.error(`SYNC BATCH SPLIT: stalled after ${n} check(s) — a promise never settled`); process.exit(1); } });
 main().catch((e) => { console.error(e); process.exit(1); });

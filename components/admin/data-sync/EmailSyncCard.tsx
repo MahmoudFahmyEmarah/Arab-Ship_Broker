@@ -69,6 +69,8 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
+      // a backfill that stopped with mail still waiting persists nothing: keep where it stopped as the start point
+      let resumeFrom: string | null = null;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -85,6 +87,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
           else if (evt.type === "error") { append(`✗ ${evt.error}`); toast.error(evt.error); }
           else if (evt.type === "empty") { append(`• ${evt.message}`); toast.message(evt.message); }
           else if (evt.type === "skipped") { append(`• ${evt.message}`); toast.message(evt.message); }
+          else if (evt.type === "resume") resumeFrom = evt.since;
           else if (evt.type === "done") {
             append(`✓ staged ${evt.totals.new + evt.totals.updated} record(s)`);
             toast.success(`Staged ${evt.totals.new + evt.totals.updated} record(s) for review.`);
@@ -93,6 +96,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun }: {
         }
       }
       await loadWatermark();
+      if (resumeFrom) setSince(toLocalInput(resumeFrom));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Email sync failed.";
       append(`✗ ${msg}`);
