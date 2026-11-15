@@ -13,6 +13,7 @@ import { PAGE_START_FLOOR_MS, pageStartNeedMs, runEmailSync, type RunDeps } from
 import { deadlineOnlyFailure } from "@/lib/sync/email/batch-split";
 import { CEILING_MESSAGE, CLIENT_CEILING_MS, boxFor, pointAfterRun, runErrorText, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 import { RunSettler } from "@/lib/sync/email/finalize";
+import { emailRunTimes, getEmailRunTimes } from "@/lib/sync/state";
 import type { SyncEvent } from "@/lib/sync/email/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -387,6 +388,58 @@ async function main() {
       && /emailResume=\{emailResume\} onEmailResume=\{setEmailResume\}/.test(page) && /emailRunning=\{emailRunning\} onEmailRunning=\{setEmailRunning\}/.test(page)
       && /resumeFrom=\{emailResume\} onResume=\{onEmailResume\} running=\{emailRunning\} onRunning=\{onEmailRunning\}/.test(page),
       "the point and the busy state are held by the page, which outlives the card when a run opens its batch in Review");
+  }
+
+  // 15 Nov 2026 (owner): "the last sync date is 15/9/2026 and the sync date is 15/11/2026 … not consistent". The card's
+  // "Last run" showed the checkpoint (the newest mail read), and batch names carried an unlabelled UTC time
+  console.log("15 Nov · the inbox's dates say what they are");
+  {
+    const failed = { status: "failed", started_at: "2026-11-15T06:10:00Z", finished_at: "2026-11-15T06:14:30Z" };
+    const okRow = { status: "succeeded", started_at: "2026-11-15T05:50:00Z", finished_at: "2026-11-15T05:54:10Z" };
+    const r1 = emailRunTimes(failed, okRow);
+    ok(r1.lastRun?.at === "2026-11-15T06:14:30Z" && r1.lastRun.status === "failed" && r1.lastSuccessAt === "2026-11-15T05:54:10Z", "the last run is the newest run of any outcome (when it finished), the last success is separate");
+    const r2 = emailRunTimes({ status: "running", started_at: "2026-11-15T07:00:00Z", finished_at: null }, null);
+    ok(r2.lastRun?.at === "2026-11-15T07:00:00Z" && r2.lastRun.status === "running" && r2.lastSuccessAt === null, "a run still going shows when it started; no success yet is null");
+    ok(emailRunTimes(null, null).lastRun === null, "no runs at all → no last run");
+    // through a stand-in job_runs table: other jobs never count, and the two reads pick the right rows
+    const rows = [
+      { job: "email-sync", status: "succeeded", started_at: "2026-11-15T05:50:00Z", finished_at: "2026-11-15T05:54:10Z" },
+      { job: "email-sync", status: "failed", started_at: "2026-11-15T06:10:00Z", finished_at: "2026-11-15T06:14:30Z" },
+      { job: "email-sync", status: "succeeded", started_at: "2026-11-14T09:00:00Z", finished_at: "2026-11-14T09:03:00Z" },
+      { job: "whatsapp-sweep", status: "succeeded", started_at: "2026-11-15T08:00:00Z", finished_at: "2026-11-15T08:00:20Z" },
+    ];
+    const table = (data: typeof rows, error: { message: string } | null = null) => ({
+      from: (name: string) => {
+        if (name !== "job_runs") throw new Error(`unexpected table ${name}`);
+        let q = [...data];
+        const b = {
+          select: () => b,
+          eq: (k: string, v: unknown) => { q = q.filter((r) => (r as Record<string, unknown>)[k] === v); return b; },
+          order: (k: string, o: { ascending: boolean }) => { q.sort((x, y) => { const a = String((x as Record<string, unknown>)[k]), c = String((y as Record<string, unknown>)[k]); return (a < c ? -1 : a > c ? 1 : 0) * (o.ascending ? 1 : -1); }); return b; },
+          limit: (n: number) => { q = q.slice(0, n); return b; },
+          maybeSingle: async () => ({ data: error ? null : q[0] ?? null, error }),
+        };
+        return b;
+      },
+    }) as unknown as SupabaseClient;
+    const got = await getEmailRunTimes(table(rows));
+    ok(got.lastRun?.at === "2026-11-15T06:14:30Z" && got.lastRun.status === "failed" && got.lastSuccessAt === "2026-11-15T05:54:10Z",
+      "read from job_runs: the newest email-sync run and the newest succeeded one (a later WhatsApp sweep never counts)", JSON.stringify(got));
+    const broken = await getEmailRunTimes(table(rows, { message: "permission denied" })).then(() => "", (e: Error) => e.message);
+    ok(/email sync runs could not be read: permission denied/.test(broken), "a failed read says so instead of showing no run");
+    const { readFileSync } = await import("node:fs");
+    const src = (p: string) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+    const card = src("components/admin/data-sync/EmailSyncCard.tsx"), shell = src("components/admin/data-sync/ChannelCard.tsx"), page = src("components/admin/data-sync/DataSyncClient.tsx");
+    ok(/last=\{lastRun \? `\$\{relTime\(lastRun\.at\)\}/.test(card) && /moreFacts=\{\[\{ label: "Mail read up to", value: watermark \?/.test(card) && !/last=\{watermark/.test(card)
+      && /setLastRun\(r\.data\.emailRuns\.lastRun\)/.test(card) && /moreFacts\?\.map\(\(f\) =>/.test(shell),
+      "the card's Last run is a run time (job_runs); the checkpoint is shown as \"Mail read up to\"");
+    ok(/Last successful run \$\{relTime\(h\.inbox\.lastSuccessAt\)\}/.test(page) && /mail read up to \$\{new Date\(h\.inbox\.mailReadUpTo\)/.test(page) && !/inbox\??\.lastSuccess\b/.test(page),
+      "the Intake tile's last successful run is a run time too, with how far the mail has been read beside it");
+    ok(/Mail read up to:\{" "\}/.test(src("components/admin/data-sync/SettingsView.tsx")) && !/Last sync:\{" "\}/.test(src("components/admin/data-sync/SettingsView.tsx")),
+      "Settings names the checkpoint for what it is");
+    ok(/const label = `Email sync · \$\{new Date\(\)\.toISOString\(\)\.slice\(0, 16\)\.replace\("T", " "\)\} UTC`;/.test(src("lib/sync/email/run.ts"))
+      && /\$\{new Date\(m\.received_at\)\.toISOString\(\)\.slice\(0, 16\)\.replace\("T", " "\)\} UTC`;/.test(src("lib/sync/whatsapp/process.ts")),
+      "email and WhatsApp batch names say their time is UTC (the table's Created column is local)");
   }
 
   // B2C-198: a provider timeout gets its own advice, and the abort signal reaches the model call explicitly

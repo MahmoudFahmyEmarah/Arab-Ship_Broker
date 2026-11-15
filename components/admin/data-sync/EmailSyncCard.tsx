@@ -57,7 +57,9 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
     setSince(boxFor(resumeFrom, watermark));
   }
   useLayoutEffect(() => { resume.current = resumeFrom; }, [resumeFrom]);
-  const loadWatermark = async () => { const r = await getSyncWatermarks(); if (r.success) { setWatermark(r.data.email); setSince(boxFor(resume.current, r.data.email)); } };
+  // when the sync last ran (job_runs) — the checkpoint above is how far the mail has been read, not a run time
+  const [lastRun, setLastRun] = useState<{ at: string; status: string } | null>(null);
+  const loadWatermark = async () => { const r = await getSyncWatermarks(); if (r.success) { setWatermark(r.data.email); setLastRun(r.data.emailRuns.lastRun); setSince(boxFor(resume.current, r.data.email)); } };
   useEffect(() => { void loadWatermark(); }, []);
   // judged in the box's own form (local wall time, to the minute): an untouched box is never a backfill (B2O-131 P1-1);
   // a held point always shows the border and Reset, even in the checkpoint's own minute (B2O-132 P3)
@@ -150,7 +152,9 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
       status={running ? "Running" : enabled === null ? "Checking" : enabled ? "Connected" : "Disabled"}
       statusTone={running ? "updated" : enabled === null ? "neutral" : enabled ? "new" : "invalid"}
       desc="Broker circulars fetched and classified locally through the active LLM key into a review batch."
-      last={watermark ? `${relTime(watermark)} · ${new Date(watermark).toLocaleString()}` : "No successful sync yet (default: last 7 days)"}
+      last={lastRun ? `${relTime(lastRun.at)} · ${new Date(lastRun.at).toLocaleString()}${lastRun.status === "succeeded" ? "" : ` · ${lastRun.status}`}` : "No run yet"}
+      lastTone={lastRun?.status === "failed" ? C.red : undefined}
+      moreFacts={[{ label: "Mail read up to", value: watermark ? new Date(watermark).toLocaleString() : "Nothing yet (the first run reads the last 7 days)" }]}
       next={nextRun ?? "On demand"}
       actions={
         <>

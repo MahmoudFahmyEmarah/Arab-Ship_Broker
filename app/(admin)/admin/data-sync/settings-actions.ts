@@ -10,7 +10,7 @@ import { unstable_rethrow } from "next/navigation";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin/require-admin";
 import { PLATFORM_SETTINGS_KEY, type PlatformSettingsData } from "@/lib/app-settings";
-import { getWatermark, setWatermark } from "@/lib/sync/state";
+import { getEmailRunTimes, getWatermark, setWatermark, type EmailRunTimes } from "@/lib/sync/state";
 import { aiBudgetToday, type AiBudget } from "@/lib/sync/email/usage";
 import { isSafeBaseUrl } from "@/lib/sync/guards";
 import { LLM_MODEL_SUGGESTIONS, LLM_VENDORS, canonicalVendor, catalogueModel, modelChoiceRefusal, llmModelEndpoint, llmModelsEndpoint, llmProviderFamily, openAiCompatibleModelFound, type LlmProviderFamily } from "@/lib/sync/llm-provider";
@@ -366,11 +366,12 @@ export interface SaveEmailInput {
 }
 
 // ── incremental sync watermark ──────────────────────────────────────────────
-export async function getSyncWatermarks(): Promise<Result<{ email: string | null; upload: string | null }>> {
+// `email` is the inbox checkpoint: the newest mail read, not a run time; `emailRuns` says when the sync last ran.
+export async function getSyncWatermarks(): Promise<Result<{ email: string | null; upload: string | null; emailRuns: EmailRunTimes }>> {
   try {
     const c = await admin();
-    const [e, u] = await Promise.all([getWatermark(c, "email"), getWatermark(c, "upload")]);
-    return { success: true, data: { email: e?.toISOString() ?? null, upload: u?.toISOString() ?? null } };
+    const [e, u, runs] = await Promise.all([getWatermark(c, "email"), getWatermark(c, "upload"), getEmailRunTimes(c)]);
+    return { success: true, data: { email: e?.toISOString() ?? null, upload: u?.toISOString() ?? null, emailRuns: runs } };
   } catch (e) {
     return fail(e, "Could not read sync state.");
   }
@@ -641,7 +642,8 @@ export interface JobRunView {
   rows: number | null; error: string | null; trigger: string | null;
 }
 export interface IntakeHealth {
-  inbox: { enabled: boolean; scheduleEnabled: boolean; scheduleLabel: string; nextRunAt: string | null; lastSuccess: string | null } | null;
+  /** mailReadUpTo is the checkpoint (newest mail read); lastSuccessAt is when a run last succeeded (job_runs) */
+  inbox: { enabled: boolean; scheduleEnabled: boolean; scheduleLabel: string; nextRunAt: string | null; mailReadUpTo: string | null; lastSuccessAt: string | null } | null;
   llm: LlmCredentialMeta | null;
   budget: AiBudget;
   whatsapp: WhatsappRuntimeView;
@@ -652,9 +654,10 @@ export async function getIntakeHealth(): Promise<Result<IntakeHealth>> {
   try {
     const c = await admin();
     const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
-    const [cfg, mark, keys, rt, budget, failed, recent] = await Promise.all([
+    const [cfg, mark, runs, keys, rt, budget, failed, recent] = await Promise.all([
       c.from("email_ingest_config").select("is_enabled, schedule_enabled, schedule_kind, schedule_hour_utc, schedule_interval_days, schedule_weekday, schedule_tz, next_run_at").maybeSingle(),
       getWatermark(c, "email"),
+      getEmailRunTimes(c),
       c.from("llm_credential").select("id, label, vendor, model, base_url, key_hint, is_active, updated_at").eq("is_active", true).maybeSingle(),
       c.from("whatsapp_runtime").select("state, qr, linked_as, worker_seen").maybeSingle(),
       aiBudgetToday(c),
@@ -672,7 +675,7 @@ export async function getIntakeHealth(): Promise<Result<IntakeHealth>> {
     return {
       success: true,
       data: {
-        inbox: e ? { enabled: !!e.is_enabled, scheduleEnabled: spec.enabled, scheduleLabel: describeSchedule(spec), nextRunAt: e.next_run_at ?? null, lastSuccess: mark?.toISOString() ?? null } : null,
+        inbox: e ? { enabled: !!e.is_enabled, scheduleEnabled: spec.enabled, scheduleLabel: describeSchedule(spec), nextRunAt: e.next_run_at ?? null, mailReadUpTo: mark?.toISOString() ?? null, lastSuccessAt: runs.lastSuccessAt } : null,
         llm: (keys.data as LlmCredentialMeta | null) ?? null,
         budget,
         whatsapp: {

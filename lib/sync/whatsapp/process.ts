@@ -254,7 +254,8 @@ export async function processPendingWhatsapp(
 
       try {
         const sheets = recordsToSheets(cargo, vessels, { refPrefix: "WA" });
-        const label = `WA · ${m.contact_name ?? m.wa_from} · ${m.received_at.slice(0, 16).replace("T", " ")}`;
+        // stored and shown beside the table's local "Created" time, so the clock is named (15 Nov 2026)
+        const label = `WA · ${m.contact_name ?? m.wa_from} · ${new Date(m.received_at).toISOString().slice(0, 16).replace("T", " ")} UTC`;
         const result = await stageBatch({
           supabase, source: new EmailLlmSource(sheets, "whatsapp"),
           fileName: `whatsapp:${m.wa_from}`, label,

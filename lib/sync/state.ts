@@ -46,6 +46,41 @@ export async function setWatermark(
   if (error) throw new Error(`sync checkpoint for ${source} could not be saved: ${error.message}`);
 }
 
+// ── email: when the sync last RAN ────────────────────────────────────────────
+// The checkpoint (last_sync_at) is the newest mail a run has read, not a run time: while mail is waiting it is the
+// newest staged message's date, weeks behind the clock during a backfill. The card showed it as "Last run", so a sync
+// made on 15 Nov read "15 Sep" (owner, 15 Nov 2026). When a run happened comes from job_runs.
+
+export interface EmailRunTimes {
+  /** the newest email-sync run of any outcome: when it finished (or started, while running), and its status */
+  lastRun: { at: string; status: string } | null;
+  /** when the newest succeeded email-sync run finished */
+  lastSuccessAt: string | null;
+}
+
+type RunRow = { status?: string | null; started_at?: string | null; finished_at?: string | null } | null;
+
+/** Pure: the two job_runs rows → the times the card and the tile show. */
+export function emailRunTimes(last: RunRow, lastOk: RunRow): EmailRunTimes {
+  const at = (r: RunRow) => r?.finished_at ?? r?.started_at ?? null;
+  const lastAt = at(last);
+  return {
+    lastRun: lastAt ? { at: lastAt, status: last?.status ?? "unknown" } : null,
+    lastSuccessAt: at(lastOk),
+  };
+}
+
+export async function getEmailRunTimes(supabase: SupabaseClient): Promise<EmailRunTimes> {
+  const runs = () => supabase.from("job_runs").select("status, started_at, finished_at").eq("job", "email-sync");
+  const [last, ok] = await Promise.all([
+    runs().order("started_at", { ascending: false }).limit(1).maybeSingle(),
+    runs().eq("status", "succeeded").order("started_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (last.error) throw new Error(`email sync runs could not be read: ${last.error.message}`);
+  if (ok.error) throw new Error(`email sync runs could not be read: ${ok.error.message}`);
+  return emailRunTimes(last.data as RunRow, ok.data as RunRow);
+}
+
 // ── email: checkpoint + lease ────────────────────────────────────────────────
 
 export interface EmailCheckpoint {

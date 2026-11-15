@@ -557,7 +557,9 @@ function IntakeView(props: {
     {
       label: "Circulation inbox", icon: Mail,
       value: !h ? "…" : !h.inbox ? "Not set up" : h.inbox.enabled ? "Connected" : "Disabled",
-      sub: h?.inbox?.lastSuccess ? `Last successful run ${relTime(h.inbox.lastSuccess)}` : "No successful run yet",
+      // when a run last succeeded (job_runs), and separately how far the mail has been read (the checkpoint)
+      sub: !h?.inbox ? "No successful run yet"
+        : `${h.inbox.lastSuccessAt ? `Last successful run ${relTime(h.inbox.lastSuccessAt)}` : "No successful run yet"}${h.inbox.mailReadUpTo ? ` · mail read up to ${new Date(h.inbox.mailReadUpTo).toLocaleDateString()}` : ""}`,
       tone: !h ? C.ink3 : h.inbox?.enabled ? C.green : C.ink3,
       tip: "IMAP connection health and the start point of the next run",
     },

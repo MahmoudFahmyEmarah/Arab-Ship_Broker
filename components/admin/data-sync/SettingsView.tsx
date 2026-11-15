@@ -413,7 +413,7 @@ function EmailCard() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span style={{ fontSize: 12.5, color: C.ink2 }}>
-                Last sync:{" "}
+                Mail read up to:{" "}
                 <strong style={{ fontFamily: C.mono, color: C.navy }}>
                   {watermark ? `${watermark.slice(0, 10)} ${watermark.slice(11, 16)} UTC` : "never"}
                 </strong>

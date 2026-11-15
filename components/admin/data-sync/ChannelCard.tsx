@@ -13,7 +13,7 @@ import { Badge, Card, type BadgeTone } from "./ui";
 
 export function ChannelCard({
   icon, abbr, iconBg, iconColor, name, status, statusTone, desc,
-  last, lastTone, next, actions, children, footer,
+  last, lastTone, next, moreFacts, actions, children, footer,
 }: {
   /** Glyph for the channel. When absent, `abbr` is rendered as a wordmark. */
   icon?: React.ReactNode;
@@ -30,6 +30,8 @@ export function ChannelCard({
   lastTone?: string;
   /** "Next scheduled" fact. */
   next: React.ReactNode;
+  /** Further facts after "Last run", e.g. how far the inbox has been read. */
+  moreFacts?: { label: string; value: React.ReactNode }[];
   /** Primary + secondary buttons. */
   actions: React.ReactNode;
   /** Expandable body (sample panel, log). */
@@ -57,6 +59,12 @@ export function ChannelCard({
           <div className="ds-channel__factlabel">Last run</div>
           <div className="ds-channel__factvalue" style={lastTone ? { color: lastTone } : undefined}>{last}</div>
         </div>
+        {moreFacts?.map((f) => (
+          <div key={f.label}>
+            <div className="ds-channel__factlabel">{f.label}</div>
+            <div className="ds-channel__factvalue">{f.value}</div>
+          </div>
+        ))}
         <div>
           <div className="ds-channel__factlabel">Next scheduled</div>
           <div className="ds-channel__factvalue">{next}</div>
