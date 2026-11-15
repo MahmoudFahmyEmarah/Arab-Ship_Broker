@@ -1,5 +1,5 @@
-// Scheduled circulation-inbox sync (Vercel cron — vercel.json, hourly).
-// Wakes every hour and runs the same runEmailSync the Intake button uses ONLY
+// Scheduled circulation-inbox sync (Vercel cron — vercel.json, daily at 01:00 UTC).
+// Wakes once a day and runs the same runEmailSync the Intake button uses ONLY
 // when the owner's cadence says a run is due (email_ingest_config.next_run_at,
 // computed by lib/sync/email/schedule.ts from daily / every-N-days / weekly at
 // a chosen hour).

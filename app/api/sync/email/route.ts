@@ -48,8 +48,10 @@ export async function POST(req: Request) {
       // done / empty / skipped / error event and writes it once at the end.
       const runId = sample ? null : await startJobRun(supabase, "email-sync", { trigger: "admin", meta: { limit, since: since?.toISOString() ?? null } });
       const settler = new RunSettler();
+      let pointHandedBack = false;   // the run sent the card a `resume` (a backfill's stop point)
       const emit = (e: SyncEvent) => {
         settler.note(e);
+        if (e.type === "resume") pointHandedBack = true;
         // A closed stream (client gone) does not stop the run: it finishes and
         // is finalised below all the same.
         try { controller.enqueue(enc.encode(`data: ${JSON.stringify(e)}\n\n`)); } catch { /* closed */ }
@@ -58,6 +60,10 @@ export async function POST(req: Request) {
         if (sample) await runEmailDryRun({ supabase, sampleText: sample, emit });
         else await runEmailSync({ supabase, limit, emit, startedBy: admin.rowId, since, owner: `admin:${admin.fullName ?? admin.rowId}`, budgetMs: 240_000, maxPages: 6 });
       } catch (e) {
+        // an unexpected throw ends a backfill too: hand the card the point it sent unless the run already handed one
+        // back (which is further on) or already settled (a throw after done/empty must not pull a finished backfill
+        // back to its start), so a retry continues the backfill (B2O-133 P3, B2O-134 P3)
+        if (!sample && since && !pointHandedBack && !settler.outcome) emit({ type: "resume", since: since.toISOString() });
         emit({ type: "error", error: e instanceof Error ? e.message : "Email sync failed." });
       } finally {
         const settle = await settler.finish(supabase, runId);

@@ -87,6 +87,11 @@ export function DataSyncClient({
   const labelFor = useMemo(() => Object.fromEntries(sheets.map((s) => [s.id, s.label])), [sheets]);
 
   const [view, setView] = useState<ViewId>("intake");
+  // where a stopped inbox backfill continues from: held here because the inbox card unmounts when its run opens the
+  // batch in Review, and must find it again when Intake is shown (B2O-131 P1-2)
+  const [emailResume, setEmailResume] = useState<string | null>(null);
+  // …and whether its run is still streaming, so a card shown again mid-run stays busy (B2O-132 P2-2)
+  const [emailRunning, setEmailRunning] = useState(false);
   const [batch, setBatch] = useState<BatchMeta | null>(null);
   const [uploadState, setUploadState] = useState<"idle" | "parsing" | "error">("idle");
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -430,6 +435,8 @@ export function DataSyncClient({
             const m = await getBatch(id);
             if (m.success && m.data) { await openBatch(m.data); router.refresh(); }
           }}
+          emailResume={emailResume} onEmailResume={setEmailResume}
+          emailRunning={emailRunning} onEmailRunning={setEmailRunning}
         />
       )}
       {view === "review" && batch && (
@@ -477,10 +484,13 @@ function IntakeView(props: {
   onOpen: (b: BatchMeta) => void; onUndo: (b: BatchMeta) => void; onDiscard: (b: BatchMeta) => void; onRegate: (b: BatchMeta) => void;
   busy: string | null; onEmailDone: (batchId: string) => void;
   onGoHistory: () => void; onOpenBatchId: (id: string) => void;
+  emailResume: string | null; onEmailResume: (iso: string | null) => void;
+  emailRunning: boolean; onEmailRunning: (running: boolean) => void;
 }) {
   const {
     uploadState, uploadError, onPick, onDrop, batches,
     onOpen, onUndo, onDiscard, onRegate, busy, onEmailDone, onGoHistory, onOpenBatchId,
+    emailResume, onEmailResume, emailRunning, onEmailRunning,
   } = props;
 
   // One gated round trip for the whole tile row (was four actions × requireAdmin).
@@ -612,7 +622,8 @@ function IntakeView(props: {
             state={uploadState} error={uploadError}
             onPick={onPick} onDrop={onDrop} lastRun={lastWorkbook}
           />
-          <EmailSyncCard onDone={onEmailDone} enabled={h ? !!h.inbox?.enabled : null} onEvent={onEmailEvent} nextRun={nextRun} />
+          <EmailSyncCard onDone={onEmailDone} enabled={h ? !!h.inbox?.enabled : null} onEvent={onEmailEvent} nextRun={nextRun}
+            resumeFrom={emailResume} onResume={onEmailResume} running={emailRunning} onRunning={onEmailRunning} />
           <WhatsappCard onOpenBatch={onOpen} linked={h ? h.whatsapp.worker_alive && h.whatsapp.state === "connected" : null} onRun={onWaRun} />
         </div>
       </div>

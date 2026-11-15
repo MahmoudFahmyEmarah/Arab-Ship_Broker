@@ -14,7 +14,7 @@ import { getActiveModel } from "./llm";
 import { UsageMeter, aiBudgetToday, meterUsage } from "./usage";
 import { fetchCirculars, imapPageSize } from "./imap";
 import { recordsToSheets } from "./to-rows";
-import { SPLIT_CALL_BUDGET, classifyWithSplit, createLimiter, createModelCallCircuit, isSyncDeadline, isUnreadableReply, runAbortableCall } from "./batch-split";
+import { SPLIT_CALL_BUDGET, classifyWithSplit, createLimiter, createModelCallCircuit, deadlineOnlyFailure, isSyncDeadline, isUnreadableReply, runAbortableCall } from "./batch-split";
 import type { ModelCallCircuit } from "./batch-split";
 import type { CargoRecord, EmailMsg, SyncEvent, SyncStepKey, SyncStepState, VesselRecord } from "./types";
 
@@ -26,6 +26,15 @@ const RETRIES = 2;                 // attempts per batch
 const BATCH_TIMEOUT_MS = 90_000;   // hard cap per batch call (stalled requests never reject)
 const MAX_BATCH_EMAILS = 10;       // emails per LLM call (output-token safety)
 const MAX_BATCH_CHARS = 120_000;   // ~30k input tokens per call, well under model limits
+// A page after the first starts only while the time left covers what this run's slowest page took (fetch through
+// classification) with a margin, and never with less than the floor. A page begun with ~40 s left was cut at the
+// deadline, its paid calls thrown away, and the run reported FAILED although the pages before it were staged and the
+// checkpoint had moved (owner, 12 Nov 2026). Measured, not fixed: one full call (90 s) does not cover a page that
+// needs a second wave, a retry or a split, and a fixed window stops fast pages early (B2O-130 P2-2).
+export const PAGE_START_FLOOR_MS = 60_000;
+export function pageStartNeedMs(slowestPageMs: number): number {
+  return Math.max(PAGE_START_FLOOR_MS, Math.ceil(slowestPageMs * 1.25) + 10_000);
+}
 
 // Long digests (many circulars stacked in one email) used to be TRUNCATED at
 // the classifier's per-email cap — every order past the cut was silently lost.
@@ -126,7 +135,7 @@ async function classifyAll(
   emails: EmailMsg[],
   emit: Emit,
   deadlineAt: number | null = null,
-): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[]; failed: number; firstError: string | null }> {
+): Promise<{ cargo: CargoRecord[]; vessels: VesselRecord[]; failed: number; firstError: string | null; deadlineOnly: boolean }> {
   // Daily token budget — shared with Data quality. Refusing here keeps the
   // watermark where it was, so nothing is skipped once the cap resets.
   const budget = await aiBudgetToday(supabase);
@@ -146,6 +155,7 @@ async function classifyAll(
   let doneEmails = 0;
   let doneBatches = 0;
   let failed = 0;
+  const failures: unknown[] = [];   // why each failed batch failed (deadline-only is judged on all of them)
   let firstError: string | null = null;
   // ONE cap on model calls in flight for the whole run: a split batch's halves wait their turn instead of fanning out
   // past CONCURRENCY (B2O P2, 4 Nov 2026)
@@ -172,6 +182,7 @@ async function classifyAll(
     } catch (e) {
       doneEmails += batch.length; doneBatches += 1; failed += 1;
       const msg = e instanceof Error ? e.message : "error";
+      failures.push(e);
       if (!firstError) firstError = msg;
       emit({ type: "log", msg: `[${doneEmails}/${expanded.length}] ✗ batch ${doneBatches}/${batches.length} skipped (${batch.length} email(s)) — ${msg}` });
     }
@@ -189,7 +200,7 @@ async function classifyAll(
     emit({ type: "usage", tokens: totals.tokens, cost, calls: totals.calls });
     emit({ type: "log", msg: `model usage · ${totals.tokens.toLocaleString()} tokens · USD ${cost.toFixed(4)} · ${totals.calls} call(s)` });
   }
-  return { cargo: uCargo, vessels: uVessels, failed, firstError };
+  return { cargo: uCargo, vessels: uVessels, failed, firstError, deadlineOnly: deadlineOnlyFailure(failures) };
 }
 
 async function stageAndFinish(
@@ -260,7 +271,10 @@ export async function runEmailSync(
     .from("email_ingest_config")
     .select("imap_host, imap_port, username, folder, search_query, is_enabled")
     .maybeSingle();
-  const fail = (msg: string) => { step(emit, "connect", "failed", msg); emit({ type: "error", error: msg }); };
+  // A backfill that ends before it reads a page (configuration, password, lease or checkpoint) hands the card back the
+  // point it was sent, so a retry continues the backfill instead of falling back to the checkpoint (B2O-132 P2-1).
+  const keepChosenPoint = () => { if (sinceOverride) emit({ type: "resume", since: sinceOverride.toISOString() }); };
+  const fail = (msg: string) => { step(emit, "connect", "failed", msg); keepChosenPoint(); emit({ type: "error", error: msg }); };
   if (error) { fail(error.message); return; }
   if (!cfg) { fail("No circulation inbox configured — set it up in Connections."); return; }
   if (!cfg.is_enabled) { fail("The circulation inbox is disabled. Enable it in Connections."); return; }
@@ -285,6 +299,7 @@ export async function runEmailSync(
     const until = lease.leaseUntil ? lease.leaseUntil.toISOString().slice(11, 16) : "soon";
     const msg = `Another inbox sync (${lease.leaseOwner ?? "unknown"}) is still running — its lease expires at ${until} UTC. Nothing was fetched; try again after it finishes.`;
     step(emit, "fetch", "skipped", "another run holds the inbox");
+    keepChosenPoint();
     emit({ type: "skipped", message: msg });
     return;
   }
@@ -306,10 +321,26 @@ export async function runEmailSync(
 
     const totals: Totals = { new: 0, updated: 0, unchanged: 0, invalid: 0, errors: 0, gateBlocked: 0, queued: 0 };
     let lastBatchId: string | null = null;
-    let pages = 0;
+    let pages = 0;   // pages this run finished: classified in full, staged when they held records, checkpoint moved
+    let slowestPageMs = 0;   // fetch through classification, over the pages this run finished
+    const utc = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+    // A natural run moves the checkpoint page by page, so the next run continues by itself. A backfill (start point
+    // chosen on the card) persists nothing, and the card resets its start point after a run, so whenever a backfill
+    // stops before its mail is read through (mail still waiting, or an error) the card is handed the point after the
+    // last staged page and keeps it as its start point (B2O-130 P2-1, B2O-131 P2-2).
+    const keepBackfillPoint = () => { if (sinceOverride) emit({ type: "resume", since: since.toISOString() }); };
+    const stopWithMailWaiting = (why: string) => {
+      emit({ type: "log", msg: sinceOverride
+        ? `${why} — this backfill stopped at ${utc(since)}; the card keeps that as the start point, press Sync now to continue`
+        : `${why} — the rest is picked up by the next run` });
+      keepBackfillPoint();
+    };
     for (let page = 1; page <= maxPages; page += 1) {
-      if (page > 1 && Date.now() - t0 > budgetMs) {
-        emit({ type: "log", msg: `time budget used after ${page - 1} page(s) — the rest is picked up by the next run` });
+      const pageT0 = Date.now();
+      const left = t0 + budgetMs - pageT0;
+      const need = pageStartNeedMs(slowestPageMs);
+      if (page > 1 && left < need) {
+        stopWithMailWaiting(`time budget used after ${page - 1} page(s) (${Math.max(0, Math.round(left / 1000))} s left; the slowest page took ${Math.round(slowestPageMs / 1000)} s, so the next needs about ${Math.round(need / 1000)} s)`);
         break;
       }
       step(emit, "fetch", "running", `page ${page} · since ${since.toISOString().slice(0, 16).replace("T", " ")} UTC`);
@@ -323,6 +354,7 @@ export async function runEmailSync(
       } catch (e) {
         const msg = `IMAP: ${e instanceof Error ? e.message : "fetch failed"}`;
         step(emit, "fetch", "failed", msg);
+        keepBackfillPoint();
         emit({ type: "error", error: msg });
         return; // checkpoint stays where the last staged page left it
       }
@@ -344,7 +376,6 @@ export async function runEmailSync(
         }
         break;
       }
-      pages += 1;
 
       step(emit, "classify", "running", `${emails.length} email(s)`);
       let classified: Awaited<ReturnType<typeof classifyAll>>;
@@ -353,10 +384,19 @@ export async function runEmailSync(
       } catch (e) {
         const msg = e instanceof Error ? e.message : "classification failed";
         step(emit, "classify", "failed", msg);
+        keepBackfillPoint();
         emit({ type: "error", error: msg });
         return; // checkpoint stays — nothing was read by the model
       }
-      const { cargo, vessels, failed, firstError } = classified;
+      const { cargo, vessels, failed, firstError, deadlineOnly } = classified;
+      if (deadlineOnly && pages > 0) {
+        // Only the run's own deadline stopped this page, after earlier pages were staged and the checkpoint moved
+        // through them: the run ends as it does at a page boundary, not as a failure. None of this page is staged and
+        // the checkpoint stays after the last staged page, so this page is read again; nothing is skipped.
+        step(emit, "classify", "done", `${pages} page(s) read · page ${page} was cut by the time budget and is read again`);
+        stopWithMailWaiting(`time budget used during page ${page} (its ${emails.length} email(s) were not staged)`);
+        break;
+      }
       step(emit, "classify", failed > 0 ? "failed" : "done", `${cargo.length} cargo · ${vessels.length} vessel${failed ? ` · ${failed} batch(es) failed` : ""}`);
       if (failed > 0) {
         // Part of the mail was never read by the model: keep the checkpoint
@@ -375,7 +415,10 @@ export async function runEmailSync(
         const advice = formatRejected
           ? "the AI provider rejected the request format (not the key or budget) — choose a model with structured-output support in Settings or report it"
           : deadlineUsed
-            ? "this run used its time budget — run it again to continue from the unchanged checkpoint"
+            ? pages === 0
+              // a first page that does not fit one run's budget would stop the next run in the same place
+              ? "the first page of mail did not finish within this run's time budget — run it again; if it stops on the same page again, report it"
+              : "this run used its time budget — run it again to continue from the unchanged checkpoint"
           : providerTimeout
             ? "the AI provider did not answer in time (not the key or budget) — run it again to continue from the unchanged checkpoint; if it keeps timing out, choose a faster model in Settings"
           : unreadableRun
@@ -383,11 +426,19 @@ export async function runEmailSync(
             : unreadable
               ? "the model could not answer one email in a readable form (not the key or budget) — run again; if the same email fails again, report it with its subject"
               : "fix the LLM key or budget in Settings and run again";
-        emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). The sync checkpoint stays at ${since.toISOString().slice(0, 16).replace("T", " ")} UTC — ${advice}; nothing was skipped.` });
+        const where = sinceOverride
+          ? `This backfill stopped at ${utc(since)}; the card keeps that as the start point`
+          : `The sync checkpoint stays at ${utc(since)}`;
+        keepBackfillPoint();
+        emit({ type: "error", error: `${failed} classification batch${failed > 1 ? "es" : ""} failed (${firstError ?? "unknown error"}). ${where} — ${advice}; nothing was skipped.` });
         return;
       }
+      pages += 1;
+      slowestPageMs = Math.max(slowestPageMs, Date.now() - pageT0);
       if (cargo.length || vessels.length) {
-        const result = await d.stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy, false);
+        let result: Awaited<ReturnType<typeof stageAndFinish>>;
+        // a staging failure is thrown to the route; a backfill still hands the card its point first
+        try { result = await d.stageAndFinish(supabase, cargo, vessels, `inbox:${cfg.username}`, emit, startedBy, false); } catch (e) { keepBackfillPoint(); throw e; }
         if (result) { lastBatchId = result.batchId; Object.assign(totals, addTotals(totals, { ...result.totals, gateBlocked: result.gate?.blocked ?? 0 })); }
       } else {
         emit({ type: "log", msg: `page ${page}: no cargo or vessel records in these ${emails.length} email(s)` });
@@ -403,6 +454,7 @@ export async function runEmailSync(
       since = next.lastSyncAt;
       if (next.uidValidity != null) { uidValidity = next.uidValidity; lastUid = next.lastUid; }
       if (!fetched.hasMore) break;
+      if (page === maxPages) { stopWithMailWaiting(`page limit reached after ${page} page(s)`); break; }
       emit({ type: "log", msg: sinceOverride
         ? `start point moved to ${next.lastSyncAt.toISOString().slice(0, 19).replace("T", " ")} UTC for this backfill only — reading the next page`
         : `checkpoint moved to ${next.lastUid != null ? `UID ${next.lastUid}` : `${next.lastSyncAt.toISOString().slice(0, 19).replace("T", " ")} UTC`} — reading the next page` });

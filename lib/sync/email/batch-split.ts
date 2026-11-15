@@ -32,6 +32,17 @@ export function isSyncDeadline(e: unknown): boolean {
   return e instanceof Error && (e.message.startsWith("SYNC_DEADLINE:") || e.message.startsWith("SYNC_PROVIDER_TIMEOUT:"));
 }
 
+/** Only the run's own wall-clock deadline (not a provider timeout, not a model error). */
+export function isRunDeadline(e: unknown): boolean {
+  return e instanceof Error && e.message.startsWith("SYNC_DEADLINE:");
+}
+
+/** A page's failures are "deadline only" when there is at least one and every one is the run's own deadline: the page
+ *  was cut for time, so it is read again by the next run instead of failing this one (12 Nov 2026). */
+export function deadlineOnlyFailure(reasons: readonly unknown[]): boolean {
+  return reasons.length > 0 && reasons.every(isRunDeadline);
+}
+
 export interface ModelCallCircuit {
   closed: boolean;
   reason: Error | null;
@@ -59,13 +70,16 @@ export async function runAbortableCall<T>(
   }
 
   const waitMs = Math.min(opts.timeoutMs, remaining);
+  // Which limit ends the wait is decided here, not by re-reading the clock when the timer fires: a timer a millisecond
+  // early used to call a deadline cut a provider timeout, and the run then failed instead of stopping cleanly (B2O-130).
+  const cutByDeadline = opts.deadlineAt != null && remaining < opts.timeoutMs;
   const controller = new AbortController();
   let timeoutError: Error | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const invocation = Promise.resolve().then(() => invoke(controller.signal));
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
-      timeoutError = opts.deadlineAt != null && Date.now() >= opts.deadlineAt
+      timeoutError = cutByDeadline
         ? new Error(`SYNC_DEADLINE: the ${opts.label} call reached the run deadline`)
         : new Error(`SYNC_PROVIDER_TIMEOUT: ${opts.label} timed out after ${Math.round(waitMs / 1000)}s; this run admitted no successor calls`);
       opts.circuit.closed = true;
@@ -151,8 +165,10 @@ export type BatchOutcome<C, V> = { cargo: C[]; vessels: V[] };
 export type SplitBudget = { left: number };
 
 async function both<C, V>(a: Promise<BatchOutcome<C, V>>, b: Promise<BatchOutcome<C, V>>): Promise<BatchOutcome<C, V>> {
-  // allSettled: both halves always finish (and are metered) even when one fails; the first failure is then raised
+  // allSettled: both halves always finish (and are metered) even when one fails; the first failure is then raised,
+  // unless it is the run deadline and the other half failed for a real reason (that one must not pass as a time cut)
   const [x, y] = await Promise.allSettled([a, b]);
+  if (x.status === "rejected" && y.status === "rejected") throw isRunDeadline(x.reason) ? y.reason : x.reason;
   if (x.status === "rejected") throw x.reason;
   if (y.status === "rejected") throw y.reason;
   return { cargo: [...x.value.cargo, ...y.value.cargo], vessels: [...x.value.vessels, ...y.value.vessels] };

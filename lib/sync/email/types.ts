@@ -99,6 +99,10 @@ export type SyncEvent =
   | { type: "usage"; tokens: number; cost: number; calls: number }
   | { type: "done"; batchId: string; totals: { new: number; updated: number; unchanged: number; invalid: number; errors: number; gateBlocked?: number; queued?: number } }
   | { type: "empty"; message: string }
+  /** a backfill (start point chosen on the card) ended before its mail was read through — mail still waiting, an
+   *  error, or a refused lease: the card keeps `since` (ISO) as its start point. Not terminal; comes before the
+   *  terminal event. Natural runs never send it (their checkpoint carries them). */
+  | { type: "resume"; since: string }
   /** the run did not start — another run holds the source's lease (phase 1) */
   | { type: "skipped"; message: string }
   | { type: "error"; error: string };
