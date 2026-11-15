@@ -8,16 +8,19 @@
 // The transport, watermark handling and event parsing are unchanged; only the
 // shell is the design's ChannelCard.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Mail, Play, FlaskConical, ChevronDown, RotateCcw } from "lucide-react";
 import { getSyncWatermarks } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { ChannelCard, SamplePanel, RunLog } from "./ChannelCard";
 import { Btn, C, relTime } from "./ui";
-import { pointAfterRun, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
+import { boxFor, pointAfterRun, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 
 import type { SyncEvent } from "@/lib/sync/email/types";
 type Evt = SyncEvent;
+
+/** The card stops waiting a little after the route's 300 s maxDuration (B2O-133 P3). */
+const CLIENT_CEILING_MS = 330_000;
 
 export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, onResume, running, onRunning }: {
   onDone: (batchId: string) => void;
@@ -42,21 +45,22 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
   // Start point for the fetch. Default = the last SUCCESSFUL sync (a failed
   // run never moves it); the admin can move it back to re-read older mail.
   const [watermark, setWatermark] = useState<string | null>(null);
-  const [since, setSince] = useState(() => toLocalInput(resumeFrom));
+  const [since, setSince] = useState(() => boxFor(resumeFrom, null));
   // A stopped backfill's point outlives this card (held by the page) and wins over the checkpoint when the box is
   // filled: on mount, and after a run that handed one back (B2O-131 P1-2). Kept in a ref for the async reload.
   const resume = useRef<string | null>(resumeFrom);
   const holdResume = (iso: string | null) => { resume.current = iso; onResume(iso); };
-  // Follow the page's point while mounted: a card shown again mid-run receives the point the earlier instance's run
-  // hands to the page (B2O-132 P2-2). The box changes during render (React's pattern for state that follows a prop);
-  // the ref follows in an effect, for the async reload.
+  // Follow the page's point while mounted, to a new point AND to "cleared": a card shown again mid-run receives what
+  // the earlier instance's run does with the page's point (B2O-132 P2-2, B2O-133 P2). The box changes during render
+  // (React's pattern for state that follows a prop); the ref follows in a layout effect, which runs before any async
+  // continuation (a reload) can read it (B2O-133 P3).
   const [shownResume, setShownResume] = useState(resumeFrom);
   if (resumeFrom !== shownResume) {
     setShownResume(resumeFrom);
-    if (resumeFrom) setSince(toLocalInput(resumeFrom));
+    setSince(boxFor(resumeFrom, watermark));
   }
-  useEffect(() => { resume.current = resumeFrom; }, [resumeFrom]);
-  const loadWatermark = async () => { const r = await getSyncWatermarks(); if (r.success) { setWatermark(r.data.email); setSince(toLocalInput(resume.current ?? r.data.email)); } };
+  useLayoutEffect(() => { resume.current = resumeFrom; }, [resumeFrom]);
+  const loadWatermark = async () => { const r = await getSyncWatermarks(); if (r.success) { setWatermark(r.data.email); setSince(boxFor(resume.current, r.data.email)); } };
   useEffect(() => { void loadWatermark(); }, []);
   // judged in the box's own form (local wall time, to the minute): an untouched box is never a backfill (B2O-131 P1-1);
   // a held point always shows the border and Reset, even in the checkpoint's own minute (B2O-132 P3)
@@ -72,9 +76,23 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
     onRunning(true);
     setLog([]);
     onEvent?.({ type: "start", title: body.sample ? "Dry run · pasted email" : "Circulation inbox · sync" });
+    let resumed = false;   // the run handed back where a backfill stopped
+    let settled = false;   // a terminal event arrived (done / empty / skipped / error)
+    // An inbox run that handed back no point, however it ended — a clean stream end, or a cut that surfaces as a
+    // throw (B2O-133 P3): settled → nothing to continue; cut → the point it was sent is held again.
+    const settlePoint = () => {
+      if (body.sample || resumed) return;
+      const next = pointAfterRun({ settled, sentSince: typeof body.since === "string" ? body.since : undefined });
+      if (next === "clear") holdResume(null);
+      else if (next !== "keep") holdResume(next.hold);
+    };
+    // A request that never settles would keep this card, and any card shown later (the page holds `running`), busy
+    // until a reload. The route stops at 300 s, so the card gives up a little after that (B2O-133 P3).
+    const ceiling = new AbortController();
+    const timer = setTimeout(() => ceiling.abort(new Error("The sync did not answer within 5½ minutes (the server stops a run at 5) — run it again; nothing was skipped.")), CLIENT_CEILING_MS);
     try {
       const res = await fetch("/api/sync/email", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ceiling.signal,
       });
       if (!res.ok || !res.body) {
         const j = await res.json().catch(() => ({}));
@@ -83,8 +101,6 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
-      let resumed = false;   // the run handed back where a backfill stopped
-      let settled = false;   // a terminal event arrived (done / empty / skipped / error)
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -110,20 +126,16 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
           }
         }
       }
-      // an inbox run that handed back no point: settled → nothing to continue (the box returns to the checkpoint);
-      // cut off without a result → the point it was sent is held again, so a retry re-reads from there
-      if (!body.sample && !resumed) {
-        const next = pointAfterRun({ settled, sentSince: typeof body.since === "string" ? body.since : undefined });
-        if (next === "clear") holdResume(null);
-        else if (next !== "keep") holdResume(next.hold);
-      }
+      settlePoint();
       await loadWatermark();
     } catch (e) {
+      settlePoint();
       const msg = e instanceof Error ? e.message : "Email sync failed.";
       append(`✗ ${msg}`);
       onEvent?.({ type: "error", error: msg });
       toast.error(msg);
     } finally {
+      clearTimeout(timer);
       onRunning(false);
       onEvent?.({ type: "finish" });
     }

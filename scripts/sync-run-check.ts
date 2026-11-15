@@ -11,7 +11,7 @@
  */
 import { PAGE_START_FLOOR_MS, pageStartNeedMs, runEmailSync, type RunDeps } from "@/lib/sync/email/run";
 import { deadlineOnlyFailure } from "@/lib/sync/email/batch-split";
-import { pointAfterRun, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
+import { boxFor, pointAfterRun, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 import { RunSettler } from "@/lib/sync/email/finalize";
 import type { SyncEvent } from "@/lib/sync/email/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -283,6 +283,11 @@ async function main() {
     const cut = pointAfterRun({ settled: false, sentSince: "2026-09-01T00:00:00.000Z" });
     ok(typeof cut === "object" && cut.hold === "2026-09-01T00:00:00.000Z", "a backfill cut off without a result holds the point it was sent, so a retry re-reads from there");
     ok(pointAfterRun({ settled: false, sentSince: undefined }) === "keep", "a natural run cut off without a result changes nothing");
+    // B2O-133 P2: what the box shows when it is (re)filled — the held point, else the checkpoint (a cleared point too)
+    const cp = "2026-09-11T12:59:41.123Z", held = "2026-09-20T09:00:37.250Z";
+    ok(boxFor(held, cp) === toLocalInput(held) && boxFor(held, null) === toLocalInput(held), "a held point fills the box");
+    ok(boxFor(null, cp) === toLocalInput(cp) && boxFor(null, null) === "", "a cleared point returns the box to the checkpoint (empty before it loads)");
+    ok(startPointToSend(boxFor(null, cp), cp, null) === undefined, "…so the next click after a clear is a natural run, never the old point's minute");
   }
   {
     // B2O-131 P1-1 / P2-1: what a "Sync now" click sends, judged in the box's own form, in several zones
@@ -350,14 +355,25 @@ async function main() {
       && !/const toLocalInput =/.test(card) && !/sinceIso/.test(card),
       "the card decides what to send only through the tested start-point helpers (no ISO-vs-minute comparison left)");
     ok(/else if \(evt\.type === "resume"\) \{ resumed = true; holdResume\(evt\.since\); setSince\(toLocalInput\(evt\.since\)\); \}/.test(card)
-      && /setSince\(toLocalInput\(resume\.current \?\? r\.data\.email\)\)/.test(card)
+      && /setSince\(boxFor\(resume\.current, r\.data\.email\)\)/.test(card)
       && /const next = pointAfterRun\(\{ settled, sentSince: typeof body\.since === "string" \? body\.since : undefined \}\);\n\s*if \(next === "clear"\) holdResume\(null\);\n\s*else if \(next !== "keep"\) holdResume\(next\.hold\);/.test(card)
       && /if \(evt\.type === "done" \|\| evt\.type === "empty" \|\| evt\.type === "skipped" \|\| evt\.type === "error"\) settled = true;/.test(card)
       && /onClick=\{\(\) => \{ holdResume\(null\); setSince\(toLocalInput\(watermark\)\); \}\}/.test(card),
       "the card shows a handed-back point, prefers it on every reload, and settles it through pointAfterRun (Reset drops it)");
-    ok(/if \(resumeFrom !== shownResume\) \{\n\s*setShownResume\(resumeFrom\);\n\s*if \(resumeFrom\) setSince\(toLocalInput\(resumeFrom\)\);\n\s*\}/.test(card)
-      && /useEffect\(\(\) => \{ resume\.current = resumeFrom; \}, \[resumeFrom\]\);/.test(card),
-      "a mounted card follows the page's point (box during render, ref in an effect)");
+    // B2O-133 P3: the point is settled on every exit, a clean stream end and a throw alike
+    const settleCalls = card.match(/\n\s*settlePoint\(\);/g) ?? [];
+    ok(settleCalls.length === 2 && /settlePoint\(\);\n\s*await loadWatermark\(\);\n\s*\} catch \(e\) \{\n\s*settlePoint\(\);/.test(card)
+      && /let resumed = false;[^\n]*\n\s*let settled = false;[^\n]*\n[\s\S]*const settlePoint = \(\) => \{[\s\S]*try \{\n\s*const res = await fetch/.test(card),
+      "the held point is settled on a clean end and in the catch (a cut that surfaces as a throw), with the flags outside the try");
+    // B2O-133 P2 + P3: a mounted card follows the page's point to a new value AND to "cleared"; the ref before any reload
+    ok(/if \(resumeFrom !== shownResume\) \{\n\s*setShownResume\(resumeFrom\);\n\s*setSince\(boxFor\(resumeFrom, watermark\)\);\n\s*\}/.test(card)
+      && /useLayoutEffect\(\(\) => \{ resume\.current = resumeFrom; \}, \[resumeFrom\]\);/.test(card) && !/useEffect\(\(\) => \{ resume\.current/.test(card),
+      "a mounted card follows the page's point, cleared included (box during render, ref in a layout effect)");
+    ok(/const ceiling = new AbortController\(\);/.test(card) && /signal: ceiling\.signal/.test(card) && /clearTimeout\(timer\);\n\s*onRunning\(false\);/.test(card) && /const CLIENT_CEILING_MS = 330_000;/.test(card),
+      "a request that never settles is given up a little after the route's 300 s, so the page's busy state always ends");
+    const route = readFileSync("app/api/sync/email/route.ts", "utf8").replace(/\r\n/g, "\n");
+    ok(/if \(e\.type === "resume"\) pointHandedBack = true;/.test(route) && /if \(!sample && since && !pointHandedBack\) emit\(\{ type: "resume", since: since\.toISOString\(\) \}\);\n\s*emit\(\{ type: "error"/.test(route),
+      "an unexpected throw that reaches the route hands a backfill its sent point, unless the run handed one back");
     ok(!/useState\(false\)/.test(card.slice(card.indexOf("export function EmailSyncCard"), card.indexOf("const [log, setLog]"))) && /onRunning\(true\);/.test(card) && /onRunning\(false\);/.test(card),
       "the card's busy state is the page's, so a card shown again mid-run stays busy");
     ok(/export function DataSyncClient[\s\S]*const \[emailResume, setEmailResume\] = useState<string \| null>\(null\);[\s\S]*const \[emailRunning, setEmailRunning\] = useState\(false\);[\s\S]*function IntakeView/.test(page)
