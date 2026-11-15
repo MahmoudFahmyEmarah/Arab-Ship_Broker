@@ -217,7 +217,8 @@ async function stageAndFinish(
   emit({ type: "log", msg: `staging ${cargo.length} cargo + ${vessels.length} vessel record(s)…` });
   step(emit, "stage", "running", `${cargo.length} cargo · ${vessels.length} vessel`);
   const source = new EmailLlmSource(sheets);
-  const label = `Email sync · ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
+  // the batch name is stored, and rendered beside the table's local "Created" time: say which clock it is (15 Nov 2026)
+  const label = `Email sync · ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`;
   // startedBy = the admin running the sync — credited as the poster on the
   // governed market cards, never the circular's sender.
   const result = await stageBatch({ supabase, source, fileName, label, startedBy });
