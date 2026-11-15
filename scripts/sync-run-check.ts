@@ -11,7 +11,7 @@
  */
 import { PAGE_START_FLOOR_MS, pageStartNeedMs, runEmailSync, type RunDeps } from "@/lib/sync/email/run";
 import { deadlineOnlyFailure } from "@/lib/sync/email/batch-split";
-import { boxFor, pointAfterRun, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
+import { CEILING_MESSAGE, CLIENT_CEILING_MS, boxFor, pointAfterRun, runErrorText, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 import { RunSettler } from "@/lib/sync/email/finalize";
 import type { SyncEvent } from "@/lib/sync/email/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -356,10 +356,10 @@ async function main() {
       "the card decides what to send only through the tested start-point helpers (no ISO-vs-minute comparison left)");
     ok(/else if \(evt\.type === "resume"\) \{ resumed = true; holdResume\(evt\.since\); setSince\(toLocalInput\(evt\.since\)\); \}/.test(card)
       && /setSince\(boxFor\(resume\.current, r\.data\.email\)\)/.test(card)
-      && /const next = pointAfterRun\(\{ settled, sentSince: typeof body\.since === "string" \? body\.since : undefined \}\);\n\s*if \(next === "clear"\) holdResume\(null\);\n\s*else if \(next !== "keep"\) holdResume\(next\.hold\);/.test(card)
+      && /const next = pointAfterRun\(\{ settled, sentSince: typeof body\.since === "string" \? body\.since : undefined \}\);\n(\s*\/\/[^\n]*\n)*\s*if \(next === "clear"\) \{ holdResume\(null\); setSince\(boxFor\(null, watermark\)\); \}\n\s*else if \(next !== "keep"\) holdResume\(next\.hold\);/.test(card)
       && /if \(evt\.type === "done" \|\| evt\.type === "empty" \|\| evt\.type === "skipped" \|\| evt\.type === "error"\) settled = true;/.test(card)
       && /onClick=\{\(\) => \{ holdResume\(null\); setSince\(toLocalInput\(watermark\)\); \}\}/.test(card),
-      "the card shows a handed-back point, prefers it on every reload, and settles it through pointAfterRun (Reset drops it)");
+      "the card shows a handed-back point, prefers it on every reload, and settles it through pointAfterRun; a clear refills the box (Reset drops it)");
     // B2O-133 P3: the point is settled on every exit, a clean stream end and a throw alike
     const settleCalls = card.match(/\n\s*settlePoint\(\);/g) ?? [];
     ok(settleCalls.length === 2 && /settlePoint\(\);\n\s*await loadWatermark\(\);\n\s*\} catch \(e\) \{\n\s*settlePoint\(\);/.test(card)
@@ -369,11 +369,18 @@ async function main() {
     ok(/if \(resumeFrom !== shownResume\) \{\n\s*setShownResume\(resumeFrom\);\n\s*setSince\(boxFor\(resumeFrom, watermark\)\);\n\s*\}/.test(card)
       && /useLayoutEffect\(\(\) => \{ resume\.current = resumeFrom; \}, \[resumeFrom\]\);/.test(card) && !/useEffect\(\(\) => \{ resume\.current/.test(card),
       "a mounted card follows the page's point, cleared included (box during render, ref in a layout effect)");
-    ok(/const ceiling = new AbortController\(\);/.test(card) && /signal: ceiling\.signal/.test(card) && /clearTimeout\(timer\);\n\s*onRunning\(false\);/.test(card) && /const CLIENT_CEILING_MS = 330_000;/.test(card),
-      "a request that never settles is given up a little after the route's 300 s, so the page's busy state always ends");
+    ok(/const ceiling = new AbortController\(\);/.test(card) && /signal: ceiling\.signal/.test(card) && /clearTimeout\(timer\);\n\s*onRunning\(false\);/.test(card)
+      && /ceiling\.abort\(new Error\(CEILING_MESSAGE\)\), CLIENT_CEILING_MS\)/.test(card) && /const msg = runErrorText\(e, ceiling\.signal\.aborted\);/.test(card) && !/const CLIENT_CEILING_MS/.test(card),
+      "a stalled request is given up a little after the route's 300 s (a slow checkpoint reload afterwards is not bounded), and the cut says so");
+    // B2O-134 P2: mid-stream, Chromium rejects the read with its own DOMException, not the abort reason
+    const chromiumCut = new DOMException("BodyStreamBuffer was aborted", "AbortError");
+    ok(CLIENT_CEILING_MS === 330_000 && runErrorText(chromiumCut, true) === CEILING_MESSAGE && runErrorText(new Error(CEILING_MESSAGE), true) === CEILING_MESSAGE,
+      "a cut by the card's own ceiling shows the ceiling's message, whatever the browser rejected with");
+    ok(runErrorText(new Error("Request failed (403)."), false) === "Request failed (403)." && runErrorText("boom", false) === "Email sync failed." && runErrorText(new Error(""), false) === "Email sync failed.",
+      "any other failure shows its own message (or a plain fallback)");
     const route = readFileSync("app/api/sync/email/route.ts", "utf8").replace(/\r\n/g, "\n");
-    ok(/if \(e\.type === "resume"\) pointHandedBack = true;/.test(route) && /if \(!sample && since && !pointHandedBack\) emit\(\{ type: "resume", since: since\.toISOString\(\) \}\);\n\s*emit\(\{ type: "error"/.test(route),
-      "an unexpected throw that reaches the route hands a backfill its sent point, unless the run handed one back");
+    ok(/if \(e\.type === "resume"\) pointHandedBack = true;/.test(route) && /if \(!sample && since && !pointHandedBack && !settler\.outcome\) emit\(\{ type: "resume", since: since\.toISOString\(\) \}\);\n\s*emit\(\{ type: "error"/.test(route),
+      "an unexpected throw that reaches the route hands a backfill its sent point, unless the run handed one back or had already settled");
     ok(!/useState\(false\)/.test(card.slice(card.indexOf("export function EmailSyncCard"), card.indexOf("const [log, setLog]"))) && /onRunning\(true\);/.test(card) && /onRunning\(false\);/.test(card),
       "the card's busy state is the page's, so a card shown again mid-run stays busy");
     ok(/export function DataSyncClient[\s\S]*const \[emailResume, setEmailResume\] = useState<string \| null>\(null\);[\s\S]*const \[emailRunning, setEmailRunning\] = useState\(false\);[\s\S]*function IntakeView/.test(page)

@@ -21,6 +21,17 @@ export function startPointChanged(input: string, checkpointIso: string | null): 
   return input !== toLocalInput(checkpointIso);
 }
 
+/** The card stops waiting for a run a little after the route's 300 s maxDuration (B2O-133 P3). */
+export const CLIENT_CEILING_MS = 330_000;
+export const CEILING_MESSAGE = "The sync did not answer within 5½ minutes — run it again; nothing was skipped.";
+
+/** The text the card shows for a run that threw. A stream cut by the card's own ceiling says so: mid-stream, Chromium
+ *  rejects the read with its own DOMException ("BodyStreamBuffer was aborted"), not the abort reason (B2O-134 P2). */
+export function runErrorText(e: unknown, cutByCeiling: boolean): string {
+  if (cutByCeiling) return CEILING_MESSAGE;
+  return e instanceof Error && e.message ? e.message : "Email sync failed.";
+}
+
 /** What the box shows when it is (re)filled: the held point when there is one, else the checkpoint. Used on mount,
  *  after every reload, and whenever the page's point changes, cleared included (B2O-133 P2). */
 export function boxFor(resumeIso: string | null, checkpointIso: string | null): string {

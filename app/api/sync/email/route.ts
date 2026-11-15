@@ -61,8 +61,9 @@ export async function POST(req: Request) {
         else await runEmailSync({ supabase, limit, emit, startedBy: admin.rowId, since, owner: `admin:${admin.fullName ?? admin.rowId}`, budgetMs: 240_000, maxPages: 6 });
       } catch (e) {
         // an unexpected throw ends a backfill too: hand the card the point it sent unless the run already handed one
-        // back (which is further on), so a retry continues the backfill (B2O-133 P3)
-        if (!sample && since && !pointHandedBack) emit({ type: "resume", since: since.toISOString() });
+        // back (which is further on) or already settled (a throw after done/empty must not pull a finished backfill
+        // back to its start), so a retry continues the backfill (B2O-133 P3, B2O-134 P3)
+        if (!sample && since && !pointHandedBack && !settler.outcome) emit({ type: "resume", since: since.toISOString() });
         emit({ type: "error", error: e instanceof Error ? e.message : "Email sync failed." });
       } finally {
         const settle = await settler.finish(supabase, runId);

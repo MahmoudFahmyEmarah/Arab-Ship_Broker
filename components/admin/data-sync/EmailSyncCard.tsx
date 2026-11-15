@@ -14,13 +14,10 @@ import { Mail, Play, FlaskConical, ChevronDown, RotateCcw } from "lucide-react";
 import { getSyncWatermarks } from "@/app/(admin)/admin/data-sync/settings-actions";
 import { ChannelCard, SamplePanel, RunLog } from "./ChannelCard";
 import { Btn, C, relTime } from "./ui";
-import { boxFor, pointAfterRun, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
+import { CEILING_MESSAGE, CLIENT_CEILING_MS, boxFor, pointAfterRun, runErrorText, startPointChanged, startPointToSend, toLocalInput } from "@/lib/sync/email/start-point";
 
 import type { SyncEvent } from "@/lib/sync/email/types";
 type Evt = SyncEvent;
-
-/** The card stops waiting a little after the route's 300 s maxDuration (B2O-133 P3). */
-const CLIENT_CEILING_MS = 330_000;
 
 export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, onResume, running, onRunning }: {
   onDone: (batchId: string) => void;
@@ -83,13 +80,15 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
     const settlePoint = () => {
       if (body.sample || resumed) return;
       const next = pointAfterRun({ settled, sentSince: typeof body.since === "string" ? body.since : undefined });
-      if (next === "clear") holdResume(null);
+      // a clear also refills the box: with no point held before, the prop stays null and the render-phase refill does
+      // not fire, so a typed date would linger (B2O-134 P3)
+      if (next === "clear") { holdResume(null); setSince(boxFor(null, watermark)); }
       else if (next !== "keep") holdResume(next.hold);
     };
     // A request that never settles would keep this card, and any card shown later (the page holds `running`), busy
     // until a reload. The route stops at 300 s, so the card gives up a little after that (B2O-133 P3).
     const ceiling = new AbortController();
-    const timer = setTimeout(() => ceiling.abort(new Error("The sync did not answer within 5½ minutes (the server stops a run at 5) — run it again; nothing was skipped.")), CLIENT_CEILING_MS);
+    const timer = setTimeout(() => ceiling.abort(new Error(CEILING_MESSAGE)), CLIENT_CEILING_MS);
     try {
       const res = await fetch("/api/sync/email", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ceiling.signal,
@@ -130,7 +129,7 @@ export function EmailSyncCard({ onDone, enabled, onEvent, nextRun, resumeFrom, o
       await loadWatermark();
     } catch (e) {
       settlePoint();
-      const msg = e instanceof Error ? e.message : "Email sync failed.";
+      const msg = runErrorText(e, ceiling.signal.aborted);
       append(`✗ ${msg}`);
       onEvent?.({ type: "error", error: msg });
       toast.error(msg);
